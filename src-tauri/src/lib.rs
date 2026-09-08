@@ -1,4 +1,5 @@
 pub mod compatibility;
+pub mod installer;
 pub mod manifest;
 pub mod snapshot;
 pub mod system;
@@ -23,6 +24,11 @@ pub fn run() {
             // Compatibility Engine (Phase 1)
             compatibility::evaluate_package_compatibility,
             compatibility::evaluate_batch_compatibility,
+            // Declarative Installer (Phase 4)
+            installer::preview_installation,
+            installer::install_package,
+            installer::list_installed_packages,
+            installer::get_installed_package,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

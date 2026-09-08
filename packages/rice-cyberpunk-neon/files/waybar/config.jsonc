@@ -1,0 +1,8 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 34,
+    "modules-left": ["hyprland/workspaces"],
+    "modules-center": ["clock"],
+    "modules-right": ["cpu", "memory", "network"]
+}

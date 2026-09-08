@@ -290,3 +290,42 @@ export interface SnapshotRecord {
   backed_up_paths: string[];
   status: "active" | "restored";
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Declarative Installer types (Phase 4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface InstallationPlan {
+  package_id: string;
+  package_name: string;
+  package_version: string;
+  files_to_create: string[];
+  files_to_replace: string[];
+  files_unchanged: string[];
+  directories_to_create: string[];
+  conflicts: string[];
+  compatibility_status: "compatible" | "missing_dependencies" | "incompatible";
+  required_dependencies: string[];
+  missing_dependencies: string[];
+  warnings: string[];
+}
+
+export interface InstallResult {
+  success: boolean;
+  package_id: string;
+  version: string;
+  snapshot_id: string;
+  installed_files: string[];
+  errors: string[];
+  rolled_back: boolean;
+}
+
+export interface InstalledPackageRecord {
+  package_id: string;
+  name: string;
+  version: string;
+  installed_at: number;
+  snapshot_id: string;
+  installed_files: string[];
+  package_source_path: string;
+}

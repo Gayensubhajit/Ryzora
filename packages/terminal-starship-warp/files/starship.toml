@@ -1,0 +1,10 @@
+# Starship Cosmic Warp
+add_newline = false
+format = "$directory$git_branch$git_status$character"
+
+[directory]
+style = "bold cyan"
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[✗](bold red)"

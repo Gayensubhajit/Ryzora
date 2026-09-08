@@ -5,6 +5,9 @@ import {
   CompatibilityReport,
   CompatibilityRequirements,
   DesktopEnvironment,
+  InstallationPlan,
+  InstallResult,
+  InstalledPackageRecord,
   ManifestValidationResult,
   PackageItem,
   RestoreResult,
@@ -26,11 +29,13 @@ interface AppContextType {
   selectedPackage: PackageItem | null;
   setSelectedPackage: (pkg: PackageItem | null) => void;
   installedPackageIds: string[];
+  installedPackages: InstalledPackageRecord[];
   snapshots: SnapshotMetadata[];
   isInstalling: boolean;
   installProgress: number;
   installLogs: string[];
-  installPackage: (pkg: PackageItem) => Promise<void>;
+  previewInstallation: (packageId: string) => Promise<InstallationPlan>;
+  installPackage: (pkg: PackageItem) => Promise<InstallResult>;
   rollbackSnapshot: (snapId: string) => Promise<void>;
   deleteSnapshot: (snapId: string) => Promise<void>;
   refreshSystem: () => Promise<void>;
@@ -235,14 +240,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [packages] = useState<PackageItem[]>(MOCK_PACKAGES);
   const [compatibilityMap, setCompatibilityMap] = useState<Record<string, CompatibilityReport>>({});
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
-  const [installedPackageIds, setInstalledPackageIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("ryzora_installed_ids");
-      return saved ? JSON.parse(saved) : ["fastfetch-cyber-spec"];
-    } catch {
-      return ["fastfetch-cyber-spec"];
-    }
-  });
+  const [installedPackages, setInstalledPackages] = useState<InstalledPackageRecord[]>([]);
+  const [installedPackageIds, setInstalledPackageIds] = useState<string[]>([]);
   const [snapshots, setSnapshots] = useState<SnapshotMetadata[]>([]);
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [installProgress, setInstallProgress] = useState<number>(0);
@@ -293,18 +292,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const loadInstalledPackages = async () => {
+    try {
+      const list = await invoke<InstalledPackageRecord[]>("list_installed_packages");
+      setInstalledPackages(list);
+      setInstalledPackageIds(list.map((p) => p.package_id));
+    } catch {
+      setInstalledPackages([]);
+      setInstalledPackageIds([]);
+    }
+  };
+
   useEffect(() => {
     refreshSystem();
     loadSnapshots();
+    loadInstalledPackages();
   }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("ryzora_installed_ids", JSON.stringify(installedPackageIds));
-    } catch {
-      // ignore
-    }
-  }, [installedPackageIds]);
 
   useEffect(() => {
     if (toast) {
@@ -328,73 +331,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const installPackage = async (pkg: PackageItem) => {
+  const previewInstallation = async (packageId: string): Promise<InstallationPlan> => {
+    return await invoke<InstallationPlan>("preview_installation", { packageId });
+  };
+
+  const installPackage = async (pkg: PackageItem): Promise<InstallResult> => {
     setIsInstalling(true);
     setInstallProgress(10);
-    // Prefer manifest.files if present, fall back to components
-    const manifestFiles = pkg.manifest?.files ?? [];
-    const pathsToBackup = manifestFiles.length > 0
-      ? manifestFiles.map((f) => f.target)
-      : pkg.components.map((c) => c.target_path);
-
     setInstallLogs([
-      `[Step 1/5] Validating package manifest for '${pkg.title}' v${pkg.version}...`,
-      ...(pkg.manifest
-        ? [`[Manifest] ryzora_spec: ${pkg.manifest.ryzora_spec} · type: ${pkg.manifest.package_type} · files: ${manifestFiles.length}`]
-        : []),
-    ]);
-
-    await new Promise((r) => setTimeout(r, 400));
-    setInstallProgress(30);
-    setInstallLogs((prev) => [
-      ...prev,
-      `[Step 2/5] Checking dependencies: ${pkg.dependencies.packages.join(", ") || "None"}`,
-      `[Verified] Safe manifest specification confirmed.`,
-    ]);
-
-    await new Promise((r) => setTimeout(r, 500));
-    setInstallProgress(55);
-
-    setInstallLogs((prev) => [
-      ...prev,
-      `[Step 3/5] Simulating snapshot of ${pathsToBackup.length} configuration paths...`,
+      `[Step 1/5] Inspecting package payload & validating manifest for '${pkg.title}'...`,
     ]);
 
     try {
-      const snap = await invoke<SnapshotMetadata>("create_snapshot", {
-        label: pkg.manifest?.name ?? pkg.title,
-        paths: pathsToBackup,
-      });
-      setSnapshots((prev) => [snap, ...prev]);
-    } catch (e) {
-      // Snapshot creation failed — log but do not block simulated install
+      // Step 1: Pre-flight preview/plan
+      const plan = await previewInstallation(pkg.id);
+      setInstallProgress(25);
       setInstallLogs((prev) => [
         ...prev,
-        `[Warning] Snapshot creation failed: ${e}`,
+        `[Plan] To create: ${plan.files_to_create.length} · To replace: ${plan.files_to_replace.length} · Unchanged: ${plan.files_unchanged.length}`,
       ]);
+
+      if (plan.conflicts.length > 0) {
+        throw new Error(`Conflicts detected: ${plan.conflicts.join("; ")}`);
+      }
+      if (plan.missing_dependencies.length > 0) {
+        throw new Error(`Missing required dependencies: ${plan.missing_dependencies.join(", ")}`);
+      }
+
+      setInstallProgress(40);
+      setInstallLogs((prev) => [
+        ...prev,
+        `[Step 2/5] Creating & verifying pre-install snapshot...`,
+      ]);
+
+      setInstallProgress(65);
+      setInstallLogs((prev) => [
+        ...prev,
+        `[Step 3/5] Staging files in isolated sandbox & validating checksums...`,
+      ]);
+
+      setInstallProgress(80);
+      setInstallLogs((prev) => [
+        ...prev,
+        `[Step 4/5] Safely applying configuration to target paths...`,
+      ]);
+
+      const result = await invoke<InstallResult>("install_package", { packageId: pkg.id });
+
+      if (result.success) {
+        setInstallProgress(100);
+        setInstallLogs((prev) => [
+          ...prev,
+          `[Step 5/5] Verified on disk! Snapshot created: ${result.snapshot_id}`,
+          `✓ '${pkg.title}' installed successfully (${result.installed_files.length} files).`,
+        ]);
+
+        await loadInstalledPackages();
+        await loadSnapshots();
+
+        setToast({
+          message: `Installed ${pkg.title}`,
+          type: "success",
+        });
+
+        setIsInstalling(false);
+        return result;
+      } else {
+        const errorMsg = result.errors.join("; ") || "Unknown error";
+        setInstallLogs((prev) => [
+          ...prev,
+          `[Failed] ${errorMsg}`,
+          result.rolled_back
+            ? `[Rollback] Restored original configuration from snapshot ${result.snapshot_id}.`
+            : ``,
+        ]);
+        setToast({
+          message: `Installation failed: ${errorMsg}`,
+          type: "warning",
+        });
+        setIsInstalling(false);
+        return result;
+      }
+    } catch (e: any) {
+      const errStr = e?.message || String(e);
+      setInstallLogs((prev) => [
+        ...prev,
+        `[Error] ${errStr}`,
+      ]);
+      setToast({
+        message: `Install failed: ${errStr}`,
+        type: "warning",
+      });
+      setIsInstalling(false);
+      throw e;
     }
-
-    await new Promise((r) => setTimeout(r, 400));
-    setInstallProgress(85);
-    setInstallLogs((prev) => [
-      ...prev,
-      `[Step 4/5] Simulated staging of configuration files...`,
-      ...pathsToBackup.map((p) => `  ✓ Staged ${p}`),
-    ]);
-
-    await new Promise((r) => setTimeout(r, 400));
-    setInstallProgress(100);
-    setInstallLogs((prev) => [
-      ...prev,
-      `[Step 5/5] Success! '${pkg.title}' is active.`,
-    ]);
-
-    setInstalledPackageIds((prev) => (prev.includes(pkg.id) ? prev : [...prev, pkg.id]));
-    setIsInstalling(false);
-    setToast({
-      message: `Installed ${pkg.title}`,
-      type: "success",
-    });
   };
 
   const rollbackSnapshot = async (snapId: string) => {
@@ -446,10 +476,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedPackage,
         setSelectedPackage,
         installedPackageIds,
+        installedPackages,
         snapshots,
         isInstalling,
         installProgress,
         installLogs,
+        previewInstallation,
         installPackage,
         rollbackSnapshot,
         refreshSystem,
