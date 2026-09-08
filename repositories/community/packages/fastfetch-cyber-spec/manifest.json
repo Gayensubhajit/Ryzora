@@ -1,0 +1,37 @@
+{
+  "id": "fastfetch-cyber-spec",
+  "name": "Cyber Spec Fastfetch",
+  "version": "1.1.0",
+  "ryzora_spec": "1",
+  "author": "ByteRacer",
+  "package_type": "fastfetch",
+  "description": "Terminal system info display with custom distro ASCII art and hardware metrics layout.",
+  "tags": [
+    "Fastfetch",
+    "CLI",
+    "System Info",
+    "ASCII Art"
+  ],
+  "color_palette": [
+    "#00f0ff",
+    "#ff007f",
+    "#39ff14",
+    "#12121e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/fastfetch/config.jsonc",
+      "target": "~/.config/fastfetch/config.jsonc",
+      "description": "Fastfetch layout and ASCII styling."
+    }
+  ]
+}

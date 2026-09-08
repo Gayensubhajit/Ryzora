@@ -1,0 +1,8 @@
+{
+    "layer": "top",
+    "position": "top",
+    "margin-top": 6,
+    "modules-left": ["hyprland/workspaces"],
+    "modules-center": ["clock"],
+    "modules-right": ["pulseaudio", "battery"]
+}

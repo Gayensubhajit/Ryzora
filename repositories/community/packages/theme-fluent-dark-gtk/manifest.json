@@ -1,0 +1,35 @@
+{
+  "id": "theme-fluent-dark-gtk",
+  "name": "Fluent Dark Modern GTK",
+  "version": "1.4.0",
+  "ryzora_spec": "1",
+  "author": "MetroLinux",
+  "package_type": "theme",
+  "description": "Cohesive dark theme for GTK3, GTK4, Libadwaita & Qt applications.",
+  "tags": [
+    "GTK",
+    "Theme",
+    "Dark Mode",
+    "Fluent"
+  ],
+  "color_palette": [
+    "#60a5fa",
+    "#93c5fd",
+    "#3b82f6",
+    "#18181b"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/gtk-3.0/settings.ini",
+      "target": "~/.config/gtk-3.0/settings.ini",
+      "description": "GTK-3.0 theme configuration."
+    }
+  ]
+}

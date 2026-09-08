@@ -90,6 +90,11 @@ pub fn find_package_dir(
         }
     }
 
+    // Check Repository Manager (Phase 5)
+    if let Ok(repo_dir) = crate::repository::find_package_dir(package_id) {
+        return Ok(repo_dir);
+    }
+
     // Check project workspace / current directory `packages/<id>`
     if let Ok(cwd) = std::env::current_dir() {
         let candidate = cwd.join("packages").join(package_id);
@@ -1334,5 +1339,14 @@ mod tests {
 
         let dest = sandbox.home_dir.join(".config/repeat/app.conf");
         assert_eq!(fs::read_to_string(&dest).unwrap(), "v2 content");
+    }
+
+    #[test]
+    fn test_installer_finds_package_in_repository() {
+        // Verify that find_package_dir locates packages configured in the repository
+        let found = find_package_dir("rice-cyberpunk-neon", None);
+        assert!(found.is_ok());
+        let pkg_dir = found.unwrap();
+        assert!(pkg_dir.join("manifest.json").is_file());
     }
 }

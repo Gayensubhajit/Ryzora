@@ -1,0 +1,75 @@
+{
+  "id": "rice-cyberpunk-neon",
+  "name": "Cyberpunk Neon 2077",
+  "version": "2.4.0",
+  "ryzora_spec": "1",
+  "author": "NeoDrifter",
+  "package_type": "rice",
+  "description": "A complete desktop rice featuring custom Waybar island modules, translucent Kitty terminal palette, custom Fastfetch ASCII logo, and Hyprlock lockscreen.",
+  "tags": [
+    "Cyberpunk",
+    "Neon",
+    "Hyprland",
+    "Waybar",
+    "Kitty",
+    "Dark Mode"
+  ],
+  "color_palette": [
+    "#00f0ff",
+    "#ff007f",
+    "#7000ff",
+    "#0a0a14"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "hyprland",
+      "waybar",
+      "kitty"
+    ],
+    "optional": [
+      "rofi",
+      "fastfetch",
+      "hyprlock"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/hypr/hyprland.conf",
+      "target": "~/.config/hypr/hyprland.conf",
+      "description": "Hyprland compositor config \u2014 window rules, animations, keybindings."
+    },
+    {
+      "source": "files/waybar/config.jsonc",
+      "target": "~/.config/waybar/config.jsonc",
+      "description": "Waybar module layout \u2014 floating island capsule."
+    },
+    {
+      "source": "files/waybar/style.css",
+      "target": "~/.config/waybar/style.css",
+      "description": "Waybar CSS \u2014 neon glow accents."
+    },
+    {
+      "source": "files/kitty/kitty.conf",
+      "target": "~/.config/kitty/kitty.conf",
+      "description": "Kitty terminal palette and opacity settings."
+    },
+    {
+      "source": "files/fastfetch/config.jsonc",
+      "target": "~/.config/fastfetch/config.jsonc",
+      "description": "Fastfetch ASCII art and color scheme."
+    },
+    {
+      "source": "files/hypr/hyprlock.conf",
+      "target": "~/.config/hypr/hyprlock.conf",
+      "description": "Hyprlock lockscreen overlay configuration."
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "id": "bar-island-glass-waybar",
+  "name": "Island Glass Waybar",
+  "version": "2.0.1",
+  "ryzora_spec": "1",
+  "author": "GlassCraft",
+  "package_type": "waybar",
+  "description": "Floating capsule status bar for Wayland. Dynamic workspace indicators and translucent hardware monitors.",
+  "tags": [
+    "Waybar",
+    "Status Bar",
+    "Glassmorphism",
+    "Wayland"
+  ],
+  "color_palette": [
+    "#38bdf8",
+    "#818cf8",
+    "#c084fc",
+    "#0f172a"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "waybar"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/waybar/config.jsonc",
+      "target": "~/.config/waybar/config.jsonc",
+      "description": "Floating capsule Waybar module configuration."
+    },
+    {
+      "source": "files/waybar/style.css",
+      "target": "~/.config/waybar/style.css",
+      "description": "Waybar CSS styling \u2014 translucent glass effect."
+    }
+  ]
+}

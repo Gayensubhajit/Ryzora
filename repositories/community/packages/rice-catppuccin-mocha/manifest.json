@@ -1,0 +1,52 @@
+{
+  "id": "rice-catppuccin-mocha",
+  "name": "Catppuccin Mocha Dusk",
+  "version": "1.2.0",
+  "ryzora_spec": "1",
+  "author": "PasticheDream",
+  "package_type": "rice",
+  "description": "Soothing pastel dark aesthetic for Linux workstations. Features gentle lavender accents, warm dark bases, and uncluttered desktop layouts.",
+  "tags": [
+    "Catppuccin",
+    "Pastel",
+    "Mocha",
+    "Hyprland",
+    "Waybar"
+  ],
+  "color_palette": [
+    "#cdd6f4",
+    "#f5c2e7",
+    "#cba6f7",
+    "#1e1e2e"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "hyprland",
+      "waybar"
+    ],
+    "optional": [
+      "rofi",
+      "fastfetch"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/hypr/hyprland.conf",
+      "target": "~/.config/hypr/hyprland.conf",
+      "description": "Hyprland configuration \u2014 Catppuccin mocha borders and rounding."
+    },
+    {
+      "source": "files/waybar/config.jsonc",
+      "target": "~/.config/waybar/config.jsonc",
+      "description": "Waybar layout with pastel modules."
+    }
+  ]
+}

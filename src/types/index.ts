@@ -329,3 +329,14 @@ export interface InstalledPackageRecord {
   installed_files: string[];
   package_source_path: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Repository & Catalog System types (Phase 5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RepositorySummary {
+  id: string;
+  name: string;
+  package_count: number;
+  path: string;
+}

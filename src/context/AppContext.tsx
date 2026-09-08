@@ -10,6 +10,7 @@ import {
   InstalledPackageRecord,
   ManifestValidationResult,
   PackageItem,
+  RepositorySummary,
   RestoreResult,
   SnapshotMetadata,
   SystemInfo,
@@ -39,6 +40,8 @@ interface AppContextType {
   rollbackSnapshot: (snapId: string) => Promise<void>;
   deleteSnapshot: (snapId: string) => Promise<void>;
   refreshSystem: () => Promise<void>;
+  repositories: RepositorySummary[];
+  refreshCatalog: () => Promise<void>;
   checkCompatibility: (pkg: PackageItem) => CompatibilityReport;
   validateManifest: (manifestJson: string) => Promise<ManifestValidationResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
@@ -237,7 +240,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("discover");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [desktopFilter, setDesktopFilter] = useState<DesktopEnvironment | "all">("all");
-  const [packages] = useState<PackageItem[]>(MOCK_PACKAGES);
+  const [packages, setPackages] = useState<PackageItem[]>(MOCK_PACKAGES);
+  const [repositories, setRepositories] = useState<RepositorySummary[]>([]);
   const [compatibilityMap, setCompatibilityMap] = useState<Record<string, CompatibilityReport>>({});
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
   const [installedPackages, setInstalledPackages] = useState<InstalledPackageRecord[]>([]);
@@ -303,10 +307,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const loadCatalogPackages = async () => {
+    try {
+      const catalog = await invoke<PackageItem[]>("get_catalog_packages");
+      if (catalog && catalog.length > 0) {
+        setPackages(catalog);
+      }
+      const repos = await invoke<RepositorySummary[]>("get_repository_info");
+      setRepositories(repos);
+    } catch (e) {
+      console.warn("Failed to load catalog from RepositoryManager; using fallback", e);
+    }
+  };
+
+  const refreshCatalog = async () => {
+    try {
+      const catalog = await invoke<PackageItem[]>("refresh_catalog");
+      if (catalog && catalog.length > 0) {
+        setPackages(catalog);
+      }
+      const repos = await invoke<RepositorySummary[]>("get_repository_info");
+      setRepositories(repos);
+    } catch (e) {
+      console.warn("Failed to refresh catalog", e);
+    }
+  };
+
   useEffect(() => {
     refreshSystem();
     loadSnapshots();
     loadInstalledPackages();
+    loadCatalogPackages();
   }, []);
 
   useEffect(() => {
@@ -485,6 +516,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installPackage,
         rollbackSnapshot,
         refreshSystem,
+        repositories,
+        refreshCatalog,
         checkCompatibility,
         validateManifest,
         deleteSnapshot,

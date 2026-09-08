@@ -1,0 +1,36 @@
+{
+  "id": "wallpaper-nebula-8k",
+  "name": "Deep Space Nebula 8K",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "AstroPixels",
+  "package_type": "wallpaper",
+  "description": "High-resolution cosmic wallpaper package with color palette swatches.",
+  "tags": [
+    "Wallpaper",
+    "Space",
+    "Cosmic",
+    "4K",
+    "8K"
+  ],
+  "color_palette": [
+    "#a855f7",
+    "#ec4899",
+    "#3b82f6",
+    "#09090b"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/wallpaper.conf",
+      "target": "~/.config/ryzora/wallpaper.conf",
+      "description": "Wallpaper palette definition."
+    }
+  ]
+}

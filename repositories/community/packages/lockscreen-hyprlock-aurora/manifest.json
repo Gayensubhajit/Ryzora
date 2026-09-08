@@ -1,0 +1,41 @@
+{
+  "id": "lockscreen-hyprlock-aurora",
+  "name": "Aurora Glass Hyprlock",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "NorthLights",
+  "package_type": "lockscreen",
+  "description": "Clean biometric & clock lockscreen overlay for Hyprland with frosted background blur.",
+  "tags": [
+    "Hyprlock",
+    "Lockscreen",
+    "Hyprland",
+    "Wayland"
+  ],
+  "color_palette": [
+    "#34d399",
+    "#38bdf8",
+    "#818cf8",
+    "#030712"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "hyprlock"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/hypr/hyprlock.conf",
+      "target": "~/.config/hypr/hyprlock.conf",
+      "description": "Hyprlock frosted overlay configuration."
+    }
+  ]
+}

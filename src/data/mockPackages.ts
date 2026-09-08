@@ -1,3 +1,9 @@
+/**
+ * @deprecated TEMPORARY DEVELOPMENT FALLBACK ONLY (Phase 5).
+ * The authoritative source of marketplace packages is now the Repository Manager
+ * via the `get_catalog_packages` Tauri command reading from `repositories/`.
+ * Do not add new packages here.
+ */
 import { PackageItem } from "../types";
 
 export const MOCK_PACKAGES: PackageItem[] = [
