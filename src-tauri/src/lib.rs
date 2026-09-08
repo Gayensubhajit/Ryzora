@@ -15,6 +15,7 @@ pub fn run() {
             manifest::create_backup_snapshot,
             manifest::rollback_snapshot,
             compatibility::evaluate_package_compatibility,
+            compatibility::evaluate_batch_compatibility,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

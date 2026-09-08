@@ -85,7 +85,6 @@ function evaluateClientCompatibility(
   const missing_required_apps: string[] = [];
   const missing_optional_apps: string[] = [];
 
-  // Distro check
   const distroId = sys.distro_id.toLowerCase();
   const distroFamily = (sys.distro_family || "").toLowerCase();
   const distro_compatible =
@@ -104,7 +103,6 @@ function evaluateClientCompatibility(
     });
   }
 
-  // Session check (Wayland vs X11)
   const sessionType = sys.session_type.toLowerCase();
   const session_compatible =
     reqs.supported_sessions.length === 0 ||
@@ -122,7 +120,6 @@ function evaluateClientCompatibility(
     });
   }
 
-  // Desktop check
   const wm = sys.window_manager.toLowerCase();
   const de = sys.desktop_environment.toLowerCase();
   const desktop_compatible =
@@ -148,7 +145,6 @@ function evaluateClientCompatibility(
     });
   }
 
-  // Applications / binaries check
   const installedSet = new Set(
     sys.installed_components.filter((c) => c.installed).map((c) => c.binary.toLowerCase())
   );
@@ -188,7 +184,6 @@ function evaluateClientCompatibility(
     }
   }
 
-  // Summary Label & Level
   let level: CompatibilityReport["level"] = "Compatible";
   let score = 100;
   let summary_label = "Compatible";
@@ -234,6 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [desktopFilter, setDesktopFilter] = useState<DesktopEnvironment | "all">("all");
   const [packages] = useState<PackageItem[]>(MOCK_PACKAGES);
+  const [compatibilityMap, setCompatibilityMap] = useState<Record<string, CompatibilityReport>>({});
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
   const [installedPackageIds, setInstalledPackageIds] = useState<string[]>(() => {
     try {
@@ -251,13 +247,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshSystem = async () => {
     setLoadingSystem(true);
+    let currentSystem: SystemInfo = FALLBACK_SYSTEM_INFO;
     try {
       const info = await invoke<SystemInfo>("detect_system_info");
       setSystemInfo(info);
+      currentSystem = info;
     } catch {
       setSystemInfo(FALLBACK_SYSTEM_INFO);
     } finally {
       setLoadingSystem(false);
+    }
+
+    // Evaluate compatibility through Rust backend
+    try {
+      const batchInputs = packages.map((p) => ({
+        id: p.id,
+        requirements: p.compatibility,
+      }));
+      const reports = await invoke<Record<string, CompatibilityReport>>(
+        "evaluate_batch_compatibility",
+        { packages: batchInputs }
+      );
+      setCompatibilityMap(reports);
+    } catch {
+      // Synchronous fallback evaluation
+      const fallbackMap: Record<string, CompatibilityReport> = {};
+      for (const p of packages) {
+        fallbackMap[p.id] = evaluateClientCompatibility(currentSystem, p.compatibility);
+      }
+      setCompatibilityMap(fallbackMap);
     }
   };
 
@@ -305,6 +323,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [toast]);
 
   const checkCompatibility = (pkg: PackageItem): CompatibilityReport => {
+    if (compatibilityMap[pkg.id]) {
+      return compatibilityMap[pkg.id];
+    }
     return evaluateClientCompatibility(systemInfo, pkg.compatibility);
   };
 

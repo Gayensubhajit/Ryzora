@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use crate::system::SystemInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,6 +226,25 @@ pub fn evaluate_package_compatibility(
     evaluate_compatibility(&sys, &requirements)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchPackageInput {
+    pub id: String,
+    pub requirements: CompatibilityRequirements,
+}
+
+#[tauri::command]
+pub fn evaluate_batch_compatibility(
+    packages: Vec<BatchPackageInput>,
+) -> HashMap<String, CompatibilityReport> {
+    let sys = crate::system::detect_system_info();
+    let mut results = HashMap::new();
+    for pkg in packages {
+        let report = evaluate_compatibility(&sys, &pkg.requirements);
+        results.insert(pkg.id, report);
+    }
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,5 +353,22 @@ mod tests {
         let report = evaluate_compatibility(&sys, &reqs);
         assert_eq!(report.level, CompatibilityLevel::IncompatibleSession);
         assert_eq!(report.summary_label, "Requires X11");
+    }
+
+    #[test]
+    fn test_incompatible_distro() {
+        let sys = mock_system();
+        let reqs = CompatibilityRequirements {
+            supported_distros: vec!["fedora".to_string(), "rhel".to_string()],
+            supported_desktops: vec!["hyprland".to_string()],
+            supported_sessions: vec!["wayland".to_string()],
+            required_binaries: vec![],
+            optional_binaries: vec![],
+        };
+
+        let report = evaluate_compatibility(&sys, &reqs);
+        assert_eq!(report.level, CompatibilityLevel::IncompatibleDistro);
+        assert_eq!(report.summary_label, "Distro mismatch");
+        assert!(!report.distro_compatible);
     }
 }
