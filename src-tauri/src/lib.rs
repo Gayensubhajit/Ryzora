@@ -1,4 +1,5 @@
 pub mod compatibility;
+pub mod dependency;
 pub mod installer;
 pub mod manifest;
 pub mod repository;
@@ -15,6 +16,8 @@ pub fn run() {
             // Manifest — validation only (Phase 2)
             manifest::validate_manifest,
             manifest::parse_manifest,
+            // Dependency Intelligence & Resolver (Phase 9)
+            dependency::resolve_package_dependencies,
             // Snapshot / Backup Engine (Phase 3)
             snapshot::create_snapshot,
             snapshot::list_snapshots,

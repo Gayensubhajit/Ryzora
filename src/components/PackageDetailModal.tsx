@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   RotateCcw,
@@ -13,9 +13,13 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
+  Terminal,
+  Cpu,
+  Package as PackageIcon,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import {
+  DependencyResolutionReport,
   InstallationPlan,
   UninstallResult,
   PackageUpdateStatus,
@@ -31,6 +35,7 @@ export const PackageDetailModal: React.FC = () => {
     installedPackageIds,
     installPackage,
     previewInstallation,
+    resolvePackageDependencies,
     isInstalling,
     installProgress,
     installLogs,
@@ -47,6 +52,28 @@ export const PackageDetailModal: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<"overview" | "manifest" | "dependencies">("overview");
   const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState<number>(0);
+
+  // Dependency Resolution (Phase 9)
+  const [depReport, setDepReport] = useState<DependencyResolutionReport | null>(null);
+  const [loadingDeps, setLoadingDeps] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (selectedPackage) {
+      setDepReport(null);
+    }
+  }, [selectedPackage?.id]);
+
+  useEffect(() => {
+    if (selectedPackage && activeTab === "dependencies" && !depReport && !loadingDeps) {
+      setLoadingDeps(true);
+      resolvePackageDependencies(selectedPackage.id)
+        .then((rep) => setDepReport(rep))
+        .catch((err) => {
+          console.error("Dependency resolution failed:", err);
+        })
+        .finally(() => setLoadingDeps(false));
+    }
+  }, [selectedPackage, activeTab, depReport, loadingDeps, resolvePackageDependencies]);
 
   // Preview & Installation flow states
   const [showPreview, setShowPreview] = useState<boolean>(false);
@@ -595,9 +622,33 @@ export const PackageDetailModal: React.FC = () => {
 
                   {/* Dependencies & Compatibility */}
                   <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
-                    <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider">
-                      Dependencies & Compatibility
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        <span>Dependencies & Intelligence Resolver</span>
+                      </div>
+                      {plan.dependency_report && (
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                          plan.dependency_report.resolved
+                            ? "bg-emerald-950/40 text-emerald-400 border border-emerald-800/40"
+                            : plan.dependency_report.missing_required.length === 0
+                            ? "bg-amber-950/40 text-amber-300 border border-amber-800/40"
+                            : "bg-rose-950/40 text-rose-400 border border-rose-800/40"
+                        }`}>
+                          {plan.dependency_report.resolved
+                            ? "DAG Resolved"
+                            : plan.dependency_report.missing_required.length === 0
+                            ? "Optional Missing"
+                            : "Required Missing"}
+                        </span>
+                      )}
                     </div>
+
+                    {plan.dependency_report?.install_order && plan.dependency_report.install_order.length > 1 && (
+                      <div className="text-[11px] text-[var(--text-muted)] font-mono bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)]">
+                        Install Sequence: {plan.dependency_report.install_order.join(" → ")}
+                      </div>
+                    )}
 
                     <div className="space-y-1">
                       {plan.required_dependencies.length > 0 ? (
@@ -607,9 +658,9 @@ export const PackageDetailModal: React.FC = () => {
                             <div key={idx} className="flex items-center justify-between font-mono text-xs">
                               <span className="text-[var(--text-primary)]">{dep}</span>
                               {isMissing ? (
-                                <span className="inline-flex items-center gap-1 text-amber-400 font-sans font-medium text-[11px]">
+                                <span className="inline-flex items-center gap-1 text-rose-400 font-sans font-medium text-[11px]">
                                   <AlertCircle className="w-3 h-3" />
-                                  Missing dependency: {dep}
+                                  Missing in PATH (Required)
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-emerald-400 font-sans font-medium text-[11px]">
@@ -625,19 +676,25 @@ export const PackageDetailModal: React.FC = () => {
                       )}
                     </div>
 
-                    {plan.missing_dependencies.length > 0 && (
-                      <div className="p-2 rounded bg-amber-950/20 border border-amber-800/40 text-amber-300 text-[11px] mt-2">
-                        Missing dependency: {plan.missing_dependencies.join(", ")}. Please install required components via your system package manager before applying this rice.
+                    {plan.dependency_report?.missing_required && plan.dependency_report.missing_required.length > 0 && (
+                      <div className="p-2.5 rounded bg-rose-950/20 border border-rose-800/40 text-rose-300 text-[11px] mt-2 leading-relaxed">
+                        Missing required dependency: <span className="font-mono text-white">{plan.dependency_report.missing_required.join(", ")}</span>.
+                        Ryzora will not run package managers autonomously. Please install them using pacman, apt, or dnf before proceeding.
+                      </div>
+                    )}
+
+                    {plan.dependency_report?.missing_optional && plan.dependency_report.missing_optional.length > 0 && plan.dependency_report.missing_required.length === 0 && (
+                      <div className="p-2.5 rounded bg-amber-950/20 border border-amber-800/40 text-amber-300 text-[11px] mt-2">
+                        Optional component(s) not installed: <span className="font-mono">{plan.dependency_report.missing_optional.join(", ")}</span>. You can continue safely with available components.
                       </div>
                     )}
 
                     {plan.conflicts.length > 0 && (
-                      <div className="p-2 rounded bg-red-950/20 border border-red-800/40 text-red-300 text-[11px] mt-2">
+                      <div className="p-2 rounded bg-red-950/20 border border-red-800/40 text-red-300 text-[11px] mt-2 font-mono">
                         Conflicts: {plan.conflicts.join("; ")}
                       </div>
                     )}
-                  </div>
-                </div>
+                  </div></div>
               ) : null}
 
               {/* Real Installation Progress */}
@@ -909,41 +966,277 @@ export const PackageDetailModal: React.FC = () => {
 
               {activeTab === "dependencies" && (
                 <div className="space-y-4 text-xs">
-                  <div>
-                    <div className="text-[11px] text-[var(--text-muted)] mb-2">
-                      Application dependencies required in PATH:
+                  {loadingDeps ? (
+                    <div className="py-8 text-center text-xs text-[var(--text-muted)] space-y-2">
+                      <div className="font-mono text-xs animate-pulse">Resolving dependency DAG & probing system capabilities...</div>
+                      <div className="text-[11px] text-[var(--text-faint)]">Read-only capability detection · Zero external commands</div>
                     </div>
-
-                    <div className="space-y-1.5">
-                      {selectedPackage.dependencies.packages.map((dep, idx) => {
-                        const isSatisfied = compat.satisfied_apps.includes(dep);
-
-                        return (
-                          <div
-                            key={idx}
-                            className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-xs"
-                          >
-                            <span className="font-mono text-[var(--text-primary)]">{dep}</span>
-                            {isSatisfied ? (
-                              <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
-                                <Check className="w-3 h-3" />
-                                Installed
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-amber-400 text-[11px]">
-                                <AlertCircle className="w-3 h-3" />
-                                Missing in PATH
-                              </span>
-                            )}
+                  ) : depReport ? (
+                    <div className="space-y-4">
+                      {/* Resolution Overview Banner */}
+                      {depReport.resolved ? (
+                        <div className="p-3 rounded-md bg-emerald-950/20 border border-emerald-800/40 space-y-1">
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>All Dependencies Satisfied</span>
                           </div>
-                        );
-                      })}
+                          {depReport.install_order.length > 0 && (
+                            <div className="text-[11px] text-emerald-300/80 font-mono">
+                              Topological Install Order: {depReport.install_order.join(" → ")}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {depReport.missing_required.length > 0 && (
+                            <div className="p-3 rounded-md bg-rose-950/20 border border-rose-800/40 space-y-1">
+                              <div className="flex items-center gap-1.5 text-rose-400 font-semibold text-xs">
+                                <AlertCircle className="w-4 h-4 text-rose-400" />
+                                <span>Missing {depReport.missing_required.length} Required Dependency(s)</span>
+                              </div>
+                              <div className="text-[11px] text-rose-300/90 leading-relaxed">
+                                Ryzora strictly avoids executing system package managers. Please install missing tools (
+                                <span className="font-mono text-white">{depReport.missing_required.join(", ")}</span>
+                                ) via your distribution package manager (pacman, apt, dnf, etc.).
+                              </div>
+                            </div>
+                          )}
+
+                          {depReport.conflicts.length > 0 && (
+                            <div className="p-3 rounded-md bg-amber-950/20 border border-amber-800/40 space-y-1">
+                              <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-xs">
+                                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                <span>Conflicting Requirements</span>
+                              </div>
+                              <ul className="text-[11px] text-amber-300/90 space-y-0.5 list-disc pl-4 font-mono">
+                                {depReport.conflicts.map((c, idx) => (
+                                  <li key={idx}>{c}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {depReport.cycles.length > 0 && (
+                            <div className="p-3 rounded-md bg-rose-950/30 border border-rose-700/50 space-y-1">
+                              <div className="flex items-center gap-1.5 text-rose-400 font-semibold text-xs">
+                                <RotateCcw className="w-4 h-4 text-rose-400" />
+                                <span>Circular Dependency Detected</span>
+                              </div>
+                              <ul className="text-[11px] text-rose-300 font-mono space-y-0.5">
+                                {depReport.cycles.map((cy, idx) => (
+                                  <li key={idx}>{cy.join(" → ")}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Missing Optional Banner */}
+                      {depReport.missing_optional.length > 0 && depReport.missing_required.length === 0 && (
+                        <div className="p-2.5 rounded-md bg-amber-950/20 border border-amber-800/40 text-amber-300 text-[11px]">
+                          Optional tool(s) not found: <span className="font-mono font-medium">{depReport.missing_optional.join(", ")}</span>. The package will install safely with available components.
+                        </div>
+                      )}
+
+                      {/* Tier 1: Ryzora Packages DAG */}
+                      {depReport.packages.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider flex items-center gap-1.5">
+                            <PackageIcon className="w-3.5 h-3.5 text-[var(--accent)]" />
+                            <span>Package Dependency Graph ({depReport.packages.length})</span>
+                          </div>
+                          <div className="space-y-1">
+                            {depReport.packages.map((pkgNode, idx) => (
+                              <div
+                                key={idx}
+                                className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between"
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-medium text-[var(--text-primary)]">
+                                      {pkgNode.name}
+                                    </span>
+                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-subtle)]">
+                                      v{pkgNode.version}
+                                    </span>
+                                    {pkgNode.version_req && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/30">
+                                        req: {pkgNode.version_req}
+                                      </span>
+                                    )}
+                                    {pkgNode.repository_id && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--bg-surface)] text-[var(--text-faint)]">
+                                        repo: {pkgNode.repository_id}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {pkgNode.transitive_packages.length > 0 && (
+                                    <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                                      ↳ depends on: {pkgNode.transitive_packages.join(", ")}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  {pkgNode.status === "satisfied" ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+                                      <Check className="w-3 h-3" />
+                                      Satisfied
+                                    </span>
+                                  ) : pkgNode.status === "missing" ? (
+                                    <span className="inline-flex items-center gap-1 text-rose-400 font-medium text-[11px]">
+                                      <AlertCircle className="w-3 h-3" />
+                                      Missing
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-amber-400 font-medium text-[11px]">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Incompatible
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tier 2: System Binaries & Tools */}
+                      {depReport.system_dependencies.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider flex items-center gap-1.5">
+                            <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>System Binaries ({depReport.system_dependencies.length})</span>
+                          </div>
+                          <div className="space-y-1">
+                            {depReport.system_dependencies.map((sysDep, idx) => (
+                              <div
+                                key={idx}
+                                className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between"
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[var(--text-primary)]">{sysDep.binary}</span>
+                                    <span
+                                      className={`text-[9px] uppercase px-1 rounded font-semibold ${
+                                        sysDep.required
+                                          ? "bg-rose-950/40 text-rose-300 border border-rose-800/40"
+                                          : "bg-slate-800/60 text-slate-300"
+                                      }`}
+                                    >
+                                      {sysDep.required ? "Required" : "Optional"}
+                                    </span>
+                                  </div>
+                                  {sysDep.path && (
+                                    <div className="text-[10px] text-[var(--text-faint)] font-mono">{sysDep.path}</div>
+                                  )}
+                                  {sysDep.description && (
+                                    <div className="text-[10px] text-[var(--text-muted)]">{sysDep.description}</div>
+                                  )}
+                                </div>
+                                <div>
+                                  {sysDep.status === "satisfied" ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+                                      <Check className="w-3 h-3" />
+                                      Found in PATH
+                                    </span>
+                                  ) : sysDep.required ? (
+                                    <span className="inline-flex items-center gap-1 text-rose-400 font-medium text-[11px]">
+                                      <AlertCircle className="w-3 h-3" />
+                                      Missing in PATH
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-amber-400 text-[11px]">
+                                      <AlertCircle className="w-3 h-3" />
+                                      Optional Not Found
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tier 3: Desktop & Runtime Capabilities */}
+                      {depReport.capability_dependencies.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider flex items-center gap-1.5">
+                            <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                            <span>System Capabilities ({depReport.capability_dependencies.length})</span>
+                          </div>
+                          <div className="space-y-1">
+                            {depReport.capability_dependencies.map((capDep, idx) => (
+                              <div
+                                key={idx}
+                                className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between"
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[var(--text-primary)]">{capDep.capability}</span>
+                                    <span className="text-[9px] uppercase px-1 rounded bg-[var(--bg-surface)] text-[var(--text-faint)]">
+                                      {capDep.kind === "desktop_capability" ? "Desktop/Session" : "Runtime"}
+                                    </span>
+                                  </div>
+                                  {capDep.current_value && (
+                                    <div className="text-[10px] text-[var(--text-muted)]">{capDep.current_value}</div>
+                                  )}
+                                </div>
+                                <div>
+                                  {capDep.status === "satisfied" ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+                                      <Check className="w-3 h-3" />
+                                      Satisfied
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-rose-400 font-medium text-[11px]">
+                                      <AlertCircle className="w-3 h-3" />
+                                      Incompatible
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  ) : (
+                    /* Fallback to package manifest dependencies */
+                    <div>
+                      <div className="text-[11px] text-[var(--text-muted)] mb-2">
+                        Application dependencies required in PATH:
+                      </div>
+                      <div className="space-y-1.5">
+                        {selectedPackage.dependencies.packages.map((dep, idx) => {
+                          const isSatisfied = compat.satisfied_apps.includes(dep);
+                          return (
+                            <div
+                              key={idx}
+                              className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-xs"
+                            >
+                              <span className="font-mono text-[var(--text-primary)]">{dep}</span>
+                              {isSatisfied ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+                                  <Check className="w-3 h-3" />
+                                  Installed
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-amber-400 text-[11px]">
+                                  <AlertCircle className="w-3 h-3" />
+                                  Missing in PATH
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {compat.issues.length > 0 && (
                     <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1.5">
-                      <div className="font-semibold text-[var(--text-primary)] text-xs">Compatibility Issues</div>
+                      <div className="font-semibold text-[var(--text-primary)] text-xs">Compatibility Warnings</div>
                       <ul className="space-y-1 text-[11px] text-[var(--text-muted)]">
                         {compat.issues.map((iss, idx) => (
                           <li key={idx} className="flex items-start gap-1.5">
@@ -1044,24 +1337,37 @@ export const PackageDetailModal: React.FC = () => {
                   Cancel
                 </button>
 
-                <button
-                  onClick={handleConfirmInstall}
-                  disabled={
-                    isInstalling ||
-                    loadingPlan ||
-                    (plan !== null &&
-                      (plan.missing_dependencies.length > 0 ||
-                        plan.compatibility_status === "incompatible" ||
-                        plan.conflicts.length > 0))
-                  }
-                  className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
-                >
-                  {isInstalling
-                    ? "Installing..."
-                    : plan && plan.missing_dependencies.length > 0
-                    ? `Missing: ${plan.missing_dependencies[0]}`
-                    : "Install"}
-                </button>
+                {plan && plan.dependency_report && plan.dependency_report.missing_required.length === 0 && plan.dependency_report.missing_optional.length > 0 ? (
+                  <button
+                    onClick={handleConfirmInstall}
+                    disabled={isInstalling || loadingPlan}
+                    className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    {isInstalling ? "Installing..." : "Continue with available components"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleConfirmInstall}
+                    disabled={
+                      Boolean(
+                        isInstalling ||
+                          loadingPlan ||
+                          (plan !== null &&
+                            (plan.missing_dependencies.length > 0 ||
+                              plan.compatibility_status === "incompatible" ||
+                              plan.conflicts.length > 0 ||
+                              Boolean(plan.dependency_report && !plan.dependency_report.resolved)))
+                      )
+                    }
+                    className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
+                  >
+                    {isInstalling
+                      ? "Installing..."
+                      : plan && (plan.missing_dependencies.length > 0 || (plan.dependency_report && plan.dependency_report.missing_required.length > 0))
+                      ? `Missing: ${plan.dependency_report?.missing_required[0] || plan.missing_dependencies[0]}`
+                      : "Install"}
+                  </button>
+                )}
               </>
             ) : (
               <>

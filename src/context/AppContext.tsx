@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  DependencyResolutionReport,
   UninstallResult,
   PackageUpdateStatus,
   UpdatePlan,
@@ -41,6 +42,7 @@ interface AppContextType {
   installProgress: number;
   installLogs: string[];
   previewInstallation: (packageId: string) => Promise<InstallationPlan>;
+  resolvePackageDependencies: (packageId: string) => Promise<DependencyResolutionReport>;
   installPackage: (pkg: PackageItem) => Promise<InstallResult>;
   uninstallPackage: (packageId: string) => Promise<UninstallResult>;
   checkPackageUpdate: (packageId: string) => Promise<PackageUpdateStatus>;
@@ -457,6 +459,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return await invoke<InstallationPlan>("preview_installation", { packageId });
   };
 
+  const resolvePackageDependencies = async (packageId: string): Promise<DependencyResolutionReport> => {
+    return await invoke<DependencyResolutionReport>("resolve_package_dependencies", { packageId });
+  };
+
   const installPackage = async (pkg: PackageItem): Promise<InstallResult> => {
     setIsInstalling(true);
     setInstallProgress(10);
@@ -640,6 +646,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installProgress,
         installLogs,
         previewInstallation,
+        resolvePackageDependencies,
         installPackage,
         uninstallPackage,
         checkPackageUpdate,

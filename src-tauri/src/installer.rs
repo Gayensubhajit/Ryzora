@@ -30,6 +30,8 @@ pub struct InstallationPlan {
     pub required_dependencies: Vec<String>,
     pub missing_dependencies: Vec<String>,
     pub warnings: Vec<String>,
+    #[serde(default)]
+    pub dependency_report: Option<crate::dependency::DependencyResolutionReport>,
 }
 
 /// Result returned after attempting an installation.
@@ -398,7 +400,7 @@ pub fn generate_installation_plan_in(
     };
     let compat_report = evaluate_compatibility(system_info, &reqs);
 
-    let (compat_status, missing_deps) = match compat_report.level {
+    let (mut compat_status, mut missing_deps) = match compat_report.level {
         CompatibilityLevel::Compatible => ("compatible".to_string(), vec![]),
         CompatibilityLevel::MissingDependencies => (
             "missing_dependencies".to_string(),
@@ -416,6 +418,34 @@ pub fn generate_installation_plan_in(
     let mut directories_to_create = Vec::new();
     let mut conflicts = Vec::new();
     let mut warnings = Vec::new();
+
+    // Phase 9: Dependency Intelligence & Resolution
+    let provider = crate::dependency::RepositoryPackageProvider::new();
+    let resolver = crate::dependency::DependencyResolver::new(&provider, system_info);
+    let dep_report = resolver.resolve_manifest(&manifest);
+
+    for m in &dep_report.missing_required {
+        if !missing_deps.contains(m) {
+            missing_deps.push(m.clone());
+        }
+    }
+    for c in &dep_report.conflicts {
+        if !conflicts.contains(c) {
+            conflicts.push(c.clone());
+        }
+    }
+    for cycle in &dep_report.cycles {
+        let cycle_msg = format!("Circular dependency detected: {}", cycle.join(" -> "));
+        if !conflicts.contains(&cycle_msg) {
+            conflicts.push(cycle_msg);
+        }
+    }
+
+    if !conflicts.is_empty() {
+        compat_status = "incompatible".to_string();
+    } else if !missing_deps.is_empty() {
+        compat_status = "missing_dependencies".to_string();
+    }
 
     for file_decl in &manifest.files {
         // Validate source file
@@ -486,6 +516,7 @@ pub fn generate_installation_plan_in(
         required_dependencies: manifest.compatibility.required,
         missing_dependencies: missing_deps,
         warnings,
+        dependency_report: Some(dep_report),
     })
 }
 
@@ -5784,5 +5815,66 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(record.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_phase9_installer_plan_includes_dependency_report() {
+        let sandbox = TestSandbox::new("phase9-plan-deps");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "plan-pkg-deps",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        let plan = generate_installation_plan_in(&pkg_dir, &sandbox.home_dir, &sys).unwrap();
+        assert!(plan.dependency_report.is_some());
+        let rep = plan.dependency_report.unwrap();
+        assert_eq!(rep.root_package_id, "plan-pkg-deps");
+        assert!(rep.resolved);
+        assert_eq!(plan.compatibility_status, "compatible");
+    }
+
+    #[test]
+    fn test_phase9_installer_plan_detects_missing_dependencies() {
+        let sandbox = TestSandbox::new("phase9-plan-missing");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "plan-pkg-missing",
+            &[("files/b.conf", "~/.config/app/b.conf", "content")],
+            &[],
+        );
+        // Overwrite manifest with missing required tool
+        let manifest_path = pkg_dir.join("manifest.json");
+        let mut manifest: RyzoraManifest =
+            serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        manifest
+            .dependencies
+            .push(crate::dependency::DependencySpec {
+                id: "nonexistent_system_tool_phase9".to_string(),
+                kind: crate::dependency::DependencyKind::SystemBinary,
+                version_req: None,
+                required: true,
+                description: Some("Crucial missing tool".to_string()),
+            });
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let plan = generate_installation_plan_in(&pkg_dir, &sandbox.home_dir, &sys).unwrap();
+        assert!(plan.dependency_report.is_some());
+        let rep = plan.dependency_report.unwrap();
+        assert!(!rep.resolved);
+        assert!(rep
+            .missing_required
+            .contains(&"nonexistent_system_tool_phase9".to_string()));
+        assert_eq!(plan.compatibility_status, "missing_dependencies");
+        assert!(plan
+            .missing_dependencies
+            .contains(&"nonexistent_system_tool_phase9".to_string()));
     }
 }

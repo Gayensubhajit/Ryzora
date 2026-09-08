@@ -71,6 +71,75 @@ export interface ManifestFile {
 }
 
 /** The authoritative Ryzora Package Manifest (spec v1). */
+// ─────────────────────────────────────────────────────────────────────────────
+// Dependency Intelligence & Resolver Types (Phase 9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DependencyKind =
+  | "package"
+  | "system_binary"
+  | "desktop_capability"
+  | "runtime_capability";
+
+export type DependencyStatus =
+  | "satisfied"
+  | "missing"
+  | "incompatible"
+  | "conflict"
+  | "unknown";
+
+export interface DependencySpec {
+  id: string;
+  kind: DependencyKind;
+  version_req?: string | null;
+  required?: boolean;
+  description?: string | null;
+}
+
+export interface ResolvedPackageNode {
+  package_id: string;
+  name: string;
+  version: string;
+  version_req?: string | null;
+  required: boolean;
+  repository_id?: string | null;
+  status: DependencyStatus;
+  status_message?: string | null;
+  dependencies: DependencySpec[];
+  transitive_packages: string[];
+}
+
+export interface ResolvedSystemDependency {
+  binary: string;
+  required: boolean;
+  status: DependencyStatus;
+  path?: string | null;
+  description?: string | null;
+}
+
+export interface ResolvedCapabilityDependency {
+  capability: string;
+  kind: DependencyKind;
+  required: boolean;
+  status: DependencyStatus;
+  current_value?: string | null;
+  description?: string | null;
+}
+
+export interface DependencyResolutionReport {
+  root_package_id: string;
+  resolved: boolean;
+  root_package?: ResolvedPackageNode | null;
+  packages: ResolvedPackageNode[];
+  system_dependencies: ResolvedSystemDependency[];
+  capability_dependencies: ResolvedCapabilityDependency[];
+  missing_required: string[];
+  missing_optional: string[];
+  conflicts: string[];
+  cycles: string[][];
+  install_order: string[];
+}
+
 export interface RyzoraManifest {
   /** Unique package slug, e.g. "cyberpunk-neon-2077". */
   id: string;
@@ -94,6 +163,8 @@ export interface RyzoraManifest {
   compatibility: ManifestCompatibility;
   /** Files this package installs. */
   files: ManifestFile[];
+  /** Typed package dependencies (Phase 9). */
+  dependencies?: DependencySpec[];
 }
 
 /** Result returned by the Rust validate_manifest command. */
@@ -313,6 +384,7 @@ export interface InstallationPlan {
   required_dependencies: string[];
   missing_dependencies: string[];
   warnings: string[];
+  dependency_report?: DependencyResolutionReport | null;
 }
 
 export interface InstallResult {

@@ -50,7 +50,7 @@ fn parse_os_release() -> HashMap<String, String> {
     map
 }
 
-fn check_binary(bin: &str) -> (bool, Option<String>) {
+pub fn check_binary(bin: &str) -> (bool, Option<String>) {
     if let Ok(path_var) = env::var("PATH") {
         for dir in env::split_paths(&path_var) {
             let full_path = dir.join(bin);

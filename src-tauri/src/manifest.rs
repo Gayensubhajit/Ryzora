@@ -1,5 +1,7 @@
+use crate::dependency::{DependencyKind, DependencySpec};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ryzora Package Manifest — spec version "1"
@@ -102,6 +104,91 @@ pub struct RyzoraManifest {
     /// Files this package installs.
     #[serde(default)]
     pub files: Vec<ManifestFile>,
+
+    /// Typed dependencies (Phase 9).
+    #[serde(default)]
+    pub dependencies: Vec<DependencySpec>,
+}
+
+impl RyzoraManifest {
+    /// Return all dependencies, merging explicit  with legacy
+    /// , , ,
+    /// and .
+    pub fn all_dependencies(&self) -> Vec<DependencySpec> {
+        let mut result = self.dependencies.clone();
+        let mut existing: HashSet<(String, DependencyKind)> = result
+            .iter()
+            .map(|d| (d.id.clone(), d.kind.clone()))
+            .collect();
+
+        // 1. Required system binaries
+        for req in &self.compatibility.required {
+            let key = (req.clone(), DependencyKind::SystemBinary);
+            if !existing.contains(&key) {
+                existing.insert(key);
+                result.push(DependencySpec {
+                    id: req.clone(),
+                    kind: DependencyKind::SystemBinary,
+                    version_req: None,
+                    required: true,
+                    description: Some(format!("System binary required in PATH: {}", req)),
+                });
+            }
+        }
+
+        // 2. Optional system binaries
+        for opt in &self.compatibility.optional {
+            let key = (opt.clone(), DependencyKind::SystemBinary);
+            if !existing.contains(&key) {
+                existing.insert(key);
+                result.push(DependencySpec {
+                    id: opt.clone(),
+                    kind: DependencyKind::SystemBinary,
+                    version_req: None,
+                    required: false,
+                    description: Some(format!("Optional system binary: {}", opt)),
+                });
+            }
+        }
+
+        // 3. Desktop / WM capabilities
+        for dt in &self.compatibility.desktops {
+            let dt_lower = dt.to_lowercase();
+            if dt_lower != "universal" && dt_lower != "all" {
+                let key = (dt.clone(), DependencyKind::DesktopCapability);
+                if !existing.contains(&key) {
+                    existing.insert(key);
+                    result.push(DependencySpec {
+                        id: dt.clone(),
+                        kind: DependencyKind::DesktopCapability,
+                        version_req: None,
+                        required: true,
+                        description: Some(format!("Desktop/WM capability: {}", dt)),
+                    });
+                }
+            }
+        }
+
+        // 4. Session protocol capabilities
+        for sess in &self.compatibility.sessions {
+            let sess_lower = sess.to_lowercase();
+            if sess_lower != "any" && sess_lower != "all" {
+                let key = (sess.clone(), DependencyKind::DesktopCapability);
+                if !existing.contains(&key) {
+                    existing.insert(key);
+                    result.push(DependencySpec {
+                        id: sess.clone(),
+                        kind: DependencyKind::DesktopCapability,
+                        version_req: None,
+                        required: true,
+                        description: Some(format!("Display session capability: {}", sess)),
+                    });
+                }
+            }
+        }
+
+        result
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,6 +385,29 @@ pub fn validate_manifest_internal(manifest_json: &str) -> ManifestValidationResu
         }
     }
 
+    // Step 6: Dependency validation (Phase 9)
+    for (i, dep) in manifest.dependencies.iter().enumerate() {
+        let trimmed_id = dep.id.trim();
+        if trimmed_id.is_empty() {
+            errors.push(format!("dependencies[{}]: 'id' must not be empty", i));
+        } else if trimmed_id.contains('/') || trimmed_id.contains('\\') || trimmed_id.contains("..")
+        {
+            errors.push(format!(
+                "dependencies[{}]: 'id' ('{}') contains invalid characters or path traversal",
+                i, dep.id
+            ));
+        }
+
+        if let Some(ref req_str) = dep.version_req {
+            if semver::VersionReq::parse(req_str).is_err() {
+                errors.push(format!(
+                    "dependencies[{}]: 'version_req' ('{}') is not a valid SemVer requirement",
+                    i, req_str
+                ));
+            }
+        }
+    }
+
     ManifestValidationResult {
         valid: errors.is_empty(),
         errors,
@@ -457,5 +567,113 @@ mod tests {
             "Got: {:?}",
             result.errors
         );
+    }
+
+    #[test]
+    fn test_phase9_dependencies_parsing_and_mapping() {
+        let json = r#"{
+            "id": "rice-with-deps",
+            "name": "Rice with Deps",
+            "version": "1.0.0",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "rice",
+            "compatibility": {
+                "desktops": ["hyprland"],
+                "sessions": ["wayland"],
+                "distros": [],
+                "required": ["hyprland", "waybar"],
+                "optional": ["rofi"]
+            },
+            "dependencies": [
+                {
+                    "id": "catppuccin-gtk",
+                    "kind": "package",
+                    "version_req": "^1.0.0",
+                    "required": true,
+                    "description": "GTK theme package"
+                }
+            ],
+            "files": []
+        }"#;
+
+        let result = validate_manifest_internal(json);
+        assert!(result.valid, "Errors: {:?}", result.errors);
+
+        let manifest: RyzoraManifest = serde_json::from_str(json).unwrap();
+        assert_eq!(manifest.dependencies.len(), 1);
+        assert_eq!(manifest.dependencies[0].id, "catppuccin-gtk");
+
+        // Test all_dependencies mapping
+        let all = manifest.all_dependencies();
+        assert!(all
+            .iter()
+            .any(|d| d.id == "catppuccin-gtk" && d.kind == DependencyKind::Package));
+        assert!(all
+            .iter()
+            .any(|d| d.id == "waybar" && d.kind == DependencyKind::SystemBinary && d.required));
+        assert!(all
+            .iter()
+            .any(|d| d.id == "rofi" && d.kind == DependencyKind::SystemBinary && !d.required));
+        assert!(all
+            .iter()
+            .any(|d| d.id == "hyprland" && d.kind == DependencyKind::DesktopCapability));
+        assert!(all
+            .iter()
+            .any(|d| d.id == "wayland" && d.kind == DependencyKind::DesktopCapability));
+    }
+
+    #[test]
+    fn test_phase9_dependencies_validation_failures() {
+        // Invalid SemVer version_req
+        let bad_req_json = r#"{
+            "id": "bad-req",
+            "name": "Bad Req",
+            "version": "1.0.0",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "rice",
+            "compatibility": {"desktops": [], "sessions": [], "distros": [], "required": [], "optional": []},
+            "dependencies": [
+                {
+                    "id": "some-dep",
+                    "kind": "package",
+                    "version_req": "invalid-version-req-!!!",
+                    "required": true
+                }
+            ],
+            "files": []
+        }"#;
+        let res = validate_manifest_internal(bad_req_json);
+        assert!(!res.valid);
+        assert!(res
+            .errors
+            .iter()
+            .any(|e| e.contains("not a valid SemVer requirement")));
+
+        // Path traversal in dependency id
+        let traversal_dep_json = r#"{
+            "id": "bad-dep-id",
+            "name": "Bad Dep ID",
+            "version": "1.0.0",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "rice",
+            "compatibility": {"desktops": [], "sessions": [], "distros": [], "required": [], "optional": []},
+            "dependencies": [
+                {
+                    "id": "../../etc/shadow",
+                    "kind": "package",
+                    "required": true
+                }
+            ],
+            "files": []
+        }"#;
+        let res2 = validate_manifest_internal(traversal_dep_json);
+        assert!(!res2.valid);
+        assert!(res2
+            .errors
+            .iter()
+            .any(|e| e.contains("invalid characters or path traversal")));
     }
 }
