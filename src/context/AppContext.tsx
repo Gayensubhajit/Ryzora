@@ -7,7 +7,8 @@ import {
   DesktopEnvironment,
   ManifestValidationResult,
   PackageItem,
-  SnapshotRecord,
+  RestoreResult,
+  SnapshotMetadata,
   SystemInfo,
 } from "../types";
 import { MOCK_PACKAGES } from "../data/mockPackages";
@@ -25,12 +26,13 @@ interface AppContextType {
   selectedPackage: PackageItem | null;
   setSelectedPackage: (pkg: PackageItem | null) => void;
   installedPackageIds: string[];
-  snapshots: SnapshotRecord[];
+  snapshots: SnapshotMetadata[];
   isInstalling: boolean;
   installProgress: number;
   installLogs: string[];
   installPackage: (pkg: PackageItem) => Promise<void>;
   rollbackSnapshot: (snapId: string) => Promise<void>;
+  deleteSnapshot: (snapId: string) => Promise<void>;
   refreshSystem: () => Promise<void>;
   checkCompatibility: (pkg: PackageItem) => CompatibilityReport;
   validateManifest: (manifestJson: string) => Promise<ManifestValidationResult>;
@@ -241,7 +243,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return ["fastfetch-cyber-spec"];
     }
   });
-  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [snapshots, setSnapshots] = useState<SnapshotMetadata[]>([]);
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [installProgress, setInstallProgress] = useState<number>(0);
   const [installLogs, setInstallLogs] = useState<string[]>([]);
@@ -283,24 +285,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loadSnapshots = async () => {
     try {
-      const list = await invoke<SnapshotRecord[]>("get_backups");
+      const list = await invoke<SnapshotMetadata[]>("list_snapshots");
       setSnapshots(list);
     } catch {
-      setSnapshots([
-        {
-          id: "snap-init-001",
-          package_id: "system-baseline",
-          package_name: "Initial System Baseline",
-          timestamp: Date.now() / 1000 - 86400,
-          formatted_date: "2026-09-08 18:00:00",
-          backed_up_paths: [
-            "~/.config/hypr/hyprland.conf",
-            "~/.config/waybar/config.jsonc",
-            "~/.config/kitty/kitty.conf",
-          ],
-          status: "active",
-        },
-      ]);
+      // No fallback data — real snapshots only
+      setSnapshots([]);
     }
   };
 
@@ -372,23 +361,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]);
 
     try {
-      const snap = await invoke<SnapshotRecord>("create_backup_snapshot", {
-        packageId: pkg.id,
-        packageName: pkg.title,
+      const snap = await invoke<SnapshotMetadata>("create_snapshot", {
+        label: pkg.manifest?.name ?? pkg.title,
         paths: pathsToBackup,
       });
       setSnapshots((prev) => [snap, ...prev]);
-    } catch {
-      const mockSnap: SnapshotRecord = {
-        id: `snap-${Date.now()}`,
-        package_id: pkg.id,
-        package_name: pkg.title,
-        timestamp: Date.now() / 1000,
-        formatted_date: "Just now",
-        backed_up_paths: pathsToBackup,
-        status: "active",
-      };
-      setSnapshots((prev) => [mockSnap, ...prev]);
+    } catch (e) {
+      // Snapshot creation failed — log but do not block simulated install
+      setInstallLogs((prev) => [
+        ...prev,
+        `[Warning] Snapshot creation failed: ${e}`,
+      ]);
     }
 
     await new Promise((r) => setTimeout(r, 400));
@@ -416,17 +399,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const rollbackSnapshot = async (snapId: string) => {
     try {
-      await invoke("rollback_snapshot", { snapshotId: snapId });
-    } catch {
-      // Fallback update
+      const result = await invoke<RestoreResult>("restore_snapshot", { id: snapId });
+      if (result.success) {
+        setToast({
+          message: `Restored ${result.restored_count} file(s) from snapshot`,
+          type: "success",
+        });
+      } else {
+        setToast({
+          message: `Restore completed with ${result.errors.length} issue(s)`,
+          type: "warning",
+        });
+      }
+    } catch (e) {
+      setToast({
+        message: `Restore failed: ${e}`,
+        type: "warning",
+      });
     }
-    setSnapshots((prev) =>
-      prev.map((s) => (s.id === snapId ? { ...s, status: "restored" } : s))
-    );
-    setToast({
-      message: `Configurations restored to snapshot ${snapId}`,
-      type: "success",
-    });
+    // Refresh snapshots to get updated status
+    await loadSnapshots();
+  };
+
+  const deleteSnapshot = async (snapId: string) => {
+    try {
+      await invoke("delete_snapshot", { id: snapId });
+      setSnapshots((prev) => prev.filter((s) => s.id !== snapId));
+      setToast({ message: "Snapshot deleted", type: "info" });
+    } catch (e) {
+      setToast({ message: `Delete failed: ${e}`, type: "warning" });
+    }
   };
 
   return (
@@ -453,6 +455,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshSystem,
         checkCompatibility,
         validateManifest,
+        deleteSnapshot,
         toast,
         setToast,
       }}

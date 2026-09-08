@@ -22,7 +22,10 @@ export const PackageDetailModal: React.FC = () => {
   if (!selectedPackage) return null;
 
   const isInstalled = installedPackageIds.includes(selectedPackage.id);
-  const relatedSnapshot = snapshots.find((s) => s.package_id === selectedPackage.id);
+  // Find a snapshot whose label matches this package (label = package name as set during install)
+  const relatedSnapshot = snapshots.find(
+    (s) => s.label === (selectedPackage.manifest?.name ?? selectedPackage.title)
+  );
   const compat = checkCompatibility(selectedPackage);
 
   return (

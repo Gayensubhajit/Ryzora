@@ -235,6 +235,52 @@ export interface PackageItem {
   manifest?: RyzoraManifest;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Snapshot / Backup Engine types (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type FileEntryType = "Regular" | "Directory" | "Symlink" | "Absent";
+export type SnapshotStatus = "Pending" | "Complete" | "Verified" | "Corrupted" | "Restored";
+
+/** Metadata for one backed-up filesystem entry inside a snapshot. */
+export interface SnapshotFileEntry {
+  original_path: string;
+  absolute_original: string;
+  backup_relative: string;
+  file_type: FileEntryType;
+  symlink_target: string | null;
+  size_bytes: number;
+  sha256: string | null;
+  existed: boolean;
+}
+
+/** The full snapshot record — mirrors Rust SnapshotMetadata. */
+export interface SnapshotMetadata {
+  id: string;
+  label: string;
+  created_at: number;
+  formatted_date: string;
+  ryzora_version: string;
+  status: SnapshotStatus;
+  entries: SnapshotFileEntry[];
+  total_size_bytes: number;
+  verified: boolean;
+}
+
+/** Result from the restore_snapshot Tauri command. */
+export interface RestoreResult {
+  restored_count: number;
+  skipped_count: number;
+  removed_absent_count: number;
+  errors: string[];
+  success: boolean;
+}
+
+/**
+ * Legacy type alias — kept for any remaining code that uses the old
+ * in-memory snapshot shape. Will be removed in a future cleanup.
+ * @deprecated Use SnapshotMetadata instead.
+ */
 export interface SnapshotRecord {
   id: string;
   package_id: string;

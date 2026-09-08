@@ -1,21 +1,26 @@
 pub mod compatibility;
 pub mod manifest;
+pub mod snapshot;
 pub mod system;
-
-use manifest::SnapshotState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(SnapshotState::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            // System Probe
             system::detect_system_info,
-            manifest::get_backups,
-            manifest::create_backup_snapshot,
-            manifest::rollback_snapshot,
+            // Manifest — validation only (Phase 2)
             manifest::validate_manifest,
             manifest::parse_manifest,
+            // Snapshot / Backup Engine (Phase 3)
+            snapshot::create_snapshot,
+            snapshot::list_snapshots,
+            snapshot::get_snapshot,
+            snapshot::verify_snapshot,
+            snapshot::delete_snapshot,
+            snapshot::restore_snapshot,
+            // Compatibility Engine (Phase 1)
             compatibility::evaluate_package_compatibility,
             compatibility::evaluate_batch_compatibility,
         ])
