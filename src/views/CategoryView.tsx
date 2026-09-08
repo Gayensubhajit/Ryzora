@@ -4,50 +4,50 @@ import { PackageCard } from "../components/PackageCard";
 import { CategoryId } from "../types";
 
 const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
-  discover: { title: "Discover", subtitle: "Explore featured rices and customization packages" },
+  discover: { title: "Discover", subtitle: "Explore desktop configurations" },
   rices: {
-    title: "Complete Desktop Rices",
-    subtitle: "Turnkey visual overhauls bundling window manager, bar, terminal, and launcher configs",
+    title: "Complete Rices",
+    subtitle: "Full visual configurations bundling window manager, status bar, and terminal themes",
   },
   themes: {
-    title: "GTK & Qt Themes",
-    subtitle: "Cohesive color schemes and icon packs for native Linux desktop applications",
+    title: "Themes",
+    subtitle: "GTK, Qt, and application color palettes",
   },
   bars: {
     title: "Status Bars",
-    subtitle: "Modular Waybar, Polybar, and AGS widgets with custom styles and sensor monitors",
+    subtitle: "Waybar and status panel configurations",
   },
   fastfetch: {
-    title: "Fastfetch & System Fetch",
-    subtitle: "High contrast ASCII art logos, hardware spec layouts, and terminal banners",
+    title: "Fastfetch",
+    subtitle: "System fetch ASCII logos and layout profiles",
   },
   lockscreens: {
     title: "Lockscreens",
-    subtitle: "Sleek security lockscreens with live clocks, weather, and media controls",
+    subtitle: "Hyprlock and lockscreen configurations",
   },
   wallpapers: {
-    title: "Wallpapers & Palettes",
-    subtitle: "Curated 4K/8K wallpapers with auto-generated Pywal and Matugen color swatches",
+    title: "Wallpapers",
+    subtitle: "High-resolution desktop wallpapers with embedded palettes",
   },
   terminal: {
-    title: "Terminal & Shell",
-    subtitle: "Kitty, Alacritty color profiles and lightning-fast Starship shell prompts",
+    title: "Terminal",
+    subtitle: "Kitty, Alacritty, and Starship shell prompt configs",
   },
-  icons: { title: "Icons", subtitle: "Vector icon themes" },
-  cursors: { title: "Cursors", subtitle: "Cursor themes" },
-  fonts: { title: "Fonts", subtitle: "Typography and coding fonts" },
+  icons: { title: "Icons", subtitle: "Icon themes" },
+  cursors: { title: "Cursors", subtitle: "Cursor sets" },
+  fonts: { title: "Fonts", subtitle: "System and coding fonts" },
   widgets: { title: "Widgets", subtitle: "Desktop screen widgets" },
-  bundles: { title: "Bundles", subtitle: "Packaged collections" },
-  installed: { title: "Installed", subtitle: "Manage installed configurations" },
-  backups: { title: "Backups", subtitle: "System snapshot history" },
-  system: { title: "System Probe", subtitle: "Environment diagnostics" },
+  bundles: { title: "Bundles", subtitle: "Package bundles" },
+  installed: { title: "Installed", subtitle: "Installed configurations" },
+  backups: { title: "Backups", subtitle: "Snapshot history" },
+  system: { title: "System", subtitle: "System diagnostics" },
 };
 
 export const CategoryView: React.FC = () => {
   const { packages, activeCategory, searchQuery, desktopFilter } = useApp();
 
   const meta = CATEGORY_META[activeCategory] || {
-    title: "Customizations",
+    title: "Category",
     subtitle: "Browse packages",
   };
 
@@ -69,40 +69,35 @@ export const CategoryView: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Category Header */}
-      <div className="p-8 rounded-3xl bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent border border-slate-800">
-        <div className="flex items-center gap-2 text-cyan-400 text-xs font-bold uppercase tracking-wider mb-2">
-          <span>Marketplace Category</span>
-        </div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
+    <div className="space-y-6 pb-10">
+      {/* Header */}
+      <div className="p-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+        <h1 className="text-lg font-bold text-[var(--text-primary)] mb-1">
           {meta.title}
         </h1>
-        <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
+        <p className="text-xs text-[var(--text-muted)]">
           {meta.subtitle}
         </p>
       </div>
 
-      {/* Grid of packages */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Showing {categoryPackages.length} package{categoryPackages.length === 1 ? "" : "s"}
-        </span>
-      </div>
+      {/* Grid */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
+          <span>{categoryPackages.length} packages</span>
+        </div>
 
-      {categoryPackages.length === 0 ? (
-        <div className="p-16 text-center rounded-3xl bg-slate-900/40 border border-slate-800 space-y-3">
-          <div className="text-slate-400 text-sm">
-            No packages currently found for this category with your active filters.
+        {categoryPackages.length === 0 ? (
+          <div className="p-12 text-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs text-[var(--text-muted)]">
+            No packages found in this category matching your filter.
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {categoryPackages.map((pkg) => (
-            <PackageCard key={pkg.id} packageItem={pkg} />
-          ))}
-        </div>
-      )}
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categoryPackages.map((pkg) => (
+              <PackageCard key={pkg.id} packageItem={pkg} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

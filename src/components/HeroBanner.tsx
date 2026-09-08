@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, Star, Download, CheckCircle2, ArrowRight } from "lucide-react";
+import { Star, Download } from "lucide-react";
 import { PackageItem } from "../types";
 import { useApp } from "../context/AppContext";
 
@@ -8,92 +8,70 @@ interface HeroBannerProps {
 }
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredPackage }) => {
-  const { setSelectedPackage, installedPackageIds, systemInfo } = useApp();
+  const { setSelectedPackage } = useApp();
 
-  const isInstalled = installedPackageIds.includes(featuredPackage.id);
+  const componentNames = featuredPackage.components.map((c) => c.name.split(" ")[0]).join(" · ");
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950 shadow-2xl shadow-cyan-950/40 select-none group">
-      {/* Background Graphic with gradient overlay */}
-      <div className="absolute inset-0 z-0">
-        <img
-          src={featuredPackage.hero_image}
-          alt={featuredPackage.title}
-          className="w-full h-full object-cover object-center brightness-60 group-hover:scale-102 transition-transform duration-700 ease-out"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#07090e] via-[#07090e]/85 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-transparent to-transparent" />
-      </div>
+    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-0">
+        {/* Left Info Column */}
+        <div className="p-6 md:col-span-7 flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between text-[11px] font-mono uppercase text-[var(--text-faint)] mb-2">
+              <span>Featured</span>
+              <span className="font-semibold text-[var(--text-muted)] tracking-wider">
+                {featuredPackage.category.toUpperCase()}
+              </span>
+            </div>
 
-      {/* Hero Content */}
-      <div className="relative z-10 p-8 md:p-10 max-w-2xl flex flex-col justify-between min-h-[360px]">
-        <div>
-          {/* Top Pill Badges */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20 backdrop-blur-md">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Featured Rice of the Week</span>
-            </span>
+            <h2 className="text-xl font-bold text-[var(--text-primary)] mb-1">
+              {featuredPackage.title}
+            </h2>
 
-            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900/80 text-emerald-400 border border-emerald-500/30 backdrop-blur-md">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Compatible with {systemInfo?.window_manager || "Hyprland"}</span>
-            </span>
+            <p className="text-xs text-[var(--text-muted)] leading-relaxed mb-3">
+              {featuredPackage.subtitle}
+            </p>
+
+            {/* Component list */}
+            <div className="text-[11px] font-mono text-[var(--text-faint)] truncate mb-4">
+              {componentNames}
+            </div>
           </div>
 
-          <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight leading-tight mb-2 drop-shadow-md">
-            {featuredPackage.title}
-          </h1>
+          {/* Actions and Stats */}
+          <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
+            <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+              <div className="flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span className="font-semibold text-[var(--text-primary)]">
+                  {featuredPackage.rating.toFixed(1)}
+                </span>
+                <span className="text-[var(--text-faint)]">({featuredPackage.rating_count})</span>
+              </div>
 
-          <p className="text-sm md:text-base text-slate-300 leading-relaxed mb-6 line-clamp-2 max-w-xl drop-shadow">
-            {featuredPackage.subtitle}. Fully modular configurations for Hyprland, Waybar, Kitty, Rofi, and Fastfetch.
-          </p>
-
-          {/* Color Swatch Previews */}
-          <div className="flex items-center gap-2 mb-6">
-            <span className="text-xs text-slate-400 font-medium">Palette:</span>
-            <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/60 backdrop-blur-md border border-white/10">
-              {featuredPackage.color_palette.map((color, idx) => (
-                <div
-                  key={idx}
-                  className="w-4 h-4 rounded-full ring-1 ring-black/50 shadow-sm"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
+              <div className="flex items-center gap-1 text-[var(--text-faint)]">
+                <Download className="w-3.5 h-3.5" />
+                <span>{(featuredPackage.downloads / 1000).toFixed(1)}k installs</span>
+              </div>
             </div>
+
+            <button
+              onClick={() => setSelectedPackage(featuredPackage)}
+              className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors"
+            >
+              View Details
+            </button>
           </div>
         </div>
 
-        {/* Buttons & Metadata */}
-        <div className="flex flex-wrap items-center gap-4">
-          <button
-            onClick={() => setSelectedPackage(featuredPackage)}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
-          >
-            <span>Inspect & Install Rice</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-
-          {isInstalled && (
-            <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-500/40 backdrop-blur-md">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Installed on your system</span>
-            </span>
-          )}
-
-          <div className="flex items-center gap-4 text-xs text-slate-300 pl-2">
-            <div className="flex items-center gap-1 text-amber-300">
-              <Star className="w-4 h-4 fill-amber-300" />
-              <span className="font-bold text-white text-sm">{featuredPackage.rating.toFixed(1)}</span>
-              <span className="text-slate-400">({featuredPackage.rating_count})</span>
-            </div>
-
-            <div className="flex items-center gap-1 text-slate-400">
-              <Download className="w-4 h-4" />
-              <span className="font-medium text-slate-300">{(featuredPackage.downloads / 1000).toFixed(1)}k installs</span>
-            </div>
-          </div>
+        {/* Right Preview Image */}
+        <div className="relative md:col-span-5 h-48 md:h-auto bg-[var(--bg-canvas)] border-t md:border-t-0 md:border-l border-[var(--border-subtle)] overflow-hidden">
+          <img
+            src={featuredPackage.hero_image}
+            alt={featuredPackage.title}
+            className="w-full h-full object-cover object-center"
+          />
         </div>
       </div>
     </div>

@@ -1,14 +1,5 @@
 import React, { useState } from "react";
-import {
-  X,
-  Star,
-  Download,
-  ShieldCheck,
-  CheckCircle2,
-  Layers,
-  History,
-  RotateCcw,
-} from "lucide-react";
+import { X, Star, RotateCcw, Check } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 export const PackageDetailModal: React.FC = () => {
@@ -25,51 +16,44 @@ export const PackageDetailModal: React.FC = () => {
     rollbackSnapshot,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "manifest" | "safety">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "manifest" | "dependencies">("overview");
   const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState<number>(0);
 
   if (!selectedPackage) return null;
 
   const isInstalled = installedPackageIds.includes(selectedPackage.id);
-
-  // Find most recent snapshot for this package if installed
   const relatedSnapshot = snapshots.find((s) => s.package_id === selectedPackage.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/70 backdrop-blur-sm select-none">
       <div
-        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl bg-[#0b0f19] border border-slate-800 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg bg-[var(--bg-surface)] border border-[var(--border-strong)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Header */}
-        <div className="p-6 pb-4 border-b border-slate-800/80 flex items-center justify-between gap-4 bg-slate-900/50">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-                {selectedPackage.category}
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
-                v{selectedPackage.version}
-              </span>
-            </div>
-            <h2 className="text-xl font-bold text-white truncate max-w-md">
+        {/* Header */}
+        <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 bg-[var(--bg-surface-elevated)]">
+          <div className="flex items-center gap-2.5 truncate">
+            <span className="font-bold text-sm text-[var(--text-primary)] truncate">
               {selectedPackage.title}
-            </h2>
+            </span>
+            <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] px-1.5 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+              v{selectedPackage.version}
+            </span>
           </div>
 
           <button
             onClick={() => setSelectedPackage(null)}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-surface)] transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Body (Scrollable) */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Screenshot Showcase */}
-          <div className="space-y-3">
-            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-800">
+        {/* Body Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Main Screenshot Preview */}
+          <div className="space-y-2">
+            <div className="relative aspect-video w-full rounded-md overflow-hidden bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
               <img
                 src={selectedPackage.screenshots[selectedScreenshotIndex] || selectedPackage.hero_image}
                 alt={selectedPackage.title}
@@ -78,15 +62,15 @@ export const PackageDetailModal: React.FC = () => {
             </div>
 
             {selectedPackage.screenshots.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-1">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 {selectedPackage.screenshots.map((shot, idx) => (
                   <button
                     key={idx}
                     onClick={() => setSelectedScreenshotIndex(idx)}
-                    className={`relative w-24 h-14 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
+                    className={`relative w-20 h-12 rounded overflow-hidden border transition-all flex-shrink-0 ${
                       selectedScreenshotIndex === idx
-                        ? "border-cyan-400 scale-102 ring-2 ring-cyan-500/30"
-                        : "border-slate-800 opacity-60 hover:opacity-100"
+                        ? "border-[var(--accent)] opacity-100"
+                        : "border-[var(--border-subtle)] opacity-60 hover:opacity-100"
                     }`}
                   >
                     <img src={shot} alt="preview" className="w-full h-full object-cover" />
@@ -96,303 +80,194 @@ export const PackageDetailModal: React.FC = () => {
             )}
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 border-b border-slate-800/80 pb-1 text-sm font-semibold">
+          {/* Clean Segmented Tab Navigation */}
+          <div className="flex items-center gap-1 border-b border-[var(--border-subtle)] pb-2 text-xs">
             <button
               onClick={() => setActiveTab("overview")}
-              className={`px-4 py-2 rounded-xl transition-all ${
+              className={`px-3 py-1 rounded-md transition-colors ${
                 activeTab === "overview"
-                  ? "bg-slate-800 text-cyan-300 border border-slate-700"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-[var(--bg-surface-elevated)] text-white font-medium"
+                  : "text-[var(--text-muted)] hover:text-white"
               }`}
             >
-              Overview & Details
+              Overview
             </button>
             <button
               onClick={() => setActiveTab("manifest")}
-              className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1 rounded-md transition-colors ${
                 activeTab === "manifest"
-                  ? "bg-slate-800 text-cyan-300 border border-slate-700"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-[var(--bg-surface-elevated)] text-white font-medium"
+                  : "text-[var(--text-muted)] hover:text-white"
               }`}
             >
-              <Layers className="w-4 h-4" />
-              <span>Manifest & Files ({selectedPackage.components.length})</span>
+              Components & Files ({selectedPackage.components.length})
             </button>
             <button
-              onClick={() => setActiveTab("safety")}
-              className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === "safety"
-                  ? "bg-slate-800 text-cyan-300 border border-slate-700"
-                  : "text-slate-400 hover:text-slate-200"
+              onClick={() => setActiveTab("dependencies")}
+              className={`px-3 py-1 rounded-md transition-colors ${
+                activeTab === "dependencies"
+                  ? "bg-[var(--bg-surface-elevated)] text-white font-medium"
+                  : "text-[var(--text-muted)] hover:text-white"
               }`}
             >
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
-              <span>Safety & Backups</span>
+              Dependencies ({selectedPackage.dependencies.packages.length})
             </button>
           </div>
 
-          {/* Tab 1: Overview */}
+          {/* Tab Content */}
           {activeTab === "overview" && (
-            <div className="space-y-5">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Description
-                </h4>
-                <p className="text-sm text-slate-300 leading-relaxed">
-                  {selectedPackage.description}
-                </p>
-              </div>
+            <div className="space-y-4 text-xs">
+              <p className="text-[var(--text-muted)] leading-relaxed">
+                {selectedPackage.description}
+              </p>
 
-              {/* Author & Stats Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
                 <div>
-                  <div className="text-[11px] text-slate-400 mb-1">Author</div>
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={selectedPackage.author.avatar}
-                      alt={selectedPackage.author.name}
-                      className="w-5 h-5 rounded-full bg-slate-800"
-                    />
-                    <span className="text-xs font-semibold text-slate-200">
-                      {selectedPackage.author.name}
-                    </span>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase mb-0.5">Author</div>
+                  <div className="text-[var(--text-primary)] font-medium truncate">
+                    {selectedPackage.author.name}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[11px] text-slate-400 mb-1">Rating</div>
-                  <div className="flex items-center gap-1 text-amber-300 text-xs font-bold">
-                    <Star className="w-3.5 h-3.5 fill-amber-300" />
-                    <span>{selectedPackage.rating.toFixed(2)}</span>
-                    <span className="text-slate-500 font-normal">({selectedPackage.rating_count})</span>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase mb-0.5">Rating</div>
+                  <div className="text-[var(--text-primary)] font-medium flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <span>{selectedPackage.rating.toFixed(1)}</span>
+                    <span className="text-[var(--text-faint)]">({selectedPackage.rating_count})</span>
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[11px] text-slate-400 mb-1">Downloads</div>
-                  <div className="flex items-center gap-1 text-slate-200 text-xs font-semibold">
-                    <Download className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>{selectedPackage.downloads.toLocaleString()}</span>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase mb-0.5">Installs</div>
+                  <div className="text-[var(--text-primary)] font-medium">
+                    {selectedPackage.downloads.toLocaleString()}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[11px] text-slate-400 mb-1">Desktops</div>
-                  <div className="text-xs font-semibold text-slate-300 uppercase">
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase mb-0.5">Target Desktops</div>
+                  <div className="text-[var(--text-primary)] font-medium uppercase truncate">
                     {selectedPackage.supported_desktops.join(", ")}
                   </div>
                 </div>
               </div>
 
-              {/* Tags & Palette */}
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {selectedPackage.tags.map((tag, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs bg-slate-900 text-slate-300 border border-slate-800"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-medium">Color Palette:</span>
-                  <div className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-900 border border-slate-800">
-                    {selectedPackage.color_palette.map((color, idx) => (
-                      <span
-                        key={idx}
-                        className="w-3.5 h-3.5 rounded-full ring-1 ring-black/40"
-                        style={{ backgroundColor: color }}
-                        title={color}
-                      />
-                    ))}
-                  </div>
+              {/* Safety notice */}
+              <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] space-y-1">
+                <div className="font-semibold text-[var(--text-primary)]">Pre-install Snapshot</div>
+                <div>
+                  Installing this package will automatically snapshot modified configuration files in <code className="text-slate-300">~/.config/</code> so you can roll back at any time.
                 </div>
               </div>
             </div>
           )}
 
-          {/* Tab 2: Manifest Inspector */}
           {activeTab === "manifest" && (
-            <div className="space-y-4">
-              <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 text-xs text-cyan-200">
-                <strong>Declarative Package Manifest</strong>: Ryzora explicitly maps every configuration file to its designated destination. No root privileges or arbitrary bash execution required.
+            <div className="space-y-3 text-xs">
+              <div className="text-[11px] text-[var(--text-muted)]">
+                Files installed by this package:
               </div>
 
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Target Files & Directories ({selectedPackage.components.length})
-                </h4>
-
-                <div className="divide-y divide-slate-800/80 rounded-2xl bg-slate-900/60 border border-slate-800 overflow-hidden">
-                  {selectedPackage.components.map((c, idx) => (
-                    <div key={idx} className="p-3.5 flex items-start justify-between gap-4 text-xs">
-                      <div>
-                        <div className="font-bold text-slate-200 mb-0.5">{c.name}</div>
-                        <div className="text-slate-400">{c.description}</div>
-                      </div>
-                      <code className="px-2.5 py-1 rounded-md bg-slate-950 text-cyan-400 font-mono text-[11px] border border-slate-800 flex-shrink-0">
-                        {c.target_path}
-                      </code>
+              <div className="divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] overflow-hidden">
+                {selectedPackage.components.map((c, idx) => (
+                  <div key={idx} className="p-2.5 flex items-start justify-between gap-3 font-mono text-[11px]">
+                    <div>
+                      <div className="font-semibold text-[var(--text-primary)] font-sans text-xs">{c.name}</div>
+                      <div className="text-[var(--text-faint)] font-sans text-[11px]">{c.description}</div>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Dependencies Check */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Required Dependencies
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedPackage.dependencies.packages.map((dep, idx) => {
-                    const isInstalledOnSystem = systemInfo?.installed_components.some(
-                      (ic) => ic.binary === dep && ic.installed
-                    );
-
-                    return (
-                      <span
-                        key={idx}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono border ${
-                          isInstalledOnSystem
-                            ? "bg-emerald-950/40 text-emerald-300 border-emerald-500/40"
-                            : "bg-slate-900 text-slate-300 border-slate-800"
-                        }`}
-                      >
-                        {isInstalledOnSystem ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        ) : (
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                        )}
-                        <span>{dep}</span>
-                        {isInstalledOnSystem && <span className="text-[10px] text-emerald-400">(ready)</span>}
-                      </span>
-                    );
-                  })}
-                </div>
+                    <code className="text-[var(--accent-text)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-subtle)] flex-shrink-0">
+                      {c.target_path}
+                    </code>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Tab 3: Safety & Backups */}
-          {activeTab === "safety" && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
-                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-                  <ShieldCheck className="w-5 h-5" />
-                  <span>Audit Rating: {selectedPackage.safety_audit.rating.toUpperCase()}</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  This package complies with Ryzora's strict safety standards. It does not request root privileges, does not modify kernel/system binaries, and can be cleanly rolled back with one click.
-                </p>
+          {activeTab === "dependencies" && (
+            <div className="space-y-3 text-xs">
+              <div className="text-[11px] text-[var(--text-muted)]">
+                Required packages for this configuration:
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <div className="text-slate-400 mb-1">Pre-Install Snapshot</div>
-                  <div className="font-semibold text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Automatic (~/.config)</span>
-                  </div>
-                </div>
+              <div className="space-y-1.5">
+                {selectedPackage.dependencies.packages.map((dep, idx) => {
+                  const isPresent = systemInfo?.installed_components.some(
+                    (ic) => ic.binary === dep && ic.installed
+                  );
 
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <div className="text-slate-400 mb-1">Root Privileges</div>
-                  <div className="font-semibold text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Not Required (User-space)</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <div className="text-slate-400 mb-1">Rollback Ready</div>
-                  <div className="font-semibold text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>1-Click Restore</span>
-                  </div>
-                </div>
+                  return (
+                    <div
+                      key={idx}
+                      className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-xs"
+                    >
+                      <span className="font-mono text-[var(--text-primary)]">{dep}</span>
+                      {isPresent ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+                          <Check className="w-3 h-3" />
+                          Installed
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-faint)] text-[11px]">
+                          Not detected in PATH
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Installation Progress & Terminal Console Logs */}
+          {/* Installation Progress & Logs */}
           {isInstalling && (
-            <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/40 space-y-3 shadow-xl">
-              <div className="flex items-center justify-between text-xs font-semibold text-cyan-300">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                  <span>Safely Installing {selectedPackage.title}...</span>
-                </div>
-                <span className="font-mono">{installProgress}%</span>
+            <div className="p-3.5 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-strong)] space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-primary)]">
+                <span>Installing {selectedPackage.title}...</span>
+                <span className="font-mono text-[var(--text-muted)]">{installProgress}%</span>
               </div>
 
-              {/* Progress Track */}
-              <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden">
+              <div className="w-full h-1.5 rounded-full bg-[var(--bg-surface)] overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 transition-all duration-300"
+                  className="h-full bg-[var(--accent)] transition-all duration-300"
                   style={{ width: `${installProgress}%` }}
                 />
               </div>
 
-              {/* Mini Terminal Logs */}
-              <div className="p-3 rounded-xl bg-black/80 font-mono text-[11px] text-slate-300 space-y-1 max-h-32 overflow-y-auto">
+              <div className="p-2 rounded bg-black/60 font-mono text-[10px] text-[var(--text-muted)] space-y-0.5 max-h-24 overflow-y-auto">
                 {installLogs.map((line, idx) => (
-                  <div key={idx} className="leading-tight">
-                    {line}
-                  </div>
+                  <div key={idx}>{line}</div>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="p-5 border-t border-slate-800/80 bg-slate-900/50 flex flex-wrap items-center justify-between gap-4">
-          <div className="text-xs text-slate-400 flex items-center gap-2">
-            <History className="w-4 h-4 text-indigo-400" />
-            <span>Automatic snapshot is generated before changes</span>
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] flex items-center justify-between gap-3">
+          <div className="text-[11px] text-[var(--text-faint)]">
+            Declarative manifest · Safe configuration
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {isInstalled && relatedSnapshot && (
               <button
                 onClick={() => rollbackSnapshot(relatedSnapshot.id)}
                 disabled={isInstalling}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Rollback Changes</span>
+                <RotateCcw className="w-3 h-3" />
+                <span>Rollback</span>
               </button>
             )}
 
             <button
               onClick={() => installPackage(selectedPackage)}
               disabled={isInstalling}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg transition-all ${
-                isInstalled
-                  ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-                  : "bg-gradient-to-r from-cyan-500 via-indigo-600 to-fuchsia-600 hover:from-cyan-400 hover:to-indigo-500 shadow-cyan-500/20"
-              }`}
+              className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
             >
-              {isInstalling ? (
-                <>
-                  <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  <span>Installing...</span>
-                </>
-              ) : isInstalled ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Reinstall / Re-apply</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>Install {selectedPackage.category === "rices" ? "Rice" : "Package"}</span>
-                </>
-              )}
+              {isInstalling ? "Installing..." : isInstalled ? "Reinstall" : "Install"}
             </button>
           </div>
         </div>

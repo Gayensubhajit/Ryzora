@@ -29,27 +29,27 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#07090e] text-slate-100 antialiased font-sans">
-      {/* Fixed Left Navigation Sidebar */}
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased font-sans">
+      {/* Fixed Navigation Sidebar */}
       <Sidebar />
 
       {/* Main Content Pane */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Top Header with Search and Desktop Filter */}
+        {/* Top Header */}
         <TopBar />
 
-        {/* Dynamic Viewport Container */}
-        <main className="flex-1 overflow-y-auto px-6 py-8">
-          <div className="max-w-7xl mx-auto">
+        {/* Viewport */}
+        <main className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="max-w-6xl mx-auto">
             {renderActiveView()}
           </div>
         </main>
       </div>
 
-      {/* Package Detail Modal & Safety Inspector */}
+      {/* Package Detail Modal Dialog */}
       <PackageDetailModal />
 
-      {/* Toast Notification */}
+      {/* Notification Toast */}
       <Toast />
     </div>
   );

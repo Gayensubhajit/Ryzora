@@ -9,8 +9,8 @@ export const TopBar: React.FC = () => {
     setSearchQuery,
     desktopFilter,
     setDesktopFilter,
-    systemInfo,
     snapshots,
+    systemInfo,
     setActiveCategory,
   } = useApp();
 
@@ -25,70 +25,70 @@ export const TopBar: React.FC = () => {
   ];
 
   return (
-    <header className="h-16 px-6 border-b border-slate-800/70 bg-[#090d16]/80 backdrop-blur-xl flex items-center justify-between gap-4 sticky top-0 z-10 select-none">
-      {/* Search Bar */}
-      <div className="relative flex-1 max-w-lg">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-          <Search className="w-4 h-4" />
+    <header className="h-12 px-5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center justify-between gap-4 sticky top-0 z-10 select-none">
+      {/* Search Input */}
+      <div className="relative flex-1 max-w-md">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--text-faint)]">
+          <Search className="w-3.5 h-3.5" />
         </div>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search rices, themes, waybar modules, fastfetch..."
-          className="w-full pl-9 pr-8 py-2 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all shadow-inner"
+          placeholder="Search rices, themes, bars..."
+          className="w-full pl-8 pr-7 py-1.5 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--accent)] rounded-md text-xs text-[var(--text-primary)] placeholder-[var(--text-faint)] focus:outline-none transition-colors"
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery("")}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200"
+            className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[var(--text-muted)] hover:text-white"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3 h-3" />
           </button>
         )}
       </div>
 
-      {/* Desktop Filter Dropdown & Actions */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 px-2.5 py-1.5 rounded-xl text-xs text-slate-300">
-          <Filter className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-slate-400 font-medium">Desktop:</span>
+      {/* Filter and Status Controls */}
+      <div className="flex items-center gap-2">
+        {/* Desktop Filter */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
+          <Filter className="w-3 h-3 text-[var(--text-faint)]" />
           <select
             value={desktopFilter}
             onChange={(e) => setDesktopFilter(e.target.value as DesktopEnvironment | "all")}
-            className="bg-transparent text-cyan-300 font-medium focus:outline-none cursor-pointer pr-1"
+            className="bg-transparent text-[var(--text-primary)] font-medium text-xs focus:outline-none cursor-pointer pr-1"
           >
             {desktops.map((d) => (
-              <option key={d.id} value={d.id} className="bg-slate-900 text-slate-200">
+              <option key={d.id} value={d.id} className="bg-[#14171d] text-slate-200">
                 {d.label}
               </option>
             ))}
           </select>
         </div>
 
-        {/* Backups Button */}
+        {/* Snapshots Button */}
         <button
           onClick={() => setActiveCategory("backups")}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 text-xs font-medium text-slate-300 transition-colors"
-          title="Manage system snapshots & rollbacks"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] transition-colors"
+          title="View configuration snapshots"
         >
-          <History className="w-3.5 h-3.5 text-indigo-400" />
+          <History className="w-3.5 h-3.5 text-[var(--text-faint)]" />
           <span>Snapshots</span>
-          <span className="px-1.5 py-0.2 rounded-md bg-indigo-500/20 text-indigo-300 font-mono text-[10px]">
+          <span className="font-mono text-[10px] text-[var(--text-faint)]">
             {snapshots.length}
           </span>
         </button>
 
-        {/* System Diagnostics Chip */}
+        {/* System Diagnostics Trigger */}
         <button
           onClick={() => setActiveCategory("system")}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800/80 border border-slate-800 hover:border-cyan-500/30 text-xs font-medium text-slate-300 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] transition-colors"
+          title="System environment"
         >
-          <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden md:inline font-mono text-[11px] text-slate-300">
+          <Cpu className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+          <span className="font-mono text-[11px] text-[var(--text-muted)]">
             {systemInfo?.window_manager || "Hyprland"}
           </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
         </button>
       </div>
     </header>

@@ -11,8 +11,6 @@ import {
   DownloadCloud,
   History,
   Cpu,
-  ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
@@ -23,7 +21,7 @@ export const Sidebar: React.FC = () => {
   const mainCategories: { id: CategoryId; label: string; icon: React.ReactNode }[] = [
     { id: "discover", label: "Discover", icon: <Compass className="w-4 h-4" /> },
     { id: "rices", label: "Complete Rices", icon: <LayoutGrid className="w-4 h-4" /> },
-    { id: "themes", label: "Themes & GTK", icon: <Palette className="w-4 h-4" /> },
+    { id: "themes", label: "Themes", icon: <Palette className="w-4 h-4" /> },
     { id: "bars", label: "Status Bars", icon: <Sliders className="w-4 h-4" /> },
     { id: "fastfetch", label: "Fastfetch", icon: <TerminalSquare className="w-4 h-4" /> },
     { id: "lockscreens", label: "Lockscreens", icon: <Lock className="w-4 h-4" /> },
@@ -40,59 +38,56 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: "backups",
-      label: "Backups & Rollback",
+      label: "Backups",
       icon: <History className="w-4 h-4" />,
       badge: snapshots.length,
     },
     {
       id: "system",
-      label: "System Probe",
+      label: "System",
       icon: <Cpu className="w-4 h-4" />,
     },
   ];
 
   return (
-    <aside className="w-64 flex-shrink-0 flex flex-col justify-between h-screen border-r border-slate-800/70 bg-[#090d16]/95 backdrop-blur-xl select-none z-20">
-      {/* Top Section: Brand */}
-      <div className="p-5 pb-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-fuchsia-500 shadow-lg shadow-cyan-500/20 ring-1 ring-white/20">
-            <Sparkles className="w-5 h-5 text-white" />
+    <aside className="w-56 flex-shrink-0 flex flex-col justify-between h-screen border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] select-none z-20">
+      {/* Brand Header */}
+      <div className="px-4 py-3.5 border-b border-[var(--border-subtle)]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-6 h-6 rounded-md bg-[var(--accent)] text-white font-mono text-xs font-bold">
+            R
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-cyan-200">
-                RYZORA
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 font-bold uppercase rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-                v0.1
-              </span>
+            <div className="font-bold text-sm tracking-wide text-[var(--text-primary)]">
+              RYZORA
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Linux Customization Store</p>
+            <div className="text-[11px] text-[var(--text-muted)] font-normal">
+              Linux customization
+            </div>
           </div>
         </div>
       </div>
 
       {/* Navigation Links */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
+      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
         <div>
-          <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Explore Marketplace
+          <div className="px-2.5 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+            Explore
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {mainCategories.map((item) => {
               const isActive = activeCategory === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveCategory(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors text-left ${
                     isActive
-                      ? "bg-gradient-to-r from-cyan-500/15 to-indigo-500/10 text-cyan-300 border border-cyan-500/30 shadow-sm shadow-cyan-500/10"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                      ? "bg-[var(--bg-surface-elevated)] text-white border-l-2 border-[var(--accent)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]"
                   }`}
                 >
-                  <span className={`${isActive ? "text-cyan-400" : "text-slate-400"}`}>
+                  <span className={isActive ? "text-[var(--accent-text)]" : "text-[var(--text-muted)]"}>
                     {item.icon}
                   </span>
                   <span>{item.label}</span>
@@ -103,36 +98,30 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div>
-          <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Management & Safety
+          <div className="px-2.5 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+            Manage
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {managementCategories.map((item) => {
               const isActive = activeCategory === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveCategory(item.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors text-left ${
                     isActive
-                      ? "bg-gradient-to-r from-cyan-500/15 to-indigo-500/10 text-cyan-300 border border-cyan-500/30"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                      ? "bg-[var(--bg-surface-elevated)] text-white border-l-2 border-[var(--accent)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={`${isActive ? "text-cyan-400" : "text-slate-400"}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span className={isActive ? "text-[var(--accent-text)]" : "text-[var(--text-muted)]"}>
                       {item.icon}
                     </span>
                     <span>{item.label}</span>
                   </div>
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span
-                      className={`text-[11px] px-1.5 py-0.2 rounded-full font-semibold ${
-                        isActive
-                          ? "bg-cyan-500/30 text-cyan-200"
-                          : "bg-slate-800 text-slate-400"
-                      }`}
-                    >
+                    <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] border border-[var(--border-subtle)]">
                       {item.badge}
                     </span>
                   )}
@@ -141,41 +130,23 @@ export const Sidebar: React.FC = () => {
             })}
           </nav>
         </div>
-
-        {/* Safety Guarantee Banner */}
-        <div className="mx-1 p-3 rounded-xl bg-gradient-to-b from-indigo-950/40 to-slate-900/60 border border-indigo-500/20">
-          <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold mb-1">
-            <ShieldCheck className="w-4 h-4 text-cyan-400" />
-            <span>Safety First</span>
-          </div>
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            All rices use declarative manifests. Automated snapshots are created prior to any modification.
-          </p>
-        </div>
       </div>
 
-      {/* Bottom User Environment Widget */}
-      <div className="p-3 border-t border-slate-800/60 bg-[#06080e]/60">
-        <div
+      {/* Compact System Footer */}
+      <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]/50">
+        <button
           onClick={() => setActiveCategory("system")}
-          className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800/70 border border-slate-800 transition-colors cursor-pointer group"
+          className="w-full text-left p-2 rounded-md hover:bg-[var(--bg-surface-elevated)] transition-colors group"
         >
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold text-slate-200 group-hover:text-cyan-300 transition-colors">
-                {systemInfo?.distro_name || "Linux Host"}
-              </span>
-            </div>
-            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700">
-              {systemInfo?.session_type || "wayland"}
-            </span>
+          <div className="text-xs font-semibold text-[var(--text-primary)] truncate">
+            {systemInfo?.distro_name || "Linux Host"}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span>DE / WM: <strong className="text-slate-300 font-medium">{systemInfo?.window_manager || "Hyprland"}</strong></span>
-            <span className="text-[10px] text-slate-400 group-hover:text-slate-300">Probe →</span>
+          <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-1.5">
+            <span>{systemInfo?.window_manager || "Hyprland"}</span>
+            <span>·</span>
+            <span className="capitalize">{systemInfo?.session_type || "wayland"}</span>
           </div>
-        </div>
+        </button>
       </div>
     </aside>
   );
