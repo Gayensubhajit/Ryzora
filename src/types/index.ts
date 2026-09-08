@@ -27,6 +27,86 @@ export type DesktopEnvironment =
   | "i3"
   | "universal";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ryzora Package Manifest — spec v1
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** All canonical Ryzora package types. */
+export type PackageType =
+  | "rice"
+  | "theme"
+  | "waybar"
+  | "fastfetch"
+  | "lockscreen"
+  | "wallpaper"
+  | "terminal"
+  | "icon"
+  | "cursor"
+  | "font"
+  | "widget"
+  | "bundle";
+
+/** Compatibility block inside a manifest — uses author-facing field names. */
+export interface ManifestCompatibility {
+  /** Desktop environments / window managers supported. Empty = universal. */
+  desktops: string[];
+  /** Required session protocol ("wayland" | "x11"). Empty = any. */
+  sessions: string[];
+  /** Supported distro IDs / families. Empty or ["all"] = universal. */
+  distros: string[];
+  /** Binaries that MUST be in PATH. */
+  required: string[];
+  /** Binaries that improve the experience but are not mandatory. */
+  optional: string[];
+}
+
+/** A single file mapping within a Ryzora package. */
+export interface ManifestFile {
+  /** Path relative to the package root, e.g. "files/hypr/hyprland.conf". */
+  source: string;
+  /** Destination on the user system — must start with "~/". */
+  target: string;
+  /** Human-readable description of what this file does. */
+  description: string;
+}
+
+/** The authoritative Ryzora Package Manifest (spec v1). */
+export interface RyzoraManifest {
+  /** Unique package slug, e.g. "cyberpunk-neon-2077". */
+  id: string;
+  /** Human-readable name. */
+  name: string;
+  /** Semver version string (X.Y.Z). */
+  version: string;
+  /** Manifest specification version. Must be "1". */
+  ryzora_spec: string;
+  /** Author name or handle. */
+  author: string;
+  /** Canonical package type. */
+  package_type: PackageType;
+  /** Long description. */
+  description: string;
+  /** Searchable tags. */
+  tags: string[];
+  /** Hex color palette for UI previews. */
+  color_palette: string[];
+  /** Compatibility requirements. */
+  compatibility: ManifestCompatibility;
+  /** Files this package installs. */
+  files: ManifestFile[];
+}
+
+/** Result returned by the Rust validate_manifest command. */
+export interface ManifestValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// System Probe types
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface InstalledComponent {
   name: string;
   binary: string;
@@ -49,21 +129,9 @@ export interface SystemInfo {
   installed_components: InstalledComponent[];
 }
 
-export interface PackageComponentSpec {
-  name: string;
-  component_type: string;
-  target_path: string;
-  description: string;
-  icon?: string;
-}
-
-export interface SafetyAudit {
-  rating: "safe" | "verified" | "requires_review";
-  changes_system_files: boolean;
-  requires_root: boolean;
-  sandbox_compatible: boolean;
-  files_modified_count: number;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Compatibility Engine types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type CompatibilityLevel =
   | "Compatible"
@@ -79,6 +147,10 @@ export interface CompatibilityIssue {
   target?: string;
 }
 
+/**
+ * Internal compatibility requirements shape used by the Rust engine.
+ * Keys use underscore-snake names to match Rust serde output.
+ */
 export interface CompatibilityRequirements {
   supported_distros: string[];
   supported_desktops: string[];
@@ -100,6 +172,26 @@ export interface CompatibilityReport {
   issues: CompatibilityIssue[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// UI / Marketplace types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PackageComponentSpec {
+  name: string;
+  component_type: string;
+  target_path: string;
+  description: string;
+  icon?: string;
+}
+
+export interface SafetyAudit {
+  rating: "safe" | "verified" | "requires_review";
+  changes_system_files: boolean;
+  requires_root: boolean;
+  sandbox_compatible: boolean;
+  files_modified_count: number;
+}
+
 export interface PackageItem {
   id: string;
   title: string;
@@ -112,6 +204,8 @@ export interface PackageItem {
     verified: boolean;
   };
   category: CategoryId;
+  /** Canonical package type — maps to ManifestCompatibility. */
+  package_type: PackageType;
   tags: string[];
   supported_desktops: DesktopEnvironment[];
   supported_display: ("wayland" | "x11")[];
@@ -129,8 +223,16 @@ export interface PackageItem {
     packages: string[];
     optional: string[];
   };
+  /** Legacy component list — kept for backward compatibility. */
   components: PackageComponentSpec[];
+  /** Internal requirements used by the Rust compatibility engine. */
   compatibility: CompatibilityRequirements;
+  /**
+   * The parsed Ryzora manifest for this package.
+   * Present for manifest-backed packages; undefined for legacy mock entries
+   * that have not yet been migrated.
+   */
+  manifest?: RyzoraManifest;
 }
 
 export interface SnapshotRecord {

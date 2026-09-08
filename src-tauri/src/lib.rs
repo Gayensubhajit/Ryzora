@@ -14,6 +14,8 @@ pub fn run() {
             manifest::get_backups,
             manifest::create_backup_snapshot,
             manifest::rollback_snapshot,
+            manifest::validate_manifest,
+            manifest::parse_manifest,
             compatibility::evaluate_package_compatibility,
             compatibility::evaluate_batch_compatibility,
         ])

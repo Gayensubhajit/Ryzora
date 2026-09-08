@@ -1,18 +1,347 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ryzora Package Manifest — spec version "1"
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// All valid package types for Ryzora packages.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PackageType {
+    Rice,
+    Theme,
+    Waybar,
+    Fastfetch,
+    Lockscreen,
+    Wallpaper,
+    Terminal,
+    Icon,
+    Cursor,
+    Font,
+    Widget,
+    Bundle,
+}
+
+/// Compatibility requirements embedded in a package manifest.
+/// Uses package-author-facing field names (desktops/sessions/distros/required/optional).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManifestCompatibility {
+    /// Supported desktop environments / window managers. Empty = "universal".
+    #[serde(default)]
+    pub desktops: Vec<String>,
+
+    /// Required display protocol ("wayland", "x11"). Empty = any.
+    #[serde(default)]
+    pub sessions: Vec<String>,
+
+    /// Supported distros / families. Empty or ["all"] = universal.
+    #[serde(default)]
+    pub distros: Vec<String>,
+
+    /// Binaries that MUST be present in PATH.
+    #[serde(default)]
+    pub required: Vec<String>,
+
+    /// Binaries that improve the experience but are not mandatory.
+    #[serde(default)]
+    pub optional: Vec<String>,
+}
+
+/// A single file mapping inside a Ryzora package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManifestFile {
+    /// Path relative to the package root (e.g. "files/hypr/hyprland.conf").
+    pub source: String,
+
+    /// Destination path on the user system. MUST start with "~/".
+    /// Path traversal ("..") is forbidden.
+    pub target: String,
+
+    /// Human-readable description of what this file does.
+    #[serde(default)]
+    pub description: String,
+}
+
+/// The authoritative Ryzora package manifest (spec v1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RyzoraManifest {
+    /// Unique package identifier (slug, e.g. "cyberpunk-neon-2077").
+    pub id: String,
+
+    /// Human-readable package name.
+    pub name: String,
+
+    /// Package version (semver, e.g. "1.0.0").
+    pub version: String,
+
+    /// Ryzora manifest specification version. Must be "1".
+    pub ryzora_spec: String,
+
+    /// Package author name or handle.
+    pub author: String,
+
+    /// Canonical package type.
+    pub package_type: PackageType,
+
+    /// Long description of the package.
+    #[serde(default)]
+    pub description: String,
+
+    /// Searchable tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    /// Hex color palette for UI previews.
+    #[serde(default)]
+    pub color_palette: Vec<String>,
+
+    /// Compatibility requirements.
+    pub compatibility: ManifestCompatibility,
+
+    /// Files this package installs.
+    #[serde(default)]
+    pub files: Vec<ManifestFile>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manifest Validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Structured result from manifest validation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManifestValidationResult {
+    pub valid: bool,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Validate a semver string of the form "X.Y.Z".
+fn is_valid_semver(v: &str) -> bool {
+    let parts: Vec<&str> = v.split('.').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    parts.iter().all(|p| p.parse::<u64>().is_ok())
+}
+
+/// Validate that a file target path is safe.
+/// - Must start with "~/"
+/// - Must not contain ".." segments
+/// - Must not contain null bytes
+fn validate_target_path(path: &str) -> Result<(), String> {
+    if !path.starts_with("~/") {
+        return Err(format!(
+            "Target '{}' must start with '~/' (home-relative paths only)",
+            path
+        ));
+    }
+    if path.contains('\0') {
+        return Err(format!("Target '{}' contains null byte", path));
+    }
+    for segment in path.split('/') {
+        if segment == ".." {
+            return Err(format!(
+                "Target '{}' contains path traversal ('..') — rejected for safety",
+                path
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validate that a file source path does not escape the package root.
+fn validate_source_path(path: &str) -> Result<(), String> {
+    if path.starts_with('/') {
+        return Err(format!(
+            "Source '{}' must be a relative path within the package",
+            path
+        ));
+    }
+    if path.contains('\0') {
+        return Err(format!("Source '{}' contains null byte", path));
+    }
+    for segment in path.split('/') {
+        if segment == ".." {
+            return Err(format!(
+                "Source '{}' escapes the package root with '..' — rejected for safety",
+                path
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Forbidden manifest fields that indicate shell-execution attempts.
+const FORBIDDEN_FIELDS: &[&str] = &[
+    "scripts",
+    "hooks",
+    "install",
+    "pre_install",
+    "post_install",
+    "uninstall",
+    "run",
+    "exec",
+    "shell",
+    "cmd",
+];
+
+/// Validate a Ryzora manifest JSON string. Returns a structured result.
+/// This is a read-only operation — nothing is written to disk.
+pub fn validate_manifest_internal(manifest_json: &str) -> ManifestValidationResult {
+    let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+
+    // Step 1: Parse as generic JSON to check for forbidden fields
+    let raw: Value = match serde_json::from_str(manifest_json) {
+        Ok(v) => v,
+        Err(e) => {
+            return ManifestValidationResult {
+                valid: false,
+                errors: vec![format!("Invalid JSON: {}", e)],
+                warnings: vec![],
+            };
+        }
+    };
+
+    if let Value::Object(ref map) = raw {
+        for field in FORBIDDEN_FIELDS {
+            if map.contains_key(*field) {
+                errors.push(format!(
+                    "Forbidden field '{}' detected — Ryzora manifests must not contain shell execution fields",
+                    field
+                ));
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        return ManifestValidationResult {
+            valid: false,
+            errors,
+            warnings,
+        };
+    }
+
+    // Step 2: Deserialize into typed struct
+    let manifest: RyzoraManifest = match serde_json::from_str(manifest_json) {
+        Ok(m) => m,
+        Err(e) => {
+            return ManifestValidationResult {
+                valid: false,
+                errors: vec![format!("Manifest schema error: {}", e)],
+                warnings: vec![],
+            };
+        }
+    };
+
+    // Step 3: Field-level validation
+    if manifest.id.trim().is_empty() {
+        errors.push("Field 'id' must not be empty".to_string());
+    } else if manifest.id.contains('/') || manifest.id.contains('\\') {
+        errors.push(format!(
+            "Field 'id' ('{}') must not contain path separators",
+            manifest.id
+        ));
+    }
+
+    if manifest.name.trim().is_empty() {
+        errors.push("Field 'name' must not be empty".to_string());
+    }
+
+    if manifest.author.trim().is_empty() {
+        errors.push("Field 'author' must not be empty".to_string());
+    }
+
+    if manifest.ryzora_spec != "1" {
+        errors.push(format!(
+            "Field 'ryzora_spec' is '{}' — only spec version '1' is supported",
+            manifest.ryzora_spec
+        ));
+    }
+
+    if !is_valid_semver(&manifest.version) {
+        errors.push(format!(
+            "Field 'version' ('{}') must be semver (X.Y.Z)",
+            manifest.version
+        ));
+    }
+
+    // Step 4: File entry safety validation
+    if manifest.files.len() > 200 {
+        warnings.push(format!(
+            "Package declares {} files — this is unusually large",
+            manifest.files.len()
+        ));
+    }
+
+    for (i, file) in manifest.files.iter().enumerate() {
+        if let Err(e) = validate_target_path(&file.target) {
+            errors.push(format!("files[{}]: {}", i, e));
+        }
+        if let Err(e) = validate_source_path(&file.source) {
+            errors.push(format!("files[{}]: {}", i, e));
+        }
+        if file.source.trim().is_empty() {
+            errors.push(format!("files[{}]: 'source' must not be empty", i));
+        }
+    }
+
+    // Step 5: Compatibility sanity warnings
+    for session in &manifest.compatibility.sessions {
+        let s = session.to_lowercase();
+        if s != "wayland" && s != "x11" && s != "any" {
+            warnings.push(format!(
+                "compatibility.sessions: '{}' is not a recognised session type (wayland, x11, any)",
+                session
+            ));
+        }
+    }
+
+    ManifestValidationResult {
+        valid: errors.is_empty(),
+        errors,
+        warnings,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tauri Commands
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Parse and validate a Ryzora manifest JSON string. Read-only.
+#[tauri::command]
+pub fn validate_manifest(manifest_json: String) -> ManifestValidationResult {
+    validate_manifest_internal(&manifest_json)
+}
+
+/// Parse a Ryzora manifest JSON string into a typed struct.
+#[tauri::command]
+pub fn parse_manifest(manifest_json: String) -> Result<RyzoraManifest, String> {
+    let result = validate_manifest_internal(&manifest_json);
+    if !result.valid {
+        return Err(result.errors.join("; "));
+    }
+    serde_json::from_str(&manifest_json).map_err(|e| e.to_string())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Snapshot State (Phase 3 stub — preserved intact)
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageComponent {
     pub name: String,
-    pub component_type: String, // e.g. "hyprland", "waybar", "kitty", "fastfetch", "wallpaper"
+    pub component_type: String,
     pub target_path: String,
     pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SafetyAudit {
-    pub rating: String, // "safe", "verified", "requires_review"
+    pub rating: String,
     pub changes_system_files: bool,
     pub requires_root: bool,
     pub sandbox_compatible: bool,
@@ -26,32 +355,29 @@ pub struct SnapshotRecord {
     pub timestamp: u64,
     pub formatted_date: String,
     pub backed_up_paths: Vec<String>,
-    pub status: String, // "active", "restored"
+    pub status: String,
 }
 
-// In-memory snapshot storage for the session
 pub struct SnapshotState {
     pub snapshots: Mutex<Vec<SnapshotRecord>>,
 }
 
 impl Default for SnapshotState {
     fn default() -> Self {
-        let initial_snapshots = vec![
-            SnapshotRecord {
-                id: "snap-init-001".to_string(),
-                package_id: "system-baseline".to_string(),
-                package_name: "Initial System Baseline".to_string(),
-                timestamp: 1725840000,
-                formatted_date: "2026-09-08 18:00:00".to_string(),
-                backed_up_paths: vec![
-                    "~/.config/hypr/hyprland.conf".to_string(),
-                    "~/.config/waybar/config.jsonc".to_string(),
-                    "~/.config/waybar/style.css".to_string(),
-                    "~/.config/kitty/kitty.conf".to_string(),
-                ],
-                status: "active".to_string(),
-            },
-        ];
+        let initial_snapshots = vec![SnapshotRecord {
+            id: "snap-init-001".to_string(),
+            package_id: "system-baseline".to_string(),
+            package_name: "Initial System Baseline".to_string(),
+            timestamp: 1725840000,
+            formatted_date: "2026-09-08 18:00:00".to_string(),
+            backed_up_paths: vec![
+                "~/.config/hypr/hyprland.conf".to_string(),
+                "~/.config/waybar/config.jsonc".to_string(),
+                "~/.config/waybar/style.css".to_string(),
+                "~/.config/kitty/kitty.conf".to_string(),
+            ],
+            status: "active".to_string(),
+        }];
         Self {
             snapshots: Mutex::new(initial_snapshots),
         }
@@ -89,7 +415,6 @@ pub fn create_backup_snapshot(
 
     let mut list = state.snapshots.lock().unwrap();
     list.insert(0, record.clone());
-
     Ok(record)
 }
 
@@ -102,8 +427,122 @@ pub fn rollback_snapshot(
     for snap in list.iter_mut() {
         if snap.id == snapshot_id {
             snap.status = "restored".to_string();
-            return Ok(format!("Successfully rolled back configurations to snapshot {}", snapshot_id));
+            return Ok(format!(
+                "Successfully rolled back configurations to snapshot {}",
+                snapshot_id
+            ));
         }
     }
     Err(format!("Snapshot {} not found", snapshot_id))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unit Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_json() -> String {
+        let s = concat!(
+            r#"{"id":"cyberpunk-neon-2077","name":"Cyberpunk Neon 2077","#,
+            r#""version":"1.0.0","ryzora_spec":"1","author":"Ryzora Community","#,
+            r#""package_type":"rice","description":"A rice.","tags":[],"color_palette":[],"#,
+            r#""compatibility":{"desktops":["hyprland"],"sessions":["wayland"],"#,
+            r#""distros":[],"required":["hyprland","waybar"],"optional":["rofi"]},"#,
+            r#""files":[{"source":"files/hypr/hyprland.conf","target":"~/.config/hypr/hyprland.conf","description":"Main config"}]}"#
+        );
+        s.to_string()
+    }
+
+    #[test]
+    fn test_valid_manifest_parses_correctly() {
+        let result = validate_manifest_internal(&valid_json());
+        assert!(result.valid, "Expected valid; errors: {:?}", result.errors);
+        let m: RyzoraManifest = serde_json::from_str(&valid_json()).unwrap();
+        assert_eq!(m.id, "cyberpunk-neon-2077");
+        assert_eq!(m.package_type, PackageType::Rice);
+        assert_eq!(m.files.len(), 1);
+        assert_eq!(m.files[0].target, "~/.config/hypr/hyprland.conf");
+    }
+
+    #[test]
+    fn test_missing_ryzora_spec_rejected() {
+        let json = concat!(
+            r#"{"id":"p","name":"P","version":"1.0.0","author":"A","package_type":"theme","#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"files":[]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Should fail without ryzora_spec");
+    }
+
+    #[test]
+    fn test_target_path_traversal_rejected() {
+        let json = concat!(
+            r#"{"id":"evil","name":"Evil","version":"1.0.0","ryzora_spec":"1","author":"A","package_type":"theme","#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"#,
+            r#""files":[{"source":"files/evil.conf","target":"~/.config/../../etc/passwd","description":"bad"}]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Path traversal in target should be rejected");
+        assert!(result.errors.iter().any(|e| e.contains("..")), "Got: {:?}", result.errors);
+    }
+
+    #[test]
+    fn test_absolute_target_rejected() {
+        let json = concat!(
+            r#"{"id":"abs","name":"Abs","version":"1.0.0","ryzora_spec":"1","author":"A","package_type":"theme","#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"#,
+            r#""files":[{"source":"files/c","target":"/etc/shadow","description":"abs"}]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Absolute target should be rejected");
+        assert!(result.errors.iter().any(|e| e.contains("~/")), "Got: {:?}", result.errors);
+    }
+
+    #[test]
+    fn test_unknown_package_type_rejected() {
+        let json = concat!(
+            r#"{"id":"bad","name":"Bad","version":"1.0.0","ryzora_spec":"1","author":"A","package_type":"malware","#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"files":[]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Unknown package_type should fail; errors: {:?}", result.errors);
+    }
+
+    #[test]
+    fn test_shell_hook_field_rejected() {
+        let json = concat!(
+            r#"{"id":"hook","name":"Hook","version":"1.0.0","ryzora_spec":"1","author":"A","package_type":"rice","#,
+            r#""scripts":{"install":"rm -rf ~/"},"#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"files":[]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Shell hook fields should be rejected");
+        assert!(result.errors.iter().any(|e| e.contains("scripts")), "Got: {:?}", result.errors);
+    }
+
+    #[test]
+    fn test_source_path_traversal_rejected() {
+        let json = concat!(
+            r#"{"id":"src","name":"Src","version":"1.0.0","ryzora_spec":"1","author":"A","package_type":"theme","#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"#,
+            r#""files":[{"source":"../../../etc/passwd","target":"~/.config/stolen.conf","description":"bad"}]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Source path traversal should be rejected");
+        assert!(result.errors.iter().any(|e| e.contains("..")), "Got: {:?}", result.errors);
+    }
+
+    #[test]
+    fn test_invalid_semver_rejected() {
+        let json = concat!(
+            r#"{"id":"bv","name":"BV","version":"not-semver","ryzora_spec":"1","author":"A","package_type":"theme","#,
+            r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"files":[]}"#
+        );
+        let result = validate_manifest_internal(json);
+        assert!(!result.valid, "Invalid semver should be rejected");
+        assert!(result.errors.iter().any(|e| e.contains("semver")), "Got: {:?}", result.errors);
+    }
 }

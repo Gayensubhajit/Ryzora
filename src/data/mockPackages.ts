@@ -8,6 +8,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "A complete desktop rice featuring custom Waybar island modules, translucent Kitty terminal palette, custom Fastfetch ASCII logo, and Hyprlock lockscreen.",
     version: "2.4.0",
+    package_type: "rice",
     author: {
       name: "NeoDrifter",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=NeoDrifter",
@@ -66,6 +67,57 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Terminal truecolor palette with 92% opacity.",
       },
     ],
+    manifest: {
+      id: "rice-cyberpunk-neon",
+      name: "Cyberpunk Neon 2077",
+      version: "2.4.0",
+      ryzora_spec: "1",
+      author: "NeoDrifter",
+      package_type: "rice",
+      description:
+        "A complete desktop rice featuring custom Waybar island modules, translucent Kitty terminal palette, custom Fastfetch ASCII logo, and Hyprlock lockscreen.",
+      tags: ["Cyberpunk", "Neon", "Hyprland", "Waybar", "Kitty", "Dark Mode"],
+      color_palette: ["#00f0ff", "#ff007f", "#7000ff", "#0a0a14"],
+      compatibility: {
+        desktops: ["hyprland", "sway"],
+        sessions: ["wayland"],
+        distros: [],
+        required: ["hyprland", "waybar", "kitty"],
+        optional: ["rofi", "fastfetch", "hyprlock"],
+      },
+      files: [
+        {
+          source: "files/hypr/hyprland.conf",
+          target: "~/.config/hypr/hyprland.conf",
+          description: "Hyprland compositor config — window rules, animations, keybindings.",
+        },
+        {
+          source: "files/waybar/config.jsonc",
+          target: "~/.config/waybar/config.jsonc",
+          description: "Waybar module layout — floating island capsule.",
+        },
+        {
+          source: "files/waybar/style.css",
+          target: "~/.config/waybar/style.css",
+          description: "Waybar CSS — neon glow accents.",
+        },
+        {
+          source: "files/kitty/kitty.conf",
+          target: "~/.config/kitty/kitty.conf",
+          description: "Kitty terminal palette and opacity settings.",
+        },
+        {
+          source: "files/fastfetch/config.jsonc",
+          target: "~/.config/fastfetch/config.jsonc",
+          description: "Fastfetch ASCII art and color scheme.",
+        },
+        {
+          source: "files/hypr/hyprlock.conf",
+          target: "~/.config/hypr/hyprlock.conf",
+          description: "Hyprlock lockscreen overlay configuration.",
+        },
+      ],
+    },
   },
   {
     id: "rice-catppuccin-mocha",
@@ -74,6 +126,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "The quintessential Catppuccin Mocha experience engineered for Linux desktops. Muted lavender, peach, and sapphire hues paired with rounded Waybar pills and cozy terminal themes.",
     version: "1.8.2",
+    package_type: "rice",
     author: {
       name: "LunarArch",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=LunarArch",
@@ -125,6 +178,42 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Official Catppuccin mocha colors with font ligatures.",
       },
     ],
+    manifest: {
+      id: "rice-catppuccin-mocha",
+      name: "Catppuccin Mocha Dusk",
+      version: "1.8.2",
+      ryzora_spec: "1",
+      author: "LunarArch",
+      package_type: "rice",
+      description:
+        "The quintessential Catppuccin Mocha experience. Muted lavender, peach, and sapphire hues with rounded Waybar pills.",
+      tags: ["Catppuccin", "Pastel", "Minimal", "Waybar", "Kitty"],
+      color_palette: ["#cba6f7", "#89b4fa", "#f38ba8", "#1e1e2e"],
+      compatibility: {
+        desktops: ["hyprland", "sway", "kde", "gnome"],
+        sessions: [],
+        distros: [],
+        required: ["waybar", "kitty"],
+        optional: ["fastfetch"],
+      },
+      files: [
+        {
+          source: "files/waybar/config.jsonc",
+          target: "~/.config/waybar/config.jsonc",
+          description: "Waybar layout — Catppuccin mocha modules.",
+        },
+        {
+          source: "files/waybar/style.css",
+          target: "~/.config/waybar/style.css",
+          description: "Waybar CSS — pastel pill styling.",
+        },
+        {
+          source: "files/kitty/kitty.conf",
+          target: "~/.config/kitty/kitty.conf",
+          description: "Kitty terminal — Catppuccin mocha palette.",
+        },
+      ],
+    },
   },
   {
     id: "rice-nordic-frost",
@@ -133,6 +222,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "Inspired by arctic midnight sun. Built around the Nord palette. High contrast, low eye fatigue, and uncluttered desktop layouts.",
     version: "3.1.0",
+    package_type: "rice",
     author: {
       name: "SvenViking",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=SvenViking",
@@ -185,6 +275,46 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Monochrome slate bar with arctic blue accent dots.",
       },
     ],
+    manifest: {
+      id: "rice-nordic-frost",
+      name: "Nordic Frost Minimal",
+      version: "3.1.0",
+      ryzora_spec: "1",
+      author: "SvenViking",
+      package_type: "rice",
+      description: "Arctic Nord-palette rice. High contrast, low eye fatigue, uncluttered layouts.",
+      tags: ["Nord", "Minimal", "Hyprland", "Sway", "Alacritty"],
+      color_palette: ["#88c0d0", "#81a1c1", "#5e81ac", "#2e3440"],
+      compatibility: {
+        desktops: ["hyprland", "sway"],
+        sessions: ["wayland"],
+        distros: ["arch", "garuda"],
+        required: ["hyprland", "waybar", "alacritty"],
+        optional: ["fastfetch"],
+      },
+      files: [
+        {
+          source: "files/hypr/hyprland.conf",
+          target: "~/.config/hypr/hyprland.conf",
+          description: "Hyprland config — Nord frost borders and tiling.",
+        },
+        {
+          source: "files/waybar/config.jsonc",
+          target: "~/.config/waybar/config.jsonc",
+          description: "Waybar layout — minimal monochrome modules.",
+        },
+        {
+          source: "files/waybar/style.css",
+          target: "~/.config/waybar/style.css",
+          description: "Waybar CSS — arctic blue accents.",
+        },
+        {
+          source: "files/alacritty/alacritty.toml",
+          target: "~/.config/alacritty/alacritty.toml",
+          description: "Alacritty terminal — Nord color palette.",
+        },
+      ],
+    },
   },
   {
     id: "bar-island-glass-waybar",
@@ -193,23 +323,26 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "A standalone Waybar configuration featuring segmented floating pills, dynamic workspace indicators, system monitor, and audio visualizer.",
     version: "2.1.0",
+    package_type: "waybar",
     author: {
       name: "WaybarCraft",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=WaybarCraft",
       verified: true,
     },
     category: "bars",
-    tags: ["Waybar", "Status Bar", "Floating", "Wayland"],
+    tags: ["Waybar", "Island", "Floating", "Wayland", "Minimal"],
     supported_desktops: ["hyprland", "sway"],
     supported_display: ["wayland"],
     rating: 4.92,
-    rating_count: 220,
-    downloads: 16500,
-    hero_image: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1600&q=80",
+    rating_count: 267,
+    downloads: 18700,
+    featured: false,
+    trending: true,
+    hero_image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1600&q=80",
     screenshots: [
-      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80",
     ],
-    color_palette: ["#38bdf8", "#818cf8", "#334155", "#0f172a"],
+    color_palette: ["#38bdf8", "#0ea5e9", "#0369a1", "#0c1a2e"],
     safety_audit: {
       rating: "safe",
       changes_system_files: false,
@@ -230,33 +363,64 @@ export const MOCK_PACKAGES: PackageItem[] = [
     },
     components: [
       {
-        name: "Waybar Config JSONC",
+        name: "Island Waybar Config",
         component_type: "waybar",
         target_path: "~/.config/waybar/config.jsonc",
-        description: "Modular capsule configuration with JSON schema validation.",
+        description: "Segmented island modules with workspace dots.",
       },
       {
-        name: "Waybar Style CSS",
+        name: "Island Waybar CSS",
         component_type: "waybar",
         target_path: "~/.config/waybar/style.css",
-        description: "Clean capsule edges and muted borders.",
+        description: "Glass morphism styling with floating pill geometry.",
       },
     ],
+    manifest: {
+      id: "bar-island-glass-waybar",
+      name: "Island Glass Waybar",
+      version: "2.1.0",
+      ryzora_spec: "1",
+      author: "WaybarCraft",
+      package_type: "waybar",
+      description: "Standalone Waybar — segmented floating pills, workspace indicators, audio visualizer.",
+      tags: ["Waybar", "Island", "Floating", "Wayland"],
+      color_palette: ["#38bdf8", "#0ea5e9", "#0369a1", "#0c1a2e"],
+      compatibility: {
+        desktops: ["hyprland", "sway"],
+        sessions: ["wayland"],
+        distros: [],
+        required: ["waybar"],
+        optional: [],
+      },
+      files: [
+        {
+          source: "files/waybar/config.jsonc",
+          target: "~/.config/waybar/config.jsonc",
+          description: "Waybar module layout — island capsule design.",
+        },
+        {
+          source: "files/waybar/style.css",
+          target: "~/.config/waybar/style.css",
+          description: "Waybar CSS — glass morphism floating pills.",
+        },
+      ],
+    },
   },
   {
     id: "fastfetch-cyber-spec",
-    title: "Cyberpunk Spec Fastfetch",
-    subtitle: "Hardware specs formatted in high-contrast ASCII",
+    title: "Cyber Spec Fastfetch",
+    subtitle: "Terminal system info display with distro art",
     description:
-      "Replaces the default fastfetch layout with a clean distro glyph, CPU/GPU temperature meters, and RAM usage percentage bars.",
+      "A Fastfetch configuration with a compact system overview, custom ASCII logo, and adaptive distro color detection.",
     version: "1.2.0",
+    package_type: "fastfetch",
     author: {
-      name: "RicingGuru",
-      avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=RicingGuru",
+      name: "CLIArtist",
+      avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=CLIArtist",
       verified: true,
     },
     category: "fastfetch",
-    tags: ["Fastfetch", "CLI", "ASCII", "Hardware", "Universal"],
+    tags: ["Fastfetch", "CLI", "Terminal", "System Info"],
     supported_desktops: ["universal"],
     supported_display: ["wayland", "x11"],
     rating: 4.94,
@@ -293,6 +457,31 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Includes distro auto-detection with matching color gauges.",
       },
     ],
+    manifest: {
+      id: "fastfetch-cyber-spec",
+      name: "Cyber Spec Fastfetch",
+      version: "1.2.0",
+      ryzora_spec: "1",
+      author: "CLIArtist",
+      package_type: "fastfetch",
+      description: "Compact system overview with custom ASCII logo and adaptive distro color detection.",
+      tags: ["Fastfetch", "CLI", "Terminal", "System Info"],
+      color_palette: ["#22c55e", "#06b6d4", "#a855f7", "#111827"],
+      compatibility: {
+        desktops: [],
+        sessions: [],
+        distros: [],
+        required: ["fastfetch"],
+        optional: [],
+      },
+      files: [
+        {
+          source: "files/fastfetch/config.jsonc",
+          target: "~/.config/fastfetch/config.jsonc",
+          description: "Fastfetch JSONC configuration — distro art and color gauges.",
+        },
+      ],
+    },
   },
   {
     id: "lockscreen-hyprlock-aurora",
@@ -301,6 +490,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "Minimal lockscreen displaying a live clock, weather summary, and PAM authentication feedback.",
     version: "1.4.1",
+    package_type: "lockscreen",
     author: {
       name: "WaylandEnthusiast",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=WaylandEnthusiast",
@@ -344,6 +534,31 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Configures blurred background snapshot with PAM authentication feedback.",
       },
     ],
+    manifest: {
+      id: "lockscreen-hyprlock-aurora",
+      name: "Aurora Glass Hyprlock",
+      version: "1.4.1",
+      ryzora_spec: "1",
+      author: "WaylandEnthusiast",
+      package_type: "lockscreen",
+      description: "Minimal lockscreen with live clock, weather summary, and PAM authentication feedback.",
+      tags: ["Hyprlock", "Lockscreen", "Hyprland", "Wayland"],
+      color_palette: ["#ec4899", "#8b5cf6", "#3b82f6", "#090d16"],
+      compatibility: {
+        desktops: ["hyprland"],
+        sessions: ["wayland"],
+        distros: [],
+        required: ["hyprlock"],
+        optional: [],
+      },
+      files: [
+        {
+          source: "files/hypr/hyprlock.conf",
+          target: "~/.config/hypr/hyprlock.conf",
+          description: "Hyprlock lockscreen — blurred background and PAM auth.",
+        },
+      ],
+    },
   },
   {
     id: "theme-fluent-dark-gtk",
@@ -352,6 +567,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "Brings clean styling to all native desktop applications. Seamlessly unifies look-and-feel across GTK and Qt software on both Wayland and X11.",
     version: "4.0.0",
+    package_type: "theme",
     author: {
       name: "DesignMatrix",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=DesignMatrix",
@@ -395,6 +611,36 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Applies dark mode settings across GTK applications.",
       },
     ],
+    manifest: {
+      id: "theme-fluent-dark-gtk",
+      name: "Fluent Dark Modern GTK",
+      version: "4.0.0",
+      ryzora_spec: "1",
+      author: "DesignMatrix",
+      package_type: "theme",
+      description: "Clean dark styling for GTK3, GTK4, Libadwaita, and Qt apps across all desktops.",
+      tags: ["GTK", "Libadwaita", "Qt", "Dark Mode"],
+      color_palette: ["#3b82f6", "#60a5fa", "#1e293b", "#0f172a"],
+      compatibility: {
+        desktops: [],
+        sessions: [],
+        distros: [],
+        required: [],
+        optional: [],
+      },
+      files: [
+        {
+          source: "files/gtk-3.0/settings.ini",
+          target: "~/.config/gtk-3.0/settings.ini",
+          description: "GTK 3 dark mode settings.",
+        },
+        {
+          source: "files/gtk-4.0/settings.ini",
+          target: "~/.config/gtk-4.0/settings.ini",
+          description: "GTK 4 dark mode settings.",
+        },
+      ],
+    },
   },
   {
     id: "wallpaper-nebula-8k",
@@ -403,6 +649,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "A clean 8K cosmic wallpaper formatted for multi-monitor setups with palette swatches for terminal themes.",
     version: "1.0.0",
+    package_type: "wallpaper",
     author: {
       name: "StellarArts",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=StellarArts",
@@ -446,6 +693,31 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Lossless 8K PNG.",
       },
     ],
+    manifest: {
+      id: "wallpaper-nebula-8k",
+      name: "Deep Space Nebula 8K",
+      version: "1.0.0",
+      ryzora_spec: "1",
+      author: "StellarArts",
+      package_type: "wallpaper",
+      description: "8K cosmic wallpaper formatted for multi-monitor setups with palette swatches.",
+      tags: ["Wallpaper", "8K", "Cosmic", "Space"],
+      color_palette: ["#818cf8", "#c084fc", "#38bdf8", "#020617"],
+      compatibility: {
+        desktops: [],
+        sessions: [],
+        distros: [],
+        required: [],
+        optional: [],
+      },
+      files: [
+        {
+          source: "files/nebula-8k.png",
+          target: "~/Pictures/Wallpapers/nebula-8k.png",
+          description: "Lossless 8K PNG cosmic wallpaper.",
+        },
+      ],
+    },
   },
   {
     id: "terminal-starship-warp",
@@ -454,6 +726,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     description:
       "Engineered for high productivity in any shell (Zsh, Fish, Bash). Features git branch badges and execution time indicators.",
     version: "2.0.0",
+    package_type: "terminal",
     author: {
       name: "DevWarp",
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=DevWarp",
@@ -497,5 +770,30 @@ export const MOCK_PACKAGES: PackageItem[] = [
         description: "Compact prompt with custom nerd-font symbols.",
       },
     ],
+    manifest: {
+      id: "terminal-starship-warp",
+      name: "Starship Cosmic Warp",
+      version: "2.0.0",
+      ryzora_spec: "1",
+      author: "DevWarp",
+      package_type: "terminal",
+      description: "Starship prompt for Zsh, Fish, Bash. Git branch badges and execution time indicators.",
+      tags: ["Starship", "Terminal", "Zsh", "Fish", "Bash", "Prompt"],
+      color_palette: ["#10b981", "#06b6d4", "#f59e0b", "#0f172a"],
+      compatibility: {
+        desktops: [],
+        sessions: [],
+        distros: [],
+        required: ["starship"],
+        optional: [],
+      },
+      files: [
+        {
+          source: "files/starship.toml",
+          target: "~/.config/starship.toml",
+          description: "Starship prompt configuration — nerd-font symbols and git status.",
+        },
+      ],
+    },
   },
 ];

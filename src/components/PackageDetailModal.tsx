@@ -191,22 +191,53 @@ export const PackageDetailModal: React.FC = () => {
 
           {activeTab === "manifest" && (
             <div className="space-y-3 text-xs">
-              <div className="text-[11px] text-[var(--text-muted)]">
-                Files installed by this package:
+              {/* Manifest header — spec version and type badge */}
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] text-[var(--text-muted)]">
+                  {selectedPackage.manifest
+                    ? `Files declared by this package (ryzora_spec v${selectedPackage.manifest.ryzora_spec}):`
+                    : "Files installed by this package:"}
+                </div>
+                {selectedPackage.manifest && (
+                  <span className="font-mono text-[10px] uppercase text-[var(--accent-text)] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded">
+                    {selectedPackage.manifest.package_type}
+                  </span>
+                )}
               </div>
 
+              {/* File list — prefer manifest.files, fall back to components[] */}
               <div className="divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] overflow-hidden">
-                {selectedPackage.components.map((c, idx) => (
-                  <div key={idx} className="p-2.5 flex items-start justify-between gap-3 font-mono text-[11px]">
-                    <div>
-                      <div className="font-semibold text-[var(--text-primary)] font-sans text-xs">{c.name}</div>
-                      <div className="text-[var(--text-faint)] font-sans text-[11px]">{c.description}</div>
-                    </div>
-                    <code className="text-[var(--accent-text)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-subtle)] flex-shrink-0">
-                      {c.target_path}
-                    </code>
-                  </div>
-                ))}
+                {selectedPackage.manifest && selectedPackage.manifest.files.length > 0
+                  ? selectedPackage.manifest.files.map((f, idx) => (
+                      <div key={idx} className="p-2.5 flex items-start justify-between gap-3 font-mono text-[11px]">
+                        <div className="min-w-0">
+                          <code className="text-[var(--text-faint)] text-[10px] block truncate">{f.source}</code>
+                          <div className="text-[var(--text-muted)] font-sans text-[11px] mt-0.5">{f.description}</div>
+                        </div>
+                        <div className="flex-shrink-0 flex items-center gap-1.5">
+                          <span className="text-[var(--text-faint)] text-[10px]">→</span>
+                          <code className="text-[var(--accent-text)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-subtle)]">
+                            {f.target}
+                          </code>
+                        </div>
+                      </div>
+                    ))
+                  : selectedPackage.components.map((c, idx) => (
+                      <div key={idx} className="p-2.5 flex items-start justify-between gap-3 font-mono text-[11px]">
+                        <div>
+                          <div className="font-semibold text-[var(--text-primary)] font-sans text-xs">{c.name}</div>
+                          <div className="text-[var(--text-faint)] font-sans text-[11px]">{c.description}</div>
+                        </div>
+                        <code className="text-[var(--accent-text)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-subtle)] flex-shrink-0">
+                          {c.target_path}
+                        </code>
+                      </div>
+                    ))}
+              </div>
+
+              {/* Manifest integrity note */}
+              <div className="p-2.5 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-faint)]">
+                Declarative manifest · No shell execution · Safe target paths only
               </div>
             </div>
           )}

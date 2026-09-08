@@ -5,6 +5,7 @@ import {
   CompatibilityReport,
   CompatibilityRequirements,
   DesktopEnvironment,
+  ManifestValidationResult,
   PackageItem,
   SnapshotRecord,
   SystemInfo,
@@ -32,6 +33,7 @@ interface AppContextType {
   rollbackSnapshot: (snapId: string) => Promise<void>;
   refreshSystem: () => Promise<void>;
   checkCompatibility: (pkg: PackageItem) => CompatibilityReport;
+  validateManifest: (manifestJson: string) => Promise<ManifestValidationResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
 }
@@ -329,10 +331,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return evaluateClientCompatibility(systemInfo, pkg.compatibility);
   };
 
+  const validateManifest = async (manifestJson: string): Promise<ManifestValidationResult> => {
+    try {
+      return await invoke<ManifestValidationResult>("validate_manifest", { manifestJson });
+    } catch {
+      return { valid: false, errors: ["Validation service unavailable"], warnings: [] };
+    }
+  };
+
   const installPackage = async (pkg: PackageItem) => {
     setIsInstalling(true);
     setInstallProgress(10);
-    setInstallLogs([`[Step 1/5] Validating package manifest for '${pkg.title}' v${pkg.version}...`]);
+    // Prefer manifest.files if present, fall back to components
+    const manifestFiles = pkg.manifest?.files ?? [];
+    const pathsToBackup = manifestFiles.length > 0
+      ? manifestFiles.map((f) => f.target)
+      : pkg.components.map((c) => c.target_path);
+
+    setInstallLogs([
+      `[Step 1/5] Validating package manifest for '${pkg.title}' v${pkg.version}...`,
+      ...(pkg.manifest
+        ? [`[Manifest] ryzora_spec: ${pkg.manifest.ryzora_spec} · type: ${pkg.manifest.package_type} · files: ${manifestFiles.length}`]
+        : []),
+    ]);
 
     await new Promise((r) => setTimeout(r, 400));
     setInstallProgress(30);
@@ -345,7 +366,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await new Promise((r) => setTimeout(r, 500));
     setInstallProgress(55);
 
-    const pathsToBackup = pkg.components.map((c) => c.target_path);
     setInstallLogs((prev) => [
       ...prev,
       `[Step 3/5] Simulating snapshot of ${pathsToBackup.length} configuration paths...`,
@@ -376,7 +396,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInstallLogs((prev) => [
       ...prev,
       `[Step 4/5] Simulated staging of configuration files...`,
-      ...pkg.components.map((c) => `  ✓ Staged ${c.target_path}`),
+      ...pathsToBackup.map((p) => `  ✓ Staged ${p}`),
     ]);
 
     await new Promise((r) => setTimeout(r, 400));
@@ -432,6 +452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rollbackSnapshot,
         refreshSystem,
         checkCompatibility,
+        validateManifest,
         toast,
         setToast,
       }}

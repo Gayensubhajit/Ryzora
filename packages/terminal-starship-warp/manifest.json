@@ -1,0 +1,39 @@
+{
+  "id": "terminal-starship-warp",
+  "name": "Starship Cosmic Warp",
+  "version": "2.0.0",
+  "ryzora_spec": "1",
+  "author": "DevWarp",
+  "package_type": "terminal",
+  "description": "Starship prompt for Zsh, Fish, Bash. Git branch badges and execution time indicators.",
+  "tags": [
+    "Starship",
+    "Terminal",
+    "Zsh",
+    "Fish",
+    "Bash",
+    "Prompt"
+  ],
+  "color_palette": [
+    "#10b981",
+    "#06b6d4",
+    "#f59e0b",
+    "#0f172a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "starship"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/starship.toml",
+      "target": "~/.config/starship.toml",
+      "description": "Starship prompt configuration \u2014 nerd-font symbols and git status."
+    }
+  ]
+}
