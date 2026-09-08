@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Star, RotateCcw, Check } from "lucide-react";
+import { X, Star, RotateCcw, Check, AlertCircle } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 export const PackageDetailModal: React.FC = () => {
@@ -11,9 +11,9 @@ export const PackageDetailModal: React.FC = () => {
     isInstalling,
     installProgress,
     installLogs,
-    systemInfo,
     snapshots,
     rollbackSnapshot,
+    checkCompatibility,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<"overview" | "manifest" | "dependencies">("overview");
@@ -23,6 +23,7 @@ export const PackageDetailModal: React.FC = () => {
 
   const isInstalled = installedPackageIds.includes(selectedPackage.id);
   const relatedSnapshot = snapshots.find((s) => s.package_id === selectedPackage.id);
+  const compat = checkCompatibility(selectedPackage);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/70 backdrop-blur-sm select-none">
@@ -80,7 +81,7 @@ export const PackageDetailModal: React.FC = () => {
             )}
           </div>
 
-          {/* Clean Segmented Tab Navigation */}
+          {/* Segmented Tab Navigation */}
           <div className="flex items-center gap-1 border-b border-[var(--border-subtle)] pb-2 text-xs">
             <button
               onClick={() => setActiveTab("overview")}
@@ -104,13 +105,16 @@ export const PackageDetailModal: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab("dependencies")}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`px-3 py-1 rounded-md transition-colors flex items-center gap-1.5 ${
                 activeTab === "dependencies"
                   ? "bg-[var(--bg-surface-elevated)] text-white font-medium"
                   : "text-[var(--text-muted)] hover:text-white"
               }`}
             >
-              Dependencies ({selectedPackage.dependencies.packages.length})
+              <span>Dependencies & Compatibility</span>
+              {compat.missing_required_apps.length > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              )}
             </button>
           </div>
 
@@ -120,6 +124,29 @@ export const PackageDetailModal: React.FC = () => {
               <p className="text-[var(--text-muted)] leading-relaxed">
                 {selectedPackage.description}
               </p>
+
+              {/* Compatibility Summary Callout */}
+              <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[var(--text-primary)]">System Compatibility</span>
+                  <span className={`font-mono text-[11px] ${
+                    compat.level === "Compatible"
+                      ? "text-emerald-400"
+                      : compat.level === "MissingDependencies"
+                      ? "text-amber-400"
+                      : "text-[var(--text-faint)]"
+                  }`}>
+                    {compat.summary_label}
+                  </span>
+                </div>
+                <div className="text-[11px] text-[var(--text-muted)]">
+                  {compat.issues.length === 0 ? (
+                    <span>All session, window manager, and required application dependencies are satisfied.</span>
+                  ) : (
+                    <span>{compat.issues[0]?.message}</span>
+                  )}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
                 <div>
@@ -153,7 +180,6 @@ export const PackageDetailModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Safety notice */}
               <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] space-y-1">
                 <div className="font-semibold text-[var(--text-primary)]">Pre-install Snapshot</div>
                 <div>
@@ -186,37 +212,52 @@ export const PackageDetailModal: React.FC = () => {
           )}
 
           {activeTab === "dependencies" && (
-            <div className="space-y-3 text-xs">
-              <div className="text-[11px] text-[var(--text-muted)]">
-                Required packages for this configuration:
+            <div className="space-y-4 text-xs">
+              <div>
+                <div className="text-[11px] text-[var(--text-muted)] mb-2">
+                  Application dependencies required in PATH:
+                </div>
+
+                <div className="space-y-1.5">
+                  {selectedPackage.dependencies.packages.map((dep, idx) => {
+                    const isSatisfied = compat.satisfied_apps.includes(dep);
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-xs"
+                      >
+                        <span className="font-mono text-[var(--text-primary)]">{dep}</span>
+                        {isSatisfied ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+                            <Check className="w-3 h-3" />
+                            Installed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-400 text-[11px]">
+                            <AlertCircle className="w-3 h-3" />
+                            Missing in PATH
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                {selectedPackage.dependencies.packages.map((dep, idx) => {
-                  const isPresent = systemInfo?.installed_components.some(
-                    (ic) => ic.binary === dep && ic.installed
-                  );
-
-                  return (
-                    <div
-                      key={idx}
-                      className="p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-xs"
-                    >
-                      <span className="font-mono text-[var(--text-primary)]">{dep}</span>
-                      {isPresent ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
-                          <Check className="w-3 h-3" />
-                          Installed
-                        </span>
-                      ) : (
-                        <span className="text-[var(--text-faint)] text-[11px]">
-                          Not detected in PATH
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              {compat.issues.length > 0 && (
+                <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1.5">
+                  <div className="font-semibold text-[var(--text-primary)] text-xs">Compatibility Issues</div>
+                  <ul className="space-y-1 text-[11px] text-[var(--text-muted)]">
+                    {compat.issues.map((iss, idx) => (
+                      <li key={idx} className="flex items-start gap-1.5">
+                        <span className="text-amber-400 mt-0.5">·</span>
+                        <span>{iss.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

@@ -1,3 +1,4 @@
+pub mod compatibility;
 pub mod manifest;
 pub mod system;
 
@@ -13,6 +14,7 @@ pub fn run() {
             manifest::get_backups,
             manifest::create_backup_snapshot,
             manifest::rollback_snapshot,
+            compatibility::evaluate_package_compatibility,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

@@ -38,6 +38,7 @@ export interface InstalledComponent {
 export interface SystemInfo {
   distro_name: string;
   distro_id: string;
+  distro_family: string;
   distro_version: string;
   kernel_version: string;
   desktop_environment: string;
@@ -64,6 +65,41 @@ export interface SafetyAudit {
   files_modified_count: number;
 }
 
+export type CompatibilityLevel =
+  | "Compatible"
+  | "MissingDependencies"
+  | "IncompatibleSession"
+  | "IncompatibleDesktop"
+  | "IncompatibleDistro";
+
+export interface CompatibilityIssue {
+  severity: "error" | "warning" | "info";
+  code: string;
+  message: string;
+  target?: string;
+}
+
+export interface CompatibilityRequirements {
+  supported_distros: string[];
+  supported_desktops: string[];
+  supported_sessions: string[];
+  required_binaries: string[];
+  optional_binaries: string[];
+}
+
+export interface CompatibilityReport {
+  level: CompatibilityLevel;
+  score: number;
+  summary_label: string;
+  session_compatible: boolean;
+  desktop_compatible: boolean;
+  distro_compatible: boolean;
+  satisfied_apps: string[];
+  missing_required_apps: string[];
+  missing_optional_apps: string[];
+  issues: CompatibilityIssue[];
+}
+
 export interface PackageItem {
   id: string;
   title: string;
@@ -87,13 +123,14 @@ export interface PackageItem {
   featured?: boolean;
   trending?: boolean;
   recent?: boolean;
-  color_palette: string[]; // hex codes for accent palette
+  color_palette: string[];
   safety_audit: SafetyAudit;
   dependencies: {
     packages: string[];
     optional: string[];
   };
   components: PackageComponentSpec[];
+  compatibility: CompatibilityRequirements;
 }
 
 export interface SnapshotRecord {

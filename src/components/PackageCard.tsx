@@ -8,18 +8,10 @@ interface PackageCardProps {
 }
 
 export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
-  const { setSelectedPackage, systemInfo, installedPackageIds } = useApp();
+  const { setSelectedPackage, installedPackageIds, checkCompatibility } = useApp();
 
   const isInstalled = installedPackageIds.includes(packageItem.id);
-
-  const currentWm = systemInfo?.window_manager.toLowerCase() || "hyprland";
-  const currentDe = systemInfo?.desktop_environment.toLowerCase() || "hyprland";
-
-  const isCompatible =
-    packageItem.supported_desktops.includes("universal") ||
-    packageItem.supported_desktops.some(
-      (d) => d === currentWm || d === currentDe || currentWm.includes(d) || currentDe.includes(d)
-    );
+  const compat = checkCompatibility(packageItem);
 
   const componentNames = packageItem.components
     .map((c) => c.name.split(" ")[0])
@@ -70,14 +62,19 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
         {/* Quiet Compatibility & Stats Row */}
         <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px]">
           <div>
-            {isCompatible ? (
+            {compat.level === "Compatible" ? (
               <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 Compatible
               </span>
+            ) : compat.level === "MissingDependencies" ? (
+              <span className="inline-flex items-center gap-1.5 text-amber-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                {compat.summary_label}
+              </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 text-[var(--text-faint)]">
-                Requires {packageItem.supported_desktops[0]}
+                {compat.summary_label}
               </span>
             )}
           </div>

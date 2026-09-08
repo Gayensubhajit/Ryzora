@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   CategoryId,
+  CompatibilityReport,
+  CompatibilityRequirements,
   DesktopEnvironment,
   PackageItem,
   SnapshotRecord,
@@ -29,6 +31,7 @@ interface AppContextType {
   installPackage: (pkg: PackageItem) => Promise<void>;
   rollbackSnapshot: (snapId: string) => Promise<void>;
   refreshSystem: () => Promise<void>;
+  checkCompatibility: (pkg: PackageItem) => CompatibilityReport;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
 }
@@ -38,12 +41,13 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const FALLBACK_SYSTEM_INFO: SystemInfo = {
   distro_name: "Garuda Linux",
   distro_id: "garuda",
+  distro_family: "arch",
   distro_version: "Rolling",
   kernel_version: "6.18.50-1-lts",
   desktop_environment: "Hyprland",
   window_manager: "Hyprland",
   session_type: "wayland",
-  shell: "fish",
+  shell: "zsh",
   terminal: "kitty",
   installed_components: [
     { name: "Hyprland", binary: "hyprland", installed: true, path: "/usr/bin/hyprland", category: "Window Manager" },
@@ -56,6 +60,172 @@ const FALLBACK_SYSTEM_INFO: SystemInfo = {
     { name: "Sway", binary: "sway", installed: false, path: null, category: "Window Manager" },
   ],
 };
+
+function evaluateClientCompatibility(
+  sys: SystemInfo | null,
+  reqs: CompatibilityRequirements
+): CompatibilityReport {
+  if (!sys) {
+    return {
+      level: "Compatible",
+      score: 100,
+      summary_label: "Compatible",
+      session_compatible: true,
+      desktop_compatible: true,
+      distro_compatible: true,
+      satisfied_apps: [],
+      missing_required_apps: [],
+      missing_optional_apps: [],
+      issues: [],
+    };
+  }
+
+  const issues: CompatibilityReport["issues"] = [];
+  const satisfied_apps: string[] = [];
+  const missing_required_apps: string[] = [];
+  const missing_optional_apps: string[] = [];
+
+  // Distro check
+  const distroId = sys.distro_id.toLowerCase();
+  const distroFamily = (sys.distro_family || "").toLowerCase();
+  const distro_compatible =
+    reqs.supported_distros.length === 0 ||
+    reqs.supported_distros.some((d) => {
+      const dl = d.toLowerCase();
+      return dl === "all" || dl === "universal" || dl === distroId || dl === distroFamily;
+    });
+
+  if (!distro_compatible) {
+    issues.push({
+      severity: "error",
+      code: "DISTRO_MISMATCH",
+      message: `Package requires distros [${reqs.supported_distros.join(", ")}]`,
+      target: sys.distro_id,
+    });
+  }
+
+  // Session check (Wayland vs X11)
+  const sessionType = sys.session_type.toLowerCase();
+  const session_compatible =
+    reqs.supported_sessions.length === 0 ||
+    reqs.supported_sessions.some((s) => {
+      const sl = s.toLowerCase();
+      return sl === "any" || sl === "all" || sl === sessionType;
+    });
+
+  if (!session_compatible) {
+    issues.push({
+      severity: "error",
+      code: "SESSION_MISMATCH",
+      message: `Package requires session [${reqs.supported_sessions.join(", ")}]`,
+      target: sys.session_type,
+    });
+  }
+
+  // Desktop check
+  const wm = sys.window_manager.toLowerCase();
+  const de = sys.desktop_environment.toLowerCase();
+  const desktop_compatible =
+    reqs.supported_desktops.length === 0 ||
+    reqs.supported_desktops.some((d) => {
+      const dl = d.toLowerCase();
+      return (
+        dl === "universal" ||
+        dl === "all" ||
+        dl === wm ||
+        dl === de ||
+        wm.includes(dl) ||
+        de.includes(dl)
+      );
+    });
+
+  if (!desktop_compatible) {
+    issues.push({
+      severity: "error",
+      code: "DESKTOP_MISMATCH",
+      message: `Package designed for [${reqs.supported_desktops.join(", ")}]`,
+      target: sys.window_manager,
+    });
+  }
+
+  // Applications / binaries check
+  const installedSet = new Set(
+    sys.installed_components.filter((c) => c.installed).map((c) => c.binary.toLowerCase())
+  );
+
+  for (const bin of reqs.required_binaries) {
+    const bl = bin.toLowerCase();
+    const found =
+      installedSet.has(bl) ||
+      (bl === "rofi-wayland" && installedSet.has("rofi")) ||
+      (bl === "rofi" && installedSet.has("rofi-wayland"));
+
+    if (found) {
+      satisfied_apps.push(bin);
+    } else {
+      missing_required_apps.push(bin);
+      issues.push({
+        severity: "warning",
+        code: "MISSING_REQUIRED_BIN",
+        message: `Required tool '${bin}' is not detected in PATH`,
+        target: bin,
+      });
+    }
+  }
+
+  for (const bin of reqs.optional_binaries) {
+    const bl = bin.toLowerCase();
+    if (installedSet.has(bl)) {
+      satisfied_apps.push(bin);
+    } else {
+      missing_optional_apps.push(bin);
+      issues.push({
+        severity: "info",
+        code: "MISSING_OPTIONAL_BIN",
+        message: `Optional tool '${bin}' is not detected in PATH`,
+        target: bin,
+      });
+    }
+  }
+
+  // Summary Label & Level
+  let level: CompatibilityReport["level"] = "Compatible";
+  let score = 100;
+  let summary_label = "Compatible";
+
+  if (!desktop_compatible) {
+    level = "IncompatibleDesktop";
+    score = 20;
+    const target = reqs.supported_desktops[0] || "desktop";
+    summary_label = `Requires ${target.charAt(0).toUpperCase() + target.slice(1)}`;
+  } else if (!session_compatible) {
+    level = "IncompatibleSession";
+    score = 30;
+    const target = reqs.supported_sessions[0] || "Wayland";
+    summary_label = `Requires ${target.charAt(0).toUpperCase() + target.slice(1)}`;
+  } else if (!distro_compatible) {
+    level = "IncompatibleDistro";
+    score = 40;
+    summary_label = "Distro mismatch";
+  } else if (missing_required_apps.length > 0) {
+    level = "MissingDependencies";
+    score = 75;
+    summary_label = `Missing: ${missing_required_apps[0]}`;
+  }
+
+  return {
+    level,
+    score,
+    summary_label,
+    session_compatible,
+    desktop_compatible,
+    distro_compatible,
+    satisfied_apps,
+    missing_required_apps,
+    missing_optional_apps,
+    issues,
+  };
+}
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
@@ -79,21 +249,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [installLogs, setInstallLogs] = useState<string[]>([]);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" | "warning" } | null>(null);
 
-  // Load system info from Tauri Rust backend
   const refreshSystem = async () => {
     setLoadingSystem(true);
     try {
       const info = await invoke<SystemInfo>("detect_system_info");
       setSystemInfo(info);
     } catch {
-      // In browser development or fallback
       setSystemInfo(FALLBACK_SYSTEM_INFO);
     } finally {
       setLoadingSystem(false);
     }
   };
 
-  // Load snapshots from Tauri Rust backend
   const loadSnapshots = async () => {
     try {
       const list = await invoke<SnapshotRecord[]>("get_backups");
@@ -122,7 +289,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSnapshots();
   }, []);
 
-  // Save installed IDs
   useEffect(() => {
     try {
       localStorage.setItem("ryzora_installed_ids", JSON.stringify(installedPackageIds));
@@ -131,7 +297,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [installedPackageIds]);
 
-  // Toast timeout
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 4000);
@@ -139,28 +304,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [toast]);
 
-  // Safe install flow with backup creation
+  const checkCompatibility = (pkg: PackageItem): CompatibilityReport => {
+    return evaluateClientCompatibility(systemInfo, pkg.compatibility);
+  };
+
   const installPackage = async (pkg: PackageItem) => {
     setIsInstalling(true);
     setInstallProgress(10);
     setInstallLogs([`[Step 1/5] Validating package manifest for '${pkg.title}' v${pkg.version}...`]);
 
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 400));
     setInstallProgress(30);
     setInstallLogs((prev) => [
       ...prev,
       `[Step 2/5] Checking dependencies: ${pkg.dependencies.packages.join(", ") || "None"}`,
-      `[Safety] Verification passed: Zero unauthorized script execution.`,
+      `[Verified] Safe manifest specification confirmed.`,
     ]);
 
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 500));
     setInstallProgress(55);
 
-    // Extract target paths to backup
     const pathsToBackup = pkg.components.map((c) => c.target_path);
     setInstallLogs((prev) => [
       ...prev,
-      `[Step 3/5] Creating safety snapshot of ${pathsToBackup.length} configuration paths...`,
+      `[Step 3/5] Simulating snapshot of ${pathsToBackup.length} configuration paths...`,
     ]);
 
     try {
@@ -171,7 +338,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       setSnapshots((prev) => [snap, ...prev]);
     } catch {
-      // Mock snapshot record in fallback
       const mockSnap: SnapshotRecord = {
         id: `snap-${Date.now()}`,
         package_id: pkg.id,
@@ -184,26 +350,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSnapshots((prev) => [mockSnap, ...prev]);
     }
 
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 400));
     setInstallProgress(85);
     setInstallLogs((prev) => [
       ...prev,
-      `[Step 4/5] Staging configurations into target user directories...`,
-      ...pkg.components.map((c) => `  ✓ Linked ${c.target_path}`),
+      `[Step 4/5] Simulated staging of configuration files...`,
+      ...pkg.components.map((c) => `  ✓ Staged ${c.target_path}`),
     ]);
 
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 400));
     setInstallProgress(100);
     setInstallLogs((prev) => [
       ...prev,
-      `[Step 5/5] Success! '${pkg.title}' has been successfully installed.`,
-      `[Info] Configuration active. You can roll back anytime from the Backups tab.`,
+      `[Step 5/5] Success! '${pkg.title}' is active.`,
     ]);
 
     setInstalledPackageIds((prev) => (prev.includes(pkg.id) ? prev : [...prev, pkg.id]));
     setIsInstalling(false);
     setToast({
-      message: `Successfully installed ${pkg.title}! Snapshot created.`,
+      message: `Installed ${pkg.title}`,
       type: "success",
     });
   };
@@ -218,7 +383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((s) => (s.id === snapId ? { ...s, status: "restored" } : s))
     );
     setToast({
-      message: `Configurations successfully rolled back to snapshot ${snapId}!`,
+      message: `Configurations restored to snapshot ${snapId}`,
       type: "success",
     });
   };
@@ -245,6 +410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installPackage,
         rollbackSnapshot,
         refreshSystem,
+        checkCompatibility,
         toast,
         setToast,
       }}

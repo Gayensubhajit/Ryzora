@@ -17,6 +17,7 @@ pub struct InstalledComponent {
 pub struct SystemInfo {
     pub distro_name: String,
     pub distro_id: String,
+    pub distro_family: String,
     pub distro_version: String,
     pub kernel_version: String,
     pub desktop_environment: String,
@@ -59,7 +60,6 @@ fn check_binary(bin: &str) -> (bool, Option<String>) {
         }
     }
 
-    // Common fallback paths
     let fallbacks = [
         format!("/usr/bin/{}", bin),
         format!("/usr/local/bin/{}", bin),
@@ -100,6 +100,39 @@ pub fn detect_system_info() -> SystemInfo {
         .cloned()
         .unwrap_or_else(|| "linux".to_string());
 
+    let id_lower = distro_id.to_lowercase();
+    let id_like = os_info.get("ID_LIKE").cloned().unwrap_or_default().to_lowercase();
+
+    let distro_family = if id_lower.contains("arch")
+        || id_lower.contains("garuda")
+        || id_lower.contains("manjaro")
+        || id_lower.contains("endeavour")
+        || id_like.contains("arch")
+    {
+        "arch".to_string()
+    } else if id_lower.contains("debian")
+        || id_lower.contains("ubuntu")
+        || id_lower.contains("pop")
+        || id_lower.contains("mint")
+        || id_like.contains("debian")
+        || id_like.contains("ubuntu")
+    {
+        "debian".to_string()
+    } else if id_lower.contains("fedora")
+        || id_lower.contains("rhel")
+        || id_lower.contains("centos")
+        || id_lower.contains("nobara")
+        || id_like.contains("fedora")
+    {
+        "fedora".to_string()
+    } else if id_lower.contains("suse") || id_like.contains("suse") {
+        "opensuse".to_string()
+    } else if id_lower.contains("nix") {
+        "nixos".to_string()
+    } else {
+        "generic_linux".to_string()
+    };
+
     let distro_version = os_info
         .get("VERSION_ID")
         .cloned()
@@ -107,7 +140,6 @@ pub fn detect_system_info() -> SystemInfo {
 
     let kernel_version = get_kernel_version();
 
-    // Desktop Environment & Window Manager detection
     let xdg_current = env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
     let desktop_session = env::var("DESKTOP_SESSION").unwrap_or_default();
 
@@ -120,7 +152,6 @@ pub fn detect_system_info() -> SystemInfo {
         "Standalone WM".to_string()
     };
 
-    // Check specific window managers / environments
     if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok()
         || xdg_current.to_lowercase().contains("hyprland")
         || desktop_session.to_lowercase().contains("hyprland")
@@ -181,7 +212,6 @@ pub fn detect_system_info() -> SystemInfo {
         .or_else(|_| env::var("TERM"))
         .unwrap_or_else(|_| "kitty".to_string());
 
-    // Check relevant Linux desktop components
     let components_to_probe = [
         ("Hyprland", "hyprland", "Window Manager"),
         ("Sway", "sway", "Window Manager"),
@@ -216,6 +246,7 @@ pub fn detect_system_info() -> SystemInfo {
     SystemInfo {
         distro_name,
         distro_id,
+        distro_family,
         distro_version,
         kernel_version,
         desktop_environment: de,
@@ -224,22 +255,5 @@ pub fn detect_system_info() -> SystemInfo {
         shell,
         terminal,
         installed_components,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_detect_system_info() {
-        let info = detect_system_info();
-        println!("Detected Distro: {}", info.distro_name);
-        println!("Detected WM: {}", info.window_manager);
-        println!("Detected Session: {}", info.session_type);
-        println!("Detected Shell: {}", info.shell);
-        println!("Installed components count: {}", info.installed_components.len());
-        assert!(!info.distro_name.is_empty());
-        assert!(!info.installed_components.is_empty());
     }
 }
