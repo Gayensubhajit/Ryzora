@@ -50,7 +50,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-56 flex-shrink-0 flex flex-col justify-between h-screen border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] select-none z-20">
+    <aside className="w-56 flex-shrink-0 flex flex-col justify-between h-screen border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] select-none z-20">
       {/* Brand Header */}
       <div className="px-4 py-3.5 border-b border-[var(--border-subtle)]">
         <div className="flex items-center gap-2.5">

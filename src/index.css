@@ -2,21 +2,22 @@
 
 @layer base {
   :root {
-    /* Neutrals & Surfaces */
-    --bg-canvas: #0e1015;
-    --bg-surface: #14171d;
-    --bg-surface-elevated: #1a1e26;
-    --bg-surface-hover: #1e232d;
-    --bg-surface-active: #242933;
+    /* Neutrals & Surfaces with clear hierarchy */
+    --bg-canvas: #090b0e;
+    --bg-sidebar: #0e1116;
+    --bg-surface: #141820;
+    --bg-surface-elevated: #1b202b;
+    --bg-surface-hover: #212735;
+    --bg-surface-active: #283040;
 
-    /* Borders */
-    --border-subtle: #222731;
-    --border-strong: #2f3542;
+    /* Borders with crisp 1px definition */
+    --border-subtle: #242b38;
+    --border-strong: #363e50;
 
     /* Typography */
-    --text-primary: #e6e8ee;
-    --text-muted: #8b92a0;
-    --text-faint: #555d6e;
+    --text-primary: #e8eaf0;
+    --text-muted: #929aa8;
+    --text-faint: #5e6678;
 
     /* Single Themeable Accent */
     --accent: #3b82f6;
@@ -39,7 +40,7 @@
   }
 }
 
-/* Restrained compact scrollbar */
+/* Compact scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -48,14 +49,13 @@
   background: var(--bg-canvas);
 }
 ::-webkit-scrollbar-thumb {
-  background: #252b36;
+  background: #252b38;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #363e4e;
+  background: #363e50;
 }
 
-/* Clean surface utilities */
 .surface-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
