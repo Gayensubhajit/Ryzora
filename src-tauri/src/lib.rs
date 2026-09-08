@@ -25,15 +25,27 @@ pub fn run() {
             // Compatibility Engine (Phase 1)
             compatibility::evaluate_package_compatibility,
             compatibility::evaluate_batch_compatibility,
-            // Declarative Installer (Phase 4)
+            // Declarative Installer (Phase 4 & 7)
             installer::preview_installation,
             installer::install_package,
             installer::list_installed_packages,
             installer::get_installed_package,
-            // Repository & Catalog System (Phase 5)
+            installer::uninstall_package,
+            installer::check_package_update,
+            installer::check_all_updates,
+            installer::preview_package_update,
+            installer::apply_package_update,
+            // Repository & Catalog System (Phase 5 & 6)
             repository::get_catalog_packages,
             repository::refresh_catalog,
             repository::get_repository_info,
+            repository::list_repository_sources,
+            repository::add_repository_source,
+            repository::remove_repository_source,
+            // Cache Management (Phase 8)
+            repository::get_cache_stats,
+            repository::clear_package_cache,
+            repository::clear_all_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

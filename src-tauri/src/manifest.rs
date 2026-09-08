@@ -375,7 +375,11 @@ mod tests {
         );
         let result = validate_manifest_internal(json);
         assert!(!result.valid, "Path traversal in target should be rejected");
-        assert!(result.errors.iter().any(|e| e.contains("..")), "Got: {:?}", result.errors);
+        assert!(
+            result.errors.iter().any(|e| e.contains("..")),
+            "Got: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -387,7 +391,11 @@ mod tests {
         );
         let result = validate_manifest_internal(json);
         assert!(!result.valid, "Absolute target should be rejected");
-        assert!(result.errors.iter().any(|e| e.contains("~/")), "Got: {:?}", result.errors);
+        assert!(
+            result.errors.iter().any(|e| e.contains("~/")),
+            "Got: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -397,7 +405,11 @@ mod tests {
             r#""compatibility":{"desktops":[],"sessions":[],"distros":[],"required":[],"optional":[]},"files":[]}"#
         );
         let result = validate_manifest_internal(json);
-        assert!(!result.valid, "Unknown package_type should fail; errors: {:?}", result.errors);
+        assert!(
+            !result.valid,
+            "Unknown package_type should fail; errors: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -409,7 +421,11 @@ mod tests {
         );
         let result = validate_manifest_internal(json);
         assert!(!result.valid, "Shell hook fields should be rejected");
-        assert!(result.errors.iter().any(|e| e.contains("scripts")), "Got: {:?}", result.errors);
+        assert!(
+            result.errors.iter().any(|e| e.contains("scripts")),
+            "Got: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -421,7 +437,11 @@ mod tests {
         );
         let result = validate_manifest_internal(json);
         assert!(!result.valid, "Source path traversal should be rejected");
-        assert!(result.errors.iter().any(|e| e.contains("..")), "Got: {:?}", result.errors);
+        assert!(
+            result.errors.iter().any(|e| e.contains("..")),
+            "Got: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -432,6 +452,10 @@ mod tests {
         );
         let result = validate_manifest_internal(json);
         assert!(!result.valid, "Invalid semver should be rejected");
-        assert!(result.errors.iter().any(|e| e.contains("semver")), "Got: {:?}", result.errors);
+        assert!(
+            result.errors.iter().any(|e| e.contains("semver")),
+            "Got: {:?}",
+            result.errors
+        );
     }
 }

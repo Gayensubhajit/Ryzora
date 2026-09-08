@@ -63,8 +63,16 @@ fn check_binary(bin: &str) -> (bool, Option<String>) {
     let fallbacks = [
         format!("/usr/bin/{}", bin),
         format!("/usr/local/bin/{}", bin),
-        format!("{}/.cargo/bin/{}", env::var("HOME").unwrap_or_default(), bin),
-        format!("{}/.local/bin/{}", env::var("HOME").unwrap_or_default(), bin),
+        format!(
+            "{}/.cargo/bin/{}",
+            env::var("HOME").unwrap_or_default(),
+            bin
+        ),
+        format!(
+            "{}/.local/bin/{}",
+            env::var("HOME").unwrap_or_default(),
+            bin
+        ),
     ];
 
     for fb in &fallbacks {
@@ -101,7 +109,11 @@ pub fn detect_system_info() -> SystemInfo {
         .unwrap_or_else(|| "linux".to_string());
 
     let id_lower = distro_id.to_lowercase();
-    let id_like = os_info.get("ID_LIKE").cloned().unwrap_or_default().to_lowercase();
+    let id_like = os_info
+        .get("ID_LIKE")
+        .cloned()
+        .unwrap_or_default()
+        .to_lowercase();
 
     let distro_family = if id_lower.contains("arch")
         || id_lower.contains("garuda")

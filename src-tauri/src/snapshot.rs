@@ -169,7 +169,12 @@ pub fn validate_and_expand_path(raw: &str, home_dir: &Path) -> Result<PathBuf, S
 
 /// Validate a snapshot ID — must not contain path separators or traversal.
 fn validate_snapshot_id(id: &str) -> Result<(), String> {
-    if id.contains('/') || id.contains('\\') || id.contains("..") || id.contains('\0') || id.trim().is_empty() {
+    if id.contains('/')
+        || id.contains('\\')
+        || id.contains("..")
+        || id.contains('\0')
+        || id.trim().is_empty()
+    {
         return Err(format!("Invalid snapshot ID '{}'", id));
     }
     Ok(())
@@ -180,8 +185,7 @@ fn validate_snapshot_id(id: &str) -> Result<(), String> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub fn sha256_file(path: &Path) -> Result<String, String> {
-    let mut file =
-        fs::File::open(path).map_err(|e| format!("Cannot open {:?}: {}", path, e))?;
+    let mut file = fs::File::open(path).map_err(|e| format!("Cannot open {:?}: {}", path, e))?;
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 65536];
     loop {
@@ -230,8 +234,7 @@ fn format_ts_id(secs: u64) -> String {
 
 fn format_ts_human(secs: u64) -> String {
     const MONTHS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     let rem = secs % 86400;
     let (y, mo, d) = days_to_ymd((secs / 86400) as i64);
@@ -253,11 +256,21 @@ fn format_ts_human(secs: u64) -> String {
 fn make_snapshot_id(label: &str, timestamp: u64) -> String {
     let sanitized: String = label
         .chars()
-        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .take(32)
         .collect();
     let sanitized = sanitized.trim_matches('-').to_string();
-    let sanitized = if sanitized.is_empty() { "snapshot".to_string() } else { sanitized };
+    let sanitized = if sanitized.is_empty() {
+        "snapshot".to_string()
+    } else {
+        sanitized
+    };
     format!("{}-{}", format_ts_id(timestamp), sanitized)
 }
 
@@ -325,8 +338,8 @@ fn backup_directory(
         existed: true,
     }];
 
-    let read_dir = fs::read_dir(absolute)
-        .map_err(|e| format!("Cannot read dir {:?}: {}", absolute, e))?;
+    let read_dir =
+        fs::read_dir(absolute).map_err(|e| format!("Cannot read dir {:?}: {}", absolute, e))?;
 
     for item in read_dir {
         let item = item.map_err(|e| e.to_string())?;
@@ -475,10 +488,9 @@ pub fn create_snapshot_in(
 
     // Write snapshot.json
     let meta_path = snap_dir.join("snapshot.json");
-    let meta_json = serde_json::to_string_pretty(&meta)
-        .map_err(|e| format!("Serialization error: {}", e))?;
-    fs::write(&meta_path, &meta_json)
-        .map_err(|e| format!("Cannot write snapshot.json: {}", e))?;
+    let meta_json =
+        serde_json::to_string_pretty(&meta).map_err(|e| format!("Serialization error: {}", e))?;
+    fs::write(&meta_path, &meta_json).map_err(|e| format!("Cannot write snapshot.json: {}", e))?;
 
     // Verify immediately after creation
     let verified = verify_snapshot_in(&id, snapshots_root).unwrap_or(false);
@@ -490,10 +502,9 @@ pub fn create_snapshot_in(
     };
 
     // Re-write with updated status
-    let meta_json = serde_json::to_string_pretty(&meta)
-        .map_err(|e| format!("Serialization error: {}", e))?;
-    fs::write(&meta_path, &meta_json)
-        .map_err(|e| format!("Cannot update snapshot.json: {}", e))?;
+    let meta_json =
+        serde_json::to_string_pretty(&meta).map_err(|e| format!("Serialization error: {}", e))?;
+    fs::write(&meta_path, &meta_json).map_err(|e| format!("Cannot update snapshot.json: {}", e))?;
 
     Ok(meta)
 }
@@ -506,8 +517,8 @@ pub fn verify_snapshot_in(id: &str, snapshots_root: &Path) -> Result<bool, Strin
     }
 
     let meta_path = snap_dir.join("snapshot.json");
-    let json = fs::read_to_string(&meta_path)
-        .map_err(|e| format!("Cannot read snapshot.json: {}", e))?;
+    let json =
+        fs::read_to_string(&meta_path).map_err(|e| format!("Cannot read snapshot.json: {}", e))?;
     let meta: SnapshotMetadata =
         serde_json::from_str(&json).map_err(|e| format!("Cannot parse snapshot.json: {}", e))?;
 
@@ -545,8 +556,8 @@ pub fn list_snapshots_in(snapshots_root: &Path) -> Result<Vec<SnapshotMetadata>,
         return Ok(Vec::new());
     }
 
-    let read_dir = fs::read_dir(snapshots_root)
-        .map_err(|e| format!("Cannot read snapshots dir: {}", e))?;
+    let read_dir =
+        fs::read_dir(snapshots_root).map_err(|e| format!("Cannot read snapshots dir: {}", e))?;
 
     let mut list = Vec::new();
     for item in read_dir {
@@ -576,8 +587,8 @@ pub fn get_snapshot_in(id: &str, snapshots_root: &Path) -> Result<SnapshotMetada
     if !meta_path.exists() {
         return Err(format!("Snapshot '{}' not found", id));
     }
-    let json = fs::read_to_string(&meta_path)
-        .map_err(|e| format!("Cannot read snapshot.json: {}", e))?;
+    let json =
+        fs::read_to_string(&meta_path).map_err(|e| format!("Cannot read snapshot.json: {}", e))?;
     serde_json::from_str(&json).map_err(|e| format!("Cannot parse snapshot.json: {}", e))
 }
 
@@ -596,8 +607,7 @@ pub fn delete_snapshot_in(id: &str, snapshots_root: &Path) -> Result<(), String>
         return Err(format!("Snapshot '{}' not found", id));
     }
 
-    fs::remove_dir_all(&snap_dir)
-        .map_err(|e| format!("Cannot delete snapshot '{}': {}", id, e))?;
+    fs::remove_dir_all(&snap_dir).map_err(|e| format!("Cannot delete snapshot '{}': {}", id, e))?;
     Ok(())
 }
 
@@ -672,8 +682,34 @@ pub fn restore_snapshot_in(
                 }
             }
             FileEntryType::Symlink => {
-                // Symlinks are recorded but not restored in this phase for safety
-                skipped_count += 1;
+                #[cfg(unix)]
+                {
+                    if let Some(ref target) = entry.symlink_target {
+                        let dest = home_dir.join(&entry.backup_relative);
+                        if let Some(parent) = dest.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        if dest.symlink_metadata().is_ok() {
+                            let _ = fs::remove_file(&dest);
+                        }
+                        match std::os::unix::fs::symlink(target, &dest) {
+                            Ok(_) => restored_count += 1,
+                            Err(e) => {
+                                errors.push(format!(
+                                    "Cannot recreate symlink {:?} -> {:?}: {}",
+                                    dest, target, e
+                                ));
+                                skipped_count += 1;
+                            }
+                        }
+                    } else {
+                        skipped_count += 1;
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    skipped_count += 1;
+                }
             }
             FileEntryType::Absent => {
                 // This path was absent before the package was installed.
@@ -735,8 +771,7 @@ pub fn restore_snapshot_in(
 pub fn create_snapshot(label: String, paths: Vec<String>) -> Result<SnapshotMetadata, String> {
     let home = get_home_dir();
     let root = get_ryzora_snapshots_dir();
-    fs::create_dir_all(&root)
-        .map_err(|e| format!("Cannot create snapshots directory: {}", e))?;
+    fs::create_dir_all(&root).map_err(|e| format!("Cannot create snapshots directory: {}", e))?;
     create_snapshot_in(&label, &paths, &home, &root)
 }
 
@@ -790,13 +825,16 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .subsec_nanos();
-            let root = std::env::temp_dir()
-                .join(format!("ryzora-test-{}-{}", tag, nanos));
+            let root = std::env::temp_dir().join(format!("ryzora-test-{}-{}", tag, nanos));
             let home = root.join("home");
             let snapshots = root.join("snapshots");
             fs::create_dir_all(&home).expect("create home");
             fs::create_dir_all(&snapshots).expect("create snapshots");
-            TestEnv { root, home, snapshots }
+            TestEnv {
+                root,
+                home,
+                snapshots,
+            }
         }
 
         /// Write a file relative to home dir, creating parent dirs.
@@ -892,8 +930,16 @@ mod tests {
         assert!(entry.size_bytes > 0);
 
         // Backed-up file must exist in snapshot
-        let backed_up = env.snapshots.join(&snap.id).join("files").join(&entry.backup_relative);
-        assert!(backed_up.exists(), "Backed-up file must exist: {:?}", backed_up);
+        let backed_up = env
+            .snapshots
+            .join(&snap.id)
+            .join("files")
+            .join(&entry.backup_relative);
+        assert!(
+            backed_up.exists(),
+            "Backed-up file must exist: {:?}",
+            backed_up
+        );
 
         // Content must match
         let orig = fs::read_to_string(&env.home.join(".config/hypr/hyprland.conf")).unwrap();
@@ -911,10 +957,15 @@ mod tests {
 
         let snap = env.create_snap("test-dir", &[".config/waybar"]);
 
-        let dir_entry = snap.entries.iter().find(|e| e.file_type == FileEntryType::Directory);
+        let dir_entry = snap
+            .entries
+            .iter()
+            .find(|e| e.file_type == FileEntryType::Directory);
         assert!(dir_entry.is_some(), "Must have a Directory entry");
 
-        let file_entries: Vec<_> = snap.entries.iter()
+        let file_entries: Vec<_> = snap
+            .entries
+            .iter()
             .filter(|e| e.file_type == FileEntryType::Regular)
             .collect();
         assert_eq!(file_entries.len(), 2, "Must have 2 regular file entries");
@@ -944,13 +995,18 @@ mod tests {
         env.write(".config/kitty/kitty.conf", "font_size 13.0");
         env.write(".config/starship.toml", "[character]\n");
 
-        let snap = env.create_snap("test-nested", &[
-            ".config/hypr/hyprland.conf",
-            ".config/kitty/kitty.conf",
-            ".config/starship.toml",
-        ]);
+        let snap = env.create_snap(
+            "test-nested",
+            &[
+                ".config/hypr/hyprland.conf",
+                ".config/kitty/kitty.conf",
+                ".config/starship.toml",
+            ],
+        );
 
-        let regular: Vec<_> = snap.entries.iter()
+        let regular: Vec<_> = snap
+            .entries
+            .iter()
             .filter(|e| e.file_type == FileEntryType::Regular)
             .collect();
         assert_eq!(regular.len(), 3);
@@ -961,10 +1017,16 @@ mod tests {
     #[test]
     fn test_snapshot_verify_passes() {
         let env = TestEnv::new("verify-ok");
-        env.write(".config/hypr/hyprland.conf", "monitor=eDP-1,1920x1080,0x0,1");
+        env.write(
+            ".config/hypr/hyprland.conf",
+            "monitor=eDP-1,1920x1080,0x0,1",
+        );
         let snap = env.create_snap("verify-test", &[".config/hypr/hyprland.conf"]);
 
-        assert!(snap.verified, "Snapshot should be verified immediately after creation");
+        assert!(
+            snap.verified,
+            "Snapshot should be verified immediately after creation"
+        );
 
         let result = verify_snapshot_in(&snap.id, &env.snapshots).unwrap();
         assert!(result, "Re-verification should pass");
@@ -977,7 +1039,8 @@ mod tests {
         let snap = env.create_snap("corrupt-test", &[".config/hypr/hyprland.conf"]);
 
         // Tamper with the backed-up file
-        let backed_up = env.snapshots
+        let backed_up = env
+            .snapshots
             .join(&snap.id)
             .join("files")
             .join(&snap.entries[0].backup_relative);
@@ -1000,7 +1063,11 @@ mod tests {
 
         // Simulate app restart — list from disk only
         let found = list_snapshots_in(&env.snapshots).unwrap();
-        assert_eq!(found.len(), 2, "Both snapshots must be discoverable from disk");
+        assert_eq!(
+            found.len(),
+            2,
+            "Both snapshots must be discoverable from disk"
+        );
 
         let ids: Vec<&str> = found.iter().map(|m| m.id.as_str()).collect();
         assert!(ids.contains(&s1.id.as_str()));
@@ -1019,14 +1086,23 @@ mod tests {
         let snap = env.create_snap("delete-me", &[".config/hypr/hyprland.conf"]);
 
         let snap_dir = env.snapshots.join(&snap.id);
-        assert!(snap_dir.exists(), "Snapshot directory must exist before deletion");
+        assert!(
+            snap_dir.exists(),
+            "Snapshot directory must exist before deletion"
+        );
 
         delete_snapshot_in(&snap.id, &env.snapshots).unwrap();
-        assert!(!snap_dir.exists(), "Snapshot directory must be gone after deletion");
+        assert!(
+            !snap_dir.exists(),
+            "Snapshot directory must be gone after deletion"
+        );
 
         // List must return empty
         let list = list_snapshots_in(&env.snapshots).unwrap();
-        assert!(list.is_empty(), "Snapshot list must be empty after deletion");
+        assert!(
+            list.is_empty(),
+            "Snapshot list must be empty after deletion"
+        );
     }
 
     #[test]
@@ -1045,14 +1121,25 @@ mod tests {
         let snap = env.create_snap("restore-test", &[".config/hypr/hyprland.conf"]);
 
         // Simulate modification after package install
-        fs::write(env.home.join(".config/hypr/hyprland.conf"), "modified by package").unwrap();
+        fs::write(
+            env.home.join(".config/hypr/hyprland.conf"),
+            "modified by package",
+        )
+        .unwrap();
 
         let result = restore_snapshot_in(&snap.id, &env.home, &env.snapshots).unwrap();
-        assert!(result.success, "Restore must succeed; errors: {:?}", result.errors);
+        assert!(
+            result.success,
+            "Restore must succeed; errors: {:?}",
+            result.errors
+        );
         assert_eq!(result.restored_count, 1);
 
         let restored = fs::read_to_string(env.home.join(".config/hypr/hyprland.conf")).unwrap();
-        assert_eq!(restored, "original content", "Restored content must match original");
+        assert_eq!(
+            restored, "original content",
+            "Restored content must match original"
+        );
     }
 
     #[test]
@@ -1066,7 +1153,11 @@ mod tests {
 
         // Restore must remove the file (it was absent before)
         let result = restore_snapshot_in(&snap.id, &env.home, &env.snapshots).unwrap();
-        assert!(result.success, "Restore must succeed; errors: {:?}", result.errors);
+        assert!(
+            result.success,
+            "Restore must succeed; errors: {:?}",
+            result.errors
+        );
         assert_eq!(result.removed_absent_count, 1);
 
         assert!(
@@ -1089,8 +1180,15 @@ mod tests {
 
         assert_eq!(snap.entries.len(), 1);
         let entry = &snap.entries[0];
-        assert_eq!(entry.file_type, FileEntryType::Symlink, "Symlink must be recorded as Symlink");
-        assert!(entry.symlink_target.is_some(), "Symlink target must be recorded");
+        assert_eq!(
+            entry.file_type,
+            FileEntryType::Symlink,
+            "Symlink must be recorded as Symlink"
+        );
+        assert!(
+            entry.symlink_target.is_some(),
+            "Symlink target must be recorded"
+        );
         // No content was copied
         assert_eq!(entry.sha256, None);
     }

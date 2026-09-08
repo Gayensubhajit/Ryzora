@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  UninstallResult,
+  PackageUpdateStatus,
+  UpdatePlan,
+  UpdateResult,
   CategoryId,
   CompatibilityReport,
   CompatibilityRequirements,
@@ -10,12 +14,13 @@ import {
   InstalledPackageRecord,
   ManifestValidationResult,
   PackageItem,
+  RepositorySourceConfig,
   RepositorySummary,
   RestoreResult,
   SnapshotMetadata,
   SystemInfo,
+  CacheStats,
 } from "../types";
-import { MOCK_PACKAGES } from "../data/mockPackages";
 
 interface AppContextType {
   systemInfo: SystemInfo | null;
@@ -37,11 +42,23 @@ interface AppContextType {
   installLogs: string[];
   previewInstallation: (packageId: string) => Promise<InstallationPlan>;
   installPackage: (pkg: PackageItem) => Promise<InstallResult>;
+  uninstallPackage: (packageId: string) => Promise<UninstallResult>;
+  checkPackageUpdate: (packageId: string) => Promise<PackageUpdateStatus>;
+  checkAllUpdates: () => Promise<PackageUpdateStatus[]>;
+  previewPackageUpdate: (packageId: string) => Promise<UpdatePlan>;
+  applyPackageUpdate: (packageId: string) => Promise<UpdateResult>;
   rollbackSnapshot: (snapId: string) => Promise<void>;
   deleteSnapshot: (snapId: string) => Promise<void>;
   refreshSystem: () => Promise<void>;
   repositories: RepositorySummary[];
+  repositorySources: RepositorySourceConfig[];
   refreshCatalog: () => Promise<void>;
+  refreshRepositories: () => Promise<void>;
+  addRepositorySource: (config: RepositorySourceConfig) => Promise<void>;
+  removeRepositorySource: (id: string) => Promise<void>;
+  getCacheStats: () => Promise<CacheStats>;
+  clearPackageCache: (packageId?: string) => Promise<number>;
+  clearAllCache: () => Promise<number>;
   checkCompatibility: (pkg: PackageItem) => CompatibilityReport;
   validateManifest: (manifestJson: string) => Promise<ManifestValidationResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
@@ -240,8 +257,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("discover");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [desktopFilter, setDesktopFilter] = useState<DesktopEnvironment | "all">("all");
-  const [packages, setPackages] = useState<PackageItem[]>(MOCK_PACKAGES);
+  const [packages, setPackages] = useState<PackageItem[]>([]);
   const [repositories, setRepositories] = useState<RepositorySummary[]>([]);
+  const [repositorySources, setRepositorySources] = useState<RepositorySourceConfig[]>([]);
   const [compatibilityMap, setCompatibilityMap] = useState<Record<string, CompatibilityReport>>({});
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
   const [installedPackages, setInstalledPackages] = useState<InstalledPackageRecord[]>([]);
@@ -320,6 +338,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const loadRepositorySources = async () => {
+    try {
+      const sources = await invoke<RepositorySourceConfig[]>("list_repository_sources");
+      setRepositorySources(sources);
+    } catch {
+      setRepositorySources([]);
+    }
+  };
+
   const refreshCatalog = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("refresh_catalog");
@@ -333,11 +360,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const refreshRepositories = async () => {
+    try {
+      const catalog = await invoke<PackageItem[]>("refresh_catalog");
+      if (catalog && catalog.length > 0) {
+        setPackages(catalog);
+      }
+      const repos = await invoke<RepositorySummary[]>("get_repository_info");
+      setRepositories(repos);
+      await loadRepositorySources();
+      setToast({ message: "Repositories refreshed", type: "info" });
+    } catch (e: any) {
+      setToast({ message: `Refresh failed: ${e?.message || e}`, type: "warning" });
+    }
+  };
+
+  const addRepositorySource = async (config: RepositorySourceConfig) => {
+    try {
+      await invoke("add_repository_source", { config });
+      await loadRepositorySources();
+      await refreshRepositories();
+      setToast({ message: `Added repository '${config.name}'`, type: "success" });
+    } catch (e: any) {
+      setToast({ message: `Failed to add repository: ${e?.message || e}`, type: "warning" });
+    }
+  };
+
+  const removeRepositorySource = async (id: string) => {
+    try {
+      await invoke("remove_repository_source", { id });
+      await loadRepositorySources();
+      await refreshRepositories();
+      setToast({ message: "Repository removed", type: "info" });
+    } catch (e: any) {
+      setToast({ message: `Failed to remove repository: ${e?.message || e}`, type: "warning" });
+    }
+  };
+
+  const getCacheStats = async (): Promise<CacheStats> => {
+    try {
+      return await invoke<CacheStats>("get_cache_stats");
+    } catch {
+      return { total_size_bytes: 0, cached_packages_count: 0, cached_repositories_count: 0, cache_dir: "" };
+    }
+  };
+
+  const clearPackageCache = async (packageId?: string): Promise<number> => {
+    try {
+      const bytes = await invoke<number>("clear_package_cache", { packageId: packageId ?? null });
+      await refreshCatalog();
+      setToast({ message: `Package cache cleaned (${Math.round(bytes / 1024)} KB freed)`, type: "info" });
+      return bytes;
+    } catch (e: any) {
+      setToast({ message: `Failed to clean cache: ${e?.message || e}`, type: "warning" });
+      return 0;
+    }
+  };
+
+  const clearAllCache = async (): Promise<number> => {
+    try {
+      const bytes = await invoke<number>("clear_all_cache");
+      await refreshCatalog();
+      setToast({ message: `All cache cleaned (${Math.round(bytes / 1024)} KB freed)`, type: "info" });
+      return bytes;
+    } catch (e: any) {
+      setToast({ message: `Failed to clean cache: ${e?.message || e}`, type: "warning" });
+      return 0;
+    }
+  };
+
   useEffect(() => {
     refreshSystem();
     loadSnapshots();
     loadInstalledPackages();
     loadCatalogPackages();
+    loadRepositorySources();
   }, []);
 
   useEffect(() => {
@@ -482,6 +579,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await loadSnapshots();
   };
 
+  const uninstallPackage = async (packageId: string): Promise<UninstallResult> => {
+    try {
+      const res = await invoke<UninstallResult>("uninstall_package", { packageId });
+      await loadInstalledPackages();
+      await loadSnapshots();
+      return res;
+    } catch (e: any) {
+      console.error("Failed to uninstall package:", e);
+      throw e;
+    }
+  };
+
+  const checkPackageUpdate = async (packageId: string): Promise<PackageUpdateStatus> => {
+    return await invoke<PackageUpdateStatus>("check_package_update", { packageId });
+  };
+
+  const checkAllUpdates = async (): Promise<PackageUpdateStatus[]> => {
+    return await invoke<PackageUpdateStatus[]>("check_all_updates");
+  };
+
+  const previewPackageUpdate = async (packageId: string): Promise<UpdatePlan> => {
+    return await invoke<UpdatePlan>("preview_package_update", { packageId });
+  };
+
+  const applyPackageUpdate = async (packageId: string): Promise<UpdateResult> => {
+    try {
+      const res = await invoke<UpdateResult>("apply_package_update", { packageId });
+      await loadInstalledPackages();
+      await loadSnapshots();
+      return res;
+    } catch (e: any) {
+      console.error("Failed to apply update:", e);
+      throw e;
+    }
+  };
+
   const deleteSnapshot = async (snapId: string) => {
     try {
       await invoke("delete_snapshot", { id: snapId });
@@ -514,10 +647,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installLogs,
         previewInstallation,
         installPackage,
+        uninstallPackage,
+        checkPackageUpdate,
+        checkAllUpdates,
+        previewPackageUpdate,
+        applyPackageUpdate,
         rollbackSnapshot,
         refreshSystem,
         repositories,
+        repositorySources,
         refreshCatalog,
+        refreshRepositories,
+        addRepositorySource,
+        removeRepositorySource,
+        getCacheStats,
+        clearPackageCache,
+        clearAllCache,
         checkCompatibility,
         validateManifest,
         deleteSnapshot,

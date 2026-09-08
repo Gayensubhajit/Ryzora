@@ -3,13 +3,11 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::compatibility::{
-    evaluate_compatibility, CompatibilityLevel, CompatibilityRequirements,
-};
-use crate::manifest::{validate_manifest_internal, RyzoraManifest};
+use crate::compatibility::{evaluate_compatibility, CompatibilityLevel, CompatibilityRequirements};
+use crate::manifest::{validate_manifest_internal, PackageType, RyzoraManifest};
 use crate::snapshot::{
-    create_snapshot_in, get_home_dir, get_ryzora_snapshots_dir, restore_snapshot_in,
-    sha256_file, validate_and_expand_path, verify_snapshot_in,
+    create_snapshot_in, get_home_dir, get_ryzora_snapshots_dir, restore_snapshot_in, sha256_file,
+    validate_and_expand_path, verify_snapshot_in,
 };
 use crate::system::{detect_system_info, SystemInfo};
 
@@ -46,16 +44,116 @@ pub struct InstallResult {
     pub rolled_back: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InstalledFileEntry {
+    pub target: String,
+    pub sha256: String,
+    #[serde(default)]
+    pub is_symlink: bool,
+    #[serde(default)]
+    pub symlink_target: Option<String>,
+}
+
 /// Authoritative record stored in ~/.local/share/ryzora/installed/<pkg_id>.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstalledPackageRecord {
     pub package_id: String,
     pub name: String,
     pub version: String,
+    #[serde(default)]
+    pub package_type: Option<PackageType>,
+    #[serde(default)]
+    pub repository_id: Option<String>,
     pub installed_at: u64,
     pub snapshot_id: String,
     pub installed_files: Vec<String>,
+    #[serde(default)]
+    pub files: Vec<InstalledFileEntry>,
     pub package_source_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UninstallResult {
+    pub package_id: String,
+    pub success: bool,
+    pub removed_files: Vec<String>,
+    pub already_missing_files: Vec<String>,
+    pub conflict_files: Vec<String>,
+    pub removed_directories: Vec<String>,
+    pub retained_directories: Vec<String>,
+    pub snapshot_id: Option<String>,
+    pub rolled_back: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateStatusKind {
+    UpToDate,
+    UpdateAvailable,
+    RepositoryUnavailable,
+    PackageNotFound,
+    UnableToDetermine,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageUpdateStatus {
+    pub package_id: String,
+    pub installed_version: String,
+    pub available_version: Option<String>,
+    pub repository_id: Option<String>,
+    pub status: UpdateStatusKind,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FileAction {
+    Create,
+    Replace,
+    Unchanged,
+    Conflict,
+    ObsoleteRemove,
+    ObsoleteRetain,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateFileItem {
+    pub target: String,
+    pub action: FileAction,
+    pub reason: String,
+    pub current_sha256: Option<String>,
+    pub new_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePlan {
+    pub package_id: String,
+    pub from_version: String,
+    pub to_version: String,
+    pub repository_id: Option<String>,
+    pub creates: Vec<String>,
+    pub replaces: Vec<String>,
+    pub unchanged: Vec<String>,
+    pub conflicts: Vec<String>,
+    pub obsolete_removes: Vec<String>,
+    pub obsolete_retains: Vec<String>,
+    pub details: Vec<UpdateFileItem>,
+    pub has_conflicts: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateResult {
+    pub success: bool,
+    pub package_id: String,
+    pub from_version: String,
+    pub to_version: String,
+    pub snapshot_id: String,
+    pub updated_files: Vec<String>,
+    pub obsolete_removed: Vec<String>,
+    pub conflicts_retained: Vec<String>,
+    pub rolled_back: bool,
+    pub errors: Vec<String>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,7 +177,11 @@ pub fn find_package_dir(
     package_id: &str,
     custom_packages_root: Option<&Path>,
 ) -> Result<PathBuf, String> {
-    if package_id.is_empty() || package_id.contains("..") || package_id.contains('/') || package_id.contains('\\') {
+    if package_id.is_empty()
+        || package_id.contains("..")
+        || package_id.contains('/')
+        || package_id.contains('\\')
+    {
         return Err(format!("Invalid package ID '{}'", package_id));
     }
 
@@ -149,10 +251,7 @@ pub fn validate_package_source_file(
 
     let full_path = package_root.join(source_rel);
     if !full_path.exists() {
-        return Err(format!(
-            "Package payload file missing: '{}'",
-            source_rel
-        ));
+        return Err(format!("Package payload file missing: '{}'", source_rel));
     }
 
     // Check symlink safety: resolved path must stay within package_root
@@ -175,8 +274,12 @@ pub fn validate_package_source_file(
         .map_err(|e| format!("Failed to read metadata for '{}': {}", source_rel, e))?;
     if meta.file_type().is_symlink() {
         // If it's a symlink within the package, ensure the target is also a regular file
-        let target_meta = fs::metadata(&full_path)
-            .map_err(|e| format!("Symlink '{}' points to unreadable target: {}", source_rel, e))?;
+        let target_meta = fs::metadata(&full_path).map_err(|e| {
+            format!(
+                "Symlink '{}' points to unreadable target: {}",
+                source_rel, e
+            )
+        })?;
         if !target_meta.is_file() {
             return Err(format!(
                 "Source symlink '{}' must point to a regular file",
@@ -199,7 +302,7 @@ pub fn validate_package_source_file(
         ));
     }
 
-    Ok(canonical_file)
+    Ok(full_path)
 }
 
 /// Validate that a target path is allowed and safe.
@@ -207,10 +310,7 @@ pub fn validate_package_source_file(
 /// or other standard user config scope.
 pub fn validate_target_safety(target_str: &str, home_dir: &Path) -> Result<PathBuf, String> {
     if !target_str.starts_with("~/") {
-        return Err(format!(
-            "Target path '{}' must start with '~/'",
-            target_str
-        ));
+        return Err(format!("Target path '{}' must start with '~/'", target_str));
     }
     if target_str.contains('\0') {
         return Err(format!("Target path '{}' contains null bytes", target_str));
@@ -274,8 +374,8 @@ pub fn load_package_manifest(package_dir: &Path) -> Result<RyzoraManifest, Strin
         ));
     }
 
-    let manifest: RyzoraManifest = serde_json::from_str(&raw)
-        .map_err(|e| format!("Failed to parse manifest: {}", e))?;
+    let manifest: RyzoraManifest =
+        serde_json::from_str(&raw).map_err(|e| format!("Failed to parse manifest: {}", e))?;
 
     Ok(manifest)
 }
@@ -442,20 +542,13 @@ pub fn install_package_in(
     }
 
     // 2. Collect all declared target paths for snapshot
-    let target_paths: Vec<String> = manifest
-        .files
-        .iter()
-        .map(|f| f.target.clone())
-        .collect();
+    let target_paths: Vec<String> = manifest.files.iter().map(|f| f.target.clone()).collect();
 
     // 3. Create snapshot
     let snapshot_label = format!("pre-install-{}", manifest.id);
-    let snapshot_meta = create_snapshot_in(
-        &snapshot_label,
-        &target_paths,
-        home_dir,
-        snapshots_root,
-    ).map_err(|e| format!("Failed to create pre-install snapshot: {}", e))?;
+    let snapshot_meta =
+        create_snapshot_in(&snapshot_label, &target_paths, home_dir, snapshots_root)
+            .map_err(|e| format!("Failed to create pre-install snapshot: {}", e))?;
 
     // 4. Verify snapshot immediately
     let snapshot_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
@@ -480,8 +573,8 @@ pub fn install_package_in(
         let _ = fs::remove_dir_all(dir);
     };
 
-    // 6. Stage payload files and calculate expected checksums
-    let mut staged_items = Vec::new(); // (staged_path, target_path, expected_sha256, target_str)
+    // 6. Stage payload files and calculate expected checksums / link targets
+    let mut staged_items = Vec::new(); // (staged_path, target_path, expected_hash, is_symlink, symlink_target, target_str)
 
     for (idx, file_decl) in manifest.files.iter().enumerate() {
         let src_path = match validate_package_source_file(package_dir, &file_decl.source) {
@@ -500,89 +593,227 @@ pub fn install_package_in(
             }
         };
 
-        let src_hash = match sha256_file(&src_path) {
-            Ok(h) => h,
+        let src_meta = match fs::symlink_metadata(&src_path) {
+            Ok(m) => m,
             Err(e) => {
                 clean_staging(&staging_dir);
-                return Err(format!("Failed to checksum source file '{}': {}", file_decl.source, e));
+                return Err(format!(
+                    "Failed to read metadata for source file '{}': {}",
+                    file_decl.source, e
+                ));
             }
         };
 
+        let src_is_symlink = src_meta.file_type().is_symlink();
         let staged_file_path = staging_dir.join(format!("file_{}", idx));
-        if let Err(e) = fs::copy(&src_path, &staged_file_path) {
-            clean_staging(&staging_dir);
-            return Err(format!("Failed to stage file '{}': {}", file_decl.source, e));
-        }
 
-        // Validate staged file matches expected hash
-        let staged_hash = match sha256_file(&staged_file_path) {
-            Ok(h) => h,
-            Err(e) => {
-                clean_staging(&staging_dir);
-                return Err(format!("Failed to verify staged file '{}': {}", file_decl.source, e));
+        let (expected_hash, symlink_target) = if src_is_symlink {
+            #[cfg(unix)]
+            {
+                let link_target = match fs::read_link(&src_path) {
+                    Ok(lt) => lt,
+                    Err(e) => {
+                        clean_staging(&staging_dir);
+                        return Err(format!(
+                            "Failed to read symlink '{}': {}",
+                            file_decl.source, e
+                        ));
+                    }
+                };
+                let link_str = link_target.to_string_lossy().to_string();
+                if let Err(e) = std::os::unix::fs::symlink(&link_target, &staged_file_path) {
+                    clean_staging(&staging_dir);
+                    return Err(format!(
+                        "Failed to stage symlink '{}': {}",
+                        file_decl.source, e
+                    ));
+                }
+                (String::new(), Some(link_str))
             }
+            #[cfg(not(unix))]
+            {
+                clean_staging(&staging_dir);
+                return Err("Symlinks are only supported on Unix platforms".to_string());
+            }
+        } else {
+            let src_hash = match sha256_file(&src_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    clean_staging(&staging_dir);
+                    return Err(format!(
+                        "Failed to checksum source file '{}': {}",
+                        file_decl.source, e
+                    ));
+                }
+            };
+
+            if let Err(e) = fs::copy(&src_path, &staged_file_path) {
+                clean_staging(&staging_dir);
+                return Err(format!(
+                    "Failed to stage file '{}': {}",
+                    file_decl.source, e
+                ));
+            }
+
+            // Validate staged file matches expected hash
+            let staged_hash = match sha256_file(&staged_file_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    clean_staging(&staging_dir);
+                    return Err(format!(
+                        "Failed to verify staged file '{}': {}",
+                        file_decl.source, e
+                    ));
+                }
+            };
+
+            if staged_hash != src_hash {
+                clean_staging(&staging_dir);
+                return Err(format!(
+                    "Staged file checksum mismatch for '{}'",
+                    file_decl.source
+                ));
+            }
+            (src_hash, None)
         };
 
-        if staged_hash != src_hash {
-            clean_staging(&staging_dir);
-            return Err(format!(
-                "Staged file checksum mismatch for '{}'",
-                file_decl.source
-            ));
-        }
-
-        staged_items.push((staged_file_path, target_path, src_hash, file_decl.target.clone()));
+        staged_items.push((
+            staged_file_path,
+            target_path,
+            expected_hash,
+            src_is_symlink,
+            symlink_target,
+            file_decl.target.clone(),
+        ));
     }
 
     // 7. Apply staged files
     let mut applied_targets = Vec::new();
+    let mut applied_entries = Vec::new();
     let mut apply_error: Option<String> = None;
 
-    for (staged_path, target_path, expected_hash, target_str) in &staged_items {
+    for (
+        staged_path,
+        target_path,
+        expected_hash,
+        item_is_symlink,
+        item_symlink_target,
+        target_str,
+    ) in &staged_items
+    {
         // Ensure parent dir exists
         if let Some(parent) = target_path.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
-                apply_error = Some(format!("Failed to create parent directory for '{}': {}", target_str, e));
+                apply_error = Some(format!(
+                    "Failed to create parent directory for '{}': {}",
+                    target_str, e
+                ));
                 break;
             }
         }
 
-        // If target is an existing symlink, remove the symlink itself so we don't write through it
-        if let Ok(meta) = fs::symlink_metadata(target_path) {
-            if meta.file_type().is_symlink() {
+        if *item_is_symlink {
+            if fs::symlink_metadata(target_path).is_ok() {
                 if let Err(e) = fs::remove_file(target_path) {
-                    apply_error = Some(format!("Failed to remove target symlink '{}': {}", target_str, e));
+                    apply_error = Some(format!(
+                        "Failed to remove existing file/symlink at '{}': {}",
+                        target_str, e
+                    ));
                     break;
                 }
             }
-        }
 
-        // Copy staged file to destination
-        if let Err(e) = fs::copy(staged_path, target_path) {
-            apply_error = Some(format!("Failed to copy staged file to '{}': {}", target_str, e));
-            break;
-        }
+            #[cfg(unix)]
+            {
+                let target_dest = item_symlink_target.as_ref().unwrap();
+                if let Err(e) = std::os::unix::fs::symlink(target_dest, target_path) {
+                    apply_error = Some(format!("Failed to create symlink '{}': {}", target_str, e));
+                    break;
+                }
+            }
 
-        // 8. Verify installed file immediately
-        let installed_hash = match sha256_file(target_path) {
-            Ok(h) => h,
-            Err(e) => {
-                apply_error = Some(format!("Failed to verify installed file '{}': {}", target_str, e));
+            // Verify installed symlink immediately
+            match fs::symlink_metadata(target_path) {
+                Ok(m) if m.file_type().is_symlink() => {
+                    let actual_link = fs::read_link(target_path)
+                        .ok()
+                        .map(|p| p.to_string_lossy().to_string());
+                    if actual_link != *item_symlink_target {
+                        apply_error = Some(format!(
+                            "Installed symlink target mismatch for '{}'",
+                            target_str
+                        ));
+                        break;
+                    }
+                }
+                _ => {
+                    apply_error = Some(format!(
+                        "Installed object is not a symlink for '{}'",
+                        target_str
+                    ));
+                    break;
+                }
+            }
+
+            applied_entries.push(InstalledFileEntry {
+                target: target_str.clone(),
+                sha256: String::new(),
+                is_symlink: true,
+                symlink_target: item_symlink_target.clone(),
+            });
+            applied_targets.push(target_str.clone());
+        } else {
+            // If target is an existing symlink, remove the symlink itself so we don't write through it
+            if let Ok(meta) = fs::symlink_metadata(target_path) {
+                if meta.file_type().is_symlink() {
+                    if let Err(e) = fs::remove_file(target_path) {
+                        apply_error = Some(format!(
+                            "Failed to remove target symlink '{}': {}",
+                            target_str, e
+                        ));
+                        break;
+                    }
+                }
+            }
+
+            // Copy staged file to destination
+            if let Err(e) = fs::copy(staged_path, target_path) {
+                apply_error = Some(format!(
+                    "Failed to copy staged file to '{}': {}",
+                    target_str, e
+                ));
                 break;
             }
-        };
 
-        if &installed_hash != expected_hash {
-            apply_error = Some(format!(
-                "Installed file verification failed for '{}': checksum mismatch",
-                target_str
-            ));
-            break;
+            // 8. Verify installed file immediately
+            let installed_hash = match sha256_file(target_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    apply_error = Some(format!(
+                        "Failed to verify installed file '{}': {}",
+                        target_str, e
+                    ));
+                    break;
+                }
+            };
+
+            if &installed_hash != expected_hash {
+                apply_error = Some(format!(
+                    "Installed file verification failed for '{}': checksum mismatch",
+                    target_str
+                ));
+                break;
+            }
+
+            applied_entries.push(InstalledFileEntry {
+                target: target_str.clone(),
+                sha256: installed_hash,
+                is_symlink: false,
+                symlink_target: None,
+            });
+            applied_targets.push(target_str.clone());
         }
-
-        applied_targets.push(target_str.clone());
     }
-
     // 9. Handle failure and automatic rollback
     if let Some(err) = apply_error {
         clean_staging(&staging_dir);
@@ -600,7 +831,11 @@ pub fn install_package_in(
             errors: vec![format!(
                 "Installation failed ({}); automatic rollback was {}",
                 err,
-                if rolled_back_ok { "successful" } else { "attempted with warnings" }
+                if rolled_back_ok {
+                    "successful"
+                } else {
+                    "attempted with warnings"
+                }
             )],
             rolled_back: true,
         });
@@ -611,16 +846,25 @@ pub fn install_package_in(
 
     // 10. Persist authoritative installation record
     if let Err(e) = fs::create_dir_all(installed_root) {
-        return Err(format!("Failed to create installed packages directory: {}", e));
+        return Err(format!(
+            "Failed to create installed packages directory: {}",
+            e
+        ));
     }
+
+    let repo_id =
+        crate::repository::create_default_manager().find_repository_for_package(&manifest.id);
 
     let record = InstalledPackageRecord {
         package_id: manifest.id.clone(),
         name: manifest.name.clone(),
         version: manifest.version.clone(),
+        package_type: Some(manifest.package_type),
+        repository_id: repo_id,
         installed_at: now,
         snapshot_id: snapshot_meta.id.clone(),
         installed_files: applied_targets.clone(),
+        files: applied_entries,
         package_source_path: package_dir.display().to_string(),
     };
 
@@ -690,6 +934,1474 @@ pub fn get_installed_package_in(
     Ok(Some(record))
 }
 
+pub fn manifest_id_safe(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Helper to safely remove empty parent directories upwards until reaching home or standard base directories.
+pub fn cleanup_empty_parents(
+    path: &Path,
+    home_dir: &Path,
+    removed_dirs: &mut Vec<String>,
+    retained_dirs: &mut Vec<String>,
+) {
+    let mut curr = path.parent();
+    while let Some(dir) = curr {
+        if dir == home_dir {
+            break;
+        }
+        if let Ok(rel) = dir.strip_prefix(home_dir) {
+            let rel_str = rel.to_string_lossy();
+            if rel_str.is_empty()
+                || rel_str == ".config"
+                || rel_str == ".local"
+                || rel_str == ".local/share"
+                || rel_str == ".local/state"
+            {
+                break;
+            }
+        } else {
+            break;
+        }
+
+        match fs::read_dir(dir) {
+            Ok(mut entries) => {
+                if entries.next().is_none() {
+                    let dir_str = dir.display().to_string();
+                    if fs::remove_dir(dir).is_ok() {
+                        if !removed_dirs.contains(&dir_str) {
+                            removed_dirs.push(dir_str);
+                        }
+                        curr = dir.parent();
+                        continue;
+                    } else {
+                        if !retained_dirs.contains(&dir_str) {
+                            retained_dirs.push(dir_str);
+                        }
+                        break;
+                    }
+                } else {
+                    let dir_str = dir.display().to_string();
+                    if !retained_dirs.contains(&dir_str) {
+                        retained_dirs.push(dir_str);
+                    }
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Safe Uninstall Pipeline (Phase 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Safely uninstalls an installed package with cryptographic verification,
+/// pre-uninstall snapshotting, conflict retention, and automatic rollback.
+pub fn uninstall_package_in(
+    package_id: &str,
+    home_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+) -> Result<UninstallResult, String> {
+    if package_id.is_empty()
+        || package_id.contains("..")
+        || package_id.contains('/')
+        || package_id.contains('\\')
+        || package_id.contains('\0')
+    {
+        return Err(format!("Invalid package ID '{}'", package_id));
+    }
+
+    let record_file = installed_root.join(format!("{}.json", package_id));
+    if !record_file.is_file() {
+        return Err(format!("Package '{}' is not installed", package_id));
+    }
+
+    let raw = fs::read_to_string(&record_file)
+        .map_err(|e| format!("Failed to read record for '{}': {}", package_id, e))?;
+    let record: InstalledPackageRecord = serde_json::from_str(&raw)
+        .map_err(|e| format!("Corrupted record for '{}': {}", package_id, e))?;
+
+    // 10. Backward compatibility: Stale/legacy metadata without checksums is refused safely
+    if record.files.is_empty() {
+        return Err(format!(
+            "Installed package '{}' contains legacy metadata without cryptographic file checksums. Automated uninstall cannot verify file ownership safely. Manual review or re-installation is required.",
+            package_id
+        ));
+    }
+
+    // Validate all target paths against sandbox rules
+    for entry in &record.files {
+        validate_target_safety(&entry.target, home_dir)?;
+    }
+
+    // Inspect filesystem state and categorize files
+    let mut files_to_remove: Vec<(PathBuf, String, bool)> = Vec::new(); // (path, target_str, is_symlink)
+    let mut already_missing_files = Vec::new();
+    let mut conflict_files = Vec::new();
+
+    for entry in &record.files {
+        let target_path = match validate_target_safety(&entry.target, home_dir) {
+            Ok(p) => p,
+            Err(e) => return Err(format!("Invalid target path in record: {}", e)),
+        };
+
+        match fs::symlink_metadata(&target_path) {
+            Ok(meta) => {
+                if meta.file_type().is_symlink() {
+                    // Current object on disk is a symlink
+                    if !entry.is_symlink {
+                        // User replaced installed regular file with a symlink -> conflict!
+                        conflict_files.push(entry.target.clone());
+                    } else {
+                        // Installed as symlink. Verify symlink target ownership.
+                        match &entry.symlink_target {
+                            Some(recorded_target) => {
+                                match fs::read_link(&target_path) {
+                                    Ok(current_link) => {
+                                        if current_link.to_string_lossy() == *recorded_target {
+                                            // Ownership verified! Link target matches recorded target.
+                                            files_to_remove.push((
+                                                target_path,
+                                                entry.target.clone(),
+                                                true,
+                                            ));
+                                        } else {
+                                            // User changed symlink target -> conflict! NEVER delete!
+                                            conflict_files.push(entry.target.clone());
+                                        }
+                                    }
+                                    Err(_) => {
+                                        // Cannot safely inspect link -> conflict!
+                                        conflict_files.push(entry.target.clone());
+                                    }
+                                }
+                            }
+                            None => {
+                                // Legacy metadata without recorded symlink_target:
+                                // Treat as unverifiable ownership and report conflict / manual review!
+                                conflict_files.push(entry.target.clone());
+                            }
+                        }
+                    }
+                } else if meta.is_file() {
+                    if entry.is_symlink {
+                        // Was installed as symlink, now regular file -> conflict!
+                        conflict_files.push(entry.target.clone());
+                    } else {
+                        let current_hash = match sha256_file(&target_path) {
+                            Ok(h) => h,
+                            Err(e) => {
+                                return Err(format!("Failed to checksum '{}': {}", entry.target, e))
+                            }
+                        };
+
+                        if current_hash == entry.sha256 {
+                            // File untouched! Safe to remove
+                            files_to_remove.push((target_path, entry.target.clone(), false));
+                        } else {
+                            // User modified file -> conflict! NEVER delete!
+                            conflict_files.push(entry.target.clone());
+                        }
+                    }
+                } else {
+                    // Directory or special file where regular file was expected -> conflict
+                    conflict_files.push(entry.target.clone());
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                already_missing_files.push(entry.target.clone());
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Failed to inspect target file '{}': {}",
+                    entry.target, e
+                ));
+            }
+        }
+    }
+    // Create pre-uninstall snapshot of ALL recorded paths
+    let snapshot_targets: Vec<String> = record.files.iter().map(|f| f.target.clone()).collect();
+    let snapshot_label = format!("pre-uninstall-{}", package_id);
+    let snapshot_meta =
+        create_snapshot_in(&snapshot_label, &snapshot_targets, home_dir, snapshots_root)
+            .map_err(|e| format!("Failed to create pre-uninstall snapshot: {}", e))?;
+
+    let snap_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
+        .map_err(|e| format!("Snapshot verification error: {}", e))?;
+    if !snap_valid {
+        return Err("Pre-uninstall snapshot failed verification — uninstall aborted before any file deletion".to_string());
+    }
+
+    // Perform removals
+    let mut removed_files = Vec::new();
+    let mut remove_error: Option<String> = None;
+
+    for (path, target_str, is_symlink) in &files_to_remove {
+        let res = if *is_symlink {
+            fs::remove_file(path) // removes the symlink itself, never touches target
+        } else {
+            fs::remove_file(path)
+        };
+
+        if let Err(e) = res {
+            remove_error = Some(format!("Failed to remove file '{}': {}", target_str, e));
+            break;
+        }
+        removed_files.push(target_str.clone());
+    }
+
+    // Rollback on unexpected failure
+    if let Some(err) = remove_error {
+        let rollback_res = restore_snapshot_in(&snapshot_meta.id, home_dir, snapshots_root);
+        let rolled_back_ok = rollback_res.map(|r| r.success).unwrap_or(false);
+
+        return Ok(UninstallResult {
+            package_id: package_id.to_string(),
+            success: false,
+            removed_files: vec![],
+            already_missing_files,
+            conflict_files,
+            removed_directories: vec![],
+            retained_directories: vec![],
+            snapshot_id: Some(snapshot_meta.id),
+            rolled_back: true,
+            error: Some(format!(
+                "Uninstall failed ({}); automatic rollback was {}",
+                err,
+                if rolled_back_ok {
+                    "successful"
+                } else {
+                    "attempted with warnings"
+                }
+            )),
+        });
+    }
+
+    // Clean empty parent directories
+    let mut removed_directories = Vec::new();
+    let mut retained_directories = Vec::new();
+
+    for (path, _, _) in &files_to_remove {
+        cleanup_empty_parents(
+            path,
+            home_dir,
+            &mut removed_directories,
+            &mut retained_directories,
+        );
+    }
+
+    // Update / remove installed metadata record
+    if let Err(e) = fs::remove_file(&record_file) {
+        return Err(format!("Failed to remove installed package record: {}", e));
+    }
+
+    Ok(UninstallResult {
+        package_id: package_id.to_string(),
+        success: true,
+        removed_files,
+        already_missing_files,
+        conflict_files,
+        removed_directories,
+        retained_directories,
+        snapshot_id: Some(snapshot_meta.id),
+        rolled_back: false,
+        error: None,
+    })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Safe Update Detection (Phase 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+pub fn check_package_update_in(
+    package_id: &str,
+    installed_root: &Path,
+    repo_mgr: &crate::repository::RepositoryManager,
+) -> Result<PackageUpdateStatus, String> {
+    if package_id.is_empty()
+        || package_id.contains("..")
+        || package_id.contains('/')
+        || package_id.contains('\\')
+        || package_id.contains('\0')
+    {
+        return Err(format!("Invalid package ID '{}'", package_id));
+    }
+
+    let record_file = installed_root.join(format!("{}.json", package_id));
+    if !record_file.is_file() {
+        return Err(format!("Package '{}' is not installed", package_id));
+    }
+
+    let raw = fs::read_to_string(&record_file)
+        .map_err(|e| format!("Failed to read record for '{}': {}", package_id, e))?;
+    let record: InstalledPackageRecord = serde_json::from_str(&raw)
+        .map_err(|e| format!("Corrupted record for '{}': {}", package_id, e))?;
+
+    // Check repository
+    let mut found_entry: Option<crate::repository::RepositoryPackageEntry> = None;
+    let mut repo_id_found: Option<String> = None;
+    let mut has_repo_error = false;
+    let mut last_error_msg = None;
+
+    if let Some(ref target_repo_id) = record.repository_id {
+        if let Some(repo) = repo_mgr.get_repository_by_id(target_repo_id) {
+            match repo.list_entries() {
+                Ok(entries) => {
+                    if let Some(entry) = entries.into_iter().find(|e| e.id == package_id) {
+                        found_entry = Some(entry);
+                        repo_id_found = Some(target_repo_id.clone());
+                    }
+                }
+                Err(e) => {
+                    has_repo_error = true;
+                    last_error_msg = Some(e);
+                }
+            }
+        } else {
+            has_repo_error = true;
+            last_error_msg = Some(format!(
+                "Repository '{}' unavailable or not configured",
+                target_repo_id
+            ));
+        }
+    }
+
+    // If not found in recorded repo, search across all repositories
+    if found_entry.is_none() && !has_repo_error {
+        for repo in repo_mgr.repositories() {
+            match repo.list_entries() {
+                Ok(entries) => {
+                    if let Some(entry) = entries.into_iter().find(|e| e.id == package_id) {
+                        found_entry = Some(entry);
+                        repo_id_found = Some(repo.id().to_string());
+                        break;
+                    }
+                }
+                Err(e) => {
+                    has_repo_error = true;
+                    last_error_msg = Some(e);
+                }
+            }
+        }
+    }
+
+    if let Some(entry) = found_entry {
+        let inst_v = semver::Version::parse(&record.version);
+        let avail_v = semver::Version::parse(&entry.version);
+
+        let status = match (inst_v, avail_v) {
+            (Ok(i), Ok(a)) => {
+                if a > i {
+                    UpdateStatusKind::UpdateAvailable
+                } else {
+                    UpdateStatusKind::UpToDate
+                }
+            }
+            _ => UpdateStatusKind::UnableToDetermine,
+        };
+
+        Ok(PackageUpdateStatus {
+            package_id: package_id.to_string(),
+            installed_version: record.version,
+            available_version: Some(entry.version),
+            repository_id: repo_id_found,
+            status,
+            message: None,
+        })
+    } else if has_repo_error {
+        Ok(PackageUpdateStatus {
+            package_id: package_id.to_string(),
+            installed_version: record.version,
+            available_version: None,
+            repository_id: record.repository_id,
+            status: UpdateStatusKind::RepositoryUnavailable,
+            message: last_error_msg,
+        })
+    } else {
+        Ok(PackageUpdateStatus {
+            package_id: package_id.to_string(),
+            installed_version: record.version,
+            available_version: None,
+            repository_id: record.repository_id,
+            status: UpdateStatusKind::PackageNotFound,
+            message: Some(format!(
+                "Package '{}' not found in available repositories",
+                package_id
+            )),
+        })
+    }
+}
+
+pub fn check_all_updates_in(
+    installed_root: &Path,
+    repo_mgr: &crate::repository::RepositoryManager,
+) -> Result<Vec<PackageUpdateStatus>, String> {
+    let installed = list_installed_packages_in(installed_root)?;
+    let mut results = Vec::new();
+    for pkg in installed {
+        if let Ok(status) = check_package_update_in(&pkg.package_id, installed_root, repo_mgr) {
+            results.push(status);
+        }
+    }
+    Ok(results)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Update Preview Pipeline (Phase 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+pub fn preview_package_update_in(
+    package_id: &str,
+    home_dir: &Path,
+    installed_root: &Path,
+    new_package_dir: &Path,
+) -> Result<UpdatePlan, String> {
+    if package_id.is_empty()
+        || package_id.contains("..")
+        || package_id.contains('/')
+        || package_id.contains('\\')
+        || package_id.contains('\0')
+    {
+        return Err(format!("Invalid package ID '{}'", package_id));
+    }
+
+    let record_file = installed_root.join(format!("{}.json", package_id));
+    if !record_file.is_file() {
+        return Err(format!("Package '{}' is not installed", package_id));
+    }
+
+    let raw = fs::read_to_string(&record_file)
+        .map_err(|e| format!("Failed to read record for '{}': {}", package_id, e))?;
+    let record: InstalledPackageRecord = serde_json::from_str(&raw)
+        .map_err(|e| format!("Corrupted record for '{}': {}", package_id, e))?;
+
+    if record.files.is_empty() {
+        return Err(format!(
+            "Installed package '{}' contains legacy metadata without checksums. Cannot safely preview update.",
+            package_id
+        ));
+    }
+
+    let new_manifest = load_package_manifest(new_package_dir)?;
+    if new_manifest.id != record.package_id {
+        return Err(format!(
+            "Manifest ID mismatch: expected '{}', got '{}'",
+            record.package_id, new_manifest.id
+        ));
+    }
+
+    let mut creates = Vec::new();
+    let mut replaces = Vec::new();
+    let mut unchanged = Vec::new();
+    let mut conflicts = Vec::new();
+    let mut obsolete_removes = Vec::new();
+    let mut obsolete_retains = Vec::new();
+    let mut details = Vec::new();
+
+    use std::collections::HashMap;
+    let old_map: HashMap<&str, &InstalledFileEntry> = record
+        .files
+        .iter()
+        .map(|f| (f.target.as_str(), f))
+        .collect();
+
+    // 1. Process files declared in new manifest
+    for file_decl in &new_manifest.files {
+        let src_path = validate_package_source_file(new_package_dir, &file_decl.source)?;
+        let target_path = validate_target_safety(&file_decl.target, home_dir)?;
+
+        let src_meta = fs::symlink_metadata(&src_path)
+            .map_err(|e| format!("Failed to read metadata for '{}': {}", file_decl.source, e))?;
+        let src_is_symlink = src_meta.file_type().is_symlink();
+
+        let (new_hash, new_link_target) = if src_is_symlink {
+            let lt = fs::read_link(&src_path)
+                .map_err(|e| format!("Failed to read symlink '{}': {}", file_decl.source, e))?;
+            (String::new(), Some(lt.to_string_lossy().to_string()))
+        } else {
+            let h = sha256_file(&src_path)?;
+            (h, None)
+        };
+
+        let target_str = file_decl.target.clone();
+
+        match fs::symlink_metadata(&target_path) {
+            Ok(meta) => {
+                let current_hash = if meta.file_type().is_symlink() {
+                    None
+                } else {
+                    sha256_file(&target_path).ok()
+                };
+
+                if let Some(old_entry) = old_map.get(target_str.as_str()) {
+                    // File was tracked in previous installation
+                    if meta.file_type().is_symlink() != old_entry.is_symlink {
+                        conflicts.push(target_str.clone());
+                        details.push(UpdateFileItem {
+                            target: target_str.clone(),
+                            action: FileAction::Conflict,
+                            reason: "File type changed on disk (symlink / regular mismatch)"
+                                .to_string(),
+                            current_sha256: current_hash,
+                            new_sha256: if src_is_symlink { None } else { Some(new_hash) },
+                        });
+                    } else if meta.file_type().is_symlink() {
+                        // Both on disk and in old entry are symlinks
+                        match &old_entry.symlink_target {
+                            Some(rec_target) => {
+                                match fs::read_link(&target_path) {
+                                    Ok(cur_link) if cur_link.to_string_lossy() == *rec_target => {
+                                        // Unmodified by user! Check if new version has same target
+                                        if new_link_target.as_deref() == Some(rec_target.as_str()) {
+                                            unchanged.push(target_str.clone());
+                                            details.push(UpdateFileItem {
+                                                target: target_str.clone(),
+                                                action: FileAction::Unchanged,
+                                                reason:
+                                                    "Symlink target is identical in new version"
+                                                        .to_string(),
+                                                current_sha256: None,
+                                                new_sha256: None,
+                                            });
+                                        } else {
+                                            replaces.push(target_str.clone());
+                                            details.push(UpdateFileItem {
+                                                target: target_str.clone(),
+                                                action: FileAction::Replace,
+                                                reason: "Symlink target unmodified by user, will be updated".to_string(),
+                                                current_sha256: None,
+                                                new_sha256: None,
+                                            });
+                                        }
+                                    }
+                                    _ => {
+                                        // User modified symlink target on disk -> conflict!
+                                        conflicts.push(target_str.clone());
+                                        details.push(UpdateFileItem {
+                                            target: target_str.clone(),
+                                            action: FileAction::Conflict,
+                                            reason:
+                                                "Symlink target modified by user after installation"
+                                                    .to_string(),
+                                            current_sha256: None,
+                                            new_sha256: None,
+                                        });
+                                    }
+                                }
+                            }
+                            None => {
+                                // Legacy metadata without recorded symlink_target
+                                conflicts.push(target_str.clone());
+                                details.push(UpdateFileItem {
+                                    target: target_str.clone(),
+                                    action: FileAction::Conflict,
+                                    reason: "Legacy symlink metadata without recorded target; retained for manual review".to_string(),
+                                    current_sha256: None,
+                                    new_sha256: None,
+                                });
+                            }
+                        }
+                    } else if let Some(ref cur_h) = current_hash {
+                        if cur_h != &old_entry.sha256 {
+                            // User modified file on disk
+                            conflicts.push(target_str.clone());
+                            details.push(UpdateFileItem {
+                                target: target_str.clone(),
+                                action: FileAction::Conflict,
+                                reason: "File modified by user after installation".to_string(),
+                                current_sha256: current_hash.clone(),
+                                new_sha256: Some(new_hash),
+                            });
+                        } else if cur_h == &new_hash {
+                            unchanged.push(target_str.clone());
+                            details.push(UpdateFileItem {
+                                target: target_str.clone(),
+                                action: FileAction::Unchanged,
+                                reason: "File content is identical in new version".to_string(),
+                                current_sha256: current_hash.clone(),
+                                new_sha256: Some(new_hash),
+                            });
+                        } else {
+                            replaces.push(target_str.clone());
+                            details.push(UpdateFileItem {
+                                target: target_str.clone(),
+                                action: FileAction::Replace,
+                                reason:
+                                    "File unmodified by user, will be replaced with new version"
+                                        .to_string(),
+                                current_sha256: current_hash.clone(),
+                                new_sha256: Some(new_hash),
+                            });
+                        }
+                    } else {
+                        conflicts.push(target_str.clone());
+                        details.push(UpdateFileItem {
+                            target: target_str.clone(),
+                            action: FileAction::Conflict,
+                            reason: "Cannot checksum target file".to_string(),
+                            current_sha256: None,
+                            new_sha256: Some(new_hash),
+                        });
+                    }
+                } else {
+                    // Target file already exists on disk, but was NOT tracked by previous install!
+                    conflicts.push(target_str.clone());
+                    details.push(UpdateFileItem {
+                        target: target_str.clone(),
+                        action: FileAction::Conflict,
+                        reason: "Pre-existing untracked file exists at destination".to_string(),
+                        current_sha256: current_hash,
+                        new_sha256: if src_is_symlink { None } else { Some(new_hash) },
+                    });
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if old_map.contains_key(target_str.as_str()) {
+                    // Was tracked but deleted by user -> recreate/replace
+                    replaces.push(target_str.clone());
+                    details.push(UpdateFileItem {
+                        target: target_str.clone(),
+                        action: FileAction::Replace,
+                        reason: "Tracked file missing on disk; will be restored with new version"
+                            .to_string(),
+                        current_sha256: None,
+                        new_sha256: if src_is_symlink { None } else { Some(new_hash) },
+                    });
+                } else {
+                    creates.push(target_str.clone());
+                    details.push(UpdateFileItem {
+                        target: target_str.clone(),
+                        action: FileAction::Create,
+                        reason: "New file introduced in this package version".to_string(),
+                        current_sha256: None,
+                        new_sha256: if src_is_symlink { None } else { Some(new_hash) },
+                    });
+                }
+            }
+            Err(e) => {
+                return Err(format!("Failed to inspect target '{}': {}", target_str, e));
+            }
+        }
+    }
+
+    // 2. Identify obsolete files (tracked in old version but absent in new manifest)
+    for old_entry in &record.files {
+        if !new_manifest
+            .files
+            .iter()
+            .any(|f| f.target == old_entry.target)
+        {
+            let target_path = match validate_target_safety(&old_entry.target, home_dir) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            match fs::symlink_metadata(&target_path) {
+                Ok(meta) => {
+                    if meta.file_type().is_symlink() {
+                        if !old_entry.is_symlink {
+                            // Was regular file, now symlink -> conflict!
+                            obsolete_retains.push(old_entry.target.clone());
+                            conflicts.push(old_entry.target.clone());
+                            details.push(UpdateFileItem {
+                                target: old_entry.target.clone(),
+                                action: FileAction::ObsoleteRetain,
+                                reason: "Obsolete file replaced with symlink; will be retained as conflict".to_string(),
+                                current_sha256: None,
+                                new_sha256: None,
+                            });
+                        } else {
+                            // Was installed as symlink
+                            match &old_entry.symlink_target {
+                                Some(recorded_target) => {
+                                    match fs::read_link(&target_path) {
+                                        Ok(current_link)
+                                            if current_link.to_string_lossy()
+                                                == *recorded_target =>
+                                        {
+                                            // Ownership verified! Unchanged symlink target -> safe to remove
+                                            obsolete_removes.push(old_entry.target.clone());
+                                            details.push(UpdateFileItem {
+                                                target: old_entry.target.clone(),
+                                                action: FileAction::ObsoleteRemove,
+                                                reason: "Obsolete symlink removed in new version; link target unchanged".to_string(),
+                                                current_sha256: None,
+                                                new_sha256: None,
+                                            });
+                                        }
+                                        _ => {
+                                            // Link target changed or unreadable -> conflict!
+                                            obsolete_retains.push(old_entry.target.clone());
+                                            conflicts.push(old_entry.target.clone());
+                                            details.push(UpdateFileItem {
+                                                target: old_entry.target.clone(),
+                                                action: FileAction::ObsoleteRetain,
+                                                reason: "Obsolete symlink target modified by user; will be retained as conflict".to_string(),
+                                                current_sha256: None,
+                                                new_sha256: None,
+                                            });
+                                        }
+                                    }
+                                }
+                                None => {
+                                    // Legacy symlink metadata without recorded target -> treat as conflict / unverifiable!
+                                    obsolete_retains.push(old_entry.target.clone());
+                                    conflicts.push(old_entry.target.clone());
+                                    details.push(UpdateFileItem {
+                                        target: old_entry.target.clone(),
+                                        action: FileAction::ObsoleteRetain,
+                                        reason: "Legacy symlink metadata without recorded target; retained for manual review".to_string(),
+                                        current_sha256: None,
+                                        new_sha256: None,
+                                    });
+                                }
+                            }
+                        }
+                    } else if meta.is_file() {
+                        if old_entry.is_symlink {
+                            // Was installed as symlink, but now regular file -> conflict!
+                            obsolete_retains.push(old_entry.target.clone());
+                            conflicts.push(old_entry.target.clone());
+                            details.push(UpdateFileItem {
+                                target: old_entry.target.clone(),
+                                action: FileAction::ObsoleteRetain,
+                                reason: "Obsolete symlink replaced with regular file; will be retained as conflict".to_string(),
+                                current_sha256: None,
+                                new_sha256: None,
+                            });
+                        } else {
+                            let cur_hash = sha256_file(&target_path).ok();
+                            if let Some(ref h) = cur_hash {
+                                if h == &old_entry.sha256 {
+                                    // Unmodified regular file -> safe to remove
+                                    obsolete_removes.push(old_entry.target.clone());
+                                    details.push(UpdateFileItem {
+                                        target: old_entry.target.clone(),
+                                        action: FileAction::ObsoleteRemove,
+                                        reason: "Obsolete file removed in new version; untouched by user".to_string(),
+                                        current_sha256: cur_hash,
+                                        new_sha256: None,
+                                    });
+                                } else {
+                                    // Modified regular file -> retain as conflict!
+                                    obsolete_retains.push(old_entry.target.clone());
+                                    conflicts.push(old_entry.target.clone());
+                                    details.push(UpdateFileItem {
+                                        target: old_entry.target.clone(),
+                                        action: FileAction::ObsoleteRetain,
+                                        reason: "Obsolete file modified by user; will be retained as conflict".to_string(),
+                                        current_sha256: cur_hash,
+                                        new_sha256: None,
+                                    });
+                                }
+                            } else {
+                                obsolete_retains.push(old_entry.target.clone());
+                                conflicts.push(old_entry.target.clone());
+                                details.push(UpdateFileItem {
+                                    target: old_entry.target.clone(),
+                                    action: FileAction::ObsoleteRetain,
+                                    reason: "Cannot checksum obsolete file; retained as conflict"
+                                        .to_string(),
+                                    current_sha256: None,
+                                    new_sha256: None,
+                                });
+                            }
+                        }
+                    } else {
+                        // Directory or special file where regular file was expected -> conflict
+                        obsolete_retains.push(old_entry.target.clone());
+                        conflicts.push(old_entry.target.clone());
+                        details.push(UpdateFileItem {
+                            target: old_entry.target.clone(),
+                            action: FileAction::ObsoleteRetain,
+                            reason:
+                                "Obsolete entry is directory or special file; retained as conflict"
+                                    .to_string(),
+                            current_sha256: None,
+                            new_sha256: None,
+                        });
+                    }
+                }
+                Err(_) => {
+                    // Already missing, nothing to remove
+                }
+            }
+        }
+    }
+
+    let has_conflicts = !conflicts.is_empty();
+
+    Ok(UpdatePlan {
+        package_id: package_id.to_string(),
+        from_version: record.version.clone(),
+        to_version: new_manifest.version.clone(),
+        repository_id: record.repository_id.clone(),
+        creates,
+        replaces,
+        unchanged,
+        conflicts,
+        obsolete_removes,
+        obsolete_retains,
+        details,
+        has_conflicts,
+    })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Update Application Pipeline (Phase 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+pub fn apply_package_update_in(
+    package_id: &str,
+    home_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    staging_root: &Path,
+    new_package_dir: &Path,
+    system_info: &SystemInfo,
+    allow_conflicts: bool,
+    new_repository_id: Option<String>,
+) -> Result<UpdateResult, String> {
+    if package_id.is_empty()
+        || package_id.contains("..")
+        || package_id.contains('/')
+        || package_id.contains('\\')
+        || package_id.contains('\0')
+    {
+        return Err(format!("Invalid package ID '{}'", package_id));
+    }
+
+    let record_file = installed_root.join(format!("{}.json", package_id));
+    if !record_file.is_file() {
+        return Err(format!("Package '{}' is not installed", package_id));
+    }
+
+    let raw = fs::read_to_string(&record_file)
+        .map_err(|e| format!("Failed to read record for '{}': {}", package_id, e))?;
+    let record: InstalledPackageRecord = serde_json::from_str(&raw)
+        .map_err(|e| format!("Corrupted record for '{}': {}", package_id, e))?;
+
+    if record.files.is_empty() {
+        return Err(format!(
+            "Installed package '{}' contains legacy metadata without checksums. Cannot safely apply update.",
+            package_id
+        ));
+    }
+
+    let new_manifest = load_package_manifest(new_package_dir)?;
+    if new_manifest.id != record.package_id {
+        return Err(format!(
+            "Manifest ID mismatch: expected '{}', got '{}'",
+            record.package_id, new_manifest.id
+        ));
+    }
+
+    // Enforce SemVer: strictly disallow downgrade and same-version update
+    let inst_v = semver::Version::parse(&record.version)
+        .map_err(|e| format!("Invalid installed version '{}': {}", record.version, e))?;
+    let new_v = semver::Version::parse(&new_manifest.version)
+        .map_err(|e| format!("Invalid new version '{}': {}", new_manifest.version, e))?;
+    if new_v <= inst_v {
+        if new_v == inst_v {
+            return Err(format!(
+                "Package '{}' is already at version {}",
+                package_id, record.version
+            ));
+        } else {
+            return Err(format!(
+                "Downgrade attempt refused for package '{}' (installed: {}, target: {})",
+                package_id, record.version, new_manifest.version
+            ));
+        }
+    }
+
+    // System compatibility check
+    let reqs = CompatibilityRequirements {
+        supported_distros: new_manifest.compatibility.distros.clone(),
+        supported_desktops: new_manifest.compatibility.desktops.clone(),
+        supported_sessions: new_manifest.compatibility.sessions.clone(),
+        required_binaries: new_manifest.compatibility.required.clone(),
+        optional_binaries: new_manifest.compatibility.optional.clone(),
+    };
+    let compat_report = evaluate_compatibility(system_info, &reqs);
+    if compat_report.level != CompatibilityLevel::Compatible {
+        return Err(format!(
+            "Package '{}' version '{}' is incompatible with your system environment",
+            new_manifest.id, new_manifest.version
+        ));
+    }
+
+    // Generate update preview
+    let plan = preview_package_update_in(package_id, home_dir, installed_root, new_package_dir)?;
+
+    if plan.has_conflicts && !allow_conflicts {
+        return Err(format!(
+            "Update blocked due to conflicting user-modified files: {}. Refusing to overwrite modified files.",
+            plan.conflicts.join(", ")
+        ));
+    }
+
+    // Collect ALL target paths for pre-update snapshot:
+    // All paths in new manifest + all paths in old record (including obsolete)
+    let mut all_targets: Vec<String> = Vec::new();
+    for f in &new_manifest.files {
+        if !all_targets.contains(&f.target) {
+            all_targets.push(f.target.clone());
+        }
+    }
+    for f in &record.files {
+        if !all_targets.contains(&f.target) {
+            all_targets.push(f.target.clone());
+        }
+    }
+
+    // Pre-update snapshot
+    let snapshot_label = format!(
+        "pre-update-{}-{}-to-{}",
+        package_id, record.version, new_manifest.version
+    );
+    let snapshot_meta = create_snapshot_in(&snapshot_label, &all_targets, home_dir, snapshots_root)
+        .map_err(|e| format!("Failed to create pre-update snapshot: {}", e))?;
+
+    let snap_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
+        .map_err(|e| format!("Snapshot verification error: {}", e))?;
+    if !snap_valid {
+        return Err("Pre-update snapshot failed integrity verification — update aborted before any file modification".to_string());
+    }
+
+    // Staging
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let staging_id = format!("update-{}-{}", manifest_id_safe(package_id), now);
+    let staging_dir = staging_root.join(&staging_id);
+    fs::create_dir_all(&staging_dir)
+        .map_err(|e| format!("Failed to create staging directory: {}", e))?;
+
+    let clean_staging = |dir: &Path| {
+        let _ = fs::remove_dir_all(dir);
+    };
+
+    let mut staged_items = Vec::new(); // (staged_path, target_path, expected_hash, is_symlink, symlink_target, target_str)
+
+    for (idx, file_decl) in new_manifest.files.iter().enumerate() {
+        // If file is a conflict and allow_conflicts is true, NEVER overwrite user file
+        if plan.conflicts.contains(&file_decl.target) {
+            continue; // retain user file
+        }
+
+        let src_path = match validate_package_source_file(new_package_dir, &file_decl.source) {
+            Ok(p) => p,
+            Err(e) => {
+                clean_staging(&staging_dir);
+                return Err(format!("Payload validation failed: {}", e));
+            }
+        };
+
+        let target_path = match validate_target_safety(&file_decl.target, home_dir) {
+            Ok(p) => p,
+            Err(e) => {
+                clean_staging(&staging_dir);
+                return Err(format!("Target validation failed: {}", e));
+            }
+        };
+
+        let src_meta = match fs::symlink_metadata(&src_path) {
+            Ok(m) => m,
+            Err(e) => {
+                clean_staging(&staging_dir);
+                return Err(format!(
+                    "Failed to read metadata for source file '{}': {}",
+                    file_decl.source, e
+                ));
+            }
+        };
+
+        let src_is_symlink = src_meta.file_type().is_symlink();
+        let staged_file_path = staging_dir.join(format!("file_{}", idx));
+
+        let (expected_hash, symlink_target) = if src_is_symlink {
+            #[cfg(unix)]
+            {
+                let link_target = match fs::read_link(&src_path) {
+                    Ok(lt) => lt,
+                    Err(e) => {
+                        clean_staging(&staging_dir);
+                        return Err(format!(
+                            "Failed to read symlink '{}': {}",
+                            file_decl.source, e
+                        ));
+                    }
+                };
+                let link_str = link_target.to_string_lossy().to_string();
+                if let Err(e) = std::os::unix::fs::symlink(&link_target, &staged_file_path) {
+                    clean_staging(&staging_dir);
+                    return Err(format!(
+                        "Failed to stage symlink '{}': {}",
+                        file_decl.source, e
+                    ));
+                }
+                (String::new(), Some(link_str))
+            }
+            #[cfg(not(unix))]
+            {
+                clean_staging(&staging_dir);
+                return Err("Symlinks are only supported on Unix platforms".to_string());
+            }
+        } else {
+            let src_hash = match sha256_file(&src_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    clean_staging(&staging_dir);
+                    return Err(format!(
+                        "Failed to checksum source file '{}': {}",
+                        file_decl.source, e
+                    ));
+                }
+            };
+
+            if let Err(e) = fs::copy(&src_path, &staged_file_path) {
+                clean_staging(&staging_dir);
+                return Err(format!(
+                    "Failed to stage file '{}': {}",
+                    file_decl.source, e
+                ));
+            }
+
+            let staged_hash = match sha256_file(&staged_file_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    clean_staging(&staging_dir);
+                    return Err(format!(
+                        "Failed to verify staged file '{}': {}",
+                        file_decl.source, e
+                    ));
+                }
+            };
+
+            if staged_hash != src_hash {
+                clean_staging(&staging_dir);
+                return Err(format!(
+                    "Staged file checksum mismatch for '{}'",
+                    file_decl.source
+                ));
+            }
+            (src_hash, None)
+        };
+
+        staged_items.push((
+            staged_file_path,
+            target_path,
+            expected_hash,
+            src_is_symlink,
+            symlink_target,
+            file_decl.target.clone(),
+        ));
+    }
+
+    // Apply staged files
+    let mut updated_files = Vec::new();
+    let mut applied_entries = Vec::new();
+    let mut apply_error: Option<String> = None;
+
+    for (
+        staged_path,
+        target_path,
+        expected_hash,
+        item_is_symlink,
+        item_symlink_target,
+        target_str,
+    ) in &staged_items
+    {
+        if let Some(parent) = target_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                apply_error = Some(format!(
+                    "Failed to create parent directory for '{}': {}",
+                    target_str, e
+                ));
+                break;
+            }
+        }
+
+        if *item_is_symlink {
+            if fs::symlink_metadata(target_path).is_ok() {
+                if let Err(e) = fs::remove_file(target_path) {
+                    apply_error = Some(format!(
+                        "Failed to remove existing file/symlink at '{}': {}",
+                        target_str, e
+                    ));
+                    break;
+                }
+            }
+
+            #[cfg(unix)]
+            {
+                let target_dest = item_symlink_target.as_ref().unwrap();
+                if let Err(e) = std::os::unix::fs::symlink(target_dest, target_path) {
+                    apply_error = Some(format!("Failed to create symlink '{}': {}", target_str, e));
+                    break;
+                }
+            }
+
+            // Verify installed symlink immediately
+            match fs::symlink_metadata(target_path) {
+                Ok(m) if m.file_type().is_symlink() => {
+                    let actual_link = fs::read_link(target_path)
+                        .ok()
+                        .map(|p| p.to_string_lossy().to_string());
+                    if actual_link != *item_symlink_target {
+                        apply_error = Some(format!(
+                            "Installed symlink target mismatch for '{}'",
+                            target_str
+                        ));
+                        break;
+                    }
+                }
+                _ => {
+                    apply_error = Some(format!(
+                        "Installed object is not a symlink for '{}'",
+                        target_str
+                    ));
+                    break;
+                }
+            }
+
+            applied_entries.push(InstalledFileEntry {
+                target: target_str.clone(),
+                sha256: String::new(),
+                is_symlink: true,
+                symlink_target: item_symlink_target.clone(),
+            });
+            updated_files.push(target_str.clone());
+        } else {
+            // If target is an existing symlink, remove it first
+            if let Ok(meta) = fs::symlink_metadata(target_path) {
+                if meta.file_type().is_symlink() {
+                    if let Err(e) = fs::remove_file(target_path) {
+                        apply_error = Some(format!(
+                            "Failed to remove target symlink '{}': {}",
+                            target_str, e
+                        ));
+                        break;
+                    }
+                }
+            }
+
+            if let Err(e) = fs::copy(staged_path, target_path) {
+                apply_error = Some(format!(
+                    "Failed to copy staged file to '{}': {}",
+                    target_str, e
+                ));
+                break;
+            }
+
+            // Verify installed file immediately
+            let installed_hash = match sha256_file(target_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    apply_error = Some(format!(
+                        "Failed to verify installed file '{}': {}",
+                        target_str, e
+                    ));
+                    break;
+                }
+            };
+
+            if &installed_hash != expected_hash {
+                apply_error = Some(format!(
+                    "Installed file checksum mismatch for '{}'",
+                    target_str
+                ));
+                break;
+            }
+
+            applied_entries.push(InstalledFileEntry {
+                target: target_str.clone(),
+                sha256: installed_hash,
+                is_symlink: false,
+                symlink_target: None,
+            });
+            updated_files.push(target_str.clone());
+        }
+    }
+
+    // Rollback on failure
+    if let Some(err) = apply_error {
+        clean_staging(&staging_dir);
+        let rollback_res = restore_snapshot_in(&snapshot_meta.id, home_dir, snapshots_root);
+        let rolled_back_ok = rollback_res.map(|r| r.success).unwrap_or(false);
+
+        return Ok(UpdateResult {
+            success: false,
+            package_id: package_id.to_string(),
+            from_version: record.version.clone(),
+            to_version: new_manifest.version.clone(),
+            snapshot_id: snapshot_meta.id,
+            updated_files: vec![],
+            obsolete_removed: vec![],
+            conflicts_retained: plan.conflicts.clone(),
+            rolled_back: true,
+            errors: vec![format!(
+                "Update failed ({}); automatic rollback was {}",
+                err,
+                if rolled_back_ok {
+                    "successful"
+                } else {
+                    "attempted with warnings"
+                }
+            )],
+        });
+    }
+
+    clean_staging(&staging_dir);
+
+    // Remove obsolete unmodified files with verified ownership
+    let mut obsolete_removed = Vec::new();
+    for target_str in &plan.obsolete_removes {
+        if let Ok(target_path) = validate_target_safety(target_str, home_dir) {
+            if let Some(old_entry) = record.files.iter().find(|f| &f.target == target_str) {
+                let safe_to_remove = match fs::symlink_metadata(&target_path) {
+                    Ok(m) => {
+                        if m.file_type().is_symlink() {
+                            if old_entry.is_symlink {
+                                if let Some(ref rec_tgt) = old_entry.symlink_target {
+                                    fs::read_link(&target_path)
+                                        .ok()
+                                        .map(|l| l.to_string_lossy().to_string())
+                                        == Some(rec_tgt.clone())
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else if m.is_file() {
+                            if !old_entry.is_symlink {
+                                sha256_file(&target_path).ok().as_ref() == Some(&old_entry.sha256)
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    Err(_) => false,
+                };
+
+                if safe_to_remove {
+                    if fs::remove_file(&target_path).is_ok() {
+                        obsolete_removed.push(target_str.clone());
+                        let mut dummy_rem = Vec::new();
+                        let mut dummy_ret = Vec::new();
+                        cleanup_empty_parents(
+                            &target_path,
+                            home_dir,
+                            &mut dummy_rem,
+                            &mut dummy_ret,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // For any conflicting files that were skipped and retained, keep their entries
+    for conflict_target in &plan.conflicts {
+        if let Some(old_entry) = record.files.iter().find(|f| &f.target == conflict_target) {
+            if !applied_entries.iter().any(|e| &e.target == conflict_target) {
+                applied_entries.push(old_entry.clone());
+            }
+        }
+    }
+
+    // Update metadata record with actual repository_id
+    let new_record = InstalledPackageRecord {
+        package_id: new_manifest.id.clone(),
+        name: new_manifest.name.clone(),
+        version: new_manifest.version.clone(),
+        package_type: Some(new_manifest.package_type),
+        repository_id: new_repository_id.or_else(|| record.repository_id.clone()),
+        installed_at: now,
+        snapshot_id: snapshot_meta.id.clone(),
+        installed_files: applied_entries.iter().map(|e| e.target.clone()).collect(),
+        files: applied_entries,
+        package_source_path: new_package_dir.display().to_string(),
+    };
+
+    let record_json = serde_json::to_string_pretty(&new_record)
+        .map_err(|e| format!("Failed to serialize updated record: {}", e))?;
+    if let Err(e) = fs::write(&record_file, record_json) {
+        return Err(format!(
+            "Failed to write updated installation record: {}",
+            e
+        ));
+    }
+
+    Ok(UpdateResult {
+        success: true,
+        package_id: package_id.to_string(),
+        from_version: record.version,
+        to_version: new_manifest.version,
+        snapshot_id: snapshot_meta.id,
+        updated_files,
+        obsolete_removed,
+        conflicts_retained: plan.conflicts,
+        rolled_back: false,
+        errors: vec![],
+    })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Update Package Resolution
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Resolve the package directory and repository ID for an update operation.
+/// Enforces:
+/// 1. Prefer installed record's repository_id when available.
+/// 2. If repository_id is unavailable, resolve through repository manager, ensuring
+///    duplicate package IDs across repositories do not cause arbitrary selection.
+/// 3. Confirms repository version > installed version (strictly no downgrades, no same-version).
+/// 4. Returns clear error if repository or package is unavailable.
+pub fn resolve_update_package(
+    package_id: &str,
+    installed_root: &Path,
+    repo_mgr: &crate::repository::RepositoryManager,
+) -> Result<(PathBuf, String, String), String> {
+    if package_id.is_empty()
+        || package_id.contains("..")
+        || package_id.contains('/')
+        || package_id.contains('\\')
+        || package_id.contains('\0')
+    {
+        return Err(format!("Invalid package ID '{}'", package_id));
+    }
+
+    let record_file = installed_root.join(format!("{}.json", package_id));
+    if !record_file.is_file() {
+        return Err(format!("Package '{}' is not installed", package_id));
+    }
+
+    let raw = fs::read_to_string(&record_file)
+        .map_err(|e| format!("Failed to read record for '{}': {}", package_id, e))?;
+    let record: InstalledPackageRecord = serde_json::from_str(&raw)
+        .map_err(|e| format!("Corrupted record for '{}': {}", package_id, e))?;
+
+    let inst_v = semver::Version::parse(&record.version)
+        .map_err(|e| format!("Invalid installed version '{}': {}", record.version, e))?;
+
+    if let Some(ref recorded_repo_id) = record.repository_id {
+        let repo = repo_mgr
+            .get_repository_by_id(recorded_repo_id)
+            .ok_or_else(|| {
+                format!(
+                    "Repository '{}' unavailable or not configured",
+                    recorded_repo_id
+                )
+            })?;
+
+        let entries = repo.list_entries().map_err(|e| {
+            format!(
+                "Failed to list entries for repository '{}': {}",
+                recorded_repo_id, e
+            )
+        })?;
+
+        let entry = entries
+            .into_iter()
+            .find(|e| e.id == package_id)
+            .ok_or_else(|| {
+                format!(
+                    "Package '{}' not found in repository '{}'",
+                    package_id, recorded_repo_id
+                )
+            })?;
+
+        let cand_v = semver::Version::parse(&entry.version).map_err(|e| {
+            format!(
+                "Invalid repository package version '{}': {}",
+                entry.version, e
+            )
+        })?;
+
+        if cand_v <= inst_v {
+            if cand_v == inst_v {
+                return Err(format!(
+                    "No update available for '{}' (already at version {})",
+                    package_id, record.version
+                ));
+            } else {
+                return Err(format!(
+                    "Downgrade attempt refused for package '{}' (installed: {}, repository: {})",
+                    package_id, record.version, entry.version
+                ));
+            }
+        }
+
+        let pkg_dir = repo.get_package_dir(package_id)?;
+        Ok((pkg_dir, recorded_repo_id.clone(), entry.version))
+    } else {
+        // No recorded repository_id: search all repositories
+        let mut matching_repos: Vec<(&dyn crate::repository::Repository, String, semver::Version)> =
+            Vec::new();
+
+        for repo in repo_mgr.repositories() {
+            if let Ok(entries) = repo.list_entries() {
+                if let Some(entry) = entries.into_iter().find(|e| e.id == package_id) {
+                    if let Ok(cand_v) = semver::Version::parse(&entry.version) {
+                        matching_repos.push((repo.as_ref(), entry.version, cand_v));
+                    }
+                }
+            }
+        }
+
+        if matching_repos.is_empty() {
+            return Err(format!(
+                "Package '{}' not found in any repository",
+                package_id
+            ));
+        }
+
+        if matching_repos.len() > 1 {
+            let names: Vec<&str> = matching_repos.iter().map(|(r, _, _)| r.id()).collect();
+            return Err(format!(
+                "Ambiguous update for package '{}': found in multiple repositories ({}); cannot select arbitrary repository",
+                package_id,
+                names.join(", ")
+            ));
+        }
+
+        let (repo, ver_str, cand_v) = &matching_repos[0];
+        if cand_v <= &inst_v {
+            if cand_v == &inst_v {
+                return Err(format!(
+                    "No update available for '{}' (already at version {})",
+                    package_id, record.version
+                ));
+            } else {
+                return Err(format!(
+                    "Downgrade attempt refused for package '{}' (installed: {}, repository: {})",
+                    package_id, record.version, ver_str
+                ));
+            }
+        }
+
+        let pkg_dir = repo.get_package_dir(package_id)?;
+        Ok((pkg_dir, repo.id().to_string(), ver_str.clone()))
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tauri Exposed Commands
 // ─────────────────────────────────────────────────────────────────────────────
@@ -731,6 +2443,61 @@ pub fn list_installed_packages() -> Result<Vec<InstalledPackageRecord>, String> 
 pub fn get_installed_package(package_id: String) -> Result<Option<InstalledPackageRecord>, String> {
     let installed_root = get_ryzora_installed_dir();
     get_installed_package_in(&package_id, &installed_root)
+}
+
+#[tauri::command]
+pub fn uninstall_package(package_id: String) -> Result<UninstallResult, String> {
+    let home = get_home_dir();
+    let snapshots_root = get_ryzora_snapshots_dir();
+    let installed_root = get_ryzora_installed_dir();
+    uninstall_package_in(&package_id, &home, &snapshots_root, &installed_root)
+}
+
+#[tauri::command]
+pub fn check_package_update(package_id: String) -> Result<PackageUpdateStatus, String> {
+    let installed_root = get_ryzora_installed_dir();
+    let repo_mgr = crate::repository::create_default_manager();
+    check_package_update_in(&package_id, &installed_root, &repo_mgr)
+}
+
+#[tauri::command]
+pub fn check_all_updates() -> Result<Vec<PackageUpdateStatus>, String> {
+    let installed_root = get_ryzora_installed_dir();
+    let repo_mgr = crate::repository::create_default_manager();
+    check_all_updates_in(&installed_root, &repo_mgr)
+}
+
+#[tauri::command]
+pub fn preview_package_update(package_id: String) -> Result<UpdatePlan, String> {
+    let home = get_home_dir();
+    let installed_root = get_ryzora_installed_dir();
+    let repo_mgr = crate::repository::create_default_manager();
+    let (new_package_dir, _repo_id, _ver) =
+        resolve_update_package(&package_id, &installed_root, &repo_mgr)?;
+    preview_package_update_in(&package_id, &home, &installed_root, &new_package_dir)
+}
+
+#[tauri::command]
+pub fn apply_package_update(package_id: String) -> Result<UpdateResult, String> {
+    let home = get_home_dir();
+    let snapshots_root = get_ryzora_snapshots_dir();
+    let installed_root = get_ryzora_installed_dir();
+    let staging_root = get_ryzora_staging_dir();
+    let repo_mgr = crate::repository::create_default_manager();
+    let (new_package_dir, repo_id, _ver) =
+        resolve_update_package(&package_id, &installed_root, &repo_mgr)?;
+    let sys = detect_system_info();
+    apply_package_update_in(
+        &package_id,
+        &home,
+        &snapshots_root,
+        &installed_root,
+        &staging_root,
+        &new_package_dir,
+        &sys,
+        false,
+        Some(repo_id),
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -857,7 +2624,7 @@ mod tests {
   "package_type": "rice",
   "description": "Test package",
   "tags": ["test"],
-  "color_palette": ["#000000"],
+  "color_palette": [],
   "compatibility": {{
     "desktops": ["hyprland"],
     "sessions": ["wayland"],
@@ -869,6 +2636,142 @@ mod tests {
 }}"##,
                 id,
                 id,
+                req_json.join(", "),
+                manifest_files_json.join(", ")
+            );
+
+            fs::write(pkg_dir.join("manifest.json"), manifest_json).unwrap();
+
+            for (src_rel, _, content) in files {
+                let full_src = pkg_dir.join(src_rel);
+                if let Some(parent) = full_src.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(full_src, content).unwrap();
+            }
+
+            pkg_dir
+        }
+
+        fn create_package_with_symlinks(
+            &self,
+            id: &str,
+            version: &str,
+            regular_files: &[(&str, &str, &str)], // (source, target, content)
+            symlinks: &[(&str, &str, &str)],      // (source, target, link_dest)
+        ) -> PathBuf {
+            let pkg_dir = self.packages_dir.join(format!("{}-{}", id, version));
+            fs::create_dir_all(&pkg_dir).unwrap();
+
+            let mut manifest_files = Vec::new();
+            for (s, t, _) in regular_files {
+                manifest_files.push(format!(
+                    r#"{{"source": "{}", "target": "{}", "description": "regular"}}"#,
+                    s, t
+                ));
+            }
+            for (s, t, _) in symlinks {
+                manifest_files.push(format!(
+                    r#"{{"source": "{}", "target": "{}", "description": "symlink"}}"#,
+                    s, t
+                ));
+            }
+
+            let manifest_json = format!(
+                r#"{{
+  "id": "{}",
+  "name": "Symlink Package",
+  "version": "{}",
+  "ryzora_spec": "1",
+  "author": "Tester",
+  "package_type": "rice",
+  "description": "Test symlink package",
+  "tags": [],
+  "color_palette": [],
+  "compatibility": {{
+    "desktops": ["hyprland"],
+    "sessions": ["wayland"],
+    "distros": ["arch"],
+    "required": [],
+    "optional": []
+  }},
+  "files": [{}]
+}}"#,
+                id,
+                version,
+                manifest_files.join(", ")
+            );
+
+            fs::write(pkg_dir.join("manifest.json"), manifest_json).unwrap();
+
+            for (src_rel, _, content) in regular_files {
+                let full_src = pkg_dir.join(src_rel);
+                if let Some(parent) = full_src.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(full_src, content).unwrap();
+            }
+
+            for (src_rel, _, link_dest) in symlinks {
+                let full_src = pkg_dir.join(src_rel);
+                if let Some(parent) = full_src.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(link_dest, &full_src).unwrap();
+            }
+
+            pkg_dir
+        }
+
+        fn create_sample_package_with_version(
+            &self,
+            id: &str,
+            version: &str,
+            files: &[(&str, &str, &str)],
+            required_binaries: &[&str],
+        ) -> PathBuf {
+            let pkg_dir = self.packages_dir.join(format!("{}-{}", id, version));
+            fs::create_dir_all(&pkg_dir).unwrap();
+
+            let manifest_files_json: Vec<String> = files
+                .iter()
+                .map(|(s, t, _)| {
+                    format!(
+                        r#"{{"source": "{}", "target": "{}", "description": "test file"}}"#,
+                        s, t
+                    )
+                })
+                .collect();
+
+            let req_json: Vec<String> = required_binaries
+                .iter()
+                .map(|b| format!(r#""{}""#, b))
+                .collect();
+
+            let manifest_json = format!(
+                r#"{{
+  "id": "{}",
+  "name": "Test Package {}",
+  "version": "{}",
+  "ryzora_spec": "1",
+  "author": "Tester",
+  "package_type": "rice",
+  "description": "Test package",
+  "tags": ["test"],
+  "color_palette": [],
+  "compatibility": {{
+    "desktops": ["hyprland"],
+    "sessions": ["wayland"],
+    "distros": ["arch"],
+    "required": [{}],
+    "optional": []
+  }},
+  "files": [{}]
+}}"#,
+                id,
+                id,
+                version,
                 req_json.join(", "),
                 manifest_files_json.join(", ")
             );
@@ -906,8 +2809,16 @@ mod tests {
         let pkg_dir = sandbox.create_sample_package(
             "test-pkg-1",
             &[
-                ("files/hypr/hyprland.conf", "~/.config/hypr/hyprland.conf", "new hypr config"),
-                ("files/waybar/style.css", "~/.config/waybar/style.css", "new waybar css"),
+                (
+                    "files/hypr/hyprland.conf",
+                    "~/.config/hypr/hyprland.conf",
+                    "new hypr config",
+                ),
+                (
+                    "files/waybar/style.css",
+                    "~/.config/waybar/style.css",
+                    "new waybar css",
+                ),
             ],
             &["hyprland", "waybar"],
         );
@@ -929,7 +2840,11 @@ mod tests {
 
         let pkg_dir = sandbox.create_sample_package(
             "dry-run-pkg",
-            &[("files/app.conf", "~/.config/test/app.conf", "payload content")],
+            &[(
+                "files/app.conf",
+                "~/.config/test/app.conf",
+                "payload content",
+            )],
             &["hyprland"],
         );
 
@@ -952,8 +2867,16 @@ mod tests {
         let pkg_dir = sandbox.create_sample_package(
             "real-install-pkg",
             &[
-                ("files/hypr/hyprland.conf", "~/.config/hypr/hyprland.conf", "hyprland config 1"),
-                ("files/waybar/config.jsonc", "~/.config/waybar/config.jsonc", "waybar config 1"),
+                (
+                    "files/hypr/hyprland.conf",
+                    "~/.config/hypr/hyprland.conf",
+                    "hyprland config 1",
+                ),
+                (
+                    "files/waybar/config.jsonc",
+                    "~/.config/waybar/config.jsonc",
+                    "waybar config 1",
+                ),
             ],
             &["hyprland", "waybar"],
         );
@@ -965,7 +2888,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(res.success);
         assert!(!res.rolled_back);
@@ -1001,7 +2925,11 @@ mod tests {
 
         let pkg_dir = sandbox.create_sample_package(
             "replace-pkg",
-            &[("files/existing.conf", "~/.config/existing.conf", "new package content")],
+            &[(
+                "files/existing.conf",
+                "~/.config/existing.conf",
+                "new package content",
+            )],
             &["hyprland"],
         );
 
@@ -1012,7 +2940,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(res.success);
 
@@ -1020,11 +2949,19 @@ mod tests {
         assert_eq!(fs::read_to_string(&dest).unwrap(), "new package content");
 
         // Snapshot contains original content
-        let snap = crate::snapshot::get_snapshot_in(&res.snapshot_id, &sandbox.snapshots_dir).unwrap();
+        let snap =
+            crate::snapshot::get_snapshot_in(&res.snapshot_id, &sandbox.snapshots_dir).unwrap();
         assert_eq!(snap.entries.len(), 1);
         let entry = &snap.entries[0];
-        let backup_file = sandbox.snapshots_dir.join(&snap.id).join("files").join(&entry.backup_relative);
-        assert_eq!(fs::read_to_string(backup_file).unwrap(), "original user content");
+        let backup_file = sandbox
+            .snapshots_dir
+            .join(&snap.id)
+            .join("files")
+            .join(&entry.backup_relative);
+        assert_eq!(
+            fs::read_to_string(backup_file).unwrap(),
+            "original user content"
+        );
     }
 
     #[test]
@@ -1144,7 +3081,10 @@ mod tests {
         );
 
         assert!(res.is_err());
-        assert!(res.err().unwrap().contains("incompatible with detected system environment"));
+        assert!(res
+            .err()
+            .unwrap()
+            .contains("incompatible with detected system environment"));
     }
 
     #[test]
@@ -1158,9 +3098,11 @@ mod tests {
 
         let _pkg_dir = sandbox.create_sample_package(
             "fail-pkg",
-            &[
-                ("files/original.conf", "~/.config/original.conf", "new replaced configuration"),
-            ],
+            &[(
+                "files/original.conf",
+                "~/.config/original.conf",
+                "new replaced configuration",
+            )],
             &["hyprland"],
         );
 
@@ -1169,8 +3111,16 @@ mod tests {
         let unwriteable_pkg_dir = sandbox.create_sample_package(
             "fail-multi-pkg",
             &[
-                ("files/original.conf", "~/.config/original.conf", "new replaced configuration"),
-                ("files/impossible.conf", "~/.config/impossible_dir/sub/file.conf", "will fail"),
+                (
+                    "files/original.conf",
+                    "~/.config/original.conf",
+                    "new replaced configuration",
+                ),
+                (
+                    "files/impossible.conf",
+                    "~/.config/impossible_dir/sub/file.conf",
+                    "will fail",
+                ),
             ],
             &["hyprland"],
         );
@@ -1186,7 +3136,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Installation failed, but handled safely
         assert!(!res.success);
@@ -1222,7 +3173,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
 
         install_package_in(
             &pkg2,
@@ -1231,7 +3183,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
 
         let list = list_installed_packages_in(&sandbox.installed_dir).unwrap();
         assert_eq!(list.len(), 2);
@@ -1262,7 +3215,10 @@ mod tests {
 
         let res = validate_package_source_file(&pkg_dir, "files/evil.conf");
         assert!(res.is_err());
-        assert!(res.err().unwrap().contains("escapes package root via symlink"));
+        assert!(res
+            .err()
+            .unwrap()
+            .contains("escapes package root via symlink"));
     }
 
     #[test]
@@ -1310,7 +3266,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(res1.success);
 
         // Check plan now reports it as unchanged
@@ -1324,7 +3281,10 @@ mod tests {
 
         // Check plan now reports it as to_replace
         let plan_diff = generate_installation_plan_in(&pkg, &sandbox.home_dir, &sys).unwrap();
-        assert_eq!(plan_diff.files_to_replace, vec!["~/.config/repeat/app.conf"]);
+        assert_eq!(
+            plan_diff.files_to_replace,
+            vec!["~/.config/repeat/app.conf"]
+        );
 
         // Second install
         let res2 = install_package_in(
@@ -1334,7 +3294,8 @@ mod tests {
             &sandbox.staging_dir,
             &sandbox.home_dir,
             &sys,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(res2.success);
 
         let dest = sandbox.home_dir.join(".config/repeat/app.conf");
@@ -1348,5 +3309,2480 @@ mod tests {
         assert!(found.is_ok());
         let pkg_dir = found.unwrap();
         assert!(pkg_dir.join("manifest.json").is_file());
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 7 COMPREHENSIVE TESTS (Tests 1 through 30)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UNINSTALL TESTS (1 - 13)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // 1. Uninstall untouched installed file
+    #[test]
+    fn test_uninstall_untouched_installed_file() {
+        let sandbox = TestSandbox::new("uninstall-untouched");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-untouched",
+            &[(
+                "files/hypr.conf",
+                "~/.config/hypr/hypr.conf",
+                "my hypr config",
+            )],
+            &[],
+        );
+
+        let install_res = install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+        assert!(install_res.success);
+
+        let dest = sandbox.home_dir.join(".config/hypr/hypr.conf");
+        assert!(dest.is_file());
+
+        let uninst_res = uninstall_package_in(
+            "pkg-untouched",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst_res.success);
+        assert!(!uninst_res.rolled_back);
+        assert_eq!(uninst_res.removed_files, vec!["~/.config/hypr/hypr.conf"]);
+        assert!(!dest.exists());
+    }
+
+    // 2. Uninstall multiple files
+    #[test]
+    fn test_uninstall_multiple_files() {
+        let sandbox = TestSandbox::new("uninstall-multiple");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-multi",
+            &[
+                ("files/hypr.conf", "~/.config/hypr/hypr.conf", "hypr config"),
+                (
+                    "files/waybar.css",
+                    "~/.config/waybar/style.css",
+                    "waybar style",
+                ),
+                (
+                    "files/kitty.conf",
+                    "~/.config/kitty/kitty.conf",
+                    "kitty config",
+                ),
+            ],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let uninst_res = uninstall_package_in(
+            "pkg-multi",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst_res.success);
+        assert_eq!(uninst_res.removed_files.len(), 3);
+        assert!(!sandbox.home_dir.join(".config/hypr/hypr.conf").exists());
+        assert!(!sandbox.home_dir.join(".config/waybar/style.css").exists());
+        assert!(!sandbox.home_dir.join(".config/kitty/kitty.conf").exists());
+    }
+
+    // 3. Already-missing file
+    #[test]
+    fn test_uninstall_already_missing_file() {
+        let sandbox = TestSandbox::new("uninstall-missing");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-missing",
+            &[
+                ("files/a.conf", "~/.config/app/a.conf", "config a"),
+                ("files/b.conf", "~/.config/app/b.conf", "config b"),
+            ],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // User deleted b.conf before uninstall
+        fs::remove_file(sandbox.home_dir.join(".config/app/b.conf")).unwrap();
+
+        let uninst_res = uninstall_package_in(
+            "pkg-missing",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst_res.success);
+        assert_eq!(uninst_res.removed_files, vec!["~/.config/app/a.conf"]);
+        assert_eq!(
+            uninst_res.already_missing_files,
+            vec!["~/.config/app/b.conf"]
+        );
+    }
+
+    // 4. Modified installed file is retained
+    #[test]
+    fn test_uninstall_modified_installed_file_retained() {
+        let sandbox = TestSandbox::new("uninstall-modified-retained");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-mod",
+            &[
+                (
+                    "files/clean.conf",
+                    "~/.config/app/clean.conf",
+                    "clean content",
+                ),
+                (
+                    "files/user.conf",
+                    "~/.config/app/user.conf",
+                    "original content",
+                ),
+            ],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // User edits user.conf
+        let user_file = sandbox.home_dir.join(".config/app/user.conf");
+        fs::write(&user_file, "user edited custom changes!").unwrap();
+
+        let uninst_res = uninstall_package_in(
+            "pkg-mod",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst_res.success);
+        assert_eq!(uninst_res.removed_files, vec!["~/.config/app/clean.conf"]);
+        // Modified file MUST still exist! Zero data loss!
+        assert!(user_file.is_file());
+        assert_eq!(
+            fs::read_to_string(&user_file).unwrap(),
+            "user edited custom changes!"
+        );
+    }
+
+    // 5. Modified file is reported as conflict
+    #[test]
+    fn test_uninstall_modified_file_reported_as_conflict() {
+        let sandbox = TestSandbox::new("uninstall-mod-conflict");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-conflict",
+            &[(
+                "files/cfg.conf",
+                "~/.config/app/cfg.conf",
+                "original content",
+            )],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        fs::write(
+            sandbox.home_dir.join(".config/app/cfg.conf"),
+            "custom content",
+        )
+        .unwrap();
+
+        let uninst_res = uninstall_package_in(
+            "pkg-conflict",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert_eq!(uninst_res.conflict_files, vec!["~/.config/app/cfg.conf"]);
+    }
+
+    // 6. Symlink is safely handled without following target
+    #[test]
+    fn test_uninstall_symlink_safely_handled_without_following_target() {
+        let sandbox = TestSandbox::new("uninstall-symlink");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-sym",
+            &[(
+                "files/app.conf",
+                "~/.config/app/app.conf",
+                "installed regular file",
+            )],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // Create an external secret file
+        let external_target = sandbox.root.join("external_secret.txt");
+        fs::write(&external_target, "critical user secret").unwrap();
+
+        // User replaced installed file with a symlink pointing to external_target
+        let app_conf = sandbox.home_dir.join(".config/app/app.conf");
+        fs::remove_file(&app_conf).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&external_target, &app_conf).unwrap();
+
+        let uninst_res = uninstall_package_in(
+            "pkg-sym",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        // Symlink replacement should be classified as conflict because Ryzora didn't install it as symlink
+        assert_eq!(uninst_res.conflict_files, vec!["~/.config/app/app.conf"]);
+        // External target must NEVER be deleted!
+        assert!(external_target.is_file());
+        assert_eq!(
+            fs::read_to_string(&external_target).unwrap(),
+            "critical user secret"
+        );
+    }
+
+    // 7. Unsafe target path is rejected
+    #[test]
+    fn test_uninstall_unsafe_target_path_rejected() {
+        let sandbox = TestSandbox::new("uninstall-unsafe-target");
+
+        // Construct fake metadata with a malicious target path
+        let record = InstalledPackageRecord {
+            package_id: "pkg-malicious".to_string(),
+            name: "Malicious".to_string(),
+            version: "1.0.0".to_string(),
+            package_type: Some(PackageType::Rice),
+            repository_id: None,
+            installed_at: 1000,
+            snapshot_id: "dummy".to_string(),
+            installed_files: vec!["~/../../etc/passwd".to_string()],
+            files: vec![InstalledFileEntry {
+                target: "~/../../etc/passwd".to_string(),
+                sha256: "deadbeef".to_string(),
+                is_symlink: false,
+                symlink_target: None,
+            }],
+            package_source_path: "/dummy".to_string(),
+        };
+
+        let record_json = serde_json::to_string(&record).unwrap();
+        fs::write(
+            sandbox.installed_dir.join("pkg-malicious.json"),
+            record_json,
+        )
+        .unwrap();
+
+        let err = uninstall_package_in(
+            "pkg-malicious",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("traversal") || err.contains("outside"));
+    }
+
+    // 8. Untrusted metadata is rejected
+    #[test]
+    fn test_uninstall_untrusted_metadata_rejected() {
+        let sandbox = TestSandbox::new("uninstall-untrusted");
+
+        // Invalid package IDs
+        assert!(uninstall_package_in(
+            "..",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir
+        )
+        .is_err());
+        assert!(uninstall_package_in(
+            "a/b",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir
+        )
+        .is_err());
+        assert!(uninstall_package_in(
+            "",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir
+        )
+        .is_err());
+
+        // Malformed JSON record
+        fs::write(
+            sandbox.installed_dir.join("pkg-corrupt.json"),
+            "{ invalid json",
+        )
+        .unwrap();
+        let err = uninstall_package_in(
+            "pkg-corrupt",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap_err();
+        assert!(err.contains("Corrupted record"));
+    }
+
+    // 9. Verified pre-uninstall snapshot is created
+    #[test]
+    fn test_uninstall_verified_pre_uninstall_snapshot_created() {
+        let sandbox = TestSandbox::new("uninstall-snapshot-verified");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-snap",
+            &[("files/cfg.conf", "~/.config/app/cfg.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let uninst_res = uninstall_package_in(
+            "pkg-snap",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst_res.success);
+        let snap_id = uninst_res
+            .snapshot_id
+            .expect("pre-uninstall snapshot id missing");
+        let valid = verify_snapshot_in(&snap_id, &sandbox.snapshots_dir).unwrap();
+        assert!(
+            valid,
+            "Pre-uninstall snapshot must pass cryptographic verification"
+        );
+    }
+
+    // 10. Unexpected uninstall failure triggers rollback
+    #[test]
+    fn test_uninstall_unexpected_failure_triggers_rollback() {
+        let sandbox = TestSandbox::new("uninstall-rollback");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-rb",
+            &[
+                ("files/a.conf", "~/.config/app10/a.conf", "content a"),
+                ("files/b.conf", "~/.config/app10/b.conf", "content b"),
+            ],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // Make parent dir read-only so file removal fails
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let p = sandbox.home_dir.join(".config/app10");
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o555)).unwrap();
+
+            let uninst_res = uninstall_package_in(
+                "pkg-rb",
+                &sandbox.home_dir,
+                &sandbox.snapshots_dir,
+                &sandbox.installed_dir,
+            )
+            .unwrap();
+
+            assert!(uninst_res.rolled_back);
+            assert!(!uninst_res.success);
+
+            // Restore write permission so sandbox cleanup succeeds
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    // 11. Rollback restores files correctly
+    #[test]
+    fn test_uninstall_rollback_restores_files_correctly() {
+        let sandbox = TestSandbox::new("uninstall-rollback-restores");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-restore",
+            &[(
+                "files/a.conf",
+                "~/.config/app11/a.conf",
+                "vital original content",
+            )],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let p = sandbox.home_dir.join(".config/app11");
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o555)).unwrap();
+
+            let uninst_res = uninstall_package_in(
+                "pkg-restore",
+                &sandbox.home_dir,
+                &sandbox.snapshots_dir,
+                &sandbox.installed_dir,
+            )
+            .unwrap();
+
+            assert!(uninst_res.rolled_back);
+
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+
+            // File must be present with original content
+            let file_a = sandbox.home_dir.join(".config/app11/a.conf");
+            assert!(file_a.is_file());
+            assert_eq!(
+                fs::read_to_string(file_a).unwrap(),
+                "vital original content"
+            );
+        }
+    }
+
+    // 12. Metadata is updated correctly
+    #[test]
+    fn test_uninstall_metadata_updated_correctly() {
+        let sandbox = TestSandbox::new("uninstall-meta");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-meta-test",
+            &[("files/cfg.conf", "~/.config/app/cfg.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        assert!(
+            get_installed_package_in("pkg-meta-test", &sandbox.installed_dir)
+                .unwrap()
+                .is_some()
+        );
+
+        uninstall_package_in(
+            "pkg-meta-test",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(
+            get_installed_package_in("pkg-meta-test", &sandbox.installed_dir)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    // 13. Stale/legacy metadata without checksums is refused safely
+    #[test]
+    fn test_uninstall_stale_legacy_metadata_without_checksums_refused_safely() {
+        let sandbox = TestSandbox::new("uninstall-legacy");
+
+        // Write legacy record with empty `files`
+        let legacy_record = InstalledPackageRecord {
+            package_id: "pkg-legacy".to_string(),
+            name: "Legacy Package".to_string(),
+            version: "1.0.0".to_string(),
+            package_type: None,
+            repository_id: None,
+            installed_at: 1000,
+            snapshot_id: "snap-legacy".to_string(),
+            installed_files: vec!["~/.config/app/important.conf".to_string()],
+            files: vec![], // No checksums!
+            package_source_path: "/legacy/path".to_string(),
+        };
+
+        let json = serde_json::to_string(&legacy_record).unwrap();
+        fs::write(sandbox.installed_dir.join("pkg-legacy.json"), json).unwrap();
+
+        let conf_path = sandbox.home_dir.join(".config/app/important.conf");
+        fs::create_dir_all(conf_path.parent().unwrap()).unwrap();
+        fs::write(&conf_path, "important user data").unwrap();
+
+        let err = uninstall_package_in(
+            "pkg-legacy",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("legacy metadata without cryptographic file checksums"));
+        // User file MUST be preserved!
+        assert!(conf_path.is_file());
+        assert_eq!(
+            fs::read_to_string(&conf_path).unwrap(),
+            "important user data"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UPDATE TESTS (14 - 30)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Mock Repository for update tests
+    struct MockUpdateRepo {
+        id: String,
+        entries: Vec<crate::repository::RepositoryPackageEntry>,
+        fail: bool,
+        package_dirs: std::collections::HashMap<String, PathBuf>,
+    }
+
+    impl MockUpdateRepo {
+        fn new(id: &str, entries: Vec<crate::repository::RepositoryPackageEntry>) -> Self {
+            Self {
+                id: id.to_string(),
+                entries,
+                fail: false,
+                package_dirs: std::collections::HashMap::new(),
+            }
+        }
+
+        fn with_dir(mut self, pkg_id: &str, dir: PathBuf) -> Self {
+            self.package_dirs.insert(pkg_id.to_string(), dir);
+            self
+        }
+    }
+
+    impl crate::repository::Repository for MockUpdateRepo {
+        fn id(&self) -> &str {
+            &self.id
+        }
+        fn name(&self) -> &str {
+            "Mock Update Repo"
+        }
+        fn repo_type(&self) -> &str {
+            "mock"
+        }
+        fn list_entries(&self) -> Result<Vec<crate::repository::RepositoryPackageEntry>, String> {
+            if self.fail {
+                return Err("Repository network error".to_string());
+            }
+            Ok(self.entries.clone())
+        }
+        fn get_package_manifest(&self, package_id: &str) -> Result<RyzoraManifest, String> {
+            let dir = self.get_package_dir(package_id)?;
+            load_package_manifest(&dir)
+        }
+        fn get_package_dir(&self, package_id: &str) -> Result<PathBuf, String> {
+            if self.fail {
+                return Err("Repository network error".to_string());
+            }
+            if let Some(dir) = self.package_dirs.get(package_id) {
+                Ok(dir.clone())
+            } else {
+                Err(format!(
+                    "Package '{}' not found in mock repo '{}'",
+                    package_id, self.id
+                ))
+            }
+        }
+    }
+
+    // 14. Installed package is up to date
+    #[test]
+    fn test_update_installed_package_up_to_date() {
+        let sandbox = TestSandbox::new("update-uptodate");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-up",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let mut mgr = crate::repository::RepositoryManager::new();
+        mgr.add_repository(Box::new(MockUpdateRepo {
+            id: "community".to_string(),
+            entries: vec![crate::repository::RepositoryPackageEntry {
+                id: "pkg-up".to_string(),
+                name: "Test Package".to_string(),
+                version: "1.0.0".to_string(),
+                package_type: PackageType::Rice,
+                description: "Test".to_string(),
+                manifest: "manifest.json".to_string(),
+                category: "rice".to_string(),
+                tags: vec![],
+                author: crate::repository::AuthorInfo {
+                    name: "Tester".to_string(),
+                    avatar: "".to_string(),
+                    verified: true,
+                },
+                color_palette: vec![],
+                hero_image: None,
+                screenshots: vec![],
+                featured: None,
+                trending: None,
+                rating: None,
+                downloads: None,
+                content_hash: None,
+                package_size_bytes: None,
+            }],
+            fail: false,
+            package_dirs: std::collections::HashMap::new(),
+        }));
+
+        let status = check_package_update_in("pkg-up", &sandbox.installed_dir, &mgr).unwrap();
+        assert_eq!(status.status, UpdateStatusKind::UpToDate);
+    }
+
+    // 15. Update is detected
+    #[test]
+    fn test_update_detected() {
+        let sandbox = TestSandbox::new("update-detected");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-detect",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let mut mgr = crate::repository::RepositoryManager::new();
+        mgr.add_repository(Box::new(MockUpdateRepo {
+            id: "community".to_string(),
+            entries: vec![crate::repository::RepositoryPackageEntry {
+                id: "pkg-detect".to_string(),
+                name: "Test Package".to_string(),
+                version: "1.2.0".to_string(),
+                package_type: PackageType::Rice,
+                description: "Test".to_string(),
+                manifest: "manifest.json".to_string(),
+                category: "rice".to_string(),
+                tags: vec![],
+                author: crate::repository::AuthorInfo {
+                    name: "Tester".to_string(),
+                    avatar: "".to_string(),
+                    verified: true,
+                },
+                color_palette: vec![],
+                hero_image: None,
+                screenshots: vec![],
+                featured: None,
+                trending: None,
+                rating: None,
+                downloads: None,
+                content_hash: None,
+                package_size_bytes: None,
+            }],
+            fail: false,
+            package_dirs: std::collections::HashMap::new(),
+        }));
+
+        let status = check_package_update_in("pkg-detect", &sandbox.installed_dir, &mgr).unwrap();
+        assert_eq!(status.status, UpdateStatusKind::UpdateAvailable);
+        assert_eq!(status.available_version, Some("1.2.0".to_string()));
+    }
+
+    // 16. Repository unavailable is not reported as up to date
+    #[test]
+    fn test_update_repository_unavailable_not_reported_as_up_to_date() {
+        let sandbox = TestSandbox::new("update-repo-unavailable");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "pkg-fail",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let mut mgr = crate::repository::RepositoryManager::new();
+        mgr.add_repository(Box::new(MockUpdateRepo {
+            id: "community".to_string(),
+            entries: vec![],
+            fail: true,
+            package_dirs: std::collections::HashMap::new(),
+        }));
+
+        let status = check_package_update_in("pkg-fail", &sandbox.installed_dir, &mgr).unwrap();
+        assert_eq!(status.status, UpdateStatusKind::RepositoryUnavailable);
+    }
+
+    // 17. Update preview creates correct CREATE entries
+    #[test]
+    fn test_update_preview_creates_correct_create_entries() {
+        let sandbox = TestSandbox::new("update-preview-create");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-up-test",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1 content")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-up-test",
+            "1.1.0",
+            &[
+                ("files/a.conf", "~/.config/app/a.conf", "v1 content"),
+                ("files/b.conf", "~/.config/app/b.conf", "new v2 file"),
+            ],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-up-test",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert_eq!(plan.creates, vec!["~/.config/app/b.conf"]);
+    }
+
+    // 18. Update preview creates correct REPLACE entries
+    #[test]
+    fn test_update_preview_creates_correct_replace_entries() {
+        let sandbox = TestSandbox::new("update-preview-replace");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-replace",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "version 1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-replace",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "version 2 modified")],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-replace",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert_eq!(plan.replaces, vec!["~/.config/app/a.conf"]);
+        assert!(plan.creates.is_empty());
+        assert!(!plan.has_conflicts);
+    }
+
+    // 19. Unchanged files are identified
+    #[test]
+    fn test_update_preview_unchanged_files_identified() {
+        let sandbox = TestSandbox::new("update-preview-unchanged");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-unchanged",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "same content")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-unchanged",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "same content")],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-unchanged",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert_eq!(plan.unchanged, vec!["~/.config/app/a.conf"]);
+        assert!(plan.replaces.is_empty());
+    }
+
+    // 20. Modified files become CONFLICT
+    #[test]
+    fn test_update_preview_modified_files_become_conflict() {
+        let sandbox = TestSandbox::new("update-preview-conflict");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-conf",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1 original")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // User edits file
+        fs::write(sandbox.home_dir.join(".config/app/a.conf"), "user edited").unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-conf",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v2 new")],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-conf",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert!(plan.has_conflicts);
+        assert_eq!(plan.conflicts, vec!["~/.config/app/a.conf"]);
+    }
+
+    // 21. Obsolete unmodified files are safely removed
+    #[test]
+    fn test_update_obsolete_unmodified_files_safely_removed() {
+        let sandbox = TestSandbox::new("update-obsolete-remove");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-obs",
+            "1.0.0",
+            &[
+                ("files/kept.conf", "~/.config/app/kept.conf", "kept content"),
+                (
+                    "files/obs.conf",
+                    "~/.config/app/obs.conf",
+                    "obsolete content",
+                ),
+            ],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-obs",
+            "1.1.0",
+            &[(
+                "files/kept.conf",
+                "~/.config/app/kept.conf",
+                "kept content v2",
+            )],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-obs",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert_eq!(plan.obsolete_removes, vec!["~/.config/app/obs.conf"]);
+
+        let res = apply_package_update_in(
+            "pkg-obs",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert!(res.success);
+        assert_eq!(res.obsolete_removed, vec!["~/.config/app/obs.conf"]);
+        assert!(!sandbox.home_dir.join(".config/app/obs.conf").exists());
+        assert!(sandbox.home_dir.join(".config/app/kept.conf").exists());
+    }
+
+    // 22. Obsolete modified files are retained
+    #[test]
+    fn test_update_obsolete_modified_files_retained() {
+        let sandbox = TestSandbox::new("update-obsolete-retain");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-obs-mod",
+            "1.0.0",
+            &[
+                ("files/kept.conf", "~/.config/app/kept.conf", "kept content"),
+                (
+                    "files/obs.conf",
+                    "~/.config/app/obs.conf",
+                    "obsolete content",
+                ),
+            ],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // User edits obs.conf
+        let obs_file = sandbox.home_dir.join(".config/app/obs.conf");
+        fs::write(&obs_file, "customized obsolete file").unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-obs-mod",
+            "1.1.0",
+            &[(
+                "files/kept.conf",
+                "~/.config/app/kept.conf",
+                "kept content v2",
+            )],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-obs-mod",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert_eq!(plan.obsolete_retains, vec!["~/.config/app/obs.conf"]);
+        assert!(plan.has_conflicts);
+
+        // Apply update with allow_conflicts = true so it proceeds while retaining conflicting file
+        let res = apply_package_update_in(
+            "pkg-obs-mod",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            true,
+            None,
+        )
+        .unwrap();
+
+        assert!(res.success);
+        // User-modified obsolete file MUST still exist!
+        assert!(obs_file.is_file());
+        assert_eq!(
+            fs::read_to_string(&obs_file).unwrap(),
+            "customized obsolete file"
+        );
+    }
+
+    // 23. Update does not modify filesystem during preview
+    #[test]
+    fn test_update_does_not_modify_filesystem_during_preview() {
+        let sandbox = TestSandbox::new("update-preview-readonly");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-readonly",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "initial content")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let file_path = sandbox.home_dir.join(".config/app/a.conf");
+        let before_content = fs::read_to_string(&file_path).unwrap();
+        let before_meta = fs::metadata(&file_path).unwrap().modified().unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-readonly",
+            "1.1.0",
+            &[(
+                "files/a.conf",
+                "~/.config/app/a.conf",
+                "new updated content",
+            )],
+            &[],
+        );
+
+        let _plan = preview_package_update_in(
+            "pkg-readonly",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        let after_content = fs::read_to_string(&file_path).unwrap();
+        let after_meta = fs::metadata(&file_path).unwrap().modified().unwrap();
+
+        assert_eq!(before_content, after_content);
+        assert_eq!(before_meta, after_meta);
+    }
+
+    // 24. Successful update refreshes installed metadata
+    #[test]
+    fn test_update_successful_refreshes_installed_metadata() {
+        let sandbox = TestSandbox::new("update-meta-refresh");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-refresh",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "content v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-refresh",
+            "1.2.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "content v2 updated")],
+            &[],
+        );
+
+        let res = apply_package_update_in(
+            "pkg-refresh",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert!(res.success);
+
+        let record = get_installed_package_in("pkg-refresh", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.version, "1.2.0");
+        assert_eq!(record.files.len(), 1);
+        let expected_hash = sha256_file(&sandbox.home_dir.join(".config/app/a.conf")).unwrap();
+        assert_eq!(record.files[0].sha256, expected_hash);
+    }
+
+    // 25. Failed update rolls back
+    #[test]
+    fn test_update_failed_rolls_back() {
+        let sandbox = TestSandbox::new("update-rollback");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-fail-rb",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app25/a.conf", "v1 original")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-fail-rb",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app25/a.conf", "v2 updated")],
+            &[],
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let file_a = sandbox.home_dir.join(".config/app25/a.conf");
+            fs::set_permissions(&file_a, fs::Permissions::from_mode(0o444)).unwrap();
+
+            let res = apply_package_update_in(
+                "pkg-fail-rb",
+                &sandbox.home_dir,
+                &sandbox.snapshots_dir,
+                &sandbox.installed_dir,
+                &sandbox.staging_dir,
+                &v2_dir,
+                &sys,
+                false,
+                None,
+            )
+            .unwrap();
+
+            assert!(res.rolled_back);
+            assert!(!res.success);
+
+            fs::set_permissions(&file_a, fs::Permissions::from_mode(0o644)).unwrap();
+
+            // Check original v1 content was restored
+            assert_eq!(fs::read_to_string(&file_a).unwrap(), "v1 original");
+        }
+    }
+
+    // 26. Rollback preserves old metadata
+    #[test]
+    fn test_update_rollback_preserves_old_metadata() {
+        let sandbox = TestSandbox::new("update-meta-preserve");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-preserve",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app26/a.conf", "v1 original")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-preserve",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app26/a.conf", "v2 updated")],
+            &[],
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let file_a = sandbox.home_dir.join(".config/app26/a.conf");
+            fs::set_permissions(&file_a, fs::Permissions::from_mode(0o444)).unwrap();
+
+            let _ = apply_package_update_in(
+                "pkg-preserve",
+                &sandbox.home_dir,
+                &sandbox.snapshots_dir,
+                &sandbox.installed_dir,
+                &sandbox.staging_dir,
+                &v2_dir,
+                &sys,
+                false,
+                None,
+            );
+
+            fs::set_permissions(&file_a, fs::Permissions::from_mode(0o644)).unwrap();
+
+            let record = get_installed_package_in("pkg-preserve", &sandbox.installed_dir)
+                .unwrap()
+                .unwrap();
+            assert_eq!(record.version, "1.0.0");
+        }
+    }
+
+    // 27. Update cannot bypass installer security validation
+    #[test]
+    fn test_update_cannot_bypass_installer_security_validation() {
+        let sandbox = TestSandbox::new("update-security-bypass");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-sec",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1 original")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // v2 specifies an invalid target outside allowed scope
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-sec",
+            "1.1.0",
+            &[("files/a.conf", "~/Documents/hacked.conf", "malicious write")],
+            &[],
+        );
+
+        let err = preview_package_update_in(
+            "pkg-sec",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("outside allowed configuration scope"));
+    }
+
+    // 28. Manifest identity mismatch is rejected
+    #[test]
+    fn test_update_manifest_identity_mismatch_rejected() {
+        let sandbox = TestSandbox::new("update-identity-mismatch");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-correct-id",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-DIFFERENT-id",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        let err = preview_package_update_in(
+            "pkg-correct-id",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("Manifest ID mismatch"));
+    }
+
+    // 29. Malicious target traversal is rejected
+    #[test]
+    fn test_update_malicious_target_traversal_rejected() {
+        let sandbox = TestSandbox::new("update-target-traversal");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-traversal",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-traversal",
+            "1.1.0",
+            &[(
+                "files/a.conf",
+                "~/.config/app/../../../etc/passwd",
+                "malicious",
+            )],
+            &[],
+        );
+
+        let err = preview_package_update_in(
+            "pkg-traversal",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("traversal") || err.contains("outside"));
+    }
+
+    // 30. Special files remain rejected
+    #[test]
+    fn test_update_special_files_remain_rejected() {
+        let sandbox = TestSandbox::new("update-special-files");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-special",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "content")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // Create v2 where source file is a directory rather than regular file
+        let v2_dir = sandbox.packages_dir.join("pkg-special-1.1.0");
+        fs::create_dir_all(&v2_dir).unwrap();
+        let manifest = r#"{
+  "id": "pkg-special",
+  "name": "Special Package",
+  "version": "1.1.0",
+  "ryzora_spec": "1",
+  "author": "Tester",
+  "package_type": "rice",
+  "description": "Test",
+  "tags": [],
+  "color_palette": [],
+  "compatibility": {
+    "desktops": ["hyprland"],
+    "sessions": ["wayland"],
+    "distros": ["arch"],
+    "required": [],
+    "optional": []
+  },
+  "files": [
+    {"source": "files/a_dir", "target": "~/.config/app/a.conf", "description": "a dir"}
+  ]
+}"#;
+        fs::write(v2_dir.join("manifest.json"), manifest).unwrap();
+        fs::create_dir_all(v2_dir.join("files/a_dir")).unwrap();
+
+        let err = preview_package_update_in(
+            "pkg-special",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.contains("regular file")
+                || err.contains("not a regular file")
+                || err.contains("directory")
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PHASE 7.1 SPECIFIC SAFETY TESTS (1 - 14)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // 1. installed symlink with unchanged target can be uninstalled
+    #[test]
+    fn test_uninstall_installed_symlink_unchanged_target_removed() {
+        let sandbox = TestSandbox::new("symlink-uninstall-ok");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_package_with_symlinks(
+            "pkg-sym-ok",
+            "1.0.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "main content")],
+            &[("files/link.conf", "~/.config/app/link.conf", "main.conf")],
+        );
+
+        let res = install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+        assert!(res.success);
+
+        // Verify symlink is on disk and has target
+        let link_path = sandbox.home_dir.join(".config/app/link.conf");
+        assert!(fs::symlink_metadata(&link_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+
+        // Uninstall package
+        let uninst = uninstall_package_in(
+            "pkg-sym-ok",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst.success);
+        assert!(!link_path.exists());
+        assert!(!sandbox.home_dir.join(".config/app/main.conf").exists());
+        assert!(uninst.conflict_files.is_empty());
+        assert!(uninst
+            .removed_files
+            .contains(&"~/.config/app/link.conf".to_string()));
+    }
+
+    // 2. installed symlink changed to another target becomes conflict
+    #[test]
+    fn test_uninstall_installed_symlink_changed_target_becomes_conflict() {
+        let sandbox = TestSandbox::new("symlink-target-changed");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_package_with_symlinks(
+            "pkg-sym-chg",
+            "1.0.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "content")],
+            &[("files/link.conf", "~/.config/app/link.conf", "main.conf")],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // User changes symlink to point to another file
+        let link_path = sandbox.home_dir.join(".config/app/link.conf");
+        fs::remove_file(&link_path).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("other_file.conf", &link_path).unwrap();
+
+        // Uninstall package
+        let uninst = uninstall_package_in(
+            "pkg-sym-chg",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst.success);
+        // Link must be retained as conflict! NEVER delete user-modified symlink target!
+        assert!(uninst
+            .conflict_files
+            .contains(&"~/.config/app/link.conf".to_string()));
+        assert!(fs::symlink_metadata(&link_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        #[cfg(unix)]
+        assert_eq!(
+            fs::read_link(&link_path).unwrap().to_str().unwrap(),
+            "other_file.conf"
+        );
+    }
+
+    // 3. installed symlink replaced with regular file becomes conflict
+    #[test]
+    fn test_uninstall_installed_symlink_replaced_with_regular_file_becomes_conflict() {
+        let sandbox = TestSandbox::new("symlink-replaced-reg");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_package_with_symlinks(
+            "pkg-sym-rep",
+            "1.0.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "content")],
+            &[("files/link.conf", "~/.config/app/link.conf", "main.conf")],
+        );
+
+        install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // User replaces symlink with regular file
+        let link_path = sandbox.home_dir.join(".config/app/link.conf");
+        fs::remove_file(&link_path).unwrap();
+        fs::write(&link_path, "regular file replacing symlink").unwrap();
+
+        let uninst = uninstall_package_in(
+            "pkg-sym-rep",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst.success);
+        assert!(uninst
+            .conflict_files
+            .contains(&"~/.config/app/link.conf".to_string()));
+        assert!(link_path.is_file());
+        assert_eq!(
+            fs::read_to_string(&link_path).unwrap(),
+            "regular file replacing symlink"
+        );
+    }
+
+    // 4. obsolete symlink with unchanged target is removed
+    #[test]
+    fn test_update_obsolete_symlink_unchanged_target_removed() {
+        let sandbox = TestSandbox::new("obs-sym-removed");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_package_with_symlinks(
+            "pkg-obs-sym",
+            "1.0.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "v1 content")],
+            &[(
+                "files/obs_link.conf",
+                "~/.config/app/obs_link.conf",
+                "main.conf",
+            )],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let link_path = sandbox.home_dir.join(".config/app/obs_link.conf");
+        assert!(fs::symlink_metadata(&link_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+
+        // v2 drops the obsolete symlink
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-obs-sym",
+            "1.1.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "v2 content")],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-obs-sym",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert!(plan
+            .obsolete_removes
+            .contains(&"~/.config/app/obs_link.conf".to_string()));
+        assert!(!plan.has_conflicts);
+
+        let res = apply_package_update_in(
+            "pkg-obs-sym",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert!(res.success);
+        assert!(res
+            .obsolete_removed
+            .contains(&"~/.config/app/obs_link.conf".to_string()));
+        assert!(!link_path.exists());
+    }
+
+    // 5. obsolete symlink with changed target is retained
+    #[test]
+    fn test_update_obsolete_symlink_changed_target_retained() {
+        let sandbox = TestSandbox::new("obs-sym-retained");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_package_with_symlinks(
+            "pkg-obs-mod-sym",
+            "1.0.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "v1 content")],
+            &[(
+                "files/obs_link.conf",
+                "~/.config/app/obs_link.conf",
+                "main.conf",
+            )],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let link_path = sandbox.home_dir.join(".config/app/obs_link.conf");
+        // User points obsolete symlink to custom config
+        fs::remove_file(&link_path).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("custom_target.conf", &link_path).unwrap();
+
+        // v2 drops obsolete symlink
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-obs-mod-sym",
+            "1.1.0",
+            &[("files/main.conf", "~/.config/app/main.conf", "v2 content")],
+            &[],
+        );
+
+        let plan = preview_package_update_in(
+            "pkg-obs-mod-sym",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &v2_dir,
+        )
+        .unwrap();
+
+        assert!(plan
+            .obsolete_retains
+            .contains(&"~/.config/app/obs_link.conf".to_string()));
+        assert!(plan.has_conflicts);
+
+        // Applying without allow_conflicts must fail
+        let err = apply_package_update_in(
+            "pkg-obs-mod-sym",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("conflicting user-modified files"));
+
+        // Applying with allow_conflicts proceeds while retaining user modified symlink
+        let res = apply_package_update_in(
+            "pkg-obs-mod-sym",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            true,
+            None,
+        )
+        .unwrap();
+
+        assert!(res.success);
+        assert!(res
+            .conflicts_retained
+            .contains(&"~/.config/app/obs_link.conf".to_string()));
+        assert!(fs::symlink_metadata(&link_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        #[cfg(unix)]
+        assert_eq!(
+            fs::read_link(&link_path).unwrap().to_str().unwrap(),
+            "custom_target.conf"
+        );
+    }
+
+    // 6. legacy symlink metadata without recorded target is retained/refused
+    #[test]
+    fn test_legacy_symlink_metadata_without_recorded_target_retained_as_conflict() {
+        let sandbox = TestSandbox::new("legacy-sym-unverifiable");
+
+        let link_target = sandbox.home_dir.join(".config/app/link.conf");
+        if let Some(p) = link_target.parent() {
+            fs::create_dir_all(p).unwrap();
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("target.conf", &link_target).unwrap();
+
+        // Write legacy record with is_symlink: true but symlink_target: None
+        let record = InstalledPackageRecord {
+            package_id: "pkg-legacy-sym".to_string(),
+            name: "Legacy Symlink Package".to_string(),
+            version: "1.0.0".to_string(),
+            package_type: Some(PackageType::Rice),
+            repository_id: None,
+            installed_at: 1000,
+            snapshot_id: "dummy".to_string(),
+            installed_files: vec!["~/.config/app/link.conf".to_string()],
+            files: vec![InstalledFileEntry {
+                target: "~/.config/app/link.conf".to_string(),
+                sha256: String::new(),
+                is_symlink: true,
+                symlink_target: None, // legacy record
+            }],
+            package_source_path: "/dummy".to_string(),
+        };
+
+        let record_json = serde_json::to_string(&record).unwrap();
+        fs::write(
+            sandbox.installed_dir.join("pkg-legacy-sym.json"),
+            record_json,
+        )
+        .unwrap();
+
+        // Uninstalling must NOT delete the unverifiable symlink
+        let uninst = uninstall_package_in(
+            "pkg-legacy-sym",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        )
+        .unwrap();
+
+        assert!(uninst.success);
+        assert!(uninst
+            .conflict_files
+            .contains(&"~/.config/app/link.conf".to_string()));
+        assert!(fs::symlink_metadata(&link_target)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
+
+    // 7. update from correct recorded repository
+    #[test]
+    fn test_update_from_correct_recorded_repository() {
+        let sandbox = TestSandbox::new("update-correct-repo");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package(
+            "pkg-repo-sel",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // Set repository_id in record to "repo-main"
+        let record_path = sandbox.installed_dir.join("pkg-repo-sel.json");
+        let mut rec: InstalledPackageRecord =
+            serde_json::from_str(&fs::read_to_string(&record_path).unwrap()).unwrap();
+        rec.repository_id = Some("repo-main".to_string());
+        fs::write(&record_path, serde_json::to_string(&rec).unwrap()).unwrap();
+
+        // Setup 2 repos: repo-main (v2.0.0) and repo-other (v3.0.0)
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-repo-sel",
+            "2.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v2 repo-main")],
+            &[],
+        );
+        let v3_dir = sandbox.create_sample_package_with_version(
+            "pkg-repo-sel",
+            "3.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v3 repo-other")],
+            &[],
+        );
+
+        let mut mgr = crate::repository::RepositoryManager::new();
+        mgr.add_repository(Box::new(
+            MockUpdateRepo::new(
+                "repo-main",
+                vec![crate::repository::RepositoryPackageEntry {
+                    id: "pkg-repo-sel".to_string(),
+                    name: "Repo Sel".to_string(),
+                    version: "2.0.0".to_string(),
+                    package_type: PackageType::Rice,
+                    description: "Main".to_string(),
+                    manifest: "manifest.json".to_string(),
+                    category: "rice".to_string(),
+                    tags: vec![],
+                    author: crate::repository::AuthorInfo {
+                        name: "Tester".to_string(),
+                        avatar: "".to_string(),
+                        verified: true,
+                    },
+                    color_palette: vec![],
+                    hero_image: None,
+                    screenshots: vec![],
+                    featured: None,
+                    trending: None,
+                    rating: None,
+                    downloads: None,
+                    content_hash: None,
+                    package_size_bytes: None,
+                }],
+            )
+            .with_dir("pkg-repo-sel", v2_dir.clone()),
+        ));
+
+        mgr.add_repository(Box::new(
+            MockUpdateRepo::new(
+                "repo-other",
+                vec![crate::repository::RepositoryPackageEntry {
+                    id: "pkg-repo-sel".to_string(),
+                    name: "Repo Sel".to_string(),
+                    version: "3.0.0".to_string(),
+                    package_type: PackageType::Rice,
+                    description: "Other".to_string(),
+                    manifest: "manifest.json".to_string(),
+                    category: "rice".to_string(),
+                    tags: vec![],
+                    author: crate::repository::AuthorInfo {
+                        name: "Tester".to_string(),
+                        avatar: "".to_string(),
+                        verified: true,
+                    },
+                    color_palette: vec![],
+                    hero_image: None,
+                    screenshots: vec![],
+                    featured: None,
+                    trending: None,
+                    rating: None,
+                    downloads: None,
+                    content_hash: None,
+                    package_size_bytes: None,
+                }],
+            )
+            .with_dir("pkg-repo-sel", v3_dir),
+        ));
+
+        let (resolved_dir, resolved_repo, version) =
+            resolve_update_package("pkg-repo-sel", &sandbox.installed_dir, &mgr).unwrap();
+
+        assert_eq!(resolved_repo, "repo-main");
+        assert_eq!(version, "2.0.0");
+        assert_eq!(resolved_dir, v2_dir);
+    }
+
+    // 8. duplicate package IDs across repositories do not cause arbitrary update selection
+    #[test]
+    fn test_update_duplicate_package_ids_across_repositories_refuses_arbitrary_selection() {
+        let sandbox = TestSandbox::new("update-dup-refused");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package(
+            "pkg-dup",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // Installed record has NO repository_id
+        let mut mgr = crate::repository::RepositoryManager::new();
+        mgr.add_repository(Box::new(MockUpdateRepo::new(
+            "repo-a",
+            vec![crate::repository::RepositoryPackageEntry {
+                id: "pkg-dup".to_string(),
+                name: "Dup".to_string(),
+                version: "1.5.0".to_string(),
+                package_type: PackageType::Rice,
+                description: "Repo A".to_string(),
+                manifest: "manifest.json".to_string(),
+                category: "rice".to_string(),
+                tags: vec![],
+                author: crate::repository::AuthorInfo {
+                    name: "Tester".to_string(),
+                    avatar: "".to_string(),
+                    verified: true,
+                },
+                color_palette: vec![],
+                hero_image: None,
+                screenshots: vec![],
+                featured: None,
+                trending: None,
+                rating: None,
+                downloads: None,
+                content_hash: None,
+                package_size_bytes: None,
+            }],
+        )));
+        mgr.add_repository(Box::new(MockUpdateRepo::new(
+            "repo-b",
+            vec![crate::repository::RepositoryPackageEntry {
+                id: "pkg-dup".to_string(),
+                name: "Dup".to_string(),
+                version: "1.6.0".to_string(),
+                package_type: PackageType::Rice,
+                description: "Repo B".to_string(),
+                manifest: "manifest.json".to_string(),
+                category: "rice".to_string(),
+                tags: vec![],
+                author: crate::repository::AuthorInfo {
+                    name: "Tester".to_string(),
+                    avatar: "".to_string(),
+                    verified: true,
+                },
+                color_palette: vec![],
+                hero_image: None,
+                screenshots: vec![],
+                featured: None,
+                trending: None,
+                rating: None,
+                downloads: None,
+                content_hash: None,
+                package_size_bytes: None,
+            }],
+        )));
+
+        let err = resolve_update_package("pkg-dup", &sandbox.installed_dir, &mgr).unwrap_err();
+        assert!(err.contains("Ambiguous update") || err.contains("multiple repositories"));
+    }
+
+    // 9. update with same version is refused
+    #[test]
+    fn test_update_with_same_version_refused() {
+        let sandbox = TestSandbox::new("update-same-ver");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-same",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let err = apply_package_update_in(
+            "pkg-same",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v1_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("already at version") || err.contains("1.0.0"));
+    }
+
+    // 10. downgrade attempt is refused
+    #[test]
+    fn test_update_downgrade_attempt_refused() {
+        let sandbox = TestSandbox::new("update-downgrade");
+        let sys = TestSandbox::mock_system();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-down",
+            "2.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v2")],
+            &[],
+        );
+
+        install_package_in(
+            &v2_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-down",
+            "1.5.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1.5")],
+            &[],
+        );
+
+        let err = apply_package_update_in(
+            "pkg-down",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v1_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("Downgrade attempt refused"));
+    }
+
+    // 11. repository package unavailable is refused
+    #[test]
+    fn test_update_repository_package_unavailable_refused() {
+        let sandbox = TestSandbox::new("update-repo-unavail");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package(
+            "pkg-unavail",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let record_path = sandbox.installed_dir.join("pkg-unavail.json");
+        let mut rec: InstalledPackageRecord =
+            serde_json::from_str(&fs::read_to_string(&record_path).unwrap()).unwrap();
+        rec.repository_id = Some("missing-repository".to_string());
+        fs::write(&record_path, serde_json::to_string(&rec).unwrap()).unwrap();
+
+        let mgr = crate::repository::RepositoryManager::new();
+        let err = resolve_update_package("pkg-unavail", &sandbox.installed_dir, &mgr).unwrap_err();
+        assert!(
+            err.contains("unavailable or not configured") || err.contains("missing-repository")
+        );
+    }
+
+    // 12. successful update records the actual repository ID
+    #[test]
+    fn test_update_successful_records_actual_repository_id() {
+        let sandbox = TestSandbox::new("update-records-repo-id");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-rec-rep",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-rec-rep",
+            "1.1.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v2")],
+            &[],
+        );
+
+        let res = apply_package_update_in(
+            "pkg-rec-rep",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            false,
+            Some("community-custom".to_string()),
+        )
+        .unwrap();
+
+        assert!(res.success);
+
+        // Verify updated record has repository_id = "community-custom"
+        let record = get_installed_package_in("pkg-rec-rep", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.repository_id, Some("community-custom".to_string()));
+        assert_eq!(record.version, "1.1.0");
+    }
+
+    // 13. successful update records symlink targets
+    #[test]
+    fn test_update_successful_records_symlink_targets() {
+        let sandbox = TestSandbox::new("update-records-symlinks");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_sample_package_with_version(
+            "pkg-sym-rec",
+            "1.0.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v1")],
+            &[],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        // v2 introduces a symlink
+        let v2_dir = sandbox.create_package_with_symlinks(
+            "pkg-sym-rec",
+            "1.2.0",
+            &[("files/a.conf", "~/.config/app/a.conf", "v2")],
+            &[("files/link.conf", "~/.config/app/link.conf", "a.conf")],
+        );
+
+        let res = apply_package_update_in(
+            "pkg-sym-rec",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &v2_dir,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert!(res.success);
+
+        let record = get_installed_package_in("pkg-sym-rec", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        let sym_entry = record
+            .files
+            .iter()
+            .find(|f| f.target == "~/.config/app/link.conf")
+            .unwrap();
+        assert!(sym_entry.is_symlink);
+        assert_eq!(sym_entry.symlink_target, Some("a.conf".to_string()));
+    }
+
+    // 14. update rollback preserves old symlink and metadata
+    #[test]
+    fn test_update_rollback_preserves_old_symlink_and_metadata() {
+        let sandbox = TestSandbox::new("update-rb-symlink");
+        let sys = TestSandbox::mock_system();
+
+        let v1_dir = sandbox.create_package_with_symlinks(
+            "pkg-sym-rb",
+            "1.0.0",
+            &[(
+                "files/main.conf",
+                "~/.config/app_rb/main.conf",
+                "v1 content",
+            )],
+            &[("files/link.conf", "~/.config/app_rb/link.conf", "main.conf")],
+        );
+
+        install_package_in(
+            &v1_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+
+        let link_path = sandbox.home_dir.join(".config/app_rb/link.conf");
+        assert!(fs::symlink_metadata(&link_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        #[cfg(unix)]
+        assert_eq!(
+            fs::read_link(&link_path).unwrap().to_str().unwrap(),
+            "main.conf"
+        );
+
+        // v2 introduces b.conf, but we make ~/.config/app_rb read-only before copy so update fails and rolls back
+        let v2_dir = sandbox.create_sample_package_with_version(
+            "pkg-sym-rb",
+            "1.1.0",
+            &[
+                (
+                    "files/main.conf",
+                    "~/.config/app_rb/main.conf",
+                    "v2 updated",
+                ),
+                (
+                    "files/fail.conf",
+                    "~/.config/app_rb/fail.conf",
+                    "should fail",
+                ),
+            ],
+            &[],
+        );
+
+        // Make main.conf read-only to force write failure during update application
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let file_main = sandbox.home_dir.join(".config/app_rb/main.conf");
+            fs::set_permissions(&file_main, fs::Permissions::from_mode(0o444)).unwrap();
+
+            let res = apply_package_update_in(
+                "pkg-sym-rb",
+                &sandbox.home_dir,
+                &sandbox.snapshots_dir,
+                &sandbox.installed_dir,
+                &sandbox.staging_dir,
+                &v2_dir,
+                &sys,
+                false,
+                None,
+            )
+            .unwrap();
+
+            assert!(!res.success);
+            assert!(res.rolled_back);
+
+            // Restore permissions
+            fs::set_permissions(&file_main, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+
+        // Original symlink must be preserved and still point to original target!
+        assert!(fs::symlink_metadata(&link_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        #[cfg(unix)]
+        assert_eq!(
+            fs::read_link(&link_path).unwrap().to_str().unwrap(),
+            "main.conf"
+        );
+
+        // Old metadata preserved
+        let record = get_installed_package_in("pkg-sym-rb", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.version, "1.0.0");
     }
 }

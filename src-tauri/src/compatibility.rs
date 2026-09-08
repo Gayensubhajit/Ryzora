@@ -1,6 +1,6 @@
+use crate::system::SystemInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::system::SystemInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatibilityRequirements {
@@ -96,8 +96,7 @@ pub fn evaluate_compatibility(
             code: "SESSION_MISMATCH".to_string(),
             message: format!(
                 "Package requires session [{}] but current session is {}",
-                req_str,
-                sys.session_type
+                req_str, sys.session_type
             ),
             target: Some(sys.session_type.clone()),
         });
@@ -109,7 +108,12 @@ pub fn evaluate_compatibility(
     let desktop_compatible = reqs.supported_desktops.is_empty()
         || reqs.supported_desktops.iter().any(|d| {
             let dl = d.to_lowercase();
-            dl == "universal" || dl == "all" || dl == wm || dl == de || wm.contains(&dl) || de.contains(&dl)
+            dl == "universal"
+                || dl == "all"
+                || dl == wm
+                || dl == de
+                || wm.contains(&dl)
+                || de.contains(&dl)
         });
 
     if !desktop_compatible {
@@ -170,14 +174,22 @@ pub fn evaluate_compatibility(
 
     // 5. Determine Overall Level & Quiet Summary Label
     let (level, score, summary_label) = if !desktop_compatible {
-        let first_target = reqs.supported_desktops.first().cloned().unwrap_or_else(|| "other".to_string());
+        let first_target = reqs
+            .supported_desktops
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "other".to_string());
         (
             CompatibilityLevel::IncompatibleDesktop,
             20,
             format!("Requires {}", capitalize(&first_target)),
         )
     } else if !session_compatible {
-        let req_sess = reqs.supported_sessions.first().cloned().unwrap_or_else(|| "Wayland".to_string());
+        let req_sess = reqs
+            .supported_sessions
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Wayland".to_string());
         (
             CompatibilityLevel::IncompatibleSession,
             30,

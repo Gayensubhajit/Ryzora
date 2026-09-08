@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
+import { ArrowUpDown } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { PackageCard } from "../components/PackageCard";
 import { CategoryId } from "../types";
@@ -43,46 +44,95 @@ const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
   system: { title: "System", subtitle: "System diagnostics" },
 };
 
+function compareSemver(v1: string, v2: string): number {
+  const parse = (v: string) =>
+    v
+      .replace(/^v/, "")
+      .split("-")[0]
+      .split(".")
+      .map((n) => parseInt(n, 10) || 0);
+  const p1 = parse(v1);
+  const p2 = parse(v2);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
 export const CategoryView: React.FC = () => {
   const { packages, activeCategory, searchQuery, desktopFilter } = useApp();
+  const [sortBy, setSortBy] = useState<"rating" | "downloads" | "name" | "newest">("downloads");
 
   const meta = CATEGORY_META[activeCategory] || {
     title: "Category",
     subtitle: "Browse packages",
   };
 
-  const categoryPackages = packages.filter((pkg) => {
-    const matchesCategory = pkg.category === activeCategory;
+  const categoryPackages = useMemo(() => {
+    let list = packages.filter((pkg) => {
+      const matchesCategory = pkg.category === activeCategory;
 
-    const matchesSearch =
-      !searchQuery ||
-      pkg.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      pkg.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      pkg.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesSearch =
+        !searchQuery ||
+        pkg.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.author.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesDesktop =
-      desktopFilter === "all" ||
-      pkg.supported_desktops.includes("universal") ||
-      pkg.supported_desktops.includes(desktopFilter);
+      const matchesDesktop =
+        desktopFilter === "all" ||
+        pkg.supported_desktops.includes("universal") ||
+        pkg.supported_desktops.includes(desktopFilter);
 
-    return matchesCategory && matchesSearch && matchesDesktop;
-  });
+      return matchesCategory && matchesSearch && matchesDesktop;
+    });
+
+    list = [...list].sort((a, b) => {
+      if (sortBy === "rating") return b.rating - a.rating;
+      if (sortBy === "downloads") return b.downloads - a.downloads;
+      if (sortBy === "name") return a.title.localeCompare(b.title);
+      if (sortBy === "newest") return compareSemver(b.version, a.version);
+      return 0;
+    });
+
+    return list;
+  }, [packages, activeCategory, searchQuery, desktopFilter, sortBy]);
 
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
-      <div className="p-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-        <h1 className="text-lg font-bold text-[var(--text-primary)] mb-1">
-          {meta.title}
-        </h1>
-        <p className="text-xs text-[var(--text-muted)]">
-          {meta.subtitle}
-        </p>
+      <div className="p-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-bold text-[var(--text-primary)] mb-1">
+            {meta.title}
+          </h1>
+          <p className="text-xs text-[var(--text-muted)]">
+            {meta.subtitle}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 self-start sm:self-center">
+          <ArrowUpDown className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] outline-none text-[11px]"
+          >
+            <option value="downloads">Most Downloads</option>
+            <option value="rating">Highest Rated</option>
+            <option value="name">Name (A-Z)</option>
+            <option value="newest">Newest Version</option>
+          </select>
+        </div>
       </div>
 
       {/* Grid */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
+        <div className="flex items-center justify-between text-xs text-[var(--text-faint)] font-mono">
           <span>{categoryPackages.length} packages</span>
         </div>
 

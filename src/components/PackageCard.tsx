@@ -1,5 +1,5 @@
 import React from "react";
-import { Star } from "lucide-react";
+import { Star, ShieldCheck } from "lucide-react";
 import { PackageItem } from "../types";
 import { useApp } from "../context/AppContext";
 
@@ -7,10 +7,37 @@ interface PackageCardProps {
   packageItem: PackageItem;
 }
 
-export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
-  const { setSelectedPackage, installedPackageIds, checkCompatibility } = useApp();
+function compareSemver(v1: string, v2: string): number {
+  const parse = (v: string) =>
+    v
+      .replace(/^v/, "")
+      .split("-")[0]
+      .split(".")
+      .map((n) => parseInt(n, 10) || 0);
+  const p1 = parse(v1);
+  const p2 = parse(v2);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
 
-  const isInstalled = installedPackageIds.includes(packageItem.id);
+export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
+  const { setSelectedPackage, installedPackages, checkCompatibility, repositories } = useApp();
+
+  const installedRecord = installedPackages.find((p) => p.package_id === packageItem.id);
+  const isInstalled = !!installedRecord;
+  const isUpdateAvailable =
+    isInstalled && installedRecord
+      ? compareSemver(packageItem.version, installedRecord.version) > 0
+      : false;
+
+  const repo = repositories.find((r) => r.id === packageItem.repository_id);
+  const isOffline = repo && repo.status === "offline" && !packageItem.is_cached;
+
   const compat = checkCompatibility(packageItem);
 
   const componentNames = packageItem.components
@@ -31,11 +58,38 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
           className="w-full h-full object-cover object-center group-hover:opacity-95 transition-opacity"
           loading="lazy"
         />
-        {isInstalled && (
+
+        {/* Top-Left: Integrity / Cache / Offline indicator */}
+        <div className="absolute top-2 left-2 flex items-center gap-1">
+          {packageItem.safety_audit?.rating === "verified" || packageItem.integrity_status === "verified" ? (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"
+              title="Cryptographically verified SHA-256 tree hash"
+            >
+              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              <span>Verified</span>
+            </div>
+          ) : isOffline ? (
+            <div className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-amber-400 border border-amber-500/30">
+              Offline
+            </div>
+          ) : packageItem.is_cached ? (
+            <div className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-[var(--text-muted)] border border-[var(--border-subtle)]">
+              Cached
+            </div>
+          ) : null}
+        </div>
+
+        {/* Top-Right: Installation State */}
+        {isUpdateAvailable ? (
+          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-amber-400 border border-amber-500/30">
+            Update v{packageItem.version}
+          </div>
+        ) : isInstalled ? (
           <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-emerald-400 border border-emerald-500/30">
             Installed
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Card Content */}

@@ -9,9 +9,19 @@ import {
   FilePlus,
   FileEdit,
   FileCheck,
+  Trash2,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { InstallationPlan } from "../types";
+import {
+  InstallationPlan,
+  UninstallResult,
+  PackageUpdateStatus,
+  UpdatePlan,
+  UpdateResult,
+} from "../types";
 
 export const PackageDetailModal: React.FC = () => {
   const {
@@ -27,6 +37,12 @@ export const PackageDetailModal: React.FC = () => {
     snapshots,
     rollbackSnapshot,
     checkCompatibility,
+    installedPackages,
+    uninstallPackage,
+    checkPackageUpdate,
+    previewPackageUpdate,
+    applyPackageUpdate,
+    setToast,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<"overview" | "manifest" | "dependencies">("overview");
@@ -39,6 +55,22 @@ export const PackageDetailModal: React.FC = () => {
   const [installCompleted, setInstallCompleted] = useState<boolean>(false);
   const [installedSnapshotId, setInstalledSnapshotId] = useState<string | null>(null);
 
+  // Uninstall flow states
+  const [showUninstall, setShowUninstall] = useState<boolean>(false);
+  const [isUninstalling, setIsUninstalling] = useState<boolean>(false);
+  const [uninstallResult, setUninstallResult] = useState<UninstallResult | null>(null);
+  const [uninstallError, setUninstallError] = useState<string | null>(null);
+
+  // Update flow states
+  const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
+  const [updateStatus, setUpdateStatus] = useState<PackageUpdateStatus | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+  const [loadingUpdatePlan, setLoadingUpdatePlan] = useState<boolean>(false);
+  const [updatePlan, setUpdatePlan] = useState<UpdatePlan | null>(null);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
   if (!selectedPackage) return null;
 
   const isInstalled = installedPackageIds.includes(selectedPackage.id);
@@ -46,6 +78,73 @@ export const PackageDetailModal: React.FC = () => {
     (s) => s.label === (selectedPackage.manifest?.name ?? selectedPackage.title)
   );
   const compat = checkCompatibility(selectedPackage);
+  const installedRecord = installedPackages.find((p) => p.package_id === selectedPackage.id);
+  const isLegacyRecord = installedRecord && (!installedRecord.files || installedRecord.files.length === 0);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const status = await checkPackageUpdate(selectedPackage.id);
+      setUpdateStatus(status);
+      if (status.status === "update_available") {
+        handleOpenUpdateModal();
+      }
+    } catch (e: any) {
+      console.error("Update check failed:", e);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleOpenUpdateModal = async () => {
+    setShowUpdateModal(true);
+    setLoadingUpdatePlan(true);
+    setUpdateError(null);
+    setUpdateResult(null);
+    try {
+      const p = await previewPackageUpdate(selectedPackage.id);
+      setUpdatePlan(p);
+    } catch (e: any) {
+      setUpdateError(e?.message ?? String(e));
+    } finally {
+      setLoadingUpdatePlan(false);
+    }
+  };
+
+  const handleConfirmUpdate = async () => {
+    setIsUpdating(true);
+    setUpdateError(null);
+    try {
+      const res = await applyPackageUpdate(selectedPackage.id);
+      setUpdateResult(res);
+      if (res.success) {
+        setUpdateStatus(null);
+      }
+    } catch (e: any) {
+      setUpdateError(e?.message ?? String(e));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleOpenUninstall = () => {
+    setShowUninstall(true);
+    setUninstallError(null);
+    setUninstallResult(null);
+  };
+
+  const handleConfirmUninstall = async () => {
+    setIsUninstalling(true);
+    setUninstallError(null);
+    try {
+      const res = await uninstallPackage(selectedPackage.id);
+      setUninstallResult(res);
+    } catch (e: any) {
+      setUninstallError(e?.message ?? String(e));
+    } finally {
+      setIsUninstalling(false);
+    }
+  };
 
   const handleOpenPreview = async () => {
     setLoadingPlan(true);
@@ -53,26 +152,13 @@ export const PackageDetailModal: React.FC = () => {
     try {
       const p = await previewInstallation(selectedPackage.id);
       setPlan(p);
-    } catch {
-      // If preview fails (e.g. package not in local repo), generate client fallback plan
-      const manifestFiles = selectedPackage.manifest?.files ?? [];
-      const targets = manifestFiles.length > 0
-        ? manifestFiles.map((f) => f.target)
-        : selectedPackage.components.map((c) => c.target_path);
-
-      setPlan({
-        package_id: selectedPackage.id,
-        package_name: selectedPackage.title,
-        package_version: selectedPackage.version,
-        files_to_create: targets,
-        files_to_replace: [],
-        files_unchanged: [],
-        directories_to_create: [],
-        conflicts: [],
-        compatibility_status: compat.missing_required_apps.length > 0 ? "missing_dependencies" : "compatible",
-        required_dependencies: selectedPackage.dependencies.packages,
-        missing_dependencies: compat.missing_required_apps,
-        warnings: [],
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setPlan(null);
+      setShowPreview(false);
+      setToast({
+        message: `Preview failed: ${msg}`,
+        type: "warning",
       });
     } finally {
       setLoadingPlan(false);
@@ -93,8 +179,13 @@ export const PackageDetailModal: React.FC = () => {
 
   const handleClose = () => {
     setShowPreview(false);
-    setInstallCompleted(false);
+    setShowUninstall(false);
+    setShowUpdateModal(false);
     setPlan(null);
+    setUpdatePlan(null);
+    setUninstallResult(null);
+    setUpdateResult(null);
+    setInstallCompleted(false);
     setSelectedPackage(null);
   };
 
@@ -177,6 +268,231 @@ export const PackageDetailModal: React.FC = () => {
                 >
                   Done
                 </button>
+              </div>
+            </div>
+          ) : showUninstall ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                      Safe Package Uninstall
+                    </h2>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                      Review tracked files and safety guarantees before removal.
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                    v{installedRecord?.version ?? selectedPackage.version}
+                  </span>
+                </div>
+
+                {isLegacyRecord ? (
+                  <div className="p-3 rounded bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span>Legacy Metadata Detected</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-amber-200/90">
+                      This package was installed before cryptographic checksum verification was available. Automated uninstall cannot verify ownership of these files. To prevent accidental data loss, automated deletion is refused. Please remove your configuration files manually or reinstall this package through the current installer.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-medium text-[var(--text-secondary)]">
+                        Tracked files ({installedRecord?.files?.length ?? 0}):
+                      </div>
+                      <div className="max-h-36 overflow-y-auto rounded bg-black/40 border border-[var(--border-subtle)] p-2 font-mono text-[11px] text-[var(--text-muted)] space-y-1">
+                        {installedRecord?.files && installedRecord.files.length > 0 ? (
+                          installedRecord.files.map((f, idx) => (
+                            <div key={idx} className="flex items-center justify-between">
+                              <span className="text-zinc-300 truncate">{f.target}</span>
+                              <span className="text-[10px] text-zinc-500 font-mono">
+                                {f.sha256.slice(0, 8)}...
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-zinc-500">No tracked files listed</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded bg-blue-950/20 border border-blue-800/30 text-blue-300 text-[11px] space-y-1">
+                      <div className="flex items-center gap-1 font-semibold text-blue-200">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Zero-Loss Protection Guarantee</span>
+                      </div>
+                      <p className="text-blue-300/90 leading-relaxed">
+                        If you have modified any of these files on your system after installation, Ryzora's checksum engine will detect the modification, preserve the file on disk, and retain it as a conflict. It will never be deleted.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded bg-emerald-950/20 border border-emerald-800/30 text-emerald-300 text-[11px] space-y-1">
+                      <div className="flex items-center gap-1 font-semibold text-emerald-200">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Verified Pre-Uninstall Snapshot</span>
+                      </div>
+                      <p className="text-emerald-300/90 leading-relaxed">
+                        A full verified backup snapshot of all files will be recorded before any deletions occur. In the unlikely event of an error, rollback will restore all files automatically.
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {uninstallError && (
+                  <div className="p-2.5 rounded bg-red-950/30 border border-red-800/40 text-red-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>{uninstallError}</span>
+                  </div>
+                )}
+
+                {uninstallResult && (
+                  <div className="p-3 rounded bg-zinc-900 border border-emerald-500/40 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Uninstall Completed Successfully</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)] space-y-0.5 font-mono">
+                      <div>Removed files: {uninstallResult.removed_files.length}</div>
+                      {uninstallResult.conflict_files.length > 0 && (
+                        <div className="text-amber-400 font-semibold">
+                          Retained modified user files: {uninstallResult.conflict_files.join(", ")}
+                        </div>
+                      )}
+                      {uninstallResult.already_missing_files.length > 0 && (
+                        <div>Already missing files: {uninstallResult.already_missing_files.length}</div>
+                      )}
+                      {uninstallResult.snapshot_id && (
+                        <div>Pre-uninstall snapshot: #{uninstallResult.snapshot_id}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : showUpdateModal ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                      Safe Package Update
+                    </h2>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                      Preview changes between your current installation and the updated package.
+                    </p>
+                  </div>
+                  {updatePlan && (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-sky-950/40 text-sky-300 border border-sky-800/40">
+                      v{updatePlan.from_version} → v{updatePlan.to_version}
+                    </span>
+                  )}
+                </div>
+
+                {loadingUpdatePlan ? (
+                  <div className="py-8 text-center text-xs text-[var(--text-muted)] flex items-center justify-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin text-[var(--accent)]" />
+                    <span>Evaluating package update preview...</span>
+                  </div>
+                ) : updatePlan ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                        <div className="text-emerald-400 font-mono font-bold text-sm">
+                          {updatePlan.creates.length}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">To Create</div>
+                      </div>
+                      <div className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                        <div className="text-sky-400 font-mono font-bold text-sm">
+                          {updatePlan.replaces.length}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">To Replace</div>
+                      </div>
+                      <div className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                        <div className="text-zinc-400 font-mono font-bold text-sm">
+                          {updatePlan.unchanged.length}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">Unchanged</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-medium text-[var(--text-secondary)]">
+                        File Actions:
+                      </div>
+                      <div className="max-h-40 overflow-y-auto rounded bg-black/40 border border-[var(--border-subtle)] p-2 font-mono text-[11px] space-y-1.5">
+                        {updatePlan.details.map((d, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-2">
+                            <span className="text-zinc-300 truncate">{d.target}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold shrink-0 ${
+                              d.action === "create" ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40" :
+                              d.action === "replace" ? "bg-sky-950/60 text-sky-400 border border-sky-800/40" :
+                              d.action === "unchanged" ? "bg-zinc-800/60 text-zinc-400 border border-zinc-700/40" :
+                              d.action === "conflict" || d.action === "obsolete_retain" ? "bg-amber-950/60 text-amber-400 border border-amber-800/40" :
+                              "bg-rose-950/60 text-rose-400 border border-rose-800/40"
+                            }`}>
+                              {d.action.replace("_", " ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {updatePlan.has_conflicts && (
+                      <div className="p-2.5 rounded bg-amber-950/30 border border-amber-800/40 text-amber-300 text-[11px] space-y-1">
+                        <div className="flex items-center gap-1 font-semibold text-amber-200">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>Conflicting User Modifications Detected ({updatePlan.conflicts.length})</span>
+                        </div>
+                        <p className="text-amber-200/90 leading-relaxed">
+                          The update engine identified user modifications in: {updatePlan.conflicts.join(", ")}. These modified files will NOT be overwritten during update application and are safely preserved.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="p-2.5 rounded bg-blue-950/20 border border-blue-800/30 text-blue-300 text-[11px] space-y-1">
+                      <div className="flex items-center gap-1 font-semibold text-blue-200">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Pre-Update Snapshot & Rollback Guarantee</span>
+                      </div>
+                      <p className="text-blue-300/90 leading-relaxed">
+                        A verified pre-update snapshot will be created before any changes. If anything fails during staging or application, Ryzora will automatically roll back to your current installation.
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+
+                {updateError && (
+                  <div className="p-2.5 rounded bg-red-950/30 border border-red-800/40 text-red-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>{updateError}</span>
+                  </div>
+                )}
+
+                {updateResult && (
+                  <div className="p-3 rounded bg-zinc-900 border border-emerald-500/40 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Update Applied Successfully!</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)] space-y-0.5 font-mono">
+                      <div>Updated to version: v{updateResult.to_version}</div>
+                      <div>Updated files: {updateResult.updated_files.length}</div>
+                      {updateResult.obsolete_removed.length > 0 && (
+                        <div>Obsolete files removed: {updateResult.obsolete_removed.length}</div>
+                      )}
+                      {updateResult.conflicts_retained.length > 0 && (
+                        <div className="text-amber-400 font-semibold">
+                          Modified files retained: {updateResult.conflicts_retained.join(", ")}
+                        </div>
+                      )}
+                      <div>Backup snapshot: #{updateResult.snapshot_id}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : showPreview ? (
@@ -443,13 +759,52 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Safety & Sandbox Info */}
-                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>Ryzora Safety Audit · Declarative Specification</span>
+                  {/* Repository & Integrity Metadata */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Source Repository</div>
+                      <div className="text-[var(--text-primary)] truncate">
+                        {selectedPackage.repository_id || "Local Community"}
+                      </div>
                     </div>
-                    <ul className="space-y-1 text-[11px] text-[var(--text-muted)]">
+
+                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Payload Status</div>
+                      <div className="text-[var(--text-primary)] truncate">
+                        {selectedPackage.is_cached
+                          ? "Cached locally"
+                          : "Remote (HTTPS on-demand)"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Safety & Sandbox Info */}
+                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold">
+                        <ShieldCheck className={`w-4 h-4 ${selectedPackage.content_hash ? "text-emerald-400" : "text-amber-400"}`} />
+                        <span className="text-[var(--text-primary)]">
+                          {selectedPackage.content_hash
+                            ? "Cryptographically Verified Package"
+                            : "Declarative Package (Unverified)"}
+                        </span>
+                      </div>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                        selectedPackage.content_hash
+                          ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                          : "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                      }`}>
+                        {selectedPackage.content_hash ? "Attested SHA-256" : "No Content Hash"}
+                      </span>
+                    </div>
+
+                    {selectedPackage.content_hash && (
+                      <div className="font-mono text-[10px] text-[var(--text-faint)] truncate bg-[var(--bg-surface)] px-2 py-1 rounded border border-[var(--border-subtle)]">
+                        tree: {selectedPackage.content_hash}
+                      </div>
+                    )}
+
+                    <ul className="space-y-1 text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-subtle)]">
                       <li className="flex items-center gap-1.5">
                         <Check className="w-3 h-3 text-emerald-400" />
                         <span>Zero shell scripts — purely declarative configuration files</span>
@@ -460,7 +815,7 @@ export const PackageDetailModal: React.FC = () => {
                       </li>
                       <li className="flex items-center gap-1.5">
                         <Check className="w-3 h-3 text-emerald-400" />
-                        <span>Automatic verified snapshot before modification</span>
+                        <span>Automatic verified snapshot before any file modification</span>
                       </li>
                     </ul>
                   </div>
@@ -584,6 +939,66 @@ export const PackageDetailModal: React.FC = () => {
               >
                 Done
               </button>
+            ) : showUninstall ? (
+              <>
+                {uninstallResult ? (
+                  <button
+                    onClick={handleClose}
+                    className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors"
+                  >
+                    Done
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setShowUninstall(false)}
+                      disabled={isUninstalling}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    {!isLegacyRecord && (
+                      <button
+                        onClick={handleConfirmUninstall}
+                        disabled={isUninstalling}
+                        className="px-4 py-1.5 rounded-md text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {isUninstalling && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                        <span>{isUninstalling ? "Uninstalling..." : "Confirm Uninstall"}</span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
+            ) : showUpdateModal ? (
+              <>
+                {updateResult ? (
+                  <button
+                    onClick={handleClose}
+                    className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors"
+                  >
+                    Done
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setShowUpdateModal(false)}
+                      disabled={isUpdating}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmUpdate}
+                      disabled={isUpdating || !updatePlan || loadingUpdatePlan}
+                      className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isUpdating && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      <span>{isUpdating ? "Updating..." : "Apply Update"}</span>
+                    </button>
+                  </>
+                )}
+              </>
             ) : showPreview ? (
               <>
                 <button
@@ -615,33 +1030,71 @@ export const PackageDetailModal: React.FC = () => {
               </>
             ) : (
               <>
-                {isInstalled && relatedSnapshot && (
-                  <button
-                    onClick={() => rollbackSnapshot(relatedSnapshot.id)}
-                    disabled={isInstalling}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Rollback</span>
-                  </button>
+                {isInstalled ? (
+                  <>
+                    <button
+                      onClick={handleCheckUpdate}
+                      disabled={checkingUpdate || isUpdating || isUninstalling}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? "animate-spin" : ""}`} />
+                      <span>
+                        {updateStatus?.status === "update_available"
+                          ? `Update (v${updateStatus.available_version})`
+                          : updateStatus?.status === "up_to_date"
+                          ? "Up to date"
+                          : "Check for Update"}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={handleOpenUninstall}
+                      disabled={isInstalling || isUpdating || isUninstalling}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Uninstall</span>
+                    </button>
+
+                    {relatedSnapshot && (
+                      <button
+                        onClick={() => rollbackSnapshot(relatedSnapshot.id)}
+                        disabled={isInstalling}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Rollback</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={handleOpenPreview}
+                      disabled={isInstalling || isUpdating || isUninstalling}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                    >
+                      Reinstall
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleOpenPreview}
+                      disabled={isInstalling}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Preview</span>
+                    </button>
+
+                    <button
+                      onClick={handleOpenPreview}
+                      disabled={isInstalling}
+                      className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
+                    >
+                      Install
+                    </button>
+                  </>
                 )}
-
-                <button
-                  onClick={handleOpenPreview}
-                  disabled={isInstalling}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Preview</span>
-                </button>
-
-                <button
-                  onClick={handleOpenPreview}
-                  disabled={isInstalling}
-                  className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
-                >
-                  {isInstalling ? "Installing..." : isInstalled ? "Reinstall" : "Install"}
-                </button>
               </>
             )}
           </div>

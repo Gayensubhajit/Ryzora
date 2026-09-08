@@ -185,7 +185,7 @@ export interface PackageComponentSpec {
 }
 
 export interface SafetyAudit {
-  rating: "safe" | "verified" | "requires_review";
+  rating: "safe" | "verified" | "requires_review" | "unverified";
   changes_system_files: boolean;
   requires_root: boolean;
   sandbox_compatible: boolean;
@@ -233,6 +233,11 @@ export interface PackageItem {
    * that have not yet been migrated.
    */
   manifest?: RyzoraManifest;
+  repository_id?: string;
+  content_hash?: string;
+  package_size_bytes?: number;
+  integrity_status?: "verified" | "unverified" | "corrupted" | "pending_download";
+  is_cached?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,14 +325,101 @@ export interface InstallResult {
   rolled_back: boolean;
 }
 
+export interface InstalledFileEntry {
+  target: string;
+  sha256: string;
+  is_symlink?: boolean;
+  symlink_target?: string | null;
+}
+
 export interface InstalledPackageRecord {
   package_id: string;
   name: string;
   version: string;
+  package_type?: PackageType;
+  repository_id?: string;
   installed_at: number;
   snapshot_id: string;
   installed_files: string[];
+  files?: InstalledFileEntry[];
   package_source_path: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Safe Uninstall & Update types (Phase 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface UninstallResult {
+  package_id: string;
+  success: boolean;
+  removed_files: string[];
+  already_missing_files: string[];
+  conflict_files: string[];
+  removed_directories: string[];
+  retained_directories: string[];
+  snapshot_id?: string | null;
+  rolled_back: boolean;
+  error?: string | null;
+}
+
+export type UpdateStatusKind =
+  | "up_to_date"
+  | "update_available"
+  | "repository_unavailable"
+  | "package_not_found"
+  | "unable_to_determine";
+
+export interface PackageUpdateStatus {
+  package_id: string;
+  installed_version: string;
+  available_version?: string | null;
+  repository_id?: string | null;
+  status: UpdateStatusKind;
+  message?: string | null;
+}
+
+export type FileAction =
+  | "create"
+  | "replace"
+  | "unchanged"
+  | "conflict"
+  | "obsolete_remove"
+  | "obsolete_retain";
+
+export interface UpdateFileItem {
+  target: string;
+  action: FileAction;
+  reason: string;
+  current_sha256?: string | null;
+  new_sha256?: string | null;
+}
+
+export interface UpdatePlan {
+  package_id: string;
+  from_version: string;
+  to_version: string;
+  repository_id?: string | null;
+  creates: string[];
+  replaces: string[];
+  unchanged: string[];
+  conflicts: string[];
+  obsolete_removes: string[];
+  obsolete_retains: string[];
+  details: UpdateFileItem[];
+  has_conflicts: boolean;
+}
+
+export interface UpdateResult {
+  success: boolean;
+  package_id: string;
+  from_version: string;
+  to_version: string;
+  snapshot_id: string;
+  updated_files: string[];
+  obsolete_removed: string[];
+  conflicts_retained: string[];
+  rolled_back: boolean;
+  errors: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -339,4 +431,24 @@ export interface RepositorySummary {
   name: string;
   package_count: number;
   path: string;
+  repo_type?: string;
+  enabled?: boolean;
+  status?: string;
+  last_refreshed?: string | null;
+  last_error?: string | null;
+}
+
+export interface CacheStats {
+  total_size_bytes: number;
+  cached_packages_count: number;
+  cached_repositories_count: number;
+  cache_dir: string;
+}
+
+export interface RepositorySourceConfig {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  repo_type: "local" | "remote";
 }
