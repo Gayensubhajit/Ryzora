@@ -782,19 +782,54 @@ export const PackageDetailModal: React.FC = () => {
                   <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-xs font-semibold">
-                        <ShieldCheck className={`w-4 h-4 ${selectedPackage.content_hash ? "text-emerald-400" : "text-amber-400"}`} />
-                        <span className="text-[var(--text-primary)]">
-                          {selectedPackage.content_hash
-                            ? "Cryptographically Verified Package"
-                            : "Declarative Package (Unverified)"}
-                        </span>
+                        {selectedPackage.integrity_status === "verified" ? (
+                          <>
+                            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                            <span className="text-[var(--text-primary)]">
+                              Cryptographically Verified Package
+                            </span>
+                          </>
+                        ) : selectedPackage.integrity_status === "corrupted" ? (
+                          <>
+                            <AlertCircle className="w-4 h-4 text-rose-400" />
+                            <span className="text-rose-300">
+                              Cache Integrity Verification Failed
+                            </span>
+                          </>
+                        ) : selectedPackage.integrity_status === "pending_download" ? (
+                          <>
+                            <ShieldCheck className="w-4 h-4 text-sky-400" />
+                            <span className="text-[var(--text-primary)]">
+                              Attested Package (Verification Pending)
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="w-4 h-4 text-amber-400" />
+                            <span className="text-[var(--text-primary)]">
+                              Declarative Package (Unverified)
+                            </span>
+                          </>
+                        )}
                       </div>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                        selectedPackage.content_hash
-                          ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
-                          : "text-amber-400 border-amber-500/30 bg-amber-500/10"
-                      }`}>
-                        {selectedPackage.content_hash ? "Attested SHA-256" : "No Content Hash"}
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                          selectedPackage.integrity_status === "verified"
+                            ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                            : selectedPackage.integrity_status === "corrupted"
+                            ? "text-rose-400 border-rose-500/30 bg-rose-500/10"
+                            : selectedPackage.integrity_status === "pending_download"
+                            ? "text-sky-400 border-sky-500/30 bg-sky-500/10"
+                            : "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                        }`}
+                      >
+                        {selectedPackage.integrity_status === "verified"
+                          ? "Attested SHA-256 Verified"
+                          : selectedPackage.integrity_status === "corrupted"
+                          ? "Corrupted Cache"
+                          : selectedPackage.integrity_status === "pending_download"
+                          ? "SHA-256 Attested"
+                          : "No Content Hash"}
                       </span>
                     </div>
 

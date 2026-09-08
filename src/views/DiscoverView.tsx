@@ -3,26 +3,30 @@ import { ArrowUpDown } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { HeroBanner } from "../components/HeroBanner";
 import { PackageCard } from "../components/PackageCard";
-import { PackageType } from "../types";
+import { PackageType, CategoryId } from "../types";
 
 type SortOption = "relevance" | "rating" | "downloads" | "name" | "newest";
 type StatusFilterOption = "all" | "compatible" | "featured" | "trending" | "installed" | "update_available" | "verified";
 
-function compareSemver(v1: string, v2: string): number {
-  const parse = (v: string) =>
-    v
-      .replace(/^v/, "")
-      .split("-")[0]
-      .split(".")
-      .map((n) => parseInt(n, 10) || 0);
-  const p1 = parse(v1);
-  const p2 = parse(v2);
+export function compareSemver(v1: string, v2: string): number {
+  const clean = (v: string) => v.replace(/^v/, "").trim();
+  const [base1, pre1] = clean(v1).split("-");
+  const [base2, pre2] = clean(v2).split("-");
+
+  const p1 = base1.split(".").map((n) => parseInt(n, 10) || 0);
+  const p2 = base2.split(".").map((n) => parseInt(n, 10) || 0);
+
   for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
     const num1 = p1[i] || 0;
     const num2 = p2[i] || 0;
     if (num1 > num2) return 1;
     if (num1 < num2) return -1;
   }
+
+  if (!pre1 && pre2) return 1;
+  if (pre1 && !pre2) return -1;
+  if (pre1 && pre2) return pre1.localeCompare(pre2);
+
   return 0;
 }
 
@@ -38,6 +42,7 @@ export const DiscoverView: React.FC = () => {
   } = useApp();
 
   const [typeFilter, setTypeFilter] = useState<PackageType | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryId | "all">("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>("all");
   const [repoFilter, setRepoFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortOption>("relevance");
@@ -67,17 +72,22 @@ export const DiscoverView: React.FC = () => {
         if (!matchesDesktop) return false;
       }
 
-      // 3. Package Type Filter
+      // 3. Category Filter
+      if (categoryFilter !== "all" && pkg.category !== categoryFilter) {
+        return false;
+      }
+
+      // 4. Package Type Filter
       if (typeFilter !== "all" && pkg.package_type !== typeFilter) {
         return false;
       }
 
-      // 4. Repository Filter
+      // 5. Repository Filter
       if (repoFilter !== "all" && pkg.repository_id !== repoFilter) {
         return false;
       }
 
-      // 5. Status Filter
+      // 6. Status Filter
       const installedRecord = installedPackages.find((p) => p.package_id === pkg.id);
       const isInstalled = !!installedRecord;
       const isUpdate =
@@ -101,11 +111,7 @@ export const DiscoverView: React.FC = () => {
       if (statusFilter === "update_available" && !isUpdate) {
         return false;
       }
-      if (
-        statusFilter === "verified" &&
-        pkg.safety_audit?.rating !== "verified" &&
-        pkg.integrity_status !== "verified"
-      ) {
+      if (statusFilter === "verified" && pkg.integrity_status !== "verified") {
         return false;
       }
 
@@ -141,6 +147,7 @@ export const DiscoverView: React.FC = () => {
     packages,
     searchQuery,
     desktopFilter,
+    categoryFilter,
     typeFilter,
     statusFilter,
     repoFilter,
@@ -158,6 +165,7 @@ export const DiscoverView: React.FC = () => {
   );
 
   const isFiltering =
+    categoryFilter !== "all" ||
     typeFilter !== "all" ||
     statusFilter !== "all" ||
     repoFilter !== "all" ||
@@ -205,6 +213,22 @@ export const DiscoverView: React.FC = () => {
 
           {/* Filter & Sort Controls */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Category Selector */}
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value as any)}
+              className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
+            >
+              <option value="all">All Categories</option>
+              <option value="rices">Complete Rices</option>
+              <option value="themes">Themes</option>
+              <option value="bars">Status Bars</option>
+              <option value="fastfetch">Fastfetch</option>
+              <option value="lockscreens">Lockscreens</option>
+              <option value="wallpapers">Wallpapers</option>
+              <option value="terminal">Terminal</option>
+            </select>
+
             {/* Type Selector */}
             <select
               value={typeFilter}
@@ -212,11 +236,13 @@ export const DiscoverView: React.FC = () => {
               className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
             >
               <option value="all">All Types</option>
-              <option value="rice">Rices</option>
-              <option value="theme">Themes</option>
-              <option value="config">Configs</option>
-              <option value="module">Modules</option>
-              <option value="suite">Suites</option>
+              <option value="rice">Rice Packages</option>
+              <option value="theme">Theme Packages</option>
+              <option value="waybar">Status Bars (Waybar)</option>
+              <option value="fastfetch">Fastfetch</option>
+              <option value="lockscreen">Lockscreens</option>
+              <option value="wallpaper">Wallpapers</option>
+              <option value="terminal">Terminal</option>
             </select>
 
             {/* Status Selector */}
@@ -275,6 +301,7 @@ export const DiscoverView: React.FC = () => {
             {isFiltering && (
               <button
                 onClick={() => {
+                  setCategoryFilter("all");
                   setTypeFilter("all");
                   setStatusFilter("all");
                   setRepoFilter("all");

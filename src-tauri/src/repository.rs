@@ -933,6 +933,9 @@ pub trait Repository: Send + Sync {
     fn last_error(&self) -> Option<String> {
         None
     }
+    fn cache_dir(&self) -> Option<&Path> {
+        None
+    }
 }
 
 // ──────── LocalRepository ────────
@@ -1253,10 +1256,30 @@ impl RemoteRepository {
             }
         };
 
-        let raw = String::from_utf8(bytes)
-            .map_err(|e| format!("Invalid UTF-8 in repository.json: {}", e))?;
+        let raw = match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(e) => {
+                self.status = "refresh_failed".to_string();
+                let msg = format!("Invalid UTF-8 in repository.json: {}", e);
+                self.last_error = Some(msg.clone());
+                if let Some(ref cached) = self.index {
+                    return Ok(cached.clone());
+                }
+                return Err(msg);
+            }
+        };
 
-        let index = Self::validate_and_parse_index(&raw)?;
+        let index = match Self::validate_and_parse_index(&raw) {
+            Ok(idx) => idx,
+            Err(e) => {
+                self.status = "refresh_failed".to_string();
+                self.last_error = Some(e.clone());
+                if let Some(ref cached) = self.index {
+                    return Ok(cached.clone());
+                }
+                return Err(e);
+            }
+        };
 
         // Atomically save to cache directory
         fs::create_dir_all(&self.cache_dir)
@@ -1334,6 +1357,10 @@ impl Repository for RemoteRepository {
 
     fn last_error(&self) -> Option<String> {
         self.last_error.clone()
+    }
+
+    fn cache_dir(&self) -> Option<&Path> {
+        Some(&self.cache_dir)
     }
 
     fn list_entries(&self) -> Result<Vec<RepositoryPackageEntry>, String> {
@@ -1923,31 +1950,61 @@ impl RepositoryManager {
                 let files_count = manifest.as_ref().map(|m| m.files.len()).unwrap_or(0);
 
                 let is_hash_verified = entry.content_hash.is_some();
-                let audit_rating = if is_hash_verified {
-                    "verified".to_string()
-                } else {
-                    "unverified".to_string()
-                };
+                let ryzora_cache_root = get_ryzora_cache_dir();
+                let repo_cache_root = repo.cache_dir().unwrap_or(&ryzora_cache_root);
 
                 let is_cached = if repo.repo_type() == "local" {
                     true
-                } else if let Ok(cache_path) = get_safe_cache_path(
-                    &get_ryzora_cache_dir(),
-                    repo.id(),
-                    &entry.id,
-                    &entry.version,
-                ) {
+                } else if let Ok(cache_path) =
+                    get_safe_cache_path(repo_cache_root, repo.id(), &entry.id, &entry.version)
+                {
                     cache_path.join("manifest.json").is_file()
                 } else {
                     false
                 };
 
-                let integrity_status = if is_hash_verified {
-                    if is_cached {
-                        "verified".to_string()
+                let (integrity_status, is_corrupted) = if repo.repo_type() == "local" {
+                    if is_hash_verified {
+                        ("verified".to_string(), false)
                     } else {
-                        "pending_download".to_string()
+                        ("unverified".to_string(), false)
                     }
+                } else if is_cached {
+                    if let Some(ref expected_hash) = entry.content_hash {
+                        if let Ok(cache_path) = get_safe_cache_path(
+                            repo_cache_root,
+                            repo.id(),
+                            &entry.id,
+                            &entry.version,
+                        ) {
+                            if let Some(ref m) = manifest {
+                                match verify_cached_package_integrity(
+                                    &cache_path,
+                                    m,
+                                    Some(expected_hash.as_str()),
+                                ) {
+                                    Ok(()) => ("verified".to_string(), false),
+                                    Err(_) => ("corrupted".to_string(), true),
+                                }
+                            } else {
+                                ("corrupted".to_string(), true)
+                            }
+                        } else {
+                            ("unverified".to_string(), false)
+                        }
+                    } else {
+                        ("unverified".to_string(), false)
+                    }
+                } else if is_hash_verified {
+                    ("pending_download".to_string(), false)
+                } else {
+                    ("unverified".to_string(), false)
+                };
+
+                let audit_rating = if is_corrupted {
+                    "corrupted".to_string()
+                } else if is_hash_verified {
+                    "verified".to_string()
                 } else {
                     "unverified".to_string()
                 };
@@ -4440,5 +4497,168 @@ mod tests {
 
         pkg.author.name = " ".to_string(); // empty author
         assert!(validate_repository_package_entry(&pkg).is_err());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 8.1 Release-Readiness & UX Audit Tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_phase8_1_remote_repo_malformed_json_sets_refresh_failed_and_retains_cached_index() {
+        let sandbox = RepoTestSandbox::new("p8-1-malformed-fallback");
+        let mock = MockHttpFetcher::new();
+
+        let valid_json = br#"{
+  "schema": 1,
+  "id": "test-remote",
+  "name": "Remote",
+  "packages": [
+    { "id": "cached-pkg", "name": "Cached", "version": "1.0.0", "package_type": "rice", "manifest": "packages/cached-pkg/manifest.json", "author": { "name": "A", "avatar": "" } }
+  ]
+}"#;
+        mock.set_response(
+            "https://example.com/repo/repository.json",
+            valid_json.to_vec(),
+        );
+
+        let mut repo = RemoteRepository::with_fetcher(
+            "test-remote".to_string(),
+            "Remote".to_string(),
+            "https://example.com/repo".to_string(),
+            sandbox.cache_dir.clone(),
+            Box::new(mock.clone()),
+        )
+        .unwrap();
+
+        // 1. Initial successful refresh
+        repo.refresh_index().unwrap();
+        assert_eq!(repo.status(), "online");
+        assert!(repo.last_error().is_none());
+        assert_eq!(repo.list_entries().unwrap().len(), 1);
+
+        // 2. Server later returns malformed JSON on subsequent refresh
+        mock.set_response(
+            "https://example.com/repo/repository.json",
+            b"{ malformed json string without close".to_vec(),
+        );
+
+        let res = repo.refresh_index();
+        // Surviving cached index is returned
+        assert!(res.is_ok());
+        assert_eq!(repo.status(), "refresh_failed");
+        assert!(repo.last_error().is_some());
+        assert!(repo
+            .last_error()
+            .unwrap()
+            .contains("Malformed remote repository index"));
+        // Cached packages remain intact
+        assert_eq!(repo.list_entries().unwrap().len(), 1);
+        assert_eq!(repo.list_entries().unwrap()[0].id, "cached-pkg");
+    }
+
+    #[test]
+    fn test_phase8_1_catalog_marks_corrupt_cache_as_corrupted_and_valid_cache_as_verified() {
+        let sandbox = RepoTestSandbox::new("p8-1-catalog-trust");
+        let mock = MockHttpFetcher::new();
+
+        let file_content = b"# Safe configuration";
+        let mut hasher = sha2::Sha256::new();
+        sha2::Digest::update(&mut hasher, file_content);
+        let file_sha256 = format!("{:x}", hasher.finalize());
+
+        let mut tree_hasher = sha2::Sha256::new();
+        sha2::Digest::update(&mut tree_hasher, b"files/config.toml");
+        sha2::Digest::update(&mut tree_hasher, file_sha256.as_bytes());
+        let expected_tree_hash = format!("{:x}", tree_hasher.finalize());
+
+        let repo_json = format!(
+            r#"{{
+  "schema": 1,
+  "id": "test-remote",
+  "name": "Remote",
+  "packages": [
+    {{
+      "id": "valid-pkg",
+      "name": "Valid",
+      "version": "1.0.0",
+      "package_type": "rice",
+      "manifest": "packages/valid-pkg/manifest.json",
+      "content_hash": "{}",
+      "author": {{ "name": "A", "avatar": "" }}
+    }},
+    {{
+      "id": "unhashed-pkg",
+      "name": "Unhashed",
+      "version": "1.0.0",
+      "package_type": "rice",
+      "manifest": "packages/unhashed-pkg/manifest.json",
+      "author": {{ "name": "A", "avatar": "" }}
+    }}
+  ]
+}}"#,
+            expected_tree_hash
+        );
+
+        let manifest_json = br#"{
+  "id": "valid-pkg",
+  "name": "Valid",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "A",
+  "package_type": "rice",
+  "compatibility": { "desktops": [], "sessions": [], "distros": [], "required": [], "optional": [] },
+  "files": [{ "source": "files/config.toml", "target": "~/.config/config.toml", "description": "c" }]
+}"#;
+
+        mock.set_response(
+            "https://example.com/repo/repository.json",
+            repo_json.into_bytes(),
+        );
+        mock.set_response(
+            "https://example.com/repo/packages/valid-pkg/manifest.json",
+            manifest_json.to_vec(),
+        );
+        mock.set_response(
+            "https://example.com/repo/packages/valid-pkg/files/config.toml",
+            file_content.to_vec(),
+        );
+
+        let mut repo = RemoteRepository::with_fetcher(
+            "test-remote".to_string(),
+            "Remote".to_string(),
+            "https://example.com/repo".to_string(),
+            sandbox.cache_dir.clone(),
+            Box::new(mock),
+        )
+        .unwrap();
+
+        repo.refresh_index().unwrap();
+
+        // Download valid-pkg so it is in cache
+        let pkg_dir = repo.get_package_dir("valid-pkg").unwrap();
+        assert!(pkg_dir.exists());
+
+        let mut manager = RepositoryManager::new();
+        manager.add_repository(Box::new(repo));
+
+        // Before corruption: valid-pkg is verified, unhashed-pkg is unverified
+        let catalog = manager.list_all_packages().unwrap();
+        let valid_item = catalog.iter().find(|p| p.id == "valid-pkg").unwrap();
+        let unhashed_item = catalog.iter().find(|p| p.id == "unhashed-pkg").unwrap();
+
+        assert_eq!(valid_item.integrity_status, "verified");
+        assert_eq!(valid_item.safety_audit.rating, "verified");
+        assert_eq!(unhashed_item.integrity_status, "unverified");
+        assert_eq!(unhashed_item.safety_audit.rating, "unverified");
+
+        // Now tamper with cached file in pkg_dir
+        fs::write(pkg_dir.join("files/config.toml"), b"# Tampered payload!").unwrap();
+
+        // Re-read catalog: valid-pkg must now be detected as corrupted, NEVER verified!
+        let catalog_after = manager.list_all_packages().unwrap();
+        let tampered_item = catalog_after.iter().find(|p| p.id == "valid-pkg").unwrap();
+
+        assert_eq!(tampered_item.integrity_status, "corrupted");
+        assert_eq!(tampered_item.safety_audit.rating, "corrupted");
     }
 }

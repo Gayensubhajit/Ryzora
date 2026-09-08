@@ -328,13 +328,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadCatalogPackages = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("get_catalog_packages");
-      if (catalog && catalog.length > 0) {
-        setPackages(catalog);
-      }
+      setPackages(catalog || []);
       const repos = await invoke<RepositorySummary[]>("get_repository_info");
       setRepositories(repos);
     } catch (e) {
-      console.warn("Failed to load catalog from RepositoryManager; using fallback", e);
+      console.warn("Failed to load catalog from RepositoryManager", e);
     }
   };
 
@@ -350,9 +348,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshCatalog = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("refresh_catalog");
-      if (catalog && catalog.length > 0) {
-        setPackages(catalog);
-      }
+      setPackages(catalog || []);
       const repos = await invoke<RepositorySummary[]>("get_repository_info");
       setRepositories(repos);
     } catch (e) {
@@ -363,9 +359,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshRepositories = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("refresh_catalog");
-      if (catalog && catalog.length > 0) {
-        setPackages(catalog);
-      }
+      setPackages(catalog || []);
       const repos = await invoke<RepositorySummary[]>("get_repository_info");
       setRepositories(repos);
       await loadRepositorySources();

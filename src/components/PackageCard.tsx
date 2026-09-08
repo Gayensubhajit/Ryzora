@@ -61,13 +61,21 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
 
         {/* Top-Left: Integrity / Cache / Offline indicator */}
         <div className="absolute top-2 left-2 flex items-center gap-1">
-          {packageItem.safety_audit?.rating === "verified" || packageItem.integrity_status === "verified" ? (
+          {packageItem.integrity_status === "verified" ? (
             <div
               className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"
               title="Cryptographically verified SHA-256 tree hash"
             >
               <ShieldCheck className="w-3 h-3 text-emerald-400" />
               <span>Verified</span>
+            </div>
+          ) : packageItem.integrity_status === "corrupted" ? (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-rose-400 border border-rose-500/30 flex items-center gap-1"
+              title="Cache integrity verification failed"
+            >
+              <ShieldCheck className="w-3 h-3 text-rose-400" />
+              <span>Corrupted</span>
             </div>
           ) : isOffline ? (
             <div className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-amber-400 border border-amber-500/30">
