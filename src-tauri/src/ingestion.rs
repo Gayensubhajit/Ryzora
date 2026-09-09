@@ -10,6 +10,7 @@
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -107,6 +108,8 @@ const FORBIDDEN_TARGET_PREFIXES: &[&str] = &[
 ];
 
 /// Recursively copies a directory tree cleanly in pure Rust.
+/// Symlinks, sockets, FIFOs, and devices are strictly rejected to prevent
+/// dereferencing, traversal, and local filesystem escape attacks.
 pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst)
         .map_err(|e| format!("Failed to create directory '{}': {}", dst.display(), e))?;
@@ -118,10 +121,16 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
         let target_path = dst.join(entry.file_name());
         let file_type = entry
             .file_type()
-            .map_err(|e| format!("File type error: {}", e))?;
-        if file_type.is_dir() {
+            .map_err(|e| format!("File type error for '{}': {}", entry_path.display(), e))?;
+
+        if file_type.is_symlink() {
+            return Err(format!(
+                "Symlinks are strictly prohibited in community submissions: '{}'",
+                entry_path.display()
+            ));
+        } else if file_type.is_dir() {
             copy_dir_all(&entry_path, &target_path)?;
-        } else {
+        } else if file_type.is_file() {
             fs::copy(&entry_path, &target_path).map_err(|e| {
                 format!(
                     "Failed to copy file '{}' to '{}': {}",
@@ -130,9 +139,356 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
                     e
                 )
             })?;
+        } else {
+            return Err(format!(
+                "Special or unsupported file type rejected: '{}'",
+                entry_path.display()
+            ));
         }
     }
     Ok(())
+}
+
+/// Recursively scans the submission directory tree for symlinks, executables, prohibited files,
+/// and oversized payloads. Rejects any symlinks to prevent dereferencing/traversal attacks.
+fn scan_directory_tree_security(
+    current_dir: &Path,
+    submission_root: &Path,
+    total_files: &mut usize,
+    total_bytes: &mut u64,
+    errors: &mut Vec<String>,
+) -> Result<bool, String> {
+    let mut passed = true;
+    let entries = fs::read_dir(current_dir).map_err(|e| {
+        format!(
+            "Failed to read directory '{}': {}",
+            current_dir.display(),
+            e
+        )
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Directory entry error: {}", e))?;
+        let entry_path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("File type error for '{}': {}", entry_path.display(), e))?;
+
+        let rel_path = entry_path
+            .strip_prefix(submission_root)
+            .unwrap_or(&entry_path)
+            .to_string_lossy()
+            .to_string();
+
+        // 1. Strict Symlink Invariant: NO symlinks anywhere in submission
+        if file_type.is_symlink() {
+            errors.push(format!(
+                "Symlinks are strictly prohibited in community submissions. Detected symlink at '{}'",
+                rel_path
+            ));
+            passed = false;
+            continue;
+        }
+
+        if file_type.is_dir() {
+            if !scan_directory_tree_security(
+                &entry_path,
+                submission_root,
+                total_files,
+                total_bytes,
+                errors,
+            )? {
+                passed = false;
+            }
+        } else if file_type.is_file() {
+            *total_files += 1;
+            let file_name = entry_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+
+            // Check prohibited file names
+            for prob in PROHIBITED_FILE_NAMES {
+                if file_name.eq_ignore_ascii_case(prob) {
+                    errors.push(format!(
+                        "Prohibited sensitive file name '{}' found at '{}'",
+                        prob, rel_path
+                    ));
+                    passed = false;
+                }
+            }
+
+            // Check file size
+            let meta = fs::symlink_metadata(&entry_path)
+                .map_err(|e| format!("Failed to read metadata for '{}': {}", rel_path, e))?;
+            let file_len = meta.len();
+            *total_bytes += file_len;
+
+            if file_len > MAX_SINGLE_FILE_BYTES {
+                errors.push(format!(
+                    "File '{}' exceeds maximum allowed file size of 50 MB (size: {} bytes)",
+                    rel_path, file_len
+                ));
+                passed = false;
+            }
+
+            // Magic byte scanning for executables & scripts
+            let is_metadata_file = rel_path == "ryzora.json"
+                || rel_path == "release.json"
+                || rel_path == "release.sig"
+                || rel_path == "checksums.sha256"
+                || rel_path == "SUBMISSION.md"
+                || rel_path == "README.md";
+
+            let mut head_buf = [0u8; 16];
+            if let Ok(mut handle) = fs::File::open(&entry_path) {
+                use std::io::Read;
+                let read_bytes = handle.read(&mut head_buf).unwrap_or(0);
+                let head = &head_buf[..read_bytes];
+
+                // ELF check
+                if head.len() >= 4 && head[..4] == [0x7f, b'E', b'L', b'F'] {
+                    errors.push(format!(
+                        "Executable binary rejected (ELF binary): '{}'",
+                        rel_path
+                    ));
+                    passed = false;
+                }
+
+                // Mach-O check
+                if head.len() >= 4
+                    && (head[..4] == [0xfe, 0xed, 0xfa, 0xce]
+                        || head[..4] == [0xce, 0xfa, 0xed, 0xfe]
+                        || head[..4] == [0xfe, 0xed, 0xfa, 0xcf]
+                        || head[..4] == [0xcf, 0xfa, 0xed, 0xfe])
+                {
+                    errors.push(format!(
+                        "Executable binary rejected (Mach-O binary): '{}'",
+                        rel_path
+                    ));
+                    passed = false;
+                }
+
+                // PE/MZ check
+                if head.len() >= 2 && head[..2] == [b'M', b'Z'] {
+                    errors.push(format!(
+                        "Executable binary rejected (Windows PE executable): '{}'",
+                        rel_path
+                    ));
+                    passed = false;
+                }
+
+                // Script hook shebang check
+                if !is_metadata_file && head.len() >= 2 && head[..2] == [b'#', b'!'] {
+                    errors.push(format!(
+                        "Executable script with shebang rejected: '{}'",
+                        rel_path
+                    ));
+                    passed = false;
+                }
+            }
+        } else {
+            errors.push(format!(
+                "Special or unsupported file type rejected: '{}'",
+                rel_path
+            ));
+            passed = false;
+        }
+    }
+
+    Ok(passed)
+}
+
+/// Validates checksums.sha256 manifest:
+/// Ensures format is strictly `<64-hex-sha256> <path>`, paths are safe and non-traversing,
+/// no duplicate entries, no symlinks, all actual files match hashes, and all declared files
+/// are represented. Mandatory for distribution release bundles.
+fn validate_checksums_file(
+    checksums_file: &Path,
+    submission_dir: &Path,
+    manifest: &RyzoraManifest,
+    is_distribution_bundle: bool,
+    errors: &mut Vec<String>,
+) -> IngestionCheckResult {
+    if !checksums_file.is_file() {
+        if is_distribution_bundle {
+            errors.push(
+                "Missing required 'checksums.sha256' manifest in distribution release bundle."
+                    .to_string(),
+            );
+            return IngestionCheckResult {
+                check_id: "checksums_sha256".to_string(),
+                name: "SHA-256 Checksum Manifest Verification".to_string(),
+                passed: false,
+                level: "error".to_string(),
+                message: "Missing required 'checksums.sha256' in distribution release bundle."
+                    .to_string(),
+            };
+        } else {
+            return IngestionCheckResult {
+                check_id: "checksums_sha256".to_string(),
+                name: "SHA-256 Checksum Manifest Verification".to_string(),
+                passed: true,
+                level: "info".to_string(),
+                message: "No checksums.sha256 file present (standalone manifest package)."
+                    .to_string(),
+            };
+        }
+    }
+
+    let content = match fs::read_to_string(checksums_file) {
+        Ok(c) => c,
+        Err(e) => {
+            errors.push(format!("Failed to read checksums.sha256: {}", e));
+            return IngestionCheckResult {
+                check_id: "checksums_sha256".to_string(),
+                name: "SHA-256 Checksum Manifest Verification".to_string(),
+                passed: false,
+                level: "error".to_string(),
+                message: format!("Unreadable checksums.sha256: {}", e),
+            };
+        }
+    };
+
+    let mut seen_paths = HashSet::new();
+    let mut recorded_files = HashMap::new();
+    let mut valid = true;
+
+    for (line_no, raw_line) in content.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() != 2 {
+            errors.push(format!(
+                "Malformed line {} in checksums.sha256: expected '<sha256> <path>', found '{}'",
+                line_no + 1,
+                raw_line
+            ));
+            valid = false;
+            continue;
+        }
+
+        let expected_sha = parts[0].trim();
+        let raw_rel_path = parts[1].trim();
+
+        // 1. Verify hash format: exactly 64 hex characters
+        if expected_sha.len() != 64 || !expected_sha.chars().all(|c| c.is_ascii_hexdigit()) {
+            errors.push(format!(
+                "Invalid SHA-256 format on line {} of checksums.sha256: '{}'",
+                line_no + 1,
+                expected_sha
+            ));
+            valid = false;
+            continue;
+        }
+
+        // 2. Verify relative path safety: no leading slash, no '..', no null byte, no backslash
+        if raw_rel_path.starts_with('/')
+            || raw_rel_path.starts_with('\\')
+            || raw_rel_path.contains("..")
+            || raw_rel_path.contains(' ')
+        {
+            errors.push(format!(
+                "Path traversal or invalid path in checksums.sha256 line {}: '{}'",
+                line_no + 1,
+                raw_rel_path
+            ));
+            valid = false;
+            continue;
+        }
+
+        let clean_rel_path = raw_rel_path.trim_start_matches("./").replace('\\', "/");
+
+        // 3. Reject duplicate entries
+        if !seen_paths.insert(clean_rel_path.clone()) {
+            errors.push(format!(
+                "Duplicate entry in checksums.sha256 for path '{}'",
+                clean_rel_path
+            ));
+            valid = false;
+            continue;
+        }
+
+        // 4. Verify the target file exists on disk inside submission_dir
+        let disk_file = submission_dir.join(&clean_rel_path);
+        if !disk_file.is_file() {
+            errors.push(format!(
+                "File listed in checksums.sha256 does not exist on disk: '{}'",
+                clean_rel_path
+            ));
+            valid = false;
+            continue;
+        }
+
+        // Verify symlink rejection
+        if let Ok(sym_meta) = fs::symlink_metadata(&disk_file) {
+            if sym_meta.file_type().is_symlink() {
+                errors.push(format!(
+                    "File listed in checksums.sha256 is a symlink: '{}'",
+                    clean_rel_path
+                ));
+                valid = false;
+                continue;
+            }
+        }
+
+        // 5. Verify actual SHA-256 matches expected
+        match compute_file_sha256(&disk_file) {
+            Ok(actual_sha) => {
+                if !expected_sha.eq_ignore_ascii_case(&actual_sha) {
+                    errors.push(format!(
+                        "Checksum mismatch for '{}': expected {}, computed {}",
+                        clean_rel_path, expected_sha, actual_sha
+                    ));
+                    valid = false;
+                }
+            }
+            Err(e) => {
+                errors.push(format!(
+                    "Failed to compute SHA-256 for '{}': {}",
+                    clean_rel_path, e
+                ));
+                valid = false;
+            }
+        }
+
+        recorded_files.insert(clean_rel_path, expected_sha.to_string());
+    }
+
+    // 6. Completeness check: Ensure EVERY file declared in manifest.files is present in checksums.sha256
+    for f in &manifest.files {
+        let norm_src = f.source.trim_start_matches("./").replace('\\', "/");
+        if !recorded_files.contains_key(&norm_src) {
+            errors.push(format!(
+                "Manifest declared file '{}' is missing from checksums.sha256",
+                f.source
+            ));
+            valid = false;
+        }
+    }
+
+    IngestionCheckResult {
+        check_id: "checksums_sha256".to_string(),
+        name: "SHA-256 Checksum Manifest Verification".to_string(),
+        passed: valid,
+        level: if valid {
+            "info".to_string()
+        } else {
+            "error".to_string()
+        },
+        message: if valid {
+            format!(
+                "All {} checksum manifest entries verified successfully with zero discrepancies.",
+                recorded_files.len()
+            )
+        } else {
+            "Checksum manifest failed validation (mismatch, missing, malformed, or traversal detected)."
+                .to_string()
+        },
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -309,93 +665,52 @@ pub fn run_ci_audit(
 
     // ── Check 3: Static Executable & Hook Scanning (Zero Command Execution) ──
     let mut zero_exec_passed = true;
-    let mut binaries_found = Vec::new();
-    let mut hooks_found = Vec::new();
     let mut total_package_bytes: u64 = 0;
     let mut total_files_count: usize = 0;
 
+    // 3.1: Verify declared manifest files exist and are not symlinks
     for (i, f) in manifest.files.iter().enumerate() {
         let file_path = submission_dir.join(&f.source);
-        if !file_path.is_file() {
-            errors.push(format!(
-                "Declared file [{}] '{}' was not found on disk at '{}'",
-                i,
-                f.source,
-                file_path.display()
-            ));
-            path_confinement_passed = false;
-            continue;
-        }
+        let sym_meta = match fs::symlink_metadata(&file_path) {
+            Ok(m) => m,
+            Err(_) => {
+                errors.push(format!(
+                    "Declared file [{}] '{}' was not found on disk at '{}'",
+                    i,
+                    f.source,
+                    file_path.display()
+                ));
+                path_confinement_passed = false;
+                zero_exec_passed = false;
+                continue;
+            }
+        };
 
-        total_files_count += 1;
-        let metadata = fs::metadata(&file_path).map_err(|e| {
-            format!(
-                "Failed to read metadata for '{}': {}",
-                file_path.display(),
-                e
-            )
-        })?;
-        let file_len = metadata.len();
-        total_package_bytes += file_len;
-
-        if file_len > MAX_SINGLE_FILE_BYTES {
+        if sym_meta.file_type().is_symlink() {
             errors.push(format!(
-                "File '{}' exceeds maximum allowed file size of 50 MB (size: {} bytes)",
-                f.source, file_len
+                "Symlinks are strictly prohibited in community submissions. Detected symlink at '{}'",
+                f.source
             ));
             zero_exec_passed = false;
         }
+    }
 
-        // Magic byte scanning
-        let mut head_buf = [0u8; 16];
-        if let Ok(mut handle) = fs::File::open(&file_path) {
-            use std::io::Read;
-            let read_bytes = handle.read(&mut head_buf).unwrap_or(0);
-            let head = &head_buf[..read_bytes];
-
-            // ELF check
-            if head.len() >= 4 && head[..4] == [0x7f, b'E', b'L', b'F'] {
-                binaries_found.push(format!("ELF binary: {}", f.source));
-                zero_exec_passed = false;
-            }
-
-            // Mach-O check
-            if head.len() >= 4
-                && (head[..4] == [0xfe, 0xed, 0xfa, 0xce]
-                    || head[..4] == [0xce, 0xfa, 0xed, 0xfe]
-                    || head[..4] == [0xfe, 0xed, 0xfa, 0xcf]
-                    || head[..4] == [0xcf, 0xfa, 0xed, 0xfe])
-            {
-                binaries_found.push(format!("Mach-O binary: {}", f.source));
-                zero_exec_passed = false;
-            }
-
-            // PE/MZ check
-            if head.len() >= 2 && head[..2] == [b'M', b'Z'] {
-                binaries_found.push(format!("Windows PE executable: {}", f.source));
-                zero_exec_passed = false;
-            }
-
-            // Script hook shebang check
-            if head.len() >= 2 && head[..2] == [b'#', b'!'] {
-                hooks_found.push(format!("Executable script with shebang: {}", f.source));
+    // 3.2: Comprehensive recursive security scan of entire submission directory tree
+    match scan_directory_tree_security(
+        submission_dir,
+        submission_dir,
+        &mut total_files_count,
+        &mut total_package_bytes,
+        &mut errors,
+    ) {
+        Ok(scan_passed) => {
+            if !scan_passed {
                 zero_exec_passed = false;
             }
         }
-
-        // Prohibited file names
-        let file_name = file_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        for prob in PROHIBITED_FILE_NAMES {
-            if file_name.eq_ignore_ascii_case(prob) {
-                errors.push(format!(
-                    "Prohibited sensitive file name '{}' found at '{}'",
-                    prob, f.source
-                ));
-                zero_exec_passed = false;
-            }
+        Err(e) => {
+            errors.push(format!("Failed to scan submission directory tree: {}", e));
+            zero_exec_passed = false;
         }
     }
 
@@ -415,13 +730,6 @@ pub fn run_ci_audit(
         zero_exec_passed = false;
     }
 
-    for b in &binaries_found {
-        errors.push(format!("Executable binary rejected: {}", b));
-    }
-    for h in &hooks_found {
-        errors.push(format!("Script hook rejected: {}", h));
-    }
-
     checks.push(IngestionCheckResult {
         check_id: "zero_executable_scan".to_string(),
         name: "Zero-Executable & Zero-Hook Pre-Flight Scan".to_string(),
@@ -432,13 +740,9 @@ pub fn run_ci_audit(
             "error".to_string()
         },
         message: if zero_exec_passed {
-            "Package strictly contains declarative dotfiles. Zero binaries or script hooks detected.".to_string()
+            "Package strictly contains declarative dotfiles. Zero binaries, script hooks, or symlinks detected.".to_string()
         } else {
-            format!(
-                "Security violation: {} binaries and {} script hooks detected.",
-                binaries_found.len(),
-                hooks_found.len()
-            )
+            "Security violation: executable binaries, script hooks, or symlinks detected.".to_string()
         },
     });
 
@@ -468,49 +772,7 @@ pub fn run_ci_audit(
         }
     };
 
-    // Check optional checksums.sha256 if present
-    let checksums_file = submission_dir.join("checksums.sha256");
-    if checksums_file.is_file() {
-        let mut checksums_valid = true;
-        if let Ok(content) = fs::read_to_string(&checksums_file) {
-            for line in content.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let expected_sha = parts[0].trim();
-                    let rel_path = parts[1].trim().trim_start_matches("./");
-                    let disk_file = submission_dir.join(rel_path);
-                    if disk_file.is_file() {
-                        if let Ok(actual_sha) = compute_file_sha256(&disk_file) {
-                            if !expected_sha.eq_ignore_ascii_case(&actual_sha) {
-                                errors.push(format!(
-                                    "Checksum mismatch for '{}': expected {}, computed {}",
-                                    rel_path, expected_sha, actual_sha
-                                ));
-                                checksums_valid = false;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        checks.push(IngestionCheckResult {
-            check_id: "checksums_sha256".to_string(),
-            name: "SHA-256 Checksum Manifest Verification".to_string(),
-            passed: checksums_valid,
-            level: if checksums_valid {
-                "info".to_string()
-            } else {
-                "error".to_string()
-            },
-            message: if checksums_valid {
-                "All files match recorded sha256 checksums.".to_string()
-            } else {
-                "Mismatch detected in checksums.sha256 file.".to_string()
-            },
-        });
-    }
-
-    // ── Check 5: Ed25519 Cryptographic Verification & Trust Chain ────────────
+    // ── Check 5: SHA-256 Checksum Manifest Verification ──────────────────────
     let release_meta_opt: Option<DistributionRelease> = {
         let rel_file = submission_dir.join("release.json");
         if rel_file.is_file() {
@@ -521,6 +783,20 @@ pub fn run_ci_audit(
             None
         }
     };
+
+    let is_distribution_bundle = release_meta_opt.is_some();
+    let checksums_file = submission_dir.join("checksums.sha256");
+    let checksums_check = validate_checksums_file(
+        &checksums_file,
+        submission_dir,
+        &manifest,
+        is_distribution_bundle,
+        &mut errors,
+    );
+    let checksums_passed = checksums_check.passed;
+    checks.push(checksums_check);
+
+    // ── Check 6: Ed25519 Cryptographic Verification & Trust Chain ────────────
 
     // Untrusted PR metadata rule: claimed trust tier in PR/release.json cannot elevate package!
     let claimed_tier = release_meta_opt.as_ref().map(|r| r.trust_tier);
@@ -655,6 +931,7 @@ pub fn run_ci_audit(
         && semver_valid
         && path_confinement_passed
         && zero_exec_passed
+        && checksums_passed
         && crypto_check_passed
         && repo_consistency_passed;
 
@@ -1789,6 +2066,185 @@ fake
         assert!(md.contains("Canonical Tree Hash Computation"));
         assert!(md.contains("Ed25519 Cryptographic Authenticity & Trust Chain"));
         assert!(md.contains("Ryzora CI Automated Audit"));
+    }
+
+    #[test]
+    fn test_ci_symlink_in_submission_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let sandbox = TestSandbox::new("symlink-reject");
+        let trust_store = TrustStore::new_test_store(&[], &[], &[]);
+
+        let draft = create_test_draft(&sandbox, "symlink-pkg", "1.0.0");
+        let build_dir = sandbox.root.join("build");
+        let pkg_res = crate::authoring::create_package_bundle(draft, &build_dir).unwrap();
+        let bundle_dir = PathBuf::from(&pkg_res.package_dir);
+
+        // Inject an unsafe symlink into the package files
+        let target_file = sandbox.root.join("external_secret.conf");
+        fs::write(&target_file, "SUPER_SECRET_TOKEN=xyz123").unwrap();
+        let symlink_path = bundle_dir.join("files/symlink-pkg/secret_symlink.conf");
+        symlink(&target_file, &symlink_path).unwrap();
+
+        let report = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(
+            !report.passed,
+            "Symlinks in package submission must cause CI audit to FAIL"
+        );
+        assert_eq!(report.moderation_status, ModerationStatus::Flagged);
+        assert_eq!(report.audit_score, 0);
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("Symlinks are strictly prohibited")),
+            "Expected symlink rejection error, got: {:?}",
+            report.errors
+        );
+    }
+
+    #[test]
+    fn test_copy_dir_all_refuses_symlinks_and_avoids_dereferencing() {
+        use std::os::unix::fs::symlink;
+
+        let sandbox = TestSandbox::new("copy-symlink-refuse");
+        let src_dir = sandbox.root.join("src");
+        let dst_dir = sandbox.root.join("dst");
+        fs::create_dir_all(&src_dir).unwrap();
+
+        // Create regular file and symlink pointing outside src_dir
+        fs::write(src_dir.join("regular.txt"), "hello").unwrap();
+        let external_file = sandbox.root.join("host_secret.txt");
+        fs::write(&external_file, "SECRET_DATA_DO_NOT_LEAK").unwrap();
+        symlink(&external_file, src_dir.join("leaked_link.txt")).unwrap();
+
+        // copy_dir_all must fail and refuse to dereference
+        let res = copy_dir_all(&src_dir, &dst_dir);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("Symlinks are strictly prohibited"));
+
+        // Ensure host_secret was NOT copied as regular file into dst_dir
+        assert!(!dst_dir.join("leaked_link.txt").exists());
+    }
+
+    #[test]
+    fn test_ci_checksums_malformed_and_traversal_rejected() {
+        let sandbox = TestSandbox::new("checksums-reject");
+        let trust_store = TrustStore::new_test_store(&[], &[], &[]);
+
+        let draft = create_test_draft(&sandbox, "chk-pkg", "1.0.0");
+        let build_dir = sandbox.root.join("build");
+        let pkg_res = crate::authoring::create_package_bundle(draft, &build_dir).unwrap();
+        let pkg_dir = PathBuf::from(&pkg_res.package_dir);
+
+        let releases_dir = sandbox.root.join("releases");
+        let dist_res = build_distribution_release_internal(
+            &pkg_dir,
+            &releases_dir,
+            ReleaseChannel::Stable,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let bundle_dir = PathBuf::from(&dist_res.bundle_dir);
+        let checksums_file = bundle_dir.join("checksums.sha256");
+        let orig_checksums = fs::read_to_string(&checksums_file).unwrap();
+
+        // Test Case A: Invalid non-hex SHA-256
+        fs::write(
+            &checksums_file,
+            "not-a-valid-hex files/chk-pkg/chk-pkg-config.conf\n",
+        )
+        .unwrap();
+        let rep_a = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(!rep_a.passed);
+        assert!(rep_a
+            .errors
+            .iter()
+            .any(|e| e.contains("Invalid SHA-256 format")));
+
+        // Test Case B: Path Traversal in checksums line
+        let valid_dummy_sha = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        fs::write(
+            &checksums_file,
+            format!("{} ../../etc/passwd\n", valid_dummy_sha),
+        )
+        .unwrap();
+        let rep_b = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(!rep_b.passed);
+        assert!(rep_b
+            .errors
+            .iter()
+            .any(|e| e.contains("Path traversal or invalid path")));
+
+        // Test Case C: Duplicate entry in checksums
+        let dup_content = format!("{}{}", orig_checksums, orig_checksums);
+        fs::write(&checksums_file, dup_content).unwrap();
+        let rep_c = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(!rep_c.passed);
+        assert!(rep_c
+            .errors
+            .iter()
+            .any(|e| e.contains("Duplicate entry in checksums.sha256")));
+
+        // Test Case D: Checksum refers to nonexistent file
+        fs::write(
+            &checksums_file,
+            format!("{} files/chk-pkg/nonexistent.conf\n", valid_dummy_sha),
+        )
+        .unwrap();
+        let rep_d = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(!rep_d.passed);
+        assert!(rep_d
+            .errors
+            .iter()
+            .any(|e| e.contains("does not exist on disk")));
+
+        // Test Case E: Omission of declared manifest file
+        fs::write(&checksums_file, "# empty checksum file\n").unwrap();
+        let rep_e = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(!rep_e.passed);
+        assert!(rep_e
+            .errors
+            .iter()
+            .any(|e| e.contains("is missing from checksums.sha256")));
+    }
+
+    #[test]
+    fn test_ci_distribution_bundle_missing_checksums_rejected() {
+        let sandbox = TestSandbox::new("dist-no-chk");
+        let trust_store = TrustStore::new_test_store(&[], &[], &[]);
+
+        let draft = create_test_draft(&sandbox, "nochk-pkg", "1.0.0");
+        let build_dir = sandbox.root.join("build");
+        let pkg_res = crate::authoring::create_package_bundle(draft, &build_dir).unwrap();
+        let pkg_dir = PathBuf::from(&pkg_res.package_dir);
+
+        let releases_dir = sandbox.root.join("releases");
+        let dist_res = build_distribution_release_internal(
+            &pkg_dir,
+            &releases_dir,
+            ReleaseChannel::Stable,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let bundle_dir = PathBuf::from(&dist_res.bundle_dir);
+        // Delete checksums.sha256 from the distribution bundle
+        fs::remove_file(bundle_dir.join("checksums.sha256")).unwrap();
+
+        let report = run_ci_audit(&bundle_dir, None, &trust_store).unwrap();
+        assert!(
+            !report.passed,
+            "Missing checksums.sha256 in distribution bundle must fail audit"
+        );
+        assert_eq!(report.moderation_status, ModerationStatus::Flagged);
+        assert!(report.errors.iter().any(|e| e.contains(
+            "Missing required 'checksums.sha256' manifest in distribution release bundle"
+        )));
     }
 
     #[test]

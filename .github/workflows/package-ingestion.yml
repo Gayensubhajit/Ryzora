@@ -46,16 +46,21 @@ jobs:
         run: |
           # Detect package submissions modified in this PR
           # Enforces pure inspection: NO scripts, binaries, or hooks in the package are EVER executed
+          # Strictly audits exactly the packages modified in the PR; zero arbitrary fallback selection
           CHANGED_DIRS=$(git diff --name-only origin/${{ github.base_ref || 'main' }} HEAD | grep -E '^(packages|community)/[^/]+/' | cut -d/ -f1-2 | sort -u || true)
           if [ -z "$CHANGED_DIRS" ]; then
-            echo "No packages detected in git diff. Checking packages/ directory..."
-            CHANGED_DIRS=$(find packages -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n 1 || true)
+            echo "No package submissions modified in this PR."
+            echo "dirs=" >> $GITHUB_OUTPUT
+            echo "has_packages=false" >> $GITHUB_OUTPUT
+          else
+            echo "Detected submission directories: $CHANGED_DIRS"
+            echo "dirs=$CHANGED_DIRS" >> $GITHUB_OUTPUT
+            echo "has_packages=true" >> $GITHUB_OUTPUT
           fi
-          echo "Detected submission directories: $CHANGED_DIRS"
-          echo "dirs=$CHANGED_DIRS" >> $GITHUB_OUTPUT
 
       - name: Execute Deterministic Audit
         id: audit
+        if: steps.locate.outputs.has_packages == 'true'
         run: |
           mkdir -p ci-artifacts
           AUDIT_PASSED=true
@@ -90,7 +95,7 @@ jobs:
           fi
 
       - name: Post Informational PR Comment
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && steps.locate.outputs.has_packages == 'true'
         uses: actions/github-script@v7
         with:
           script: |
