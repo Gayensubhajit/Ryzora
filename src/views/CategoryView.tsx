@@ -5,7 +5,11 @@ import { PackageCard } from "../components/PackageCard";
 import { CategoryId } from "../types";
 
 const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
+  hub: { title: "Ryzora Hub", subtitle: "Synchronized ecosystem, updates, and creators" },
   discover: { title: "Discover", subtitle: "Explore desktop configurations" },
+  updates: { title: "Updates", subtitle: "Categorized updates with 1-click preview and rollback" },
+  repositories: { title: "Repositories", subtitle: "Repository sync and release channel management" },
+  creators: { title: "Creators", subtitle: "Creator profiles with Ed25519 keyring verification" },
   rices: {
     title: "Complete Rices",
     subtitle: "Full visual configurations bundling window manager, status bar, and terminal themes",

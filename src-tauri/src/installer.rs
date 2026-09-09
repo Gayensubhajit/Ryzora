@@ -58,6 +58,17 @@ pub struct InstalledFileEntry {
     pub symlink_target: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InstalledHistoryEntry {
+    pub version: String,
+    pub installed_at: u64,
+    pub snapshot_id: String,
+    #[serde(default)]
+    pub repository_id: Option<String>,
+    #[serde(default)]
+    pub tree_hash: Option<String>,
+}
+
 /// Authoritative record stored in ~/.local/share/ryzora/installed/<pkg_id>.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstalledPackageRecord {
@@ -80,6 +91,8 @@ pub struct InstalledPackageRecord {
     pub signer_key_id: Option<String>,
     #[serde(default)]
     pub signer_name: Option<String>,
+    #[serde(default)]
+    pub history: Vec<InstalledHistoryEntry>,
 }
 
 impl Default for InstalledPackageRecord {
@@ -98,6 +111,7 @@ impl Default for InstalledPackageRecord {
             cryptographic_status: None,
             signer_key_id: None,
             signer_name: None,
+            history: Vec::new(),
         }
     }
 }
@@ -975,6 +989,16 @@ pub fn install_package_in_with_trust(
     let repo_id =
         crate::repository::create_default_manager().find_repository_for_package(&manifest.id);
 
+    let tree_hash_val = crate::repository::compute_package_tree_hash(package_dir, &manifest).ok();
+
+    let history_entry = InstalledHistoryEntry {
+        version: manifest.version.clone(),
+        installed_at: now,
+        snapshot_id: snapshot_meta.id.clone(),
+        repository_id: repo_id.clone(),
+        tree_hash: tree_hash_val,
+    };
+
     let record = InstalledPackageRecord {
         package_id: manifest.id.clone(),
         name: manifest.name.clone(),
@@ -989,6 +1013,7 @@ pub fn install_package_in_with_trust(
         cryptographic_status: Some(crypto_eval.status),
         signer_key_id: crypto_eval.key_id,
         signer_name: crypto_eval.signer_name,
+        history: vec![history_entry],
     };
 
     let record_json = serde_json::to_string_pretty(&record)
@@ -2349,7 +2374,20 @@ pub fn apply_package_update_in(
         }
     }
 
-    // Update metadata record with actual repository_id
+    // Update metadata record with actual repository_id and append history
+    let new_tree_hash_val =
+        crate::repository::compute_package_tree_hash(new_package_dir, &new_manifest).ok();
+    let mut updated_history = record.history.clone();
+    updated_history.push(InstalledHistoryEntry {
+        version: new_manifest.version.clone(),
+        installed_at: now,
+        snapshot_id: snapshot_meta.id.clone(),
+        repository_id: new_repository_id
+            .clone()
+            .or_else(|| record.repository_id.clone()),
+        tree_hash: new_tree_hash_val,
+    });
+
     let new_record = InstalledPackageRecord {
         package_id: new_manifest.id.clone(),
         name: new_manifest.name.clone(),
@@ -2364,6 +2402,7 @@ pub fn apply_package_update_in(
         cryptographic_status: None,
         signer_key_id: None,
         signer_name: None,
+        history: updated_history,
     };
 
     let record_json = serde_json::to_string_pretty(&new_record)
@@ -3759,6 +3798,7 @@ mod tests {
             cryptographic_status: None,
             signer_key_id: None,
             signer_name: None,
+            history: Vec::new(),
         };
 
         let record_json = serde_json::to_string(&record).unwrap();
@@ -4029,6 +4069,7 @@ mod tests {
             cryptographic_status: None,
             signer_key_id: None,
             signer_name: None,
+            history: Vec::new(),
         };
 
         let json = serde_json::to_string(&legacy_record).unwrap();
@@ -5378,6 +5419,7 @@ mod tests {
             cryptographic_status: None,
             signer_key_id: None,
             signer_name: None,
+            history: Vec::new(),
         };
 
         let record_json = serde_json::to_string(&record).unwrap();
@@ -6078,5 +6120,120 @@ mod tests {
                 "original content before install"
             );
         }
+    }
+
+    #[test]
+    fn test_installed_package_history_recorded_on_install() {
+        let sandbox = TestSandbox::new("history-install");
+        let sys = TestSandbox::mock_system();
+        let pkg_dir = sandbox.create_sample_package_with_version(
+            "test-hist",
+            "1.0.0",
+            &[("file.conf", "~/.config/test/file.conf", "v1 content")],
+            &[],
+        );
+
+        let res = install_package_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+        assert!(res.success);
+
+        let record = get_installed_package_in("test-hist", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.history.len(), 1);
+        assert_eq!(record.history[0].version, "1.0.0");
+        assert_eq!(record.history[0].snapshot_id, record.snapshot_id);
+        assert!(record.history[0].installed_at > 0);
+    }
+
+    #[test]
+    fn test_installed_package_history_survives_updates() {
+        let sandbox = TestSandbox::new("history-update");
+        let sys = TestSandbox::mock_system();
+        let pkg_v1 = sandbox.create_sample_package_with_version(
+            "test-hist-up",
+            "1.0.0",
+            &[("file.conf", "~/.config/test/file.conf", "v1 content")],
+            &[],
+        );
+
+        let res1 = install_package_in(
+            &pkg_v1,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+        assert!(res1.success);
+
+        let pkg_v2 = sandbox.create_sample_package_with_version(
+            "test-hist-up",
+            "1.1.0",
+            &[("file.conf", "~/.config/test/file.conf", "v2 content")],
+            &[],
+        );
+        let res2 = apply_package_update_in(
+            "test-hist-up",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &pkg_v2,
+            &sys,
+            false,
+            None,
+        )
+        .unwrap();
+        assert!(res2.success);
+
+        let record = get_installed_package_in("test-hist-up", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.history.len(), 2);
+        assert_eq!(record.history[0].version, "1.0.0");
+        assert_eq!(record.history[1].version, "1.1.0");
+        assert_eq!(record.version, "1.1.0");
+    }
+
+    #[test]
+    fn test_installed_package_history_rollback_integration() {
+        let sandbox = TestSandbox::new("history-rollback");
+        let sys = TestSandbox::mock_system();
+        let pkg_v1 = sandbox.create_sample_package_with_version(
+            "test-hist-rb",
+            "1.0.0",
+            &[("file.conf", "~/.config/test/file.conf", "v1 content")],
+            &[],
+        );
+
+        let res1 = install_package_in(
+            &pkg_v1,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+        )
+        .unwrap();
+        assert!(res1.success);
+
+        let record_v1 = get_installed_package_in("test-hist-rb", &sandbox.installed_dir)
+            .unwrap()
+            .unwrap();
+        let snapshot_v1 = record_v1.history[0].snapshot_id.clone();
+
+        // Rollback using the historical snapshot ID
+        let rollback = restore_snapshot_in(&snapshot_v1, &sandbox.home_dir, &sandbox.snapshots_dir);
+        assert!(rollback.is_ok());
+        assert!(rollback.unwrap().success);
     }
 }

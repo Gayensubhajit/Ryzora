@@ -32,6 +32,12 @@ import {
   ReleaseChannel,
   IngestionReport,
   IngestionResult,
+  HubOverview,
+  UpdatesDashboardSummary,
+  CreatorProfile,
+  RepositorySyncStatus,
+  RepositorySyncReport,
+  InstalledHistoryEntry,
 } from "../types";
 
 interface AppContextType {
@@ -92,6 +98,22 @@ interface AppContextType {
   ingestCommunitySubmission: (submissionDir: string, repoDir: string) => Promise<IngestionResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
+  // Phase 14: Ryzora Hub, Updates, Creators & Sync
+  hubOverview: HubOverview | null;
+  loadingHub: boolean;
+  refreshHub: () => Promise<void>;
+  updatesSummary: UpdatesDashboardSummary | null;
+  loadingUpdates: boolean;
+  refreshUpdates: () => Promise<void>;
+  creatorProfiles: CreatorProfile[];
+  loadingCreators: boolean;
+  refreshCreators: () => Promise<void>;
+  repositorySyncStatuses: RepositorySyncStatus[];
+  loadingRepoSync: boolean;
+  refreshRepositorySync: (repoId: string) => Promise<RepositorySyncReport>;
+  refreshAllRepositoriesSync: () => Promise<RepositorySyncReport[]>;
+  switchRepositoryChannel: (repoId: string, channel: string) => Promise<RepositorySyncStatus>;
+  getInstalledPackageHistory: (packageId: string) => Promise<InstalledHistoryEntry[]>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -298,6 +320,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [installProgress, setInstallProgress] = useState<number>(0);
   const [installLogs, setInstallLogs] = useState<string[]>([]);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" | "warning" } | null>(null);
+  const [hubOverview, setHubOverview] = useState<HubOverview | null>(null);
+  const [loadingHub, setLoadingHub] = useState<boolean>(false);
+  const [updatesSummary, setUpdatesSummary] = useState<UpdatesDashboardSummary | null>(null);
+  const [loadingUpdates, setLoadingUpdates] = useState<boolean>(false);
+  const [creatorProfiles, setCreatorProfiles] = useState<CreatorProfile[]>([]);
+  const [loadingCreators, setLoadingCreators] = useState<boolean>(false);
+  const [repositorySyncStatuses, setRepositorySyncStatuses] = useState<RepositorySyncStatus[]>([]);
+  const [loadingRepoSync, setLoadingRepoSync] = useState<boolean>(false);
 
   const refreshSystem = async () => {
     setLoadingSystem(true);
@@ -458,6 +488,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadInstalledPackages();
     loadCatalogPackages();
     loadRepositorySources();
+    refreshHub();
+    refreshUpdates();
+    refreshCreators();
+    refreshRepoSyncStatuses();
   }, []);
 
   useEffect(() => {
@@ -729,6 +763,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const refreshHub = async () => {
+    setLoadingHub(true);
+    try {
+      const data = await invoke<HubOverview>("get_hub_overview");
+      setHubOverview(data);
+    } catch (e) {
+      console.error("Failed to load hub overview", e);
+    } finally {
+      setLoadingHub(false);
+    }
+  };
+
+  const refreshUpdates = async () => {
+    setLoadingUpdates(true);
+    try {
+      const data = await invoke<UpdatesDashboardSummary>("get_updates_dashboard");
+      setUpdatesSummary(data);
+    } catch (e) {
+      console.error("Failed to load updates dashboard", e);
+    } finally {
+      setLoadingUpdates(false);
+    }
+  };
+
+  const refreshCreators = async () => {
+    setLoadingCreators(true);
+    try {
+      const data = await invoke<CreatorProfile[]>("list_creator_profiles");
+      setCreatorProfiles(data || []);
+    } catch (e) {
+      console.error("Failed to load creator profiles", e);
+    } finally {
+      setLoadingCreators(false);
+    }
+  };
+
+  const refreshRepoSyncStatuses = async () => {
+    setLoadingRepoSync(true);
+    try {
+      const data = await invoke<RepositorySyncStatus[]>("get_repository_sync_status");
+      setRepositorySyncStatuses(data || []);
+    } catch (e) {
+      console.error("Failed to load repository sync statuses", e);
+    } finally {
+      setLoadingRepoSync(false);
+    }
+  };
+
+  const refreshRepositorySync = async (repositoryId: string): Promise<RepositorySyncReport> => {
+    setLoadingRepoSync(true);
+    try {
+      const report = await invoke<RepositorySyncReport>("refresh_repository_sync", { repositoryId });
+      await refreshRepoSyncStatuses();
+      await refreshCatalog();
+      await refreshUpdates();
+      await refreshHub();
+      setToast({
+        message: report.message,
+        type: report.success ? "success" : "warning",
+      });
+      return report;
+    } finally {
+      setLoadingRepoSync(false);
+    }
+  };
+
+  const refreshAllRepositoriesSync = async (): Promise<RepositorySyncReport[]> => {
+    setLoadingRepoSync(true);
+    try {
+      const reports = await invoke<RepositorySyncReport[]>("refresh_all_repositories_sync");
+      await refreshRepoSyncStatuses();
+      await refreshCatalog();
+      await refreshUpdates();
+      await refreshHub();
+      const allOk = reports.every((r) => r.success);
+      setToast({
+        message: `All repositories synchronized (${reports.length} sources)`,
+        type: allOk ? "success" : "info",
+      });
+      return reports;
+    } finally {
+      setLoadingRepoSync(false);
+    }
+  };
+
+  const switchRepositoryChannel = async (repositoryId: string, channel: string): Promise<RepositorySyncStatus> => {
+    const status = await invoke<RepositorySyncStatus>("switch_repository_channel", { repositoryId, channel });
+    await refreshRepoSyncStatuses();
+    await refreshCatalog();
+    await refreshUpdates();
+    await refreshHub();
+    setToast({
+      message: `Repository '${status.name}' channel switched to ${channel}`,
+      type: "success",
+    });
+    return status;
+  };
+
+  const getInstalledPackageHistory = async (packageId: string): Promise<InstalledHistoryEntry[]> => {
+    return await invoke<InstalledHistoryEntry[]>("get_installed_package_history", { packageId });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -783,6 +919,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteSnapshot,
         toast,
         setToast,
+        hubOverview,
+        loadingHub,
+        refreshHub,
+        updatesSummary,
+        loadingUpdates,
+        refreshUpdates,
+        creatorProfiles,
+        loadingCreators,
+        refreshCreators,
+        repositorySyncStatuses,
+        loadingRepoSync,
+        refreshRepositorySync,
+        refreshAllRepositoriesSync,
+        switchRepositoryChannel,
+        getInstalledPackageHistory,
       }}
     >
       {children}

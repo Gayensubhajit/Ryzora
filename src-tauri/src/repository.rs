@@ -1878,6 +1878,19 @@ impl RepositoryManager {
         Ok(())
     }
 
+    pub fn refresh_repository(&mut self, id: &str) -> Result<(), String> {
+        for repo in &mut self.repositories {
+            if repo.id() == id {
+                return repo.refresh();
+            }
+        }
+        Err(format!("Repository '{}' not found", id))
+    }
+
+    pub fn repositories_mut(&mut self) -> &mut [Box<dyn Repository>] {
+        &mut self.repositories
+    }
+
     pub fn list_repositories(&self) -> Vec<RepositorySummary> {
         self.repositories
             .iter()

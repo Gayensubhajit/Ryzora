@@ -1,5 +1,9 @@
 export type CategoryId =
+  | "hub"
   | "discover"
+  | "updates"
+  | "repositories"
+  | "creators"
   | "rices"
   | "themes"
   | "bars"
@@ -414,6 +418,14 @@ export interface InstalledFileEntry {
   symlink_target?: string | null;
 }
 
+export interface InstalledHistoryEntry {
+  version: string;
+  installed_at: number;
+  snapshot_id: string;
+  repository_id?: string;
+  tree_hash?: string;
+}
+
 export interface InstalledPackageRecord {
   package_id: string;
   name: string;
@@ -425,6 +437,7 @@ export interface InstalledPackageRecord {
   installed_files: string[];
   files?: InstalledFileEntry[];
   package_source_path: string;
+  history?: InstalledHistoryEntry[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -746,4 +759,81 @@ export interface IngestionResult {
   version: string;
   repository_path: string;
   report: IngestionReport;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ryzora Hub — Repository Sync, Categorized Updates & Creator Profiles (Phase 14)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RepositorySyncStatus {
+  id: string;
+  name: string;
+  url: string;
+  repo_type: "local" | "remote" | string;
+  enabled: boolean;
+  status: "online" | "offline" | "cached" | "refresh_failed" | string;
+  package_count: number;
+  last_synced?: string;
+  error_message?: string;
+  channel: string;
+  available_channels: string[];
+}
+
+export interface RepositorySyncReport {
+  repository_id: string;
+  success: boolean;
+  packages_discovered: number;
+  timestamp: string;
+  message: string;
+}
+
+export type UpdateCategory = "Security" | "Feature" | "Optional";
+
+export interface PackageUpdateItem {
+  package_id: string;
+  name: string;
+  installed_version: string;
+  available_version: string;
+  category: UpdateCategory;
+  repository_id: string;
+  release_channel: string;
+  release_notes?: string;
+  tree_hash?: string;
+  cryptographic_status?: string;
+  snapshot_id: string;
+}
+
+export interface UpdatesDashboardSummary {
+  total_updates: number;
+  security_updates_count: number;
+  feature_updates_count: number;
+  optional_updates_count: number;
+  updates: PackageUpdateItem[];
+}
+
+export interface CreatorProfile {
+  id: string;
+  display_name: string;
+  avatar: string;
+  verified: boolean;
+  trust_tier: "Official" | "Verified" | "Community" | "Untrusted";
+  public_key_fingerprint?: string;
+  total_packages: number;
+  total_downloads: number;
+  average_rating?: number;
+  package_ids: string[];
+  recent_packages: any[];
+  release_channels: string[];
+}
+
+export interface HubOverview {
+  total_installed: number;
+  available_updates_count: number;
+  security_updates_count: number;
+  total_repositories: number;
+  online_repositories_count: number;
+  featured_creators: CreatorProfile[];
+  recent_installs: InstalledPackageRecord[];
+  latest_releases: any[];
+  sync_summary: RepositorySyncStatus[];
 }

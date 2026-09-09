@@ -1,14 +1,18 @@
 pub mod authoring;
 pub mod compatibility;
+pub mod creator;
 pub mod crypto;
 pub mod dependency;
 pub mod distribution;
+pub mod hub;
 pub mod ingestion;
 pub mod installer;
 pub mod manifest;
 pub mod repository;
+pub mod repository_sync;
 pub mod snapshot;
 pub mod system;
+pub mod updates;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -70,6 +74,17 @@ pub fn run() {
             // Community Ingestion & CI Automation (Phase 13)
             ingestion::run_ci_submission_audit,
             ingestion::ingest_community_submission,
+            // Ryzora Hub, Sync, Updates & Creators (Phase 14)
+            hub::get_hub_overview,
+            hub::get_installed_package_history,
+            updates::get_updates_dashboard,
+            creator::list_creator_profiles,
+            creator::get_creator_profile,
+            repository_sync::get_repository_sync_status,
+            repository_sync::refresh_repository_sync,
+            repository_sync::refresh_all_repositories_sync,
+            repository_sync::switch_repository_channel,
+            repository_sync::list_repository_channels,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

@@ -1,5 +1,9 @@
 import React from "react";
 import {
+  Globe,
+  ArrowUpCircle,
+  Server,
+  Users,
   Compass,
   LayoutGrid,
   Palette,
@@ -17,9 +21,10 @@ import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
 
 export const Sidebar: React.FC = () => {
-  const { activeCategory, setActiveCategory, installedPackageIds, snapshots, systemInfo } = useApp();
+  const { activeCategory, setActiveCategory, installedPackageIds, snapshots, systemInfo, updatesSummary } = useApp();
 
   const mainCategories: { id: CategoryId; label: string; icon: React.ReactNode }[] = [
+    { id: "hub", label: "Hub", icon: <Globe className="w-4 h-4" /> },
     { id: "discover", label: "Discover", icon: <Compass className="w-4 h-4" /> },
     { id: "rices", label: "Complete Rices", icon: <LayoutGrid className="w-4 h-4" /> },
     { id: "themes", label: "Themes", icon: <Palette className="w-4 h-4" /> },
@@ -36,6 +41,22 @@ export const Sidebar: React.FC = () => {
       label: "Installed",
       icon: <DownloadCloud className="w-4 h-4" />,
       badge: installedPackageIds.length,
+    },
+    {
+      id: "updates",
+      label: "Updates",
+      icon: <ArrowUpCircle className="w-4 h-4" />,
+      badge: updatesSummary && updatesSummary.total_updates > 0 ? updatesSummary.total_updates : undefined,
+    },
+    {
+      id: "repositories",
+      label: "Repositories",
+      icon: <Server className="w-4 h-4" />,
+    },
+    {
+      id: "creators",
+      label: "Creators",
+      icon: <Users className="w-4 h-4" />,
     },
     {
       id: "backups",

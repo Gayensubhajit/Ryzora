@@ -2,6 +2,10 @@ import React from "react";
 import { AppProvider, useApp } from "./context/AppContext";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { HubView } from "./views/HubView";
+import { UpdatesView } from "./views/UpdatesView";
+import { RepositoryView } from "./views/RepositoryView";
+import { CreatorProfileView } from "./views/CreatorProfileView";
 import { DiscoverView } from "./views/DiscoverView";
 import { CategoryView } from "./views/CategoryView";
 import { InstalledView } from "./views/InstalledView";
@@ -16,8 +20,16 @@ const MainLayout: React.FC = () => {
 
   const renderActiveView = () => {
     switch (activeCategory) {
+      case "hub":
+        return <HubView />;
       case "discover":
         return <DiscoverView />;
+      case "updates":
+        return <UpdatesView />;
+      case "repositories":
+        return <RepositoryView />;
+      case "creators":
+        return <CreatorProfileView />;
       case "installed":
         return <InstalledView />;
       case "backups":
