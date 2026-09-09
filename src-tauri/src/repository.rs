@@ -7,6 +7,7 @@ use std::path::{Component, Path, PathBuf};
 use url::Url;
 
 use crate::compatibility::CompatibilityRequirements;
+use crate::distribution::{ModerationStatus, ReleaseChannel, TrustTier};
 use crate::manifest::{validate_manifest_internal, PackageType, RyzoraManifest};
 use crate::snapshot::get_home_dir;
 
@@ -63,6 +64,18 @@ pub struct RepositoryPackageEntry {
     pub content_hash: Option<String>,
     #[serde(default)]
     pub package_size_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_channel: Option<ReleaseChannel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_tier: Option<TrustTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moderation_status: Option<ModerationStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trending_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maintainer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +184,18 @@ pub struct FrontendPackageItem {
     pub integrity_status: String,
     #[serde(default)]
     pub is_cached: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_channel: Option<ReleaseChannel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_tier: Option<TrustTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moderation_status: Option<ModerationStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trending_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maintainer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_notes: Option<String>,
 }
 
 fn default_integrity_status() -> String {
@@ -2045,6 +2070,52 @@ impl RepositoryManager {
                     package_size_bytes: entry.package_size_bytes,
                     integrity_status,
                     is_cached,
+                    release_channel: Some(entry.release_channel.unwrap_or_else(|| {
+                        let v_lower = entry.version.to_lowercase();
+                        if v_lower.contains("nightly") {
+                            ReleaseChannel::Nightly
+                        } else if v_lower.contains("beta")
+                            || v_lower.contains("rc")
+                            || v_lower.contains("alpha")
+                        {
+                            ReleaseChannel::Beta
+                        } else {
+                            ReleaseChannel::Stable
+                        }
+                    })),
+                    trust_tier: Some(entry.trust_tier.unwrap_or_else(|| {
+                        if is_corrupted {
+                            TrustTier::Untrusted
+                        } else if repo.id() == "ryzora-official" {
+                            TrustTier::Official
+                        } else if entry.author.verified && is_hash_verified {
+                            TrustTier::Verified
+                        } else {
+                            TrustTier::Community
+                        }
+                    })),
+                    moderation_status: Some(
+                        entry
+                            .moderation_status
+                            .unwrap_or(ModerationStatus::Approved),
+                    ),
+                    trending_score: Some(entry.trending_score.unwrap_or_else(|| {
+                        let dl = entry.downloads.unwrap_or(1000) as f64;
+                        let rt = entry.rating.unwrap_or(4.8);
+                        let tr = if entry.trending.unwrap_or(false) {
+                            50.0
+                        } else {
+                            0.0
+                        };
+                        let ft = if entry.featured.unwrap_or(false) {
+                            30.0
+                        } else {
+                            0.0
+                        };
+                        (dl * 0.05) + (rt * 10.0) + tr + ft
+                    })),
+                    maintainer: entry.maintainer.clone(),
+                    release_notes: entry.release_notes.clone(),
                 };
 
                 all_packages.push(item);
@@ -2077,14 +2148,33 @@ pub fn load_repository_configs() -> Vec<RepositorySourceConfig> {
         }
     }
 
-    // Default configuration: local community repository
-    vec![RepositorySourceConfig {
-        id: "community-local".to_string(),
-        name: "Ryzora Community Repository (Local)".to_string(),
-        url: "local://repositories/community".to_string(),
-        enabled: true,
-        repo_type: "local".to_string(),
-    }]
+    // Default configurations: Official & Community remotes (GitHub-backed) + Local repository
+    vec![
+        RepositorySourceConfig {
+            id: "ryzora-official".to_string(),
+            name: "Ryzora Official (GitHub)".to_string(),
+            url: "https://raw.githubusercontent.com/Gayensubhajit/Ryzora-official-repo/main"
+                .to_string(),
+            enabled: false,
+            repo_type: "remote".to_string(),
+        },
+        RepositorySourceConfig {
+            id: "ryzora-community".to_string(),
+            name: "Ryzora Community (GitHub)".to_string(),
+            url:
+                "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community"
+                    .to_string(),
+            enabled: false,
+            repo_type: "remote".to_string(),
+        },
+        RepositorySourceConfig {
+            id: "community-local".to_string(),
+            name: "Ryzora Community Repository (Local)".to_string(),
+            url: "local://repositories/community".to_string(),
+            enabled: true,
+            repo_type: "local".to_string(),
+        },
+    ]
 }
 
 pub fn save_repository_configs(configs: &[RepositorySourceConfig]) -> Result<(), String> {
@@ -3850,6 +3940,12 @@ mod tests {
             downloads: None,
             content_hash: None,
             package_size_bytes: None,
+            release_channel: None,
+            trust_tier: None,
+            moderation_status: None,
+            trending_score: None,
+            maintainer: None,
+            release_notes: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -3886,6 +3982,12 @@ mod tests {
             downloads: None,
             content_hash: None,
             package_size_bytes: None,
+            release_channel: None,
+            trust_tier: None,
+            moderation_status: None,
+            trending_score: None,
+            maintainer: None,
+            release_notes: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -3918,6 +4020,12 @@ mod tests {
             downloads: None,
             content_hash: None,
             package_size_bytes: None,
+            release_channel: None,
+            trust_tier: None,
+            moderation_status: None,
+            trending_score: None,
+            maintainer: None,
+            release_notes: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4489,6 +4597,12 @@ mod tests {
             downloads: None,
             content_hash: None,
             package_size_bytes: None,
+            release_channel: None,
+            trust_tier: None,
+            moderation_status: None,
+            trending_score: None,
+            maintainer: None,
+            release_notes: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());

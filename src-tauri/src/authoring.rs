@@ -955,6 +955,12 @@ pub fn export_to_repository(
         downloads: Some(0),
         content_hash: Some(content_hash.clone()),
         package_size_bytes: Some(total_bytes),
+        release_channel: Some(crate::distribution::ReleaseChannel::Stable),
+        trust_tier: Some(crate::distribution::TrustTier::Community),
+        moderation_status: Some(crate::distribution::ModerationStatus::Approved),
+        trending_score: Some(0.0),
+        maintainer: None,
+        release_notes: None,
     };
 
     if let Some(pos) = index.packages.iter().position(|p| p.id == manifest.id) {

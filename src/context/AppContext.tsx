@@ -24,6 +24,9 @@ import {
   PackageDraft,
   AuthoringResult,
   PublishResult,
+  StoreAuditReport,
+  DistributionReleaseResult,
+  ReleaseChannel,
 } from "../types";
 
 interface AppContextType {
@@ -69,6 +72,14 @@ interface AppContextType {
   validatePackageDraft: (draft: PackageDraft) => Promise<ManifestValidationResult>;
   createPackage: (draft: PackageDraft, destinationDir: string) => Promise<AuthoringResult>;
   publishPackageToRepository: (packageDir: string, repositoryPath: string) => Promise<PublishResult>;
+  auditStoreSubmission: (packageDir: string) => Promise<StoreAuditReport>;
+  buildDistributionRelease: (
+    packageDir: string,
+    outputDir: string,
+    channel: ReleaseChannel,
+    releaseNotes?: string,
+    maintainer?: string
+  ) => Promise<DistributionReleaseResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
 }
@@ -642,6 +653,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return res;
   };
 
+
+  const auditStoreSubmission = async (packageDir: string): Promise<StoreAuditReport> => {
+    return await invoke<StoreAuditReport>("audit_store_submission", { packageDir });
+  };
+
+  const buildDistributionRelease = async (
+    packageDir: string,
+    outputDir: string,
+    channel: ReleaseChannel,
+    releaseNotes?: string,
+    maintainer?: string
+  ): Promise<DistributionReleaseResult> => {
+    return await invoke<DistributionReleaseResult>("build_distribution_release", {
+      packageDir,
+      outputDir,
+      channel,
+      releaseNotes: releaseNotes || null,
+      maintainer: maintainer || null,
+    });
+  };
+
   const deleteSnapshot = async (snapId: string) => {
     try {
       await invoke("delete_snapshot", { id: snapId });
@@ -696,6 +728,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         validatePackageDraft,
         createPackage,
         publishPackageToRepository,
+        auditStoreSubmission,
+        buildDistributionRelease,
         deleteSnapshot,
         toast,
         setToast,

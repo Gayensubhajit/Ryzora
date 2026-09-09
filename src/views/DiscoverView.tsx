@@ -5,8 +5,19 @@ import { HeroBanner } from "../components/HeroBanner";
 import { PackageCard } from "../components/PackageCard";
 import { PackageType, CategoryId } from "../types";
 
-type SortOption = "relevance" | "rating" | "downloads" | "name" | "newest";
-type StatusFilterOption = "all" | "compatible" | "featured" | "trending" | "installed" | "update_available" | "verified";
+type SortOption = "relevance" | "trending" | "rating" | "downloads" | "name" | "newest";
+type StatusFilterOption =
+  | "all"
+  | "official"
+  | "verified"
+  | "community"
+  | "compatible"
+  | "featured"
+  | "trending"
+  | "installed"
+  | "update_available"
+  | "stable"
+  | "beta";
 
 export function compareSemver(v1: string, v2: string): number {
   const clean = (v: string) => v.replace(/^v/, "").trim();
@@ -111,7 +122,19 @@ export const DiscoverView: React.FC = () => {
       if (statusFilter === "update_available" && !isUpdate) {
         return false;
       }
-      if (statusFilter === "verified" && pkg.integrity_status !== "verified") {
+      if (statusFilter === "official" && pkg.trust_tier !== "official") {
+        return false;
+      }
+      if (statusFilter === "verified" && pkg.trust_tier !== "verified" && pkg.trust_tier !== "official" && pkg.integrity_status !== "verified") {
+        return false;
+      }
+      if (statusFilter === "community" && pkg.trust_tier !== "community") {
+        return false;
+      }
+      if (statusFilter === "stable" && pkg.release_channel && pkg.release_channel !== "stable") {
+        return false;
+      }
+      if (statusFilter === "beta" && pkg.release_channel !== "beta") {
         return false;
       }
 
@@ -120,6 +143,11 @@ export const DiscoverView: React.FC = () => {
 
     // Sort
     result = [...result].sort((a, b) => {
+      if (sortBy === "trending") {
+        const scoreA = a.trending_score ?? (a.trending ? 100 : 0);
+        const scoreB = b.trending_score ?? (b.trending ? 100 : 0);
+        return scoreB - scoreA;
+      }
       if (sortBy === "rating") {
         return b.rating - a.rating;
       }
@@ -245,19 +273,23 @@ export const DiscoverView: React.FC = () => {
               <option value="terminal">Terminal</option>
             </select>
 
-            {/* Status Selector */}
+            {/* Status & Trust Selector */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
             >
-              <option value="all">All Status</option>
+              <option value="all">All Status & Tiers</option>
+              <option value="official">Official Ryzora Only</option>
+              <option value="verified">Verified Authors</option>
+              <option value="community">Community Packages</option>
               <option value="compatible">Compatible Only</option>
-              <option value="verified">Verified Only</option>
               <option value="installed">Installed</option>
               <option value="update_available">Update Available</option>
               <option value="featured">Featured</option>
               <option value="trending">Trending</option>
+              <option value="stable">Stable Channel</option>
+              <option value="beta">Beta Channel</option>
             </select>
 
             {/* Repository Selector */}
@@ -285,6 +317,7 @@ export const DiscoverView: React.FC = () => {
                 className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
               >
                 <option value="relevance">Relevance</option>
+                <option value="trending">Trending Score</option>
                 <option value="rating">Highest Rated</option>
                 <option value="downloads">Most Downloads</option>
                 <option value="name">Name (A-Z)</option>

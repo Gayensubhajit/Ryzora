@@ -1,5 +1,5 @@
 import React from "react";
-import { Star, ShieldCheck } from "lucide-react";
+import { Star, ShieldCheck, Sparkles } from "lucide-react";
 import { PackageItem } from "../types";
 import { useApp } from "../context/AppContext";
 
@@ -61,6 +61,31 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
 
         {/* Top-Left: Integrity / Cache / Offline indicator */}
         <div className="absolute top-2 left-2 flex items-center gap-1">
+          {packageItem.trust_tier === "official" && (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-amber-500/25 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"
+              title="Official Ryzora Package"
+            >
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>Official</span>
+            </div>
+          )}
+          {packageItem.release_channel === "beta" && (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30"
+              title="Beta Release Channel"
+            >
+              Beta
+            </div>
+          )}
+          {packageItem.release_channel === "nightly" && (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30"
+              title="Nightly Release Channel"
+            >
+              Nightly
+            </div>
+          )}
           {packageItem.integrity_status === "verified" ? (
             <div
               className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"

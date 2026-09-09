@@ -311,6 +311,12 @@ export interface PackageItem {
   package_size_bytes?: number;
   integrity_status?: "verified" | "unverified" | "corrupted" | "pending_download";
   is_cached?: boolean;
+  release_channel?: ReleaseChannel;
+  trust_tier?: TrustTier;
+  moderation_status?: ModerationStatus;
+  trending_score?: number;
+  maintainer?: string;
+  release_notes?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -577,3 +583,63 @@ export interface ManifestValidationResult {
   errors: string[];
   warnings: string[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Store & Distribution Infrastructure types (Phase 11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ReleaseChannel = "stable" | "beta" | "nightly";
+
+export type TrustTier = "official" | "verified" | "community" | "untrusted";
+
+export type ModerationStatus = "approved" | "pending_review" | "flagged" | "deprecated";
+
+export interface StoreAuditReport {
+  passed: boolean;
+  binary_executables_found: string[];
+  script_hooks_found: string[];
+  path_traversal_errors: string[];
+  size_limit_errors: string[];
+  metadata_errors: string[];
+  warnings: string[];
+  total_files: number;
+  total_bytes: number;
+  tree_hash: string;
+  score: number;
+}
+
+export interface DistributionRelease {
+  schema_version: number;
+  package_id: string;
+  name: string;
+  version: string;
+  package_type: PackageType;
+  channel: ReleaseChannel;
+  author: {
+    name: string;
+    avatar: string;
+    verified: boolean;
+  };
+  maintainer?: string;
+  release_notes: string;
+  published_at: string;
+  tree_hash: string;
+  min_ryzora_version: string;
+  trust_tier: TrustTier;
+  files_count: number;
+  total_bytes: number;
+}
+
+export interface DistributionReleaseResult {
+  success: boolean;
+  bundle_dir: string;
+  manifest_path: string;
+  release_path: string;
+  checksums_path: string;
+  submission_md_path: string;
+  submission_text: string;
+  tree_hash: string;
+  channel: ReleaseChannel;
+  message: string;
+}
+

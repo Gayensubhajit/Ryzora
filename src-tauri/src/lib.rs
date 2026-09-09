@@ -1,6 +1,7 @@
 pub mod authoring;
 pub mod compatibility;
 pub mod dependency;
+pub mod distribution;
 pub mod installer;
 pub mod manifest;
 pub mod repository;
@@ -54,6 +55,9 @@ pub fn run() {
             authoring::validate_package_draft,
             authoring::create_package,
             authoring::publish_package_to_repository,
+            // Store & Distribution Infrastructure (Phase 11)
+            distribution::audit_store_submission,
+            distribution::build_distribution_release,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

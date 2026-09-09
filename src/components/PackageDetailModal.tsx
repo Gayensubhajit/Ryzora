@@ -3,6 +3,7 @@ import {
   X,
   RotateCcw,
   Check,
+  Sparkles,
   AlertCircle,
   ShieldCheck,
   Eye,
@@ -236,6 +237,29 @@ export const PackageDetailModal: React.FC = () => {
             <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] px-1.5 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
               v{selectedPackage.version}
             </span>
+            {selectedPackage.trust_tier === "official" && (
+              <span className="text-[10px] font-semibold uppercase text-amber-300 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 flex items-center gap-1 shadow-sm">
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                Official
+              </span>
+            )}
+            {selectedPackage.trust_tier === "verified" && (
+              <span className="text-[10px] font-semibold uppercase text-blue-300 px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 flex items-center gap-1 shadow-sm">
+                <ShieldCheck className="w-3 h-3 text-blue-400" />
+                Verified
+              </span>
+            )}
+            {selectedPackage.release_channel && (
+              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                selectedPackage.release_channel === "beta"
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : selectedPackage.release_channel === "nightly"
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                  : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+              }`}>
+                {selectedPackage.release_channel}
+              </span>
+            )}
             {showPreview && !installCompleted && (
               <span className="text-[10px] font-mono uppercase text-[var(--accent-text)] px-1.5 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
                 Installation Preview
@@ -822,7 +846,7 @@ export const PackageDetailModal: React.FC = () => {
                   )}
 
                   {/* Repository & Integrity Metadata */}
-                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
                     <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
                       <div className="text-[10px] uppercase text-[var(--text-faint)]">Source Repository</div>
                       <div className="text-[var(--text-primary)] truncate">
@@ -836,6 +860,20 @@ export const PackageDetailModal: React.FC = () => {
                         {selectedPackage.is_cached
                           ? "Cached locally"
                           : "Remote (HTTPS on-demand)"}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Release Channel</div>
+                      <div className="text-[var(--text-primary)] uppercase truncate">
+                        {selectedPackage.release_channel || "stable"}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Trust Tier</div>
+                      <div className="text-[var(--text-primary)] capitalize truncate">
+                        {selectedPackage.trust_tier || "community"}
                       </div>
                     </div>
                   </div>
