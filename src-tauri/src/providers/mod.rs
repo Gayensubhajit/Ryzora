@@ -1,4 +1,5 @@
 pub mod community;
+pub mod fastfetch;
 pub mod github;
 pub mod normalizer;
 pub mod synthesizer;
@@ -339,6 +340,7 @@ pub fn create_default_provider_manager() -> ProviderManager {
     let mut mgr = ProviderManager::new();
     mgr.register_provider(Arc::new(community::CommunityProvider::new()));
     mgr.register_provider(Arc::new(github::GitHubProvider::new()));
+    mgr.register_provider(Arc::new(fastfetch::FastfetchProvider::new()));
     mgr
 }
 
