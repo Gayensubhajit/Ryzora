@@ -3,6 +3,8 @@ use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,10 +21,18 @@ use crate::repository::compute_package_tree_hash;
 /// Prevents cross-protocol attacks and signature replay across package IDs.
 pub const RYZORA_SIGNING_DOMAIN_V1: &str = "ryzora-v1";
 
-/// Hardcoded Ryzora Core Root Public Key for official distribution vetting.
+/// Authentic Hardcoded Ryzora Core Root Public Key for official distribution vetting.
 /// Hex: 32 bytes (64 hex characters).
+/// Fingerprint: ed25519:992aaf4748a8fd60
 pub const RYZORA_OFFICIAL_ROOT_PUBKEY_HEX: &str =
-    "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    "d1a9eda16bd08fae78c922688650008b4bce235a1171044f3b68d1cb109dc0fb";
+
+/// Fingerprint of the authentic Ryzora Core Root Public Key (first 16 hex chars of SHA-256).
+pub const RYZORA_OFFICIAL_ROOT_FINGERPRINT: &str = "ed25519:992aaf4748a8fd60";
+
+/// Recognized active Ryzora Core Root Public Keys for vetting official distribution releases.
+/// Designed for future key rotation: additional authorized root public keys can be appended here.
+pub const RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS: &[&str] = &[RYZORA_OFFICIAL_ROOT_PUBKEY_HEX];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cryptographic Data Types
@@ -281,7 +291,10 @@ impl TrustStore {
         Self {
             trusted_keys,
             revoked_keys,
-            official_core_keys: vec![RYZORA_OFFICIAL_ROOT_PUBKEY_HEX.to_string()],
+            official_core_keys: RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS
+                .iter()
+                .map(|k| k.to_string())
+                .collect(),
         }
     }
 
@@ -448,6 +461,23 @@ pub fn evaluate_trust_chain(
         }
         Some(s) => s,
     };
+
+    // Case 1.5: Algorithm Check (Ed25519 only)
+    if sig.algorithm.to_lowercase() != "ed25519" {
+        return CryptographicEvaluation {
+            status: CryptographicStatus::InvalidSignature,
+            key_id: Some(sig.key_id.clone()),
+            public_key: Some(sig.public_key.clone()),
+            signer_name: Some(sig.signer_identity.name.clone()),
+            is_valid: false,
+            is_trusted: false,
+            can_install: false,
+            error_message: Some(format!(
+                "Unsupported signature algorithm '{}'. Ryzora exclusively supports 'ed25519'.",
+                sig.algorithm
+            )),
+        };
+    }
 
     // Case 2: Tree Hash Check
     if sig.signed_tree_hash.trim() != expected_tree_hash.trim() {
@@ -622,36 +652,155 @@ pub fn evaluate_package_directory_crypto(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Gets or creates a local persistent author Ed25519 keypair for signing releases.
+/// Sets secure Unix file permissions (e.g. 0600 for private keys or 0700 for directories).
+#[allow(unused_variables)]
+pub fn set_secure_permissions(path: &Path, mode: u32) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let permissions = fs::Permissions::from_mode(mode);
+        fs::set_permissions(path, permissions).map_err(|e| {
+            format!(
+                "Failed to set permissions 0{:03o} on '{}': {}",
+                mode,
+                path.display(),
+                e
+            )
+        })?;
+    }
+    Ok(())
+}
+
+/// Verifies that a private key file has strict, secure permissions (0600 on Unix).
+/// Fails closed if the file is readable or writable by other users (group/world access).
+pub fn verify_private_key_permissions(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let metadata = fs::metadata(path).map_err(|e| {
+            format!(
+                "Failed to read metadata for private key file '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
+        let mode = metadata.permissions().mode();
+        let insecure_bits = mode & 0o077;
+        if insecure_bits != 0 {
+            return Err(format!(
+                "Insecure permissions on private key file '{}': mode is 0{:04o} (group/world bits: 0{:03o}). Private key files must have strict 0600 permissions (user read/write only). Installation or signing refused.",
+                path.display(),
+                mode & 0o777,
+                insecure_bits
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Writes a private key atomically to disk with strict 0600 permissions.
+pub fn write_private_key_atomic(path: &Path, private_key_hex: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Invalid private key path".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create directory '{}': {}", parent.display(), e))?;
+    set_secure_permissions(parent, 0o700)?;
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let tmp_path = parent.join(format!(".author.key.tmp.{}", nanos));
+
+    // Write temp file
+    fs::write(&tmp_path, private_key_hex).map_err(|e| {
+        format!(
+            "Failed to write temporary private key file '{}': {}",
+            tmp_path.display(),
+            e
+        )
+    })?;
+
+    // Enforce 0600 on temp file before rename
+    set_secure_permissions(&tmp_path, 0o600)?;
+
+    // Atomically rename into place
+    fs::rename(&tmp_path, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp_path);
+        format!(
+            "Failed to atomically rename private key to '{}': {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    // Verify final permissions
+    verify_private_key_permissions(path)?;
+
+    Ok(())
+}
+
+/// Loads an Ed25519 author signing key from disk, strictly verifying permissions.
+pub fn load_author_signing_key(priv_path: &Path) -> Result<SigningKey, String> {
+    if !priv_path.is_file() {
+        return Err(format!(
+            "Private key file '{}' does not exist",
+            priv_path.display()
+        ));
+    }
+
+    // Step 1: Strict permission check (fails closed on group/world access)
+    verify_private_key_permissions(priv_path)?;
+
+    // Step 2: Read and decode
+    let hex_raw = fs::read_to_string(priv_path).map_err(|e| {
+        format!(
+            "Failed to read private key file '{}': {}",
+            priv_path.display(),
+            e
+        )
+    })?;
+    let bytes = hex::decode(hex_raw.trim()).map_err(|e| {
+        format!(
+            "Malformed private key hex in '{}': {}",
+            priv_path.display(),
+            e
+        )
+    })?;
+    if bytes.len() != 32 {
+        return Err(format!(
+            "Invalid private key length ({}) in '{}', expected 32 bytes",
+            bytes.len(),
+            priv_path.display()
+        ));
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&bytes);
+    Ok(SigningKey::from_bytes(&arr))
+}
+
+/// Gets or creates a local persistent author Ed25519 keypair for signing releases.
 pub fn get_or_create_author_keypair(author_name: &str) -> Result<AuthorKeyPairInfo, String> {
     let keys_dir = get_author_keys_dir();
     fs::create_dir_all(&keys_dir)
         .map_err(|e| format!("Failed to create author keys directory: {}", e))?;
+    set_secure_permissions(&keys_dir, 0o700)?;
 
     let priv_path = keys_dir.join("author.key");
     let pub_path = keys_dir.join("author.pub");
 
     let signing_key = if priv_path.is_file() {
-        let hex_raw = fs::read_to_string(&priv_path)
-            .map_err(|e| format!("Failed to read private key file: {}", e))?;
-        let bytes =
-            hex::decode(hex_raw.trim()).map_err(|e| format!("Malformed private key hex: {}", e))?;
-        if bytes.len() != 32 {
-            return Err("Invalid private key length".to_string());
-        }
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&bytes);
-        SigningKey::from_bytes(&arr)
+        load_author_signing_key(&priv_path)?
     } else {
         let (sign, _) = generate_ed25519_keypair();
         let priv_hex = hex::encode(sign.to_bytes());
-        fs::write(&priv_path, &priv_hex)
-            .map_err(|e| format!("Failed to save author private key: {}", e))?;
+        write_private_key_atomic(&priv_path, &priv_hex)?;
         sign
     };
 
     let verifying = signing_key.verifying_key();
     let pub_hex = hex::encode(verifying.as_bytes());
     let _ = fs::write(&pub_path, &pub_hex);
+    let _ = set_secure_permissions(&pub_path, 0o644);
 
     let key_id = compute_key_fingerprint(&verifying);
 
@@ -1235,5 +1384,213 @@ pub mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_crypto_official_root_key_authenticity_and_fingerprint() {
+        let bytes = hex::decode(RYZORA_OFFICIAL_ROOT_PUBKEY_HEX).expect("Must be valid hex");
+        assert_eq!(
+            bytes.len(),
+            32,
+            "Ed25519 root public key must be exactly 32 bytes"
+        );
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        let verifying_key =
+            VerifyingKey::from_bytes(&arr).expect("Must be authentic Ed25519 public key");
+        let computed_fp = compute_key_fingerprint(&verifying_key);
+        assert_eq!(computed_fp, RYZORA_OFFICIAL_ROOT_FINGERPRINT);
+        assert_eq!(computed_fp, "ed25519:992aaf4748a8fd60");
+
+        // Must be recognized by default TrustStore
+        let store = TrustStore::load_default();
+        assert!(store.is_official_core_key(RYZORA_OFFICIAL_ROOT_PUBKEY_HEX));
+        assert!(!store.is_official_core_key(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ));
+    }
+
+    #[test]
+    fn test_crypto_author_private_key_permissions_hardening_0600() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "ryzora-perm-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let priv_path = temp_dir.join("author.key");
+
+        let (sign, _) = generate_ed25519_keypair();
+        let priv_hex = hex::encode(sign.to_bytes());
+
+        // Write atomically with 0600
+        write_private_key_atomic(&priv_path, &priv_hex).unwrap();
+
+        #[cfg(unix)]
+        {
+            let mode = fs::metadata(&priv_path).unwrap().permissions().mode();
+            assert_eq!(
+                mode & 0o777,
+                0o600,
+                "Private key file must have strict 0600 permissions"
+            );
+            let parent_mode = fs::metadata(&temp_dir).unwrap().permissions().mode();
+            assert_eq!(
+                parent_mode & 0o777,
+                0o700,
+                "Parent key directory must have strict 0700 permissions"
+            );
+        }
+
+        // Loading key must succeed
+        let loaded = load_author_signing_key(&priv_path).unwrap();
+        assert_eq!(loaded.to_bytes(), sign.to_bytes());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_crypto_author_private_key_rejects_insecure_permissions() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "ryzora-insecure-perm-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let priv_path = temp_dir.join("author.key");
+
+        let (sign, _) = generate_ed25519_keypair();
+        let priv_hex = hex::encode(sign.to_bytes());
+        fs::write(&priv_path, &priv_hex).unwrap();
+
+        // Test 1: group/world readable (0644)
+        set_secure_permissions(&priv_path, 0o644).unwrap();
+        let err644 = load_author_signing_key(&priv_path).unwrap_err();
+        assert!(err644.contains("Insecure permissions"));
+        assert!(err644.contains("0600"));
+
+        // Test 2: world writable (0666)
+        set_secure_permissions(&priv_path, 0o666).unwrap();
+        let err666 = load_author_signing_key(&priv_path).unwrap_err();
+        assert!(err666.contains("Insecure permissions"));
+
+        // Test 3: group readable only (0640)
+        set_secure_permissions(&priv_path, 0o640).unwrap();
+        let err640 = load_author_signing_key(&priv_path).unwrap_err();
+        assert!(err640.contains("Insecure permissions"));
+
+        // Test 4: fixed to 0600 -> succeeds
+        set_secure_permissions(&priv_path, 0o600).unwrap();
+        assert!(load_author_signing_key(&priv_path).is_ok());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_crypto_signature_algorithm_enforcement_ed25519_only() {
+        let (sign, _) = generate_ed25519_keypair();
+        let mut sig = sign_package_tree_hash(
+            &sign,
+            "algo-pkg",
+            "treehash-algo",
+            SignerIdentity {
+                author_id: "algo-pkg".to_string(),
+                name: "Algo Tester".to_string(),
+                handle: None,
+            },
+        )
+        .unwrap();
+
+        let store = TrustStore::new_test_store(&[], &[], &[]);
+
+        // Valid with ed25519
+        assert_eq!(sig.algorithm, "ed25519");
+        assert!(
+            evaluate_trust_chain(Some(&sig), "algo-pkg", "treehash-algo", None, &store).is_valid
+        );
+
+        // Corrupted / forbidden algorithms must fail closed
+        sig.algorithm = "rsa".to_string();
+        let eval_rsa = evaluate_trust_chain(Some(&sig), "algo-pkg", "treehash-algo", None, &store);
+        assert!(!eval_rsa.is_valid);
+        assert_eq!(eval_rsa.status, CryptographicStatus::InvalidSignature);
+        assert!(eval_rsa
+            .error_message
+            .unwrap()
+            .contains("Unsupported signature algorithm"));
+
+        sig.algorithm = "ecdsa".to_string();
+        let eval_ecdsa =
+            evaluate_trust_chain(Some(&sig), "algo-pkg", "treehash-algo", None, &store);
+        assert!(!eval_ecdsa.is_valid);
+        assert_eq!(eval_ecdsa.status, CryptographicStatus::InvalidSignature);
+    }
+
+    #[test]
+    fn test_crypto_signature_metadata_tampering_rejected() {
+        let (sign, _) = generate_ed25519_keypair();
+        let orig_sig = sign_package_tree_hash(
+            &sign,
+            "tamper-meta-pkg",
+            "treehash-original",
+            SignerIdentity {
+                author_id: "tamper-meta-pkg".to_string(),
+                name: "Tamper Tester".to_string(),
+                handle: None,
+            },
+        )
+        .unwrap();
+
+        let store = TrustStore::new_test_store(&[], &[], &[]);
+
+        // Tamper 1: signed_tree_hash mismatch
+        let mut bad_tree = orig_sig.clone();
+        bad_tree.signed_tree_hash = "treehash-tampered".to_string();
+        let eval1 = evaluate_trust_chain(
+            Some(&bad_tree),
+            "tamper-meta-pkg",
+            "treehash-original",
+            None,
+            &store,
+        );
+        assert!(!eval1.is_valid);
+        assert_eq!(eval1.status, CryptographicStatus::InvalidSignature);
+        assert!(eval1.error_message.unwrap().contains("Tampering detected"));
+
+        // Tamper 2: signature bytes corrupted
+        let mut bad_sig_bytes = orig_sig.clone();
+        bad_sig_bytes.signature = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string();
+        let eval2 = evaluate_trust_chain(
+            Some(&bad_sig_bytes),
+            "tamper-meta-pkg",
+            "treehash-original",
+            None,
+            &store,
+        );
+        assert!(!eval2.is_valid);
+        assert_eq!(eval2.status, CryptographicStatus::InvalidSignature);
+        assert!(eval2
+            .error_message
+            .unwrap()
+            .contains("Mathematical Ed25519 signature check failed"));
+
+        // Tamper 3: public key substituted
+        let (_, other_verify) = generate_ed25519_keypair();
+        let mut bad_pubkey = orig_sig.clone();
+        bad_pubkey.public_key = hex::encode(other_verify.as_bytes());
+        let eval3 = evaluate_trust_chain(
+            Some(&bad_pubkey),
+            "tamper-meta-pkg",
+            "treehash-original",
+            None,
+            &store,
+        );
+        assert!(!eval3.is_valid);
+        assert_eq!(eval3.status, CryptographicStatus::InvalidSignature);
     }
 }

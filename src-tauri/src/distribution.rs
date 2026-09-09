@@ -802,36 +802,25 @@ pub fn build_distribution_release_internal(
     let sig_meta_opt = {
         if let Ok(key_info) = crate::crypto::get_or_create_author_keypair(&manifest.author) {
             let priv_key_path = std::path::PathBuf::from(&key_info.private_key_path);
-            if let Ok(raw_hex) = fs::read_to_string(&priv_key_path) {
-                if let Ok(bytes) = hex::decode(raw_hex.trim()) {
-                    if bytes.len() == 32 {
-                        let mut arr = [0u8; 32];
-                        arr.copy_from_slice(&bytes);
-                        let signing_key = ed25519_dalek::SigningKey::from_bytes(&arr);
-                        let identity = crate::crypto::SignerIdentity {
-                            author_id: manifest.id.clone(),
-                            name: manifest.author.clone(),
-                            handle: maintainer.clone(),
-                        };
-                        let sig_res = crate::crypto::sign_package_tree_hash(
-                            &signing_key,
-                            &manifest.id,
-                            &audit.tree_hash,
-                            identity,
-                        );
-                        if let Ok(sig) = sig_res {
-                            let sig_path = bundle_dir.join("release.sig");
-                            let _ = fs::write(
-                                &sig_path,
-                                serde_json::to_string_pretty(&sig).unwrap_or_default(),
-                            );
-                            Some(sig)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+            if let Ok(signing_key) = crate::crypto::load_author_signing_key(&priv_key_path) {
+                let identity = crate::crypto::SignerIdentity {
+                    author_id: manifest.id.clone(),
+                    name: manifest.author.clone(),
+                    handle: maintainer.clone(),
+                };
+                let sig_res = crate::crypto::sign_package_tree_hash(
+                    &signing_key,
+                    &manifest.id,
+                    &audit.tree_hash,
+                    identity,
+                );
+                if let Ok(sig) = sig_res {
+                    let sig_path = bundle_dir.join("release.sig");
+                    let _ = fs::write(
+                        &sig_path,
+                        serde_json::to_string_pretty(&sig).unwrap_or_default(),
+                    );
+                    Some(sig)
                 } else {
                     None
                 }
@@ -1995,6 +1984,170 @@ exec-once = evil
             "Official claim without Core Root key must fail closed"
         );
         assert_eq!(imp_eval.status, CryptographicStatus::OfficialImpersonation);
+    }
+
+    #[test]
+    fn test_catalog_hash_vs_actual_package_hash_separation() {
+        use crate::crypto::{
+            compute_key_fingerprint, generate_ed25519_keypair, sign_package_tree_hash,
+            SignerIdentity, TrustStore,
+        };
+        use crate::installer::install_package_in_with_trust;
+
+        let sandbox = TestSandbox::new("catalog-hash-separation");
+
+        let (author_signing_key, author_verifying_key) = generate_ed25519_keypair();
+        let _author_pubkey_hex = hex::encode(author_verifying_key.as_bytes());
+        let _author_key_id = compute_key_fingerprint(&author_verifying_key);
+        let trust_store = TrustStore::new_test_store(&[], &[], &[]);
+
+        // 1. Create and build initial clean package
+        let conf_file = sandbox.root.join("kitty.conf");
+        fs::write(
+            &conf_file,
+            "font_size 12.0
+",
+        )
+        .unwrap();
+
+        let draft = crate::authoring::PackageDraft {
+            id: "safe-kitty-theme".to_string(),
+            name: "Safe Kitty Theme".to_string(),
+            version: "1.0.0".to_string(),
+            author: "KittyAuthor".to_string(),
+            package_type: PackageType::Theme,
+            description: "Legitimate kitty config".to_string(),
+            tags: vec!["kitty".to_string()],
+            color_palette: vec![],
+            compatibility: crate::manifest::ManifestCompatibility {
+                desktops: vec![],
+                sessions: vec![],
+                distros: vec![],
+                required: vec![],
+                optional: vec![],
+            },
+            dependencies: vec![],
+            files: vec![crate::authoring::FileMappingDraft {
+                source_path: conf_file.to_string_lossy().to_string(),
+                target: "~/.config/kitty/kitty.conf".to_string(),
+                package_rel_path: Some("files/kitty.conf".to_string()),
+                description: "Kitty config".to_string(),
+            }],
+        };
+
+        let build_dir = sandbox.root.join("build");
+        fs::create_dir_all(&build_dir).unwrap();
+        let build_res = crate::authoring::create_package_bundle(draft, &build_dir).unwrap();
+        let pkg_dir = PathBuf::from(&build_res.package_dir);
+
+        let releases_dir = sandbox.root.join("releases");
+        fs::create_dir_all(&releases_dir).unwrap();
+        let dist_res = build_distribution_release_internal(
+            &pkg_dir,
+            &releases_dir,
+            ReleaseChannel::Stable,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let bundle_dir = PathBuf::from(&dist_res.bundle_dir);
+        let legit_tree_hash = dist_res.tree_hash.clone();
+
+        // Sign the legitimate bundle
+        let sig_meta = sign_package_tree_hash(
+            &author_signing_key,
+            "safe-kitty-theme",
+            &legit_tree_hash,
+            SignerIdentity {
+                author_id: "safe-kitty-theme".to_string(),
+                name: "KittyAuthor".to_string(),
+                handle: None,
+            },
+        )
+        .unwrap();
+
+        fs::write(
+            bundle_dir.join("release.sig"),
+            serde_json::to_string_pretty(&sig_meta).unwrap(),
+        )
+        .unwrap();
+
+        // 2. Publish to Repository index (recording legitimate content_hash H1)
+        let repo_dir = sandbox.root.join("repo");
+        fs::create_dir_all(repo_dir.join("packages")).unwrap();
+        let initial_repo_index = crate::repository::RepositoryIndex {
+            schema: 1,
+            id: "test-repo".to_string(),
+            name: "Test Repo".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Repo for catalog separation test".to_string(),
+            packages: vec![],
+        };
+        fs::write(
+            repo_dir.join("repository.json"),
+            serde_json::to_string_pretty(&initial_repo_index).unwrap(),
+        )
+        .unwrap();
+
+        let pub_res = crate::authoring::export_to_repository(&bundle_dir, &repo_dir).unwrap();
+        assert!(pub_res.success);
+
+        // Verify repository index claims legit hash H1
+        let repo_raw = fs::read_to_string(repo_dir.join("repository.json")).unwrap();
+        let repo_index: crate::repository::RepositoryIndex =
+            serde_json::from_str(&repo_raw).unwrap();
+        assert_eq!(
+            repo_index.packages[0].content_hash.as_ref().unwrap(),
+            &legit_tree_hash
+        );
+
+        // 3. Attacker tampers with the on-disk package files inside the repository package folder
+        let repo_pkg_dir = repo_dir.join("packages/safe-kitty-theme");
+        let payload_file = repo_pkg_dir.join("files/kitty.conf");
+        fs::write(
+            &payload_file,
+            "font_size 12.0
+# Malicious injection into dotfile!
+",
+        )
+        .unwrap();
+
+        // 4. Installer attempts to plan and install from repo_pkg_dir
+        // Even though repository.json claims content_hash is legitimate H1,
+        // the installer recomputes the tree hash from the ACTUAL on-disk files (producing H2).
+        let home_dir = sandbox.root.join("home");
+        fs::create_dir_all(&home_dir).unwrap();
+        let snapshots_dir = sandbox.root.join("snapshots");
+        let installed_dir = sandbox.root.join("installed");
+        let staging_dir = sandbox.root.join("staging");
+        let sys = mock_dist_system();
+
+        let install_err = install_package_in_with_trust(
+            &repo_pkg_dir,
+            &snapshots_dir,
+            &installed_dir,
+            &staging_dir,
+            &home_dir,
+            &sys,
+            &trust_store,
+        );
+
+        // Must fail closed with tampering detected!
+        assert!(
+            install_err.is_err(),
+            "Installer must reject package with tampered disk files despite valid catalog entry"
+        );
+        let err_msg = install_err.unwrap_err();
+        assert!(
+            err_msg.contains("Tampering detected")
+                || err_msg.contains("does not match payload tree hash"),
+            "Error message must indicate hash mismatch / tampering: {}",
+            err_msg
+        );
+
+        // Verify no snapshots or installed files were created
+        assert!(!installed_dir.join("safe-kitty-theme.json").exists());
     }
 
     #[test]

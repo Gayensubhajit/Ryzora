@@ -2076,7 +2076,12 @@ impl RepositoryManager {
                     "unverified".to_string()
                 };
 
-                // Phase 12 Cryptographic Trust Chain Evaluation
+                // Phase 12 Cryptographic Trust Chain Evaluation (Provisional / Informational for Catalog)
+                // INVARIANT: Catalog evaluation against entry.content_hash is strictly provisional.
+                // It indicates expected publisher trust for catalog browsing and discovery.
+                // The actual installation gate in installer::install_package_in ALWAYS recomputes
+                // the full tree hash from actual on-disk files before verifying the Ed25519 signature
+                // and applying the trust policy.
                 let trust_store = crate::crypto::TrustStore::load_default();
                 let tree_h = entry.content_hash.as_deref().unwrap_or("");
                 let crypto_eval = crate::crypto::evaluate_trust_chain(
