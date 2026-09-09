@@ -1,68 +1,97 @@
 # Ryzora 🌌
 > **The Universal Linux Desktop Customization Platform**
 
-Ryzora is a standalone native Linux desktop customization marketplace and configuration manager. It allows Linux users to safely discover, preview, install, manage, and rollback desktop customization components across any Linux desktop environment.
+Ryzora is a native Linux desktop customization marketplace and configuration manager. It allows Linux users to safely discover, preview, install, manage, and rollback desktop configurations (rices, bars, themes, terminals, lockscreens, and wallpapers) across any Linux desktop environment without compromising system security.
 
 ---
 
-## 🚀 Features
+## 🛡️ Security Architecture & Invariants
 
-- **Universal Linux Support**: Runs seamlessly on Hyprland, Sway, KDE Plasma, GNOME, XFCE, Cinnamon, COSMIC, and other window managers and desktop environments.
-- **Complete Desktop Rices**: Discover and install bundled configurations containing window manager settings, bars, application launchers, terminal palettes, fastfetch layouts, and wallpapers in one click.
-- **Modular Categories**:
-  - 🎨 **Themes**: GTK, Qt, Icon sets, Cursor themes
-  - 🖥️ **Rices**: Complete full-desktop visual overhauls
-  - 📊 **Status Bars**: Waybar, Polybar, AGS widgets
-  - ⚡ **Fastfetch**: Custom ASCII logos and system fetch layouts
-  - 🔒 **Lockscreens**: Hyprlock, Swaylock, SDDM configurations
-  - 🖼️ **Wallpapers**: Curated high-res dynamic wallpapers
-  - 💻 **Terminal**: Starship prompts, Kitty, Alacritty color schemes
-- **Automatic System Detection**: Rust-powered environment probe that detects your Linux distribution, active desktop/window manager, display server (Wayland vs. X11), and installed desktop tools.
-- **Safety First Architecture**:
-  - **Zero Arbitrary Scripts**: Never executes opaque `install.sh` scripts.
-  - **Manifest Validation**: All packages use a typed, declaratively verified manifest format specifying exact file destinations and required dependencies.
-  - **Pre-Installation Snapshots**: Automatically takes timestamped snapshots of modified directories (`~/.config/*`).
-  - **1-Click Rollback**: Easily restore previous configurations if an installation doesn't fit your workflow.
+Unlike traditional dotfile installers that pipe arbitrary scripts into a shell (`curl ... | sh`), Ryzora is built around uncompromising security invariants:
+
+1. **Zero Privilege Escalation**: Absolutely NO `sudo`, `pkexec`, or setuid binaries. Ryzora operates exclusively within user-space.
+2. **Zero Shell Execution**: Packages never execute shell scripts (`install.sh`, `post_install.sh`) or invoke system package managers (`pacman`, `apt`, `yay`).
+3. **Pure Declarative Manifests**: All file placements are typed, validated, and restricted to the user's home directory (`~/.config/*`). Attempts to target `/etc`, `/usr`, or `/bin` are strictly blocked.
+4. **Ed25519 Cryptographic Trust**: Packages are cryptographically signed and verified over canonical directory tree hashes (`release.sig`). Unsigned packages remain isolated in the Community tier.
+5. **Atomic Snapshots & 1-Click Rollback**: Before any installation or update touches a file, a byte-accurate snapshot is taken. If anything fails, state is rolled back automatically.
 
 ---
 
-## 🛠️ Tech Stack
+## 🚀 Key Features
 
-- **Framework**: [Tauri 2](https://v2.tauri.app/)
-- **Frontend**: React, TypeScript, Tailwind CSS, Lucide Icons
-- **Backend / Native**: Rust
-- **Platform**: Linux (Wayland & X11)
+- **Universal Linux Support**: Native support for Hyprland, Sway, KDE Plasma, GNOME, XFCE, COSMIC, and other desktop environments on Wayland and X11.
+- **Discover Marketplace**: Explore curated community rices, themes, status bars, and terminal themes with high-res screenshots, ratings, and trust badges.
+- **Dependency Solver**: Pure-Rust probe detects missing desktop binaries (e.g. `waybar`, `fastfetch`) and warns before installation without installing system packages.
+- **Collections (`.ryzlist`)**: Export, share, and install reproducible sets of customizations with atomic transaction boundaries.
+- **Integrity Health Dashboard**: Authoritative local filesystem audits against installed SHA-256 hashes to detect file tampering or accidental deletions.
+- **Ryzora Hub & Creator Profiles**: View trending creators, author statistics, and manage installed updates.
+- **Offline & Cache Resilience**: Cached packages and local repositories remain browsable and installable even without an internet connection.
 
 ---
 
-## 📦 Getting Started
+## 📦 Installation & Packaging
+
+### Arch Linux / AUR
+Ryzora is packaged for Arch Linux via `PKGBUILD`:
+```bash
+cd packaging/arch
+makepkg -si
+```
+
+### AppImage (Universal Linux)
+Download the standalone `Ryzora-x86_64.AppImage` from GitHub Releases, make it executable, and run:
+```bash
+chmod +x Ryzora-x86_64.AppImage
+./Ryzora-x86_64.AppImage
+```
+
+To build an AppImage locally:
+```bash
+./scripts/build-appimage.sh
+```
+
+### Standalone Binary Tarball
+Extract the release tarball and run directly:
+```bash
+tar -xzf ryzora-v0.1.0-linux-x86_64.tar.gz
+./ryzora-v0.1.0-linux-x86_64/ryzora
+```
+
+---
+
+## 🛠️ Development & Building from Source
 
 ### Prerequisites
-
-Ensure you have the following installed on your Linux system:
 - **Node.js** (v20+) and **npm**
 - **Rust** and **Cargo** (1.80+)
-- **WebKit2GTK** (webkit2gtk-4.1) and system build tools:
+- **WebKit2GTK** (webkit2gtk-4.1), GTK3, and OpenSSL:
   ```bash
   # Arch / Garuda Linux:
-  sudo pacman -S --needed base-devel webkit2gtk-4.1 librsvg
+  sudo pacman -S --needed base-devel webkit2gtk-4.1 librsvg gtk3 openssl
   ```
 
-### Development
-
+### Development Mode
 ```bash
-# Install frontend dependencies
 npm install
-
-# Run application in development mode (Tauri 2 + Vite)
 npm run tauri dev
 ```
 
-### Production Build
-
+### Run Tests & Security Verification
 ```bash
-npm run tauri build
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo check --manifest-path src-tauri/Cargo.toml
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+npm run build
 ```
+
+---
+
+## 📚 Documentation
+
+- [Root Key Ceremony & Cryptographic Trust](docs/ROOT_KEY_CEREMONY.md)
+- [Release Signing & Signature Schema](docs/RELEASE_SIGNING.md)
+- [Package Authoring & Contribution Handbook](docs/PACKAGING_GUIDE.md)
+- [Versioning & Compatibility Policy](docs/VERSIONING.md)
 
 ---
 

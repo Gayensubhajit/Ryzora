@@ -1,0 +1,27 @@
+pkgbase = ryzora
+	pkgdesc = Universal Linux Desktop Customization Platform
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/Gayensubhajit/Ryzora
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	makedepends = npm
+	makedepends = nodejs
+	makedepends = git
+	depends = gtk3
+	depends = webkit2gtk-4.1
+	depends = openssl
+	depends = hicolor-icon-theme
+	optdepends = hyprland: Wayland compositor support
+	optdepends = waybar: Status bar customization
+	optdepends = hyprlock: Screen lockscreen customization
+	optdepends = fastfetch: System info fetch customization
+	optdepends = kitty: GPU-accelerated terminal rice support
+	optdepends = alacritty: Fast terminal rice support
+	provides = ryzora
+	conflicts = ryzora-bin
+	source = ryzora-0.1.0.tar.gz::https://github.com/Gayensubhajit/Ryzora/archive/refs/tags/v0.1.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = ryzora

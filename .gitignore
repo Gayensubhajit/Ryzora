@@ -25,3 +25,4 @@ dist-ssr
 
 # Tauri auto-generated ignores
 src-tauri/target/
+target/

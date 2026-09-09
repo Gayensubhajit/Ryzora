@@ -1,0 +1,51 @@
+# Maintainer: Ryzora Contributors <contributors@ryzora.org>
+pkgname=ryzora
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Universal Linux Desktop Customization Platform"
+arch=('x86_64')
+url="https://github.com/Gayensubhajit/Ryzora"
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'openssl' 'hicolor-icon-theme')
+makedepends=('cargo' 'npm' 'nodejs' 'git')
+optdepends=(
+    'hyprland: Wayland compositor support'
+    'waybar: Status bar customization'
+    'hyprlock: Screen lockscreen customization'
+    'fastfetch: System info fetch customization'
+    'kitty: GPU-accelerated terminal rice support'
+    'alacritty: Fast terminal rice support'
+)
+provides=('ryzora')
+conflicts=('ryzora-bin')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    npm install --frozen-lockfile || npm install
+    npm run build
+    cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # Install binaries
+    install -Dm755 "src-tauri/target/release/ryzora" "$pkgdir/usr/bin/ryzora"
+    install -Dm755 "src-tauri/target/release/ryzora-ci" "$pkgdir/usr/bin/ryzora-ci"
+
+    # Install desktop entry
+    install -Dm644 "dist-assets/ryzora.desktop" "$pkgdir/usr/share/applications/ryzora.desktop"
+
+    # Install icons
+    install -Dm644 "dist-assets/icons/hicolor/scalable/apps/ryzora.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/ryzora.svg"
+    for size in 16 32 48 64 128 256 512; do
+        install -Dm644 "dist-assets/icons/hicolor/${size}x${size}/apps/ryzora.png" \
+            "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/ryzora.png"
+    done
+
+    # Install license and documentation
+    install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

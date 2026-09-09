@@ -1,4 +1,4 @@
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+pub use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,18 +21,27 @@ use crate::repository::compute_package_tree_hash;
 /// Prevents cross-protocol attacks and signature replay across package IDs.
 pub const RYZORA_SIGNING_DOMAIN_V1: &str = "ryzora-v1";
 
-/// Authentic Hardcoded Ryzora Core Root Public Key for official distribution vetting.
+/// Dedicated Development/Test Root Public Key used in unit testing, local development,
+/// and automated CI integration tests.
 /// Hex: 32 bytes (64 hex characters).
 /// Fingerprint: ed25519:992aaf4748a8fd60
-pub const RYZORA_OFFICIAL_ROOT_PUBKEY_HEX: &str =
+pub const RYZORA_DEV_TEST_ROOT_PUBKEY_HEX: &str =
     "d1a9eda16bd08fae78c922688650008b4bce235a1171044f3b68d1cb109dc0fb";
 
-/// Fingerprint of the authentic Ryzora Core Root Public Key (first 16 hex chars of SHA-256).
-pub const RYZORA_OFFICIAL_ROOT_FINGERPRINT: &str = "ed25519:992aaf4748a8fd60";
+/// Fingerprint of the development/test root public key.
+pub const RYZORA_DEV_TEST_ROOT_FINGERPRINT: &str = "ed25519:992aaf4748a8fd60";
+
+/// Backward-compatible alias for the official root public key.
+/// In production distribution builds, the root key is provisioned via the RYZORA_OFFICIAL_ROOT_KEY
+/// compile-time environment variable or the root key ceremony (see docs/ROOT_KEY_CEREMONY.md).
+pub const RYZORA_OFFICIAL_ROOT_PUBKEY_HEX: &str = RYZORA_DEV_TEST_ROOT_PUBKEY_HEX;
+
+/// Backward-compatible alias for the official root fingerprint.
+pub const RYZORA_OFFICIAL_ROOT_FINGERPRINT: &str = RYZORA_DEV_TEST_ROOT_FINGERPRINT;
 
 /// Recognized active Ryzora Core Root Public Keys for vetting official distribution releases.
-/// Designed for future key rotation: additional authorized root public keys can be appended here.
-pub const RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS: &[&str] = &[RYZORA_OFFICIAL_ROOT_PUBKEY_HEX];
+/// Designed for root key rotation: additional authorized root public keys can be appended here.
+pub const RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS: &[&str] = &[RYZORA_DEV_TEST_ROOT_PUBKEY_HEX];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cryptographic Data Types
@@ -288,13 +297,27 @@ impl TrustStore {
             }
         }
 
+        let mut official_keys: Vec<String> = Vec::new();
+        // 1. Check if compile-time production official root key was provisioned
+        if let Some(prod_key) = option_env!("RYZORA_OFFICIAL_ROOT_KEY") {
+            let clean = prod_key.trim();
+            if !clean.is_empty() {
+                official_keys.push(clean.to_lowercase());
+            }
+        }
+        // 2. In debug / test builds, fallback to the recognized dev/test keys if no production key was provided
+        #[cfg(any(debug_assertions, test))]
+        if official_keys.is_empty() {
+            official_keys = RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS
+                .iter()
+                .map(|k| k.to_string())
+                .collect();
+        }
+
         Self {
             trusted_keys,
             revoked_keys,
-            official_core_keys: RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS
-                .iter()
-                .map(|k| k.to_string())
-                .collect(),
+            official_core_keys: official_keys,
         }
     }
 
@@ -316,6 +339,34 @@ impl TrustStore {
         self.official_core_keys
             .iter()
             .any(|k| k.to_lowercase() == clean)
+    }
+
+    /// Returns true if an authentic production root key has been provisioned
+    /// (i.e. official keys are present and not the dev/test placeholder).
+    pub fn is_production_ready(&self) -> bool {
+        !self.official_core_keys.is_empty()
+            && !self
+                .official_core_keys
+                .iter()
+                .any(|k| k.trim().to_lowercase() == RYZORA_DEV_TEST_ROOT_PUBKEY_HEX.to_lowercase())
+    }
+
+    /// Access the recognized official root public keys.
+    pub fn official_core_keys(&self) -> &[String] {
+        &self.official_core_keys
+    }
+
+    /// Appends an authorized official root key for key rotation.
+    pub fn add_official_core_key(&mut self, public_key_hex: &str) {
+        let clean = public_key_hex.trim().to_lowercase();
+        if !clean.is_empty()
+            && !self
+                .official_core_keys
+                .iter()
+                .any(|k| k.to_lowercase() == clean)
+        {
+            self.official_core_keys.push(clean);
+        }
     }
 
     pub fn is_revoked(&self, key_id: &str, public_key_hex: &str) -> bool {
@@ -1408,6 +1459,39 @@ pub mod tests {
         assert!(!store.is_official_core_key(
             "0000000000000000000000000000000000000000000000000000000000000000"
         ));
+    }
+
+    #[test]
+    fn test_crypto_production_root_unprovisioned_safety() {
+        // When unprovisioned (empty official keys), an absent root CANNOT validate arbitrary packages as official
+        let unprovisioned_store = TrustStore::new_test_store(&[], &[], &[]);
+        assert!(!unprovisioned_store.is_production_ready());
+        assert_eq!(unprovisioned_store.official_core_keys().len(), 0);
+        assert!(!unprovisioned_store.is_official_core_key(RYZORA_DEV_TEST_ROOT_PUBKEY_HEX));
+        assert!(!unprovisioned_store.is_official_core_key(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ));
+    }
+
+    #[test]
+    fn test_crypto_production_root_provisioning_and_rotation() {
+        let (_signing1, verifying1) = generate_ed25519_keypair();
+        let pubkey1_hex = hex::encode(verifying1.as_bytes());
+
+        let (_signing2, verifying2) = generate_ed25519_keypair();
+        let pubkey2_hex = hex::encode(verifying2.as_bytes());
+
+        // Provisioned with single root key
+        let mut store = TrustStore::new_test_store(&[&pubkey1_hex], &[], &[]);
+        assert!(store.is_production_ready());
+        assert!(store.is_official_core_key(&pubkey1_hex));
+        assert!(!store.is_official_core_key(&pubkey2_hex));
+
+        // Rotate root key: append authorized key2
+        store.add_official_core_key(&pubkey2_hex);
+        assert_eq!(store.official_core_keys().len(), 2);
+        assert!(store.is_official_core_key(&pubkey1_hex));
+        assert!(store.is_official_core_key(&pubkey2_hex));
     }
 
     #[test]

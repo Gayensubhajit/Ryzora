@@ -1,0 +1,46 @@
+# Maintainer: Ryzora Contributors <contributors@ryzora.org>
+pkgname=ryzora-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Universal Linux Desktop Customization Platform (Pre-compiled binary)"
+arch=('x86_64')
+url="https://github.com/Gayensubhajit/Ryzora"
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'openssl' 'hicolor-icon-theme')
+optdepends=(
+    'hyprland: Wayland compositor support'
+    'waybar: Status bar customization'
+    'hyprlock: Screen lockscreen customization'
+    'fastfetch: System info fetch customization'
+    'kitty: GPU-accelerated terminal rice support'
+    'alacritty: Fast terminal rice support'
+)
+provides=('ryzora')
+conflicts=('ryzora')
+source=("$url/releases/download/v$pkgver/ryzora-v$pkgver-linux-x86_64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    cd "$srcdir"
+
+    # Install binaries
+    install -Dm755 "ryzora" "$pkgdir/usr/bin/ryzora"
+    if [ -f "ryzora-ci" ]; then
+        install -Dm755 "ryzora-ci" "$pkgdir/usr/bin/ryzora-ci"
+    fi
+
+    # Install desktop entry
+    if [ -f "ryzora.desktop" ]; then
+        install -Dm644 "ryzora.desktop" "$pkgdir/usr/share/applications/ryzora.desktop"
+    fi
+
+    # Install icons
+    if [ -d "icons" ]; then
+        cp -r icons/* "$pkgdir/usr/share/icons/"
+    fi
+
+    # Install license and documentation
+    if [ -f "LICENSE" ]; then
+        install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    fi
+}

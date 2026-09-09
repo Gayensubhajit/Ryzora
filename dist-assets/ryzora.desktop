@@ -1,0 +1,25 @@
+[Desktop Entry]
+Name=Ryzora
+GenericName=Linux Desktop Customization Manager
+Comment=Safely discover, install, and manage desktop rices, themes, bars, and configurations
+Exec=ryzora %U
+Icon=ryzora
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;
+Keywords=rice;hyprland;theme;waybar;wallpaper;dotfiles;desktop;customization;
+StartupWMClass=ryzora
+MimeType=application/x-ryzlist;
+Actions=Discover;Installed;Hub;
+
+[Desktop Action Discover]
+Name=Browse Discover Catalog
+Exec=ryzora --view discover
+
+[Desktop Action Installed]
+Name=Manage Installed Packages
+Exec=ryzora --view installed
+
+[Desktop Action Hub]
+Name=Open Ryzora Hub
+Exec=ryzora --view hub
