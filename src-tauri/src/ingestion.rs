@@ -389,7 +389,7 @@ fn validate_checksums_file(
         if raw_rel_path.starts_with('/')
             || raw_rel_path.starts_with('\\')
             || raw_rel_path.contains("..")
-            || raw_rel_path.contains(' ')
+            || raw_rel_path.contains('\0')
         {
             errors.push(format!(
                 "Path traversal or invalid path in checksums.sha256 line {}: '{}'",
@@ -627,7 +627,7 @@ pub fn run_ci_audit(
             path_confinement_passed = false;
         }
 
-        if t.contains("..") || t.contains(' ') {
+        if t.contains("..") || t.contains('\0') {
             errors.push(format!(
                 "File [{}] target '{}' contains prohibited traversal components ('..' or null)",
                 i, t

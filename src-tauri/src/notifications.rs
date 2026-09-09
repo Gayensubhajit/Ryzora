@@ -340,6 +340,15 @@ pub fn load_all_entries() -> Vec<ActivityEntry> {
 
 /// Mark a specific entry as read in an explicit log path.
 pub fn mark_read_in(path: &Path, id: &str) -> Result<(), String> {
+    if id.is_empty()
+        || id.contains("..")
+        || id.contains('/')
+        || id.contains('\\')
+        || id.contains('\0')
+    {
+        return Err(format!("Invalid notification ID '{}'", id));
+    }
+
     let _guard = ACTIVITY_LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     if !path.is_file() {
