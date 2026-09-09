@@ -4,6 +4,7 @@ pub mod github;
 pub mod normalizer;
 pub mod rice;
 pub mod synthesizer;
+pub mod wallpaper;
 
 use crate::manifest::PackageType;
 use crate::repository::{AuthorInfo, FrontendPackageItem};
@@ -343,6 +344,7 @@ pub fn create_default_provider_manager() -> ProviderManager {
     mgr.register_provider(Arc::new(github::GitHubProvider::new()));
     mgr.register_provider(Arc::new(fastfetch::FastfetchProvider::new()));
     mgr.register_provider(Arc::new(rice::RiceProvider::new()));
+    mgr.register_provider(Arc::new(wallpaper::WallpaperProvider::new()));
     mgr
 }
 
