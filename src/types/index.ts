@@ -102,6 +102,7 @@ export interface ResolvedPackageNode {
   version: string;
   version_req?: string | null;
   required: boolean;
+  effective_required?: boolean;
   repository_id?: string | null;
   status: DependencyStatus;
   status_message?: string | null;

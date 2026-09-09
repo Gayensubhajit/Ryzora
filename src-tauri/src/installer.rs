@@ -5877,4 +5877,60 @@ mod tests {
             .missing_dependencies
             .contains(&"nonexistent_system_tool_phase9".to_string()));
     }
+
+    #[test]
+    fn test_phase9_1_installer_rollback_with_dependency_plan() {
+        let sandbox = TestSandbox::new("phase9-1-rollback");
+        let sys = TestSandbox::mock_system();
+
+        // Target file initially exists
+        let orig_file = sandbox.home_dir.join(".config/dep_app/main.conf");
+        fs::create_dir_all(orig_file.parent().unwrap()).unwrap();
+        fs::write(&orig_file, "original content before install").unwrap();
+
+        // Create package with valid dependency
+        let pkg_dir = sandbox.create_sample_package(
+            "dep-rollback-pkg",
+            &[(
+                "files/main.conf",
+                "~/.config/dep_app/main.conf",
+                "new content",
+            )],
+            &[],
+        );
+
+        // Verify dependency planning succeeds
+        let plan = generate_installation_plan_in(&pkg_dir, &sandbox.home_dir, &sys).unwrap();
+        assert!(plan.dependency_report.is_some());
+        assert!(plan.dependency_report.unwrap().resolved);
+
+        // Make destination file read-only so staged apply fails
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&orig_file, fs::Permissions::from_mode(0o444)).unwrap();
+
+            let res = install_package_in(
+                &pkg_dir,
+                &sandbox.snapshots_dir,
+                &sandbox.installed_dir,
+                &sandbox.staging_dir,
+                &sandbox.home_dir,
+                &sys,
+            );
+
+            // Restore permissions
+            fs::set_permissions(&orig_file, fs::Permissions::from_mode(0o644)).unwrap();
+
+            let install_res = res.unwrap();
+            assert!(!install_res.success);
+            assert!(install_res.rolled_back);
+
+            // Check original file was restored
+            assert_eq!(
+                fs::read_to_string(&orig_file).unwrap(),
+                "original content before install"
+            );
+        }
+    }
 }

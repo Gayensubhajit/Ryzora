@@ -6,7 +6,14 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dependency Data Model (Phase 9)
+// Hardening Limits (Phase 9.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+pub const MAX_DEPENDENCY_DEPTH: usize = 32;
+pub const MAX_RESOLVED_NODES: usize = 128;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dependency Data Model (Phase 9 & 9.1)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -51,6 +58,8 @@ pub struct ResolvedPackageNode {
     pub version: String,
     pub version_req: Option<String>,
     pub required: bool,
+    #[serde(default = "default_true")]
+    pub effective_required: bool,
     pub repository_id: Option<String>,
     pub status: DependencyStatus,
     pub status_message: Option<String>,
@@ -99,6 +108,25 @@ pub struct DependencyResolutionReport {
 pub trait PackageProvider {
     fn get_manifest(&self, package_id: &str) -> Result<RyzoraManifest, String>;
     fn get_repository_id(&self, package_id: &str) -> Option<String>;
+
+    /// Retrieve all candidate manifests available for this package ID across all repositories,
+    /// paired with their repository ID.
+    fn get_candidates(&self, package_id: &str) -> Vec<(RyzoraManifest, String)> {
+        match self.get_manifest(package_id) {
+            Ok(m) => {
+                let repo = self
+                    .get_repository_id(package_id)
+                    .unwrap_or_else(|| "unknown".to_string());
+                vec![(m, repo)]
+            }
+            Err(_) => vec![],
+        }
+    }
+
+    /// Return a list of offline or error repository descriptions.
+    fn get_unavailable_repositories(&self) -> Vec<String> {
+        vec![]
+    }
 }
 
 pub struct RepositoryPackageProvider {
@@ -133,6 +161,30 @@ impl PackageProvider for RepositoryPackageProvider {
             }
         }
         None
+    }
+
+    fn get_candidates(&self, package_id: &str) -> Vec<(RyzoraManifest, String)> {
+        let mut candidates = Vec::new();
+        for repo in self.manager.repositories() {
+            if let Ok(entries) = repo.list_entries() {
+                if entries.iter().any(|e| e.id == package_id) {
+                    if let Ok(m) = repo.get_package_manifest(package_id) {
+                        candidates.push((m, repo.id().to_string()));
+                    }
+                }
+            }
+        }
+        candidates
+    }
+
+    fn get_unavailable_repositories(&self) -> Vec<String> {
+        let mut unavail = Vec::new();
+        for repo in self.manager.repositories() {
+            if repo.status() != "online" {
+                unavail.push(format!("{} ({})", repo.id(), repo.status()));
+            }
+        }
+        unavail
     }
 }
 
@@ -177,11 +229,14 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
         let mut capability_deps_map: HashMap<String, ResolvedCapabilityDependency> = HashMap::new();
 
         // 1. Recursive resolution traversal
+        let root_repo_id = self.provider.get_repository_id(&root_id);
         let mut call_stack: Vec<String> = Vec::new();
         self.traverse_package(
             root_manifest,
             None,
-            true,
+            root_repo_id,
+            true, // root package is directly required
+            true, // effective required
             &mut call_stack,
             &mut packages_map,
             &mut version_requirements,
@@ -217,7 +272,7 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
             self.topological_sort(&root_id, &adj_list, &mut visited, &mut install_order);
         }
 
-        // 4. Summarize missing dependencies
+        // 4. Summarize missing dependencies with transitive optional awareness
         let mut missing_required = Vec::new();
         let mut missing_optional = Vec::new();
 
@@ -244,14 +299,26 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
         }
 
         for pkg in packages_map.values() {
-            if pkg.status == DependencyStatus::Missing && pkg.required {
-                missing_required.push(format!("package:{}", pkg.package_id));
-            } else if pkg.status == DependencyStatus::Incompatible && pkg.required {
-                conflicts.push(format!(
-                    "Package '{}' is incompatible: {}",
-                    pkg.package_id,
-                    pkg.status_message.as_deref().unwrap_or("unknown reason")
-                ));
+            if pkg.status == DependencyStatus::Missing {
+                if pkg.effective_required {
+                    missing_required.push(format!("package:{}", pkg.package_id));
+                } else {
+                    missing_optional.push(format!("package:{}", pkg.package_id));
+                }
+            } else if pkg.status == DependencyStatus::Incompatible {
+                if pkg.effective_required {
+                    conflicts.push(format!(
+                        "Package '{}' is incompatible: {}",
+                        pkg.package_id,
+                        pkg.status_message.as_deref().unwrap_or("unknown reason")
+                    ));
+                } else {
+                    missing_optional.push(format!(
+                        "package:{} (incompatible: {})",
+                        pkg.package_id,
+                        pkg.status_message.as_deref().unwrap_or("unknown reason")
+                    ));
+                }
             }
         }
 
@@ -288,7 +355,9 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
         &self,
         manifest: &RyzoraManifest,
         version_req: Option<String>,
-        required: bool,
+        repo_id: Option<String>,
+        direct_required: bool,
+        effective_required: bool,
         call_stack: &mut Vec<String>,
         packages: &mut HashMap<String, ResolvedPackageNode>,
         version_requirements: &mut HashMap<String, Vec<(String, String)>>,
@@ -300,7 +369,25 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
     ) {
         let pkg_id = manifest.id.clone();
 
-        // Check for cycle
+        // Safety Limit 1: Max recursion depth
+        if call_stack.len() >= MAX_DEPENDENCY_DEPTH {
+            conflicts.push(format!(
+                "Maximum dependency depth ({}) exceeded at package '{}' — possible deep recursion or malicious graph",
+                MAX_DEPENDENCY_DEPTH, pkg_id
+            ));
+            return;
+        }
+
+        // Safety Limit 2: Max resolved node count
+        if packages.len() >= MAX_RESOLVED_NODES {
+            conflicts.push(format!(
+                "Maximum resolved dependency count ({}) exceeded — graph too large",
+                MAX_RESOLVED_NODES
+            ));
+            return;
+        }
+
+        // Check for cycle in current recursion path
         if let Some(pos) = call_stack.iter().position(|id| id == &pkg_id) {
             let mut cycle = call_stack[pos..].to_vec();
             cycle.push(pkg_id.clone());
@@ -310,8 +397,12 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
 
         call_stack.push(pkg_id.clone());
 
-        // Check if package already processed
-        if let Some(existing) = packages.get(&pkg_id) {
+        // Check if package was already resolved
+        if let Some(existing) = packages.get_mut(&pkg_id) {
+            // If another path requires this package, promote effective_required to true
+            if effective_required {
+                existing.effective_required = true;
+            }
             if let Some(ref req_str) = version_req {
                 if let Ok(req) = VersionReq::parse(req_str) {
                     if let Ok(ver) = Version::parse(&existing.version) {
@@ -360,12 +451,14 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
             }
         }
 
-        let repo_id = self.provider.get_repository_id(&pkg_id);
+        let repo_id = repo_id.or_else(|| self.provider.get_repository_id(&pkg_id));
         let all_deps = manifest.all_dependencies();
         let mut child_package_ids = Vec::new();
 
         // Process all dependencies declared by this package
         for dep in &all_deps {
+            let child_effective_required = effective_required && dep.required;
+
             match dep.kind {
                 DependencyKind::Package => {
                     child_package_ids.push(dep.id.clone());
@@ -376,13 +469,118 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
                             .push((pkg_id.clone(), req_str.clone()));
                     }
 
-                    // Attempt to resolve child package from provider
-                    match self.provider.get_manifest(&dep.id) {
-                        Ok(child_manifest) => {
+                    // Phase 9.1: Multi-repository candidate inspection & deterministic version selection
+                    let candidates = self.provider.get_candidates(&dep.id);
+
+                    if candidates.is_empty() {
+                        let unavail = self.provider.get_unavailable_repositories();
+                        let error_msg = if !unavail.is_empty() {
+                            format!(
+                                "Package '{}' not found, but repository sources [{}] are offline/error",
+                                dep.id,
+                                unavail.join(", ")
+                            )
+                        } else {
+                            format!("Package '{}' not found in any repository", dep.id)
+                        };
+
+                        let child_node = ResolvedPackageNode {
+                            package_id: dep.id.clone(),
+                            name: dep.id.clone(),
+                            version: "unknown".to_string(),
+                            version_req: dep.version_req.clone(),
+                            required: dep.required,
+                            effective_required: child_effective_required,
+                            repository_id: None,
+                            status: DependencyStatus::Missing,
+                            status_message: Some(error_msg),
+                            dependencies: Vec::new(),
+                            transitive_packages: Vec::new(),
+                        };
+                        packages.insert(dep.id.clone(), child_node);
+                    } else {
+                        // Filter candidates matching version_req
+                        let mut matching: Vec<(RyzoraManifest, String)> = Vec::new();
+                        let mut all_versions: Vec<String> = Vec::new();
+
+                        for (cand_manifest, cand_repo) in candidates {
+                            all_versions
+                                .push(format!("v{} ({})", cand_manifest.version, cand_repo));
+
+                            let satisfies = match &dep.version_req {
+                                Some(req_str) => match VersionReq::parse(req_str) {
+                                    Ok(req) => match Version::parse(&cand_manifest.version) {
+                                        Ok(v) => req.matches(&v),
+                                        Err(_) => false,
+                                    },
+                                    Err(_) => false,
+                                },
+                                None => true,
+                            };
+
+                            if satisfies {
+                                matching.push((cand_manifest, cand_repo));
+                            }
+                        }
+
+                        if matching.is_empty() {
+                            let req_display = dep.version_req.as_deref().unwrap_or("any");
+                            let msg = format!(
+                                "Package '{}' has available versions [{}], but none satisfy requirement '{}'",
+                                dep.id,
+                                all_versions.join(", "),
+                                req_display
+                            );
+
+                            let child_node = ResolvedPackageNode {
+                                package_id: dep.id.clone(),
+                                name: dep.id.clone(),
+                                version: "incompatible".to_string(),
+                                version_req: dep.version_req.clone(),
+                                required: dep.required,
+                                effective_required: child_effective_required,
+                                repository_id: None,
+                                status: DependencyStatus::Incompatible,
+                                status_message: Some(msg),
+                                dependencies: Vec::new(),
+                                transitive_packages: Vec::new(),
+                            };
+                            packages.insert(dep.id.clone(), child_node);
+                        } else {
+                            // Deterministic candidate selection:
+                            // 1. Highest SemVer version first
+                            // 2. Local repository preferred over remote
+                            // 3. Alphabetical tie-breaker on repository ID
+                            matching.sort_by(|(m_a, repo_a), (m_b, repo_b)| {
+                                let v_a = Version::parse(&m_a.version).ok();
+                                let v_b = Version::parse(&m_b.version).ok();
+                                match (v_a, v_b) {
+                                    (Some(a), Some(b)) => {
+                                        let cmp = b.cmp(&a);
+                                        if cmp != std::cmp::Ordering::Equal {
+                                            return cmp;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+
+                                let is_local_a = repo_a.starts_with("local");
+                                let is_local_b = repo_b.starts_with("local");
+                                if is_local_a != is_local_b {
+                                    return is_local_b.cmp(&is_local_a);
+                                }
+
+                                repo_a.cmp(repo_b)
+                            });
+
+                            let (best_manifest, best_repo_id) = matching.remove(0);
+
                             self.traverse_package(
-                                &child_manifest,
+                                &best_manifest,
                                 dep.version_req.clone(),
+                                Some(best_repo_id),
                                 dep.required,
+                                child_effective_required,
                                 call_stack,
                                 packages,
                                 version_requirements,
@@ -392,24 +590,6 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
                                 system_deps,
                                 capability_deps,
                             );
-                        }
-                        Err(e) => {
-                            let child_node = ResolvedPackageNode {
-                                package_id: dep.id.clone(),
-                                name: dep.id.clone(),
-                                version: "unknown".to_string(),
-                                version_req: dep.version_req.clone(),
-                                required: dep.required,
-                                repository_id: None,
-                                status: DependencyStatus::Missing,
-                                status_message: Some(format!(
-                                    "Package not found in any repository: {}",
-                                    e
-                                )),
-                                dependencies: Vec::new(),
-                                transitive_packages: Vec::new(),
-                            };
-                            packages.insert(dep.id.clone(), child_node);
                         }
                     }
                 }
@@ -424,15 +604,14 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
                     let entry = system_deps.entry(dep.id.clone()).or_insert_with(|| {
                         ResolvedSystemDependency {
                             binary: dep.id.clone(),
-                            required: dep.required,
+                            required: child_effective_required,
                             status: dep_status,
                             path,
                             description: dep.description.clone(),
                         }
                     });
 
-                    // If any dependent marks it required, it becomes required
-                    if dep.required {
+                    if child_effective_required {
                         entry.required = true;
                     }
                 }
@@ -442,13 +621,13 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
                         ResolvedCapabilityDependency {
                             capability: dep.id.clone(),
                             kind: DependencyKind::DesktopCapability,
-                            required: dep.required,
+                            required: child_effective_required,
                             status,
                             current_value: current_val,
                             description: dep.description.clone(),
                         }
                     });
-                    if dep.required {
+                    if child_effective_required {
                         entry.required = true;
                     }
                 }
@@ -458,13 +637,13 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
                         ResolvedCapabilityDependency {
                             capability: dep.id.clone(),
                             kind: DependencyKind::RuntimeCapability,
-                            required: dep.required,
+                            required: child_effective_required,
                             status,
                             current_value: current_val,
                             description: dep.description.clone(),
                         }
                     });
-                    if dep.required {
+                    if child_effective_required {
                         entry.required = true;
                     }
                 }
@@ -478,7 +657,8 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
             name: manifest.name.clone(),
             version: manifest.version.clone(),
             version_req,
-            required,
+            required: direct_required,
+            effective_required,
             repository_id: repo_id,
             status,
             status_message,
@@ -558,10 +738,34 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
         )
     }
 
-    /// Secure capability check for runtime environments.
+    /// Secure capability check for runtime environments and distro requirements.
     /// Pure filesystem checks without external process execution.
     fn evaluate_runtime_capability(&self, cap: &str) -> (DependencyStatus, Option<String>) {
         let cap_lower = cap.to_lowercase();
+
+        // Distro capability check (e.g. distro:arch, distro:ubuntu, arch, ubuntu)
+        if cap_lower.starts_with("distro:")
+            || [
+                "arch", "ubuntu", "debian", "fedora", "void", "gentoo", "nixos",
+            ]
+            .contains(&cap_lower.as_str())
+        {
+            let target = cap_lower.trim_start_matches("distro:");
+            let sys_id = self.system_info.distro_id.to_lowercase();
+            let sys_fam = self.system_info.distro_family.to_lowercase();
+            if target == "all" || target == "universal" || sys_id == target || sys_fam == target {
+                return (
+                    DependencyStatus::Satisfied,
+                    Some(self.system_info.distro_name.clone()),
+                );
+            } else {
+                return (
+                    DependencyStatus::Incompatible,
+                    Some(format!("Active system is {}", self.system_info.distro_name)),
+                );
+            }
+        }
+
         match cap_lower.as_str() {
             "systemd" => {
                 if Path::new("/run/systemd/system").exists() {
@@ -658,7 +862,8 @@ pub fn resolve_package_dependencies(
 
 #[cfg(test)]
 pub struct MockPackageProvider {
-    pub manifests: HashMap<String, (RyzoraManifest, Option<String>)>,
+    pub manifests: HashMap<String, Vec<(RyzoraManifest, String)>>,
+    pub unavailable_repositories: Vec<String>,
 }
 
 #[cfg(test)]
@@ -666,14 +871,20 @@ impl MockPackageProvider {
     pub fn new() -> Self {
         Self {
             manifests: HashMap::new(),
+            unavailable_repositories: Vec::new(),
         }
     }
 
     pub fn add(&mut self, manifest: RyzoraManifest, repo_id: Option<&str>) {
-        self.manifests.insert(
-            manifest.id.clone(),
-            (manifest, repo_id.map(|s| s.to_string())),
-        );
+        let r = repo_id.unwrap_or("local").to_string();
+        self.manifests
+            .entry(manifest.id.clone())
+            .or_default()
+            .push((manifest, r));
+    }
+
+    pub fn add_unavailable_repo(&mut self, repo_name: &str) {
+        self.unavailable_repositories.push(repo_name.to_string());
     }
 }
 
@@ -682,17 +893,27 @@ impl PackageProvider for MockPackageProvider {
     fn get_manifest(&self, package_id: &str) -> Result<RyzoraManifest, String> {
         self.manifests
             .get(package_id)
-            .map(|(m, _)| m.clone())
+            .and_then(|list| list.first().map(|(m, _)| m.clone()))
             .ok_or_else(|| format!("Package '{}' not found in mock provider", package_id))
     }
 
     fn get_repository_id(&self, package_id: &str) -> Option<String> {
-        self.manifests.get(package_id).and_then(|(_, r)| r.clone())
+        self.manifests
+            .get(package_id)
+            .and_then(|list| list.first().map(|(_, r)| r.clone()))
+    }
+
+    fn get_candidates(&self, package_id: &str) -> Vec<(RyzoraManifest, String)> {
+        self.manifests.get(package_id).cloned().unwrap_or_default()
+    }
+
+    fn get_unavailable_repositories(&self) -> Vec<String> {
+        self.unavailable_repositories.clone()
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Unit Tests (Phase 9)
+// Unit Tests (Phase 9 & 9.1 Hardening)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -830,7 +1051,9 @@ mod tests {
         assert!(report
             .conflicts
             .iter()
-            .any(|c| c.contains("does not satisfy requirement") || c.contains("resolved")));
+            .any(|c| c.contains("does not satisfy requirement")
+                || c.contains("resolved")
+                || c.contains("none satisfy")));
     }
 
     #[test]
@@ -879,7 +1102,6 @@ mod tests {
 
         assert!(report.resolved);
         assert_eq!(report.packages.len(), 3);
-        // Topological order must install base-icons first, then cool-theme, then cyber-rice
         assert_eq!(
             report.install_order,
             vec!["base-icons", "cool-theme", "cyber-rice"]
@@ -891,7 +1113,6 @@ mod tests {
         let mut provider = MockPackageProvider::new();
         let sys = make_test_sys();
 
-        // Diamond: A -> B -> D and A -> C -> D
         let d = make_manifest("shared-font", "1.5.0", vec![], vec![], vec![]);
         let b = make_manifest(
             "bar-pkg",
@@ -961,9 +1182,7 @@ mod tests {
         let mut provider = MockPackageProvider::new();
         let sys = make_test_sys();
 
-        // D is version 1.5.0
         let d = make_manifest("shared-font", "1.5.0", vec![], vec![], vec![]);
-        // B requires D ^1.0.0 (matches 1.5.0)
         let b = make_manifest(
             "bar-pkg",
             "1.0.0",
@@ -977,7 +1196,6 @@ mod tests {
             vec![],
             vec![],
         );
-        // C requires D ^2.0.0 (conflicts with 1.5.0)
         let c = make_manifest(
             "term-pkg",
             "1.0.0",
@@ -1032,7 +1250,6 @@ mod tests {
         let mut provider = MockPackageProvider::new();
         let sys = make_test_sys();
 
-        // Cycle: A -> B -> C -> A
         let c = make_manifest(
             "pkg-c",
             "1.0.0",
@@ -1092,7 +1309,6 @@ mod tests {
         let mut provider = MockPackageProvider::new();
         let sys = make_test_sys();
 
-        // A requires nonexistent-binary-xyz
         let a = make_manifest(
             "pkg-with-missing-bin",
             "1.0.0",
@@ -1140,7 +1356,6 @@ mod tests {
         let resolver = DependencyResolver::new(&provider, &sys);
         let report = resolver.resolve("pkg-with-opt-bin").unwrap();
 
-        // Since only optional binary is missing, package IS resolved!
         assert!(report.resolved);
         assert!(report.missing_required.is_empty());
         assert!(report
@@ -1151,7 +1366,7 @@ mod tests {
     #[test]
     fn test_resolver_desktop_and_session_capabilities() {
         let mut provider = MockPackageProvider::new();
-        let sys = make_test_sys(); // Hyprland, wayland
+        let sys = make_test_sys();
 
         let a = make_manifest(
             "hypr-pkg",
@@ -1185,5 +1400,388 @@ mod tests {
         for cap in report.capability_dependencies {
             assert_eq!(cap.status, DependencyStatus::Satisfied);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 9.1 Hardening Tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_multi_repo_candidate_selection_selects_highest_compatible() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        // Repo 1 has v1.0.0
+        let dep_v1 = make_manifest("dep-tool", "1.0.0", vec![], vec![], vec![]);
+        provider.add(dep_v1, Some("official-repo"));
+
+        // Repo 2 has v2.1.0
+        let dep_v2 = make_manifest("dep-tool", "2.1.0", vec![], vec![], vec![]);
+        provider.add(dep_v2, Some("community-repo"));
+
+        // Repo 3 has v2.5.0
+        let dep_v25 = make_manifest("dep-tool", "2.5.0", vec![], vec![], vec![]);
+        provider.add(dep_v25, Some("edge-repo"));
+
+        // Root requires ^2.0.0 -> should deterministically select v2.5.0
+        let root = make_manifest(
+            "root-app",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "dep-tool".to_string(),
+                kind: DependencyKind::Package,
+                version_req: Some("^2.0.0".to_string()),
+                required: true,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(root, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("root-app").unwrap();
+
+        assert!(report.resolved);
+        let dep_node = report
+            .packages
+            .iter()
+            .find(|p| p.package_id == "dep-tool")
+            .unwrap();
+        assert_eq!(dep_node.version, "2.5.0");
+        assert_eq!(dep_node.repository_id.as_deref(), Some("edge-repo"));
+    }
+
+    #[test]
+    fn test_deterministic_version_selection_tie_breaker_prefers_local() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        // Remote repo has v1.0.0
+        let dep_remote = make_manifest("shared-theme", "1.0.0", vec![], vec![], vec![]);
+        provider.add(dep_remote, Some("remote-store"));
+
+        // Local repo has v1.0.0
+        let dep_local = make_manifest("shared-theme", "1.0.0", vec![], vec![], vec![]);
+        provider.add(dep_local, Some("local-user"));
+
+        let root = make_manifest(
+            "root-app",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "shared-theme".to_string(),
+                kind: DependencyKind::Package,
+                version_req: Some("^1.0.0".to_string()),
+                required: true,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(root, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("root-app").unwrap();
+
+        assert!(report.resolved);
+        let dep_node = report
+            .packages
+            .iter()
+            .find(|p| p.package_id == "shared-theme")
+            .unwrap();
+        assert_eq!(dep_node.version, "1.0.0");
+        // Local repository must be preferred on identical versions!
+        assert_eq!(dep_node.repository_id.as_deref(), Some("local-user"));
+    }
+
+    #[test]
+    fn test_unavailable_version_diagnostics() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        let dep1 = make_manifest("widget-lib", "1.0.0", vec![], vec![], vec![]);
+        let dep2 = make_manifest("widget-lib", "1.2.0", vec![], vec![], vec![]);
+        provider.add(dep1, Some("repo-a"));
+        provider.add(dep2, Some("repo-b"));
+
+        // Request ^2.0.0 (neither satisfies)
+        let root = make_manifest(
+            "root-app",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "widget-lib".to_string(),
+                kind: DependencyKind::Package,
+                version_req: Some("^2.0.0".to_string()),
+                required: true,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(root, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("root-app").unwrap();
+
+        assert!(!report.resolved);
+        assert!(!report.conflicts.is_empty());
+        let conflict = &report.conflicts[0];
+        assert!(conflict.contains("available versions"));
+        assert!(conflict.contains("widget-lib"));
+        assert!(conflict.contains("^2.0.0"));
+    }
+
+    #[test]
+    fn test_offline_repository_distinction() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        provider.add_unavailable_repo("arch-community (offline)");
+
+        let root = make_manifest(
+            "root-app",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "unreachable-package".to_string(),
+                kind: DependencyKind::Package,
+                version_req: None,
+                required: true,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(root, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("root-app").unwrap();
+
+        assert!(!report.resolved);
+        let unreach = report
+            .packages
+            .iter()
+            .find(|p| p.package_id == "unreachable-package")
+            .unwrap();
+        assert!(unreach
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("offline/error"));
+    }
+
+    #[test]
+    fn test_transitive_optional_dependency_propagation() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        // Tool C is a system binary that does NOT exist
+        // Package B (optional) declares Tool C as a required binary
+        let b = make_manifest(
+            "opt-package-b",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "missing_system_tool_xyz".to_string(),
+                kind: DependencyKind::SystemBinary,
+                version_req: None,
+                required: true, // required for B, but B is optional for A!
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(b, Some("community"));
+
+        // Package A requires B optionally
+        let a = make_manifest(
+            "pkg-a",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "opt-package-b".to_string(),
+                kind: DependencyKind::Package,
+                version_req: None,
+                required: false, // OPTIONAL
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(a, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("pkg-a").unwrap();
+
+        // Since B is optional, missing Tool C MUST NOT block resolution of A!
+        assert!(
+            report.resolved,
+            "Optional missing dependency should not block report.resolved"
+        );
+        assert!(
+            report.missing_required.is_empty(),
+            "missing_required should be empty"
+        );
+        assert!(report
+            .missing_optional
+            .contains(&"missing_system_tool_xyz".to_string()));
+    }
+
+    #[test]
+    fn test_optional_dependency_cycle_does_not_hang() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        // Cycle in optional path: A -> B (opt) -> C (opt) -> B
+        let c = make_manifest(
+            "pkg-c",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "pkg-b".to_string(),
+                kind: DependencyKind::Package,
+                version_req: None,
+                required: false,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        let b = make_manifest(
+            "pkg-b",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "pkg-c".to_string(),
+                kind: DependencyKind::Package,
+                version_req: None,
+                required: false,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        let a = make_manifest(
+            "pkg-a",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "pkg-b".to_string(),
+                kind: DependencyKind::Package,
+                version_req: None,
+                required: false,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+
+        provider.add(c, Some("community"));
+        provider.add(b, Some("community"));
+        provider.add(a, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("pkg-a").unwrap();
+
+        // Should detect cycle cleanly and not hang or overflow stack
+        assert!(!report.cycles.is_empty());
+    }
+
+    #[test]
+    fn test_prerelease_semver_constraint_matching() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        let beta_pkg = make_manifest("dep-beta", "1.0.0-beta.2", vec![], vec![], vec![]);
+        provider.add(beta_pkg, Some("community"));
+
+        // 1. Stable requirement does not match prerelease under standard SemVer 2.0
+        let root_stable = make_manifest(
+            "root-stable",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "dep-beta".to_string(),
+                kind: DependencyKind::Package,
+                version_req: Some("^1.0.0".to_string()),
+                required: true,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(root_stable, Some("local"));
+
+        // 2. Explicit prerelease requirement matches
+        let root_beta = make_manifest(
+            "root-beta",
+            "1.0.0",
+            vec![DependencySpec {
+                id: "dep-beta".to_string(),
+                kind: DependencyKind::Package,
+                version_req: Some("^1.0.0-beta".to_string()),
+                required: true,
+                description: None,
+            }],
+            vec![],
+            vec![],
+        );
+        provider.add(root_beta, Some("local"));
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report_stable = resolver.resolve("root-stable").unwrap();
+        assert!(!report_stable.resolved);
+
+        let report_beta = resolver.resolve("root-beta").unwrap();
+        assert!(report_beta.resolved);
+    }
+
+    #[test]
+    fn test_max_dependency_depth_guard() {
+        let mut provider = MockPackageProvider::new();
+        let sys = make_test_sys();
+
+        // Chain of 35 packages: pkg-0 -> pkg-1 -> ... -> pkg-34
+        for i in 0..35 {
+            let next_dep = if i < 34 {
+                vec![DependencySpec {
+                    id: format!("chain-pkg-{}", i + 1),
+                    kind: DependencyKind::Package,
+                    version_req: None,
+                    required: true,
+                    description: None,
+                }]
+            } else {
+                vec![]
+            };
+
+            let pkg = make_manifest(
+                &format!("chain-pkg-{}", i),
+                "1.0.0",
+                next_dep,
+                vec![],
+                vec![],
+            );
+            provider.add(pkg, Some("local"));
+        }
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+        let report = resolver.resolve("chain-pkg-0").unwrap();
+
+        // Depth guard must trigger conflict rather than stack overflow
+        assert!(!report.resolved);
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|c| c.contains("Maximum dependency depth")));
+    }
+
+    #[test]
+    fn test_distro_capability_detection() {
+        let provider = MockPackageProvider::new();
+        let sys = make_test_sys(); // Arch Linux
+
+        let resolver = DependencyResolver::new(&provider, &sys);
+
+        // Arch should satisfy distro:arch
+        let (arch_status, _) = resolver.evaluate_runtime_capability("distro:arch");
+        assert_eq!(arch_status, DependencyStatus::Satisfied);
+
+        // Arch should be incompatible with distro:ubuntu
+        let (ubuntu_status, _) = resolver.evaluate_runtime_capability("distro:ubuntu");
+        assert_eq!(ubuntu_status, DependencyStatus::Incompatible);
     }
 }

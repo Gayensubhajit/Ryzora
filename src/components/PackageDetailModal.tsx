@@ -56,24 +56,29 @@ export const PackageDetailModal: React.FC = () => {
   // Dependency Resolution (Phase 9)
   const [depReport, setDepReport] = useState<DependencyResolutionReport | null>(null);
   const [loadingDeps, setLoadingDeps] = useState<boolean>(false);
+  const [depError, setDepError] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedPackage) {
       setDepReport(null);
+      setDepError(null);
     }
   }, [selectedPackage?.id]);
 
   useEffect(() => {
-    if (selectedPackage && activeTab === "dependencies" && !depReport && !loadingDeps) {
+    if (selectedPackage && activeTab === "dependencies" && !depReport && !loadingDeps && !depError) {
       setLoadingDeps(true);
+      setDepError(null);
       resolvePackageDependencies(selectedPackage.id)
         .then((rep) => setDepReport(rep))
         .catch((err) => {
           console.error("Dependency resolution failed:", err);
+          const msg = typeof err === "string" ? err : (err && typeof err === "object" && "message" in err ? String(err.message) : "Failed to resolve dependency graph");
+          setDepError(msg);
         })
         .finally(() => setLoadingDeps(false));
     }
-  }, [selectedPackage, activeTab, depReport, loadingDeps, resolvePackageDependencies]);
+  }, [selectedPackage, activeTab, depReport, loadingDeps, depError, resolvePackageDependencies]);
 
   // Preview & Installation flow states
   const [showPreview, setShowPreview] = useState<boolean>(false);
@@ -1070,10 +1075,20 @@ export const PackageDetailModal: React.FC = () => {
                                         repo: {pkgNode.repository_id}
                                       </span>
                                     )}
+                                    {pkgNode.effective_required === false && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-950/40 text-amber-300 border border-amber-800/30">
+                                        optional
+                                      </span>
+                                    )}
                                   </div>
                                   {pkgNode.transitive_packages.length > 0 && (
                                     <div className="text-[10px] text-[var(--text-muted)] font-mono">
                                       ↳ depends on: {pkgNode.transitive_packages.join(", ")}
+                                    </div>
+                                  )}
+                                  {pkgNode.status_message && (
+                                    <div className="text-[10px] text-rose-300/90 font-mono bg-rose-950/30 px-2 py-0.5 rounded border border-rose-900/40 mt-1">
+                                      {pkgNode.status_message}
                                     </div>
                                   )}
                                 </div>
@@ -1204,6 +1219,20 @@ export const PackageDetailModal: React.FC = () => {
                   ) : (
                     /* Fallback to package manifest dependencies */
                     <div>
+                      {depError && (
+                        <div className="p-3 mb-3 rounded-md bg-rose-950/30 border border-rose-800/40 space-y-1">
+                          <div className="flex items-center gap-1.5 text-rose-400 font-semibold text-xs">
+                            <AlertCircle className="w-4 h-4 text-rose-400" />
+                            <span>Dependency Resolution Error</span>
+                          </div>
+                          <div className="text-[11px] text-rose-300/90 font-mono leading-relaxed">
+                            {depError}
+                          </div>
+                          <div className="text-[10px] text-[var(--text-muted)]">
+                            One or more configured repositories may be offline, unreachable, or returning invalid metadata.
+                          </div>
+                        </div>
+                      )}
                       <div className="text-[11px] text-[var(--text-muted)] mb-2">
                         Application dependencies required in PATH:
                       </div>

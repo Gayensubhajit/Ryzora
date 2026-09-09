@@ -115,11 +115,17 @@ impl RyzoraManifest {
     /// , , ,
     /// and .
     pub fn all_dependencies(&self) -> Vec<DependencySpec> {
-        let mut result = self.dependencies.clone();
-        let mut existing: HashSet<(String, DependencyKind)> = result
-            .iter()
-            .map(|d| (d.id.clone(), d.kind.clone()))
-            .collect();
+        let mut result = Vec::new();
+        let mut existing: HashSet<(String, DependencyKind)> = HashSet::new();
+
+        // 0. Explicit dependencies deduplicated
+        for dep in &self.dependencies {
+            let key = (dep.id.clone(), dep.kind.clone());
+            if !existing.contains(&key) {
+                existing.insert(key);
+                result.push(dep.clone());
+            }
+        }
 
         // 1. Required system binaries
         for req in &self.compatibility.required {
@@ -205,11 +211,7 @@ pub struct ManifestValidationResult {
 
 /// Validate a semver string of the form "X.Y.Z".
 fn is_valid_semver(v: &str) -> bool {
-    let parts: Vec<&str> = v.split('.').collect();
-    if parts.len() != 3 {
-        return false;
-    }
-    parts.iter().all(|p| p.parse::<u64>().is_ok())
+    semver::Version::parse(v).is_ok()
 }
 
 /// Validate that a file target path is safe.
@@ -385,21 +387,50 @@ pub fn validate_manifest_internal(manifest_json: &str) -> ManifestValidationResu
         }
     }
 
-    // Step 6: Dependency validation (Phase 9)
+    // Step 6: Dependency validation (Phase 9.1 hardened)
+    if manifest.dependencies.len() > 64 {
+        errors.push(format!(
+            "Package declares {} dependencies — exceeds limit of 64",
+            manifest.dependencies.len()
+        ));
+    }
+
+    let mut seen_dep_keys = HashSet::new();
     for (i, dep) in manifest.dependencies.iter().enumerate() {
         let trimmed_id = dep.id.trim();
         if trimmed_id.is_empty() {
             errors.push(format!("dependencies[{}]: 'id' must not be empty", i));
-        } else if trimmed_id.contains('/') || trimmed_id.contains('\\') || trimmed_id.contains("..")
+        } else if trimmed_id.len() > 64 {
+            errors.push(format!(
+                "dependencies[{}]: 'id' exceeds maximum length of 64 characters",
+                i
+            ));
+        } else if trimmed_id.contains("..")
+            || !trimmed_id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == ':')
         {
             errors.push(format!(
-                "dependencies[{}]: 'id' ('{}') contains invalid characters or path traversal",
+                "dependencies[{}]: 'id' ('{}') contains invalid characters or path traversal — only alphanumeric, dashes, underscores, dots, and colons are allowed",
                 i, dep.id
             ));
         }
 
+        let key = (trimmed_id.to_string(), dep.kind.clone());
+        if !seen_dep_keys.insert(key) {
+            warnings.push(format!(
+                "dependencies[{}]: duplicate dependency specification for '{:?}:{}' — will be deduplicated",
+                i, dep.kind, dep.id
+            ));
+        }
+
         if let Some(ref req_str) = dep.version_req {
-            if semver::VersionReq::parse(req_str).is_err() {
+            if req_str.len() > 64 {
+                errors.push(format!(
+                    "dependencies[{}]: 'version_req' exceeds maximum length of 64 characters",
+                    i
+                ));
+            } else if semver::VersionReq::parse(req_str).is_err() {
                 errors.push(format!(
                     "dependencies[{}]: 'version_req' ('{}') is not a valid SemVer requirement",
                     i, req_str
@@ -675,5 +706,76 @@ mod tests {
             .errors
             .iter()
             .any(|e| e.contains("invalid characters or path traversal")));
+    }
+
+    #[test]
+    fn test_phase9_1_manifest_hardening_tests() {
+        // 1. Prerelease semver is valid
+        let pre_json = r#"{
+            "id": "prerelease-pkg",
+            "name": "Prerelease Package",
+            "version": "1.0.0-beta.2",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "rice",
+            "compatibility": {"desktops": [], "sessions": [], "distros": [], "required": [], "optional": []},
+            "dependencies": [],
+            "files": []
+        }"#;
+        let res1 = validate_manifest_internal(pre_json);
+        assert!(
+            res1.valid,
+            "Expected valid prerelease semver: {:?}",
+            res1.errors
+        );
+
+        // 2. Excessively long dependency ID (> 64 chars)
+        let long_id = "a".repeat(65);
+        let long_id_json = format!(
+            r#"{{
+            "id": "long-id-pkg",
+            "name": "Long ID Package",
+            "version": "1.0.0",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "rice",
+            "compatibility": {{"desktops": [], "sessions": [], "distros": [], "required": [], "optional": []}},
+            "dependencies": [{{"id": "{}", "kind": "package", "required": true}}],
+            "files": []
+        }}"#,
+            long_id
+        );
+        let res2 = validate_manifest_internal(&long_id_json);
+        assert!(!res2.valid);
+        assert!(res2
+            .errors
+            .iter()
+            .any(|e| e.contains("exceeds maximum length of 64 characters")));
+
+        // 3. Duplicate dependency specs generate warning and are deduplicated
+        let dup_json = r#"{
+            "id": "dup-dep-pkg",
+            "name": "Dup Dep Package",
+            "version": "1.0.0",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "rice",
+            "compatibility": {"desktops": [], "sessions": [], "distros": [], "required": [], "optional": []},
+            "dependencies": [
+                {"id": "theme-a", "kind": "package", "version_req": "^1.0.0", "required": true},
+                {"id": "theme-a", "kind": "package", "version_req": "^1.0.0", "required": true}
+            ],
+            "files": []
+        }"#;
+        let res3 = validate_manifest_internal(dup_json);
+        assert!(res3.valid);
+        assert!(res3
+            .warnings
+            .iter()
+            .any(|w| w.contains("duplicate dependency specification")));
+
+        let manifest: RyzoraManifest = serde_json::from_str(dup_json).unwrap();
+        let all = manifest.all_dependencies();
+        assert_eq!(all.len(), 1, "Expected deduplication to 1 item");
     }
 }
