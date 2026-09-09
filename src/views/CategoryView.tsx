@@ -42,6 +42,7 @@ const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
   installed: { title: "Installed", subtitle: "Installed configurations" },
   backups: { title: "Backups", subtitle: "Snapshot history" },
   system: { title: "System", subtitle: "System diagnostics" },
+  author: { title: "Package Creator", subtitle: "Author and publish Ryzora packages" },
 };
 
 function compareSemver(v1: string, v2: string): number {

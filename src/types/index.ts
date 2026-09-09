@@ -14,7 +14,8 @@ export type CategoryId =
   | "bundles"
   | "installed"
   | "backups"
-  | "system";
+  | "system"
+  | "author";
 
 export type DesktopEnvironment =
   | "hyprland"
@@ -524,4 +525,55 @@ export interface RepositorySourceConfig {
   url: string;
   enabled: boolean;
   repo_type: "local" | "remote";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Package Authoring & Store Publishing types (Phase 10)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FileMappingDraft {
+  source_path: string;
+  target: string;
+  package_rel_path?: string;
+  description: string;
+}
+
+export interface PackageDraft {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  package_type: PackageType;
+  description: string;
+  tags: string[];
+  color_palette: string[];
+  compatibility: ManifestCompatibility;
+  dependencies: DependencySpec[];
+  files: FileMappingDraft[];
+}
+
+export interface AuthoringResult {
+  success: boolean;
+  package_dir: string;
+  manifest_path: string;
+  files_copied: number;
+  total_bytes: number;
+  sha256_checksum: string;
+  warnings: string[];
+}
+
+export interface PublishResult {
+  success: boolean;
+  repository_path: string;
+  package_id: string;
+  package_version: string;
+  archive_path?: string | null;
+  archive_sha256?: string | null;
+  message: string;
+}
+
+export interface ManifestValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }

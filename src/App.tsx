@@ -7,6 +7,7 @@ import { CategoryView } from "./views/CategoryView";
 import { InstalledView } from "./views/InstalledView";
 import { BackupsView } from "./views/BackupsView";
 import { SystemView } from "./views/SystemView";
+import { AuthorView } from "./views/AuthorView";
 import { PackageDetailModal } from "./components/PackageDetailModal";
 import { Toast } from "./components/Toast";
 
@@ -23,6 +24,8 @@ const MainLayout: React.FC = () => {
         return <BackupsView />;
       case "system":
         return <SystemView />;
+      case "author":
+        return <AuthorView />;
       default:
         return <CategoryView />;
     }

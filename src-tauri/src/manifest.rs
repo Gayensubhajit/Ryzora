@@ -24,6 +24,25 @@ pub enum PackageType {
     Widget,
     Bundle,
 }
+impl std::fmt::Display for PackageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            PackageType::Rice => "rice",
+            PackageType::Theme => "theme",
+            PackageType::Waybar => "waybar",
+            PackageType::Fastfetch => "fastfetch",
+            PackageType::Lockscreen => "lockscreen",
+            PackageType::Wallpaper => "wallpaper",
+            PackageType::Terminal => "terminal",
+            PackageType::Icon => "icon",
+            PackageType::Cursor => "cursor",
+            PackageType::Font => "font",
+            PackageType::Widget => "widget",
+            PackageType::Bundle => "bundle",
+        };
+        write!(f, "{}", s)
+    }
+}
 
 /// Compatibility requirements embedded in a package manifest.
 /// Uses package-author-facing field names (desktops/sessions/distros/required/optional).
@@ -194,6 +213,12 @@ impl RyzoraManifest {
         }
 
         result
+    }
+
+    /// Format this manifest as canonical, pretty-printed JSON.
+    pub fn to_canonical_json(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize manifest: {}", e))
     }
 }
 

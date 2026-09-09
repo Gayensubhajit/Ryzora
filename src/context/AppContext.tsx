@@ -21,6 +21,9 @@ import {
   SnapshotMetadata,
   SystemInfo,
   CacheStats,
+  PackageDraft,
+  AuthoringResult,
+  PublishResult,
 } from "../types";
 
 interface AppContextType {
@@ -63,6 +66,9 @@ interface AppContextType {
   clearAllCache: () => Promise<number>;
   checkCompatibility: (pkg: PackageItem) => CompatibilityReport;
   validateManifest: (manifestJson: string) => Promise<ManifestValidationResult>;
+  validatePackageDraft: (draft: PackageDraft) => Promise<ManifestValidationResult>;
+  createPackage: (draft: PackageDraft, destinationDir: string) => Promise<AuthoringResult>;
+  publishPackageToRepository: (packageDir: string, repositoryPath: string) => Promise<PublishResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
 }
@@ -615,6 +621,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const validatePackageDraft = async (draft: PackageDraft): Promise<ManifestValidationResult> => {
+    return await invoke<ManifestValidationResult>("validate_package_draft", { draft });
+  };
+
+  const createPackage = async (draft: PackageDraft, destinationDir: string): Promise<AuthoringResult> => {
+    return await invoke<AuthoringResult>("create_package", { draft, destinationDir });
+  };
+
+  const publishPackageToRepository = async (
+    packageDir: string,
+    repositoryPath: string
+  ): Promise<PublishResult> => {
+    const res = await invoke<PublishResult>("publish_package_to_repository", {
+      packageDir,
+      repositoryPath,
+    });
+    await refreshCatalog();
+    await refreshRepositories();
+    return res;
+  };
+
   const deleteSnapshot = async (snapId: string) => {
     try {
       await invoke("delete_snapshot", { id: snapId });
@@ -666,6 +693,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearAllCache,
         checkCompatibility,
         validateManifest,
+        validatePackageDraft,
+        createPackage,
+        publishPackageToRepository,
         deleteSnapshot,
         toast,
         setToast,

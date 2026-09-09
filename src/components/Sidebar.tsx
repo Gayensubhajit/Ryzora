@@ -11,6 +11,7 @@ import {
   DownloadCloud,
   History,
   Cpu,
+  PackagePlus,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
@@ -46,6 +47,11 @@ export const Sidebar: React.FC = () => {
       id: "system",
       label: "System",
       icon: <Cpu className="w-4 h-4" />,
+    },
+    {
+      id: "author",
+      label: "Package Creator",
+      icon: <PackagePlus className="w-4 h-4" />,
     },
   ];
 

@@ -1,3 +1,4 @@
+pub mod authoring;
 pub mod compatibility;
 pub mod dependency;
 pub mod installer;
@@ -49,6 +50,10 @@ pub fn run() {
             repository::get_cache_stats,
             repository::clear_package_cache,
             repository::clear_all_cache,
+            // Package Authoring & Store Publishing (Phase 10)
+            authoring::validate_package_draft,
+            authoring::create_package,
+            authoring::publish_package_to_repository,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");
