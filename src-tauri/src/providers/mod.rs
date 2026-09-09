@@ -1,3 +1,4 @@
+pub mod github;
 pub mod normalizer;
 pub mod synthesizer;
 
@@ -334,7 +335,9 @@ pub fn get_global_provider_manager() -> &'static Mutex<ProviderManager> {
 }
 
 pub fn create_default_provider_manager() -> ProviderManager {
-    ProviderManager::new()
+    let mut mgr = ProviderManager::new();
+    mgr.register_provider(Arc::new(github::GitHubProvider::new()));
+    mgr
 }
 
 #[tauri::command]

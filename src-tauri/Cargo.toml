@@ -31,6 +31,8 @@ semver = "1.0"
 ed25519-dalek = { version = "2.1", default-features = false, features = ["std", "rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 hex = "0.4"
+tar = "0.4"
+flate2 = "1.0"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

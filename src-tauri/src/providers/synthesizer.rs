@@ -81,16 +81,22 @@ impl ManifestSynthesizer {
         }
         full_description.push_str(&format!("\nSource: {}", item.provenance.source_url));
 
+        // Clean and normalize version into valid SemVer (X.Y.Z)
+        let clean_version = {
+            let v_trimmed = item.version.trim().trim_start_matches('v');
+            if semver::Version::parse(v_trimmed).is_ok() {
+                v_trimmed.to_string()
+            } else {
+                "1.0.0".to_string()
+            }
+        };
+
         // 4. Construct canonical RyzoraManifest
         let manifest = RyzoraManifest {
             ryzora_spec: "1".to_string(),
             id: clean_id,
             name: item.title.clone(),
-            version: if item.version.trim().is_empty() {
-                "1.0.0".to_string()
-            } else {
-                item.version.clone()
-            },
+            version: clean_version,
             author: item.author.name.clone(),
             package_type: item.package_type.clone(),
             description: full_description,
