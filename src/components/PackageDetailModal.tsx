@@ -6,6 +6,7 @@ import {
   Sparkles,
   AlertCircle,
   ShieldCheck,
+  Key,
   Eye,
   FilePlus,
   FileEdit,
@@ -967,6 +968,79 @@ export const PackageDetailModal: React.FC = () => {
                         <span>Automatic verified snapshot before any file modification</span>
                       </li>
                     </ul>
+                  </div>
+
+                  {/* Phase 12 Cryptographic Trust & Signature Card */}
+                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                        <Key className="w-4 h-4 text-purple-400" />
+                        <span>Cryptographic Authenticity & Provenance</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border uppercase ${
+                          selectedPackage.cryptographic_status === "official_verified"
+                            ? "text-amber-300 border-amber-500/40 bg-amber-500/10"
+                            : selectedPackage.cryptographic_status === "author_verified"
+                            ? "text-blue-300 border-blue-500/40 bg-blue-500/10"
+                            : selectedPackage.cryptographic_status === "self_signed_unvetted"
+                            ? "text-purple-300 border-purple-500/30 bg-purple-500/10"
+                            : selectedPackage.cryptographic_status === "invalid_signature" ||
+                              selectedPackage.cryptographic_status === "revoked_key" ||
+                              selectedPackage.cryptographic_status === "official_impersonation"
+                            ? "text-rose-300 border-rose-500/40 bg-rose-500/10"
+                            : "text-[var(--text-muted)] border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+                        }`}
+                      >
+                        {selectedPackage.cryptographic_status === "official_verified"
+                          ? "Official Core Signed"
+                          : selectedPackage.cryptographic_status === "author_verified"
+                          ? "Verified Author Signed"
+                          : selectedPackage.cryptographic_status === "self_signed_unvetted"
+                          ? "Self-Signed (Unvetted)"
+                          : selectedPackage.cryptographic_status === "invalid_signature"
+                          ? "Invalid Signature"
+                          : selectedPackage.cryptographic_status === "revoked_key"
+                          ? "Key Revoked"
+                          : selectedPackage.cryptographic_status === "official_impersonation"
+                          ? "Official Impersonation"
+                          : "Unsigned"}
+                      </span>
+                    </div>
+
+                    {selectedPackage.signature ? (
+                      <div className="space-y-1.5 pt-1 text-[11px] font-mono border-t border-[var(--border-subtle)]">
+                        <div className="flex items-center justify-between text-[var(--text-muted)]">
+                          <span>Signer:</span>
+                          <span className="text-[var(--text-primary)] font-semibold">
+                            {selectedPackage.signature.signer_identity.name}
+                            {selectedPackage.signature.signer_identity.handle
+                              ? ` (${selectedPackage.signature.signer_identity.handle})`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[var(--text-muted)]">
+                          <span>Algorithm / Key ID:</span>
+                          <span className="text-[var(--accent)] truncate max-w-[200px]">
+                            {selectedPackage.signature.algorithm.toUpperCase()} · {selectedPackage.signature.key_id}
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded bg-[var(--bg-surface)] text-[10px] text-[var(--text-faint)] truncate select-all">
+                          pubkey: {selectedPackage.signature.public_key}
+                        </div>
+                        <p className="text-[10px] font-sans text-[var(--text-faint)] pt-0.5">
+                          {selectedPackage.cryptographic_status === "official_verified"
+                            ? "Verified against Ryzora Core Root Authority. Guaranteed authentic release."
+                            : selectedPackage.cryptographic_status === "author_verified"
+                            ? "Verified against Ryzora Community Trust Keyring. Author identity recognized."
+                            : "Mathematically authentic Ed25519 signature by author. Key is not yet vetted in the Ryzora Core keyring."}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-subtle)]">
+                        This package is unsigned. Permitted as a Community contribution under declarative sandbox rules.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

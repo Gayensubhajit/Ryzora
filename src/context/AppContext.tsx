@@ -26,6 +26,9 @@ import {
   PublishResult,
   StoreAuditReport,
   DistributionReleaseResult,
+  AuthorKeyPairInfo,
+  TrustedKeyEntry,
+  CryptographicEvaluation,
   ReleaseChannel,
 } from "../types";
 
@@ -80,6 +83,9 @@ interface AppContextType {
     releaseNotes?: string,
     maintainer?: string
   ) => Promise<DistributionReleaseResult>;
+  getAuthorKeypair: (authorName?: string) => Promise<AuthorKeyPairInfo>;
+  listTrustedKeys: () => Promise<TrustedKeyEntry[]>;
+  verifyPackageCryptography: (packageDir: string) => Promise<CryptographicEvaluation>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
 }
@@ -674,6 +680,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const getAuthorKeypair = async (authorName?: string): Promise<AuthorKeyPairInfo> => {
+    return await invoke<AuthorKeyPairInfo>("get_author_keypair", { authorName: authorName || null });
+  };
+
+  const listTrustedKeys = async (): Promise<TrustedKeyEntry[]> => {
+    return await invoke<TrustedKeyEntry[]>("list_trusted_keys");
+  };
+
+  const verifyPackageCryptography = async (packageDir: string): Promise<CryptographicEvaluation> => {
+    return await invoke<CryptographicEvaluation>("verify_package_cryptography", { packageDir });
+  };
+
   const deleteSnapshot = async (snapId: string) => {
     try {
       await invoke("delete_snapshot", { id: snapId });
@@ -730,6 +748,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         publishPackageToRepository,
         auditStoreSubmission,
         buildDistributionRelease,
+        getAuthorKeypair,
+        listTrustedKeys,
+        verifyPackageCryptography,
         deleteSnapshot,
         toast,
         setToast,

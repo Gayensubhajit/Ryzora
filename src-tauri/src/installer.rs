@@ -32,6 +32,8 @@ pub struct InstallationPlan {
     pub warnings: Vec<String>,
     #[serde(default)]
     pub dependency_report: Option<crate::dependency::DependencyResolutionReport>,
+    #[serde(default)]
+    pub cryptographic_evaluation: Option<crate::crypto::CryptographicEvaluation>,
 }
 
 /// Result returned after attempting an installation.
@@ -72,6 +74,32 @@ pub struct InstalledPackageRecord {
     #[serde(default)]
     pub files: Vec<InstalledFileEntry>,
     pub package_source_path: String,
+    #[serde(default)]
+    pub cryptographic_status: Option<crate::crypto::CryptographicStatus>,
+    #[serde(default)]
+    pub signer_key_id: Option<String>,
+    #[serde(default)]
+    pub signer_name: Option<String>,
+}
+
+impl Default for InstalledPackageRecord {
+    fn default() -> Self {
+        Self {
+            package_id: String::new(),
+            name: String::new(),
+            version: "1.0.0".to_string(),
+            package_type: None,
+            repository_id: None,
+            installed_at: 0,
+            snapshot_id: String::new(),
+            installed_files: Vec::new(),
+            files: Vec::new(),
+            package_source_path: String::new(),
+            cryptographic_status: None,
+            signer_key_id: None,
+            signer_name: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -388,6 +416,16 @@ pub fn generate_installation_plan_in(
     home_dir: &Path,
     system_info: &SystemInfo,
 ) -> Result<InstallationPlan, String> {
+    let trust_store = crate::crypto::TrustStore::load_default();
+    generate_installation_plan_in_with_trust(package_dir, home_dir, system_info, &trust_store)
+}
+
+pub fn generate_installation_plan_in_with_trust(
+    package_dir: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    trust_store: &crate::crypto::TrustStore,
+) -> Result<InstallationPlan, String> {
     let manifest = load_package_manifest(package_dir)?;
 
     // Compatibility check
@@ -418,6 +456,20 @@ pub fn generate_installation_plan_in(
     let mut directories_to_create = Vec::new();
     let mut conflicts = Vec::new();
     let mut warnings = Vec::new();
+
+    // Phase 12: Cryptographic Signature & Trust Chain Evaluation
+    let crypto_eval =
+        crate::crypto::evaluate_package_directory_crypto(package_dir, &manifest, None, trust_store)
+            .ok();
+
+    if let Some(ref eval) = crypto_eval {
+        if !eval.can_install {
+            if let Some(ref err) = eval.error_message {
+                conflicts.push(format!("Cryptographic Verification Block: {}", err));
+                compat_status = "incompatible".to_string();
+            }
+        }
+    }
 
     // Phase 9: Dependency Intelligence & Resolution
     let provider = crate::dependency::RepositoryPackageProvider::new();
@@ -517,6 +569,7 @@ pub fn generate_installation_plan_in(
         missing_dependencies: missing_deps,
         warnings,
         dependency_report: Some(dep_report),
+        cryptographic_evaluation: crypto_eval,
     })
 }
 
@@ -545,10 +598,32 @@ pub fn install_package_in(
     home_dir: &Path,
     system_info: &SystemInfo,
 ) -> Result<InstallResult, String> {
+    let trust_store = crate::crypto::TrustStore::load_default();
+    install_package_in_with_trust(
+        package_dir,
+        snapshots_root,
+        installed_root,
+        staging_root,
+        home_dir,
+        system_info,
+        &trust_store,
+    )
+}
+
+pub fn install_package_in_with_trust(
+    package_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    staging_root: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    trust_store: &crate::crypto::TrustStore,
+) -> Result<InstallResult, String> {
     let manifest = load_package_manifest(package_dir)?;
 
     // 1. Pre-flight check & plan
-    let plan = generate_installation_plan_in(package_dir, home_dir, system_info)?;
+    let plan =
+        generate_installation_plan_in_with_trust(package_dir, home_dir, system_info, trust_store)?;
 
     if !plan.conflicts.is_empty() {
         return Err(format!(
@@ -570,6 +645,20 @@ pub fn install_package_in(
             "Cannot install package '{}': incompatible with detected system environment",
             manifest.id
         ));
+    }
+
+    // Phase 12: Cryptographic Pre-Install Gate (Fails Closed Before Snapshot/Staging)
+    let crypto_eval = crate::crypto::evaluate_package_directory_crypto(
+        package_dir,
+        &manifest,
+        None,
+        trust_store,
+    )?;
+    if !crypto_eval.can_install {
+        let err_msg = crypto_eval.error_message.unwrap_or_else(|| {
+            "Package failed cryptographic trust verification. Installation aborted.".to_string()
+        });
+        return Err(format!("Cryptographic Verification Error: {}", err_msg));
     }
 
     // 2. Collect all declared target paths for snapshot
@@ -897,6 +986,9 @@ pub fn install_package_in(
         installed_files: applied_targets.clone(),
         files: applied_entries,
         package_source_path: package_dir.display().to_string(),
+        cryptographic_status: Some(crypto_eval.status),
+        signer_key_id: crypto_eval.key_id,
+        signer_name: crypto_eval.signer_name,
     };
 
     let record_json = serde_json::to_string_pretty(&record)
@@ -2269,6 +2361,9 @@ pub fn apply_package_update_in(
         installed_files: applied_entries.iter().map(|e| e.target.clone()).collect(),
         files: applied_entries,
         package_source_path: new_package_dir.display().to_string(),
+        cryptographic_status: None,
+        signer_key_id: None,
+        signer_name: None,
     };
 
     let record_json = serde_json::to_string_pretty(&new_record)
@@ -3661,6 +3756,9 @@ mod tests {
                 symlink_target: None,
             }],
             package_source_path: "/dummy".to_string(),
+            cryptographic_status: None,
+            signer_key_id: None,
+            signer_name: None,
         };
 
         let record_json = serde_json::to_string(&record).unwrap();
@@ -3928,6 +4026,9 @@ mod tests {
             installed_files: vec!["~/.config/app/important.conf".to_string()],
             files: vec![], // No checksums!
             package_source_path: "/legacy/path".to_string(),
+            cryptographic_status: None,
+            signer_key_id: None,
+            signer_name: None,
         };
 
         let json = serde_json::to_string(&legacy_record).unwrap();
@@ -4071,6 +4172,7 @@ mod tests {
                 trending_score: None,
                 maintainer: None,
                 release_notes: None,
+                signature: None,
             }],
             fail: false,
             package_dirs: std::collections::HashMap::new(),
@@ -4134,6 +4236,7 @@ mod tests {
                 trending_score: None,
                 maintainer: None,
                 release_notes: None,
+                signature: None,
             }],
             fail: false,
             package_dirs: std::collections::HashMap::new(),
@@ -5272,6 +5375,9 @@ mod tests {
                 symlink_target: None, // legacy record
             }],
             package_source_path: "/dummy".to_string(),
+            cryptographic_status: None,
+            signer_key_id: None,
+            signer_name: None,
         };
 
         let record_json = serde_json::to_string(&record).unwrap();
@@ -5376,6 +5482,7 @@ mod tests {
                     trending_score: None,
                     maintainer: None,
                     release_notes: None,
+                    signature: None,
                 }],
             )
             .with_dir("pkg-repo-sel", v2_dir.clone()),
@@ -5413,6 +5520,7 @@ mod tests {
                     trending_score: None,
                     maintainer: None,
                     release_notes: None,
+                    signature: None,
                 }],
             )
             .with_dir("pkg-repo-sel", v3_dir),
@@ -5481,6 +5589,7 @@ mod tests {
                 trending_score: None,
                 maintainer: None,
                 release_notes: None,
+                signature: None,
             }],
         )));
         mgr.add_repository(Box::new(MockUpdateRepo::new(
@@ -5514,6 +5623,7 @@ mod tests {
                 trending_score: None,
                 maintainer: None,
                 release_notes: None,
+                signature: None,
             }],
         )));
 

@@ -115,6 +115,8 @@ pub struct DistributionRelease {
     pub trust_tier: TrustTier,
     pub files_count: usize,
     pub total_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<crate::crypto::PackageSignatureMetadata>,
 }
 
 /// Result returned after exporting a distribution bundle ready for GitHub PR submission.
@@ -796,6 +798,51 @@ pub fn build_distribution_release_internal(
         .as_secs();
     let published_at = format!("{}", now_ts);
 
+    // Phase 12 Ed25519 Author Signature Generation
+    let sig_meta_opt = {
+        if let Ok(key_info) = crate::crypto::get_or_create_author_keypair(&manifest.author) {
+            let priv_key_path = std::path::PathBuf::from(&key_info.private_key_path);
+            if let Ok(raw_hex) = fs::read_to_string(&priv_key_path) {
+                if let Ok(bytes) = hex::decode(raw_hex.trim()) {
+                    if bytes.len() == 32 {
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&bytes);
+                        let signing_key = ed25519_dalek::SigningKey::from_bytes(&arr);
+                        let identity = crate::crypto::SignerIdentity {
+                            author_id: manifest.id.clone(),
+                            name: manifest.author.clone(),
+                            handle: maintainer.clone(),
+                        };
+                        let sig_res = crate::crypto::sign_package_tree_hash(
+                            &signing_key,
+                            &manifest.id,
+                            &audit.tree_hash,
+                            identity,
+                        );
+                        if let Ok(sig) = sig_res {
+                            let sig_path = bundle_dir.join("release.sig");
+                            let _ = fs::write(
+                                &sig_path,
+                                serde_json::to_string_pretty(&sig).unwrap_or_default(),
+                            );
+                            Some(sig)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
     let release_metadata = DistributionRelease {
         schema_version: 1,
         package_id: manifest.id.clone(),
@@ -817,6 +864,7 @@ pub fn build_distribution_release_internal(
         trust_tier: TrustTier::Community,
         files_count: audit.total_files,
         total_bytes: audit.total_bytes,
+        signature: sig_meta_opt,
     };
 
     let release_path = bundle_dir.join("release.json");
@@ -1592,6 +1640,384 @@ pub mod tests {
         ];
 
         let files = [
+            "distribution.rs",
+            "authoring.rs",
+            "repository.rs",
+            "installer.rs",
+            "manifest.rs",
+            "snapshot.rs",
+            "lib.rs",
+        ];
+
+        for file_name in &files {
+            let file_path = src_dir.join(file_name);
+            if file_path.is_file() {
+                let code = fs::read_to_string(&file_path).unwrap();
+                let prod_code = code.split("#[cfg(test)]").next().unwrap_or(&code);
+                for pat in &forbidden_needles {
+                    assert!(
+                        !prod_code.contains(pat),
+                        "Production file '{}' must not contain forbidden pattern '{}'",
+                        file_name,
+                        pat
+                    );
+                }
+            }
+        }
+    }
+
+    fn copy_test_dir(src: &Path, dst: &Path) {
+        fs::create_dir_all(dst).unwrap();
+        for entry in fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let ty = entry.file_type().unwrap();
+            if ty.is_dir() {
+                copy_test_dir(&entry.path(), &dst.join(entry.file_name()));
+            } else {
+                fs::copy(entry.path(), dst.join(entry.file_name())).unwrap();
+            }
+        }
+    }
+
+    fn mock_dist_system() -> crate::system::SystemInfo {
+        crate::system::SystemInfo {
+            distro_name: "Arch Linux".to_string(),
+            distro_id: "arch".to_string(),
+            distro_family: "arch".to_string(),
+            distro_version: "Rolling".to_string(),
+            kernel_version: "6.12.0".to_string(),
+            desktop_environment: "hyprland".to_string(),
+            window_manager: "hyprland".to_string(),
+            session_type: "wayland".to_string(),
+            shell: "zsh".to_string(),
+            terminal: "kitty".to_string(),
+            installed_components: vec![],
+        }
+    }
+
+    #[test]
+    fn test_phase12_full_pipeline_audit() {
+        use crate::crypto::{
+            compute_key_fingerprint, evaluate_package_directory_crypto, generate_ed25519_keypair,
+            sign_package_tree_hash, CryptographicStatus, SignerIdentity, TrustStore,
+            TrustedKeyEntry,
+        };
+        use crate::installer::install_package_in_with_trust;
+
+        let sandbox = TestSandbox::new("p12-crypto-pipeline");
+
+        // 1. Setup Keys: Core Root Keypair and Author Keypair
+        let (_core_signing_key, core_verifying_key) = generate_ed25519_keypair();
+        let core_pubkey_hex = hex::encode(core_verifying_key.as_bytes());
+
+        let (author_signing_key, author_verifying_key) = generate_ed25519_keypair();
+        let author_pubkey_hex = hex::encode(author_verifying_key.as_bytes());
+        let author_key_id = compute_key_fingerprint(&author_verifying_key);
+
+        let mut trust_store = TrustStore::new_test_store(&[&core_pubkey_hex], &[], &[]);
+
+        // 2. Draft and Build Package
+        let conf_file = sandbox.root.join("hyprland.conf");
+        fs::write(
+            &conf_file,
+            "# Phase 12 Rice
+general {
+  border_size = 2
+}
+",
+        )
+        .unwrap();
+
+        let draft = crate::authoring::PackageDraft {
+            id: "catppuccin-crypto-rice".to_string(),
+            name: "Catppuccin Crypto Rice".to_string(),
+            version: "1.0.0".to_string(),
+            author: "CryptoDev".to_string(),
+            package_type: PackageType::Rice,
+            description: "Phase 12 signed package".to_string(),
+            tags: vec!["catppuccin".to_string(), "signed".to_string()],
+            color_palette: vec!["#1e1e2e".to_string(), "#cba6f7".to_string()],
+            compatibility: crate::manifest::ManifestCompatibility {
+                desktops: vec!["hyprland".to_string()],
+                sessions: vec!["wayland".to_string()],
+                distros: vec![],
+                required: vec![],
+                optional: vec![],
+            },
+            dependencies: vec![],
+            files: vec![crate::authoring::FileMappingDraft {
+                source_path: conf_file.to_string_lossy().to_string(),
+                target: "~/.config/hypr/hyprland.conf".to_string(),
+                package_rel_path: None,
+                description: "Hyprland configuration".to_string(),
+            }],
+        };
+
+        let draft_build_dir = sandbox.root.join("draft_output");
+        fs::create_dir_all(&draft_build_dir).unwrap();
+        let build_res = crate::authoring::create_package_bundle(draft, &draft_build_dir).unwrap();
+        let authored_pkg_dir = PathBuf::from(&build_res.package_dir);
+
+        // 3. Build Distribution Release Bundle
+        let releases_dir = sandbox.root.join("releases");
+        fs::create_dir_all(&releases_dir).unwrap();
+
+        let dist_res = build_distribution_release_internal(
+            &authored_pkg_dir,
+            &releases_dir,
+            ReleaseChannel::Stable,
+            Some("Release signed with Ed25519".to_string()),
+            Some("@cryptodev".to_string()),
+        )
+        .unwrap();
+
+        let bundle_dir = PathBuf::from(&dist_res.bundle_dir);
+        let tree_hash = dist_res.tree_hash.clone();
+
+        // Sign the package explicitly with author_keypair into release.sig
+        let sig_meta = sign_package_tree_hash(
+            &author_signing_key,
+            "catppuccin-crypto-rice",
+            &tree_hash,
+            SignerIdentity {
+                author_id: "cryptodev".to_string(),
+                name: "CryptoDev".to_string(),
+                handle: Some("@cryptodev".to_string()),
+            },
+        )
+        .unwrap();
+
+        fs::write(
+            bundle_dir.join("release.sig"),
+            serde_json::to_string_pretty(&sig_meta).unwrap(),
+        )
+        .unwrap();
+
+        // 4. Publish to Repository
+        let repo_dir = sandbox.root.join("test_repo");
+        fs::create_dir_all(repo_dir.join("packages")).unwrap();
+        let initial_repo_index = crate::repository::RepositoryIndex {
+            schema: 1,
+            id: "crypto-repo".to_string(),
+            name: "Crypto Repository".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Repo for Phase 12 audit".to_string(),
+            packages: vec![],
+        };
+        fs::write(
+            repo_dir.join("repository.json"),
+            serde_json::to_string_pretty(&initial_repo_index).unwrap(),
+        )
+        .unwrap();
+
+        let pub_res = crate::authoring::export_to_repository(&bundle_dir, &repo_dir).unwrap();
+        assert!(pub_res.success);
+
+        // Verify repository index captured signature
+        let repo_raw = fs::read_to_string(repo_dir.join("repository.json")).unwrap();
+        let repo_index: crate::repository::RepositoryIndex =
+            serde_json::from_str(&repo_raw).unwrap();
+        assert_eq!(repo_index.packages.len(), 1);
+        let repo_pkg = &repo_index.packages[0];
+        assert!(
+            repo_pkg.signature.is_some(),
+            "Repository entry must preserve signature"
+        );
+        assert_eq!(repo_pkg.signature.as_ref().unwrap().key_id, author_key_id);
+
+        // 5. Discover & Evaluate: Unknown key MUST NOT be Verified or Official (HARD RULE)
+        let manifest = crate::installer::load_package_manifest(&bundle_dir).unwrap();
+        let eval =
+            evaluate_package_directory_crypto(&bundle_dir, &manifest, None, &trust_store).unwrap();
+
+        assert!(
+            eval.is_valid,
+            "Ed25519 signature must be mathematically valid"
+        );
+        assert!(!eval.is_trusted, "Key is not yet in trust store");
+        assert_eq!(
+            eval.status,
+            CryptographicStatus::SelfSignedUnvetted,
+            "Self-signed unvetted key must evaluate to SelfSignedUnvetted"
+        );
+        assert!(
+            eval.can_install,
+            "Community users can install unvetted packages"
+        );
+
+        // 6. Pre-Install & Install Gate with Self-Signed Package
+        let home_dir = sandbox.root.join("home");
+        fs::create_dir_all(&home_dir).unwrap();
+        let snapshots_dir = sandbox.root.join("snapshots");
+        let installed_dir = sandbox.root.join("installed");
+        let staging_dir = sandbox.root.join("staging");
+        let sys = mock_dist_system();
+
+        let install_res = install_package_in_with_trust(
+            &bundle_dir,
+            &snapshots_dir,
+            &installed_dir,
+            &staging_dir,
+            &home_dir,
+            &sys,
+            &trust_store,
+        )
+        .unwrap();
+
+        assert!(install_res.success);
+        let record_raw =
+            fs::read_to_string(installed_dir.join("catppuccin-crypto-rice.json")).unwrap();
+        let record: crate::installer::InstalledPackageRecord =
+            serde_json::from_str(&record_raw).unwrap();
+        assert_eq!(
+            record.cryptographic_status,
+            Some(CryptographicStatus::SelfSignedUnvetted)
+        );
+        assert_eq!(record.signer_key_id, Some(author_key_id.clone()));
+
+        // 7. Promote Key to Trusted Author (Vetting)
+        trust_store
+            .add_trusted_key(TrustedKeyEntry {
+                key_id: author_key_id.clone(),
+                public_key: author_pubkey_hex.clone(),
+                author_name: "CryptoDev".to_string(),
+                role: "community_verified".to_string(),
+                added_at: "2026-09-09T12:00:00Z".to_string(),
+                notes: "Vetted community author".to_string(),
+            })
+            .unwrap();
+
+        let vetted_eval =
+            evaluate_package_directory_crypto(&bundle_dir, &manifest, None, &trust_store).unwrap();
+
+        assert!(vetted_eval.is_trusted);
+        assert_eq!(
+            vetted_eval.status,
+            CryptographicStatus::AuthorVerified,
+            "Vetted trusted key must evaluate to AuthorVerified"
+        );
+
+        // 8. Revocation Gate: Fail Closed before snapshot/staging
+        trust_store
+            .revoke_key(
+                &author_key_id,
+                &author_pubkey_hex,
+                "Private key compromised in incident report",
+            )
+            .unwrap();
+
+        let revoked_eval =
+            evaluate_package_directory_crypto(&bundle_dir, &manifest, None, &trust_store).unwrap();
+
+        assert!(!revoked_eval.is_valid);
+        assert!(!revoked_eval.can_install, "Revoked key must block install");
+        assert_eq!(revoked_eval.status, CryptographicStatus::RevokedKey);
+
+        // Attempt install with revoked key
+        let revoked_install_err = install_package_in_with_trust(
+            &bundle_dir,
+            &snapshots_dir,
+            &installed_dir,
+            &staging_dir,
+            &home_dir,
+            &sys,
+            &trust_store,
+        );
+
+        assert!(revoked_install_err.is_err());
+        let err_str = revoked_install_err.err().unwrap();
+        assert!(
+            err_str.contains("Cryptographic Verification Block")
+                || err_str.contains("Cryptographic Verification Error")
+        );
+        assert!(err_str.contains("revoked"));
+
+        // 9. Tamper Detection Gate: Fail Closed on corrupt signature/content
+        let untrusted_store = TrustStore::new_test_store(&[], &[], &[]);
+        let tampered_bundle = sandbox.root.join("tampered_bundle");
+        copy_test_dir(&bundle_dir, &tampered_bundle);
+
+        // Tamper with file
+        fs::write(
+            tampered_bundle.join(&manifest.files[0].source),
+            "# Malicious injection into dotfile
+exec-once = evil
+",
+        )
+        .unwrap();
+
+        let tampered_manifest = crate::installer::load_package_manifest(&tampered_bundle).unwrap();
+        let tampered_eval = evaluate_package_directory_crypto(
+            &tampered_bundle,
+            &tampered_manifest,
+            None,
+            &untrusted_store,
+        )
+        .unwrap();
+
+        assert!(!tampered_eval.is_valid);
+        assert!(!tampered_eval.can_install);
+        assert_eq!(tampered_eval.status, CryptographicStatus::InvalidSignature);
+
+        let tampered_err = install_package_in_with_trust(
+            &tampered_bundle,
+            &snapshots_dir,
+            &installed_dir,
+            &staging_dir,
+            &home_dir,
+            &sys,
+            &untrusted_store,
+        );
+        assert!(tampered_err.is_err());
+        let tampered_msg = tampered_err.unwrap_err();
+        assert!(
+            tampered_msg.contains("Cryptographic Verification Block")
+                || tampered_msg.contains("Cryptographic Verification Error")
+        );
+        assert!(
+            tampered_msg.contains("Tampering detected")
+                || tampered_msg.contains("InvalidSignature")
+        );
+
+        // 10. Official Metadata with Non-Core Key Gate (Rule 6)
+        let official_impersonator_store = TrustStore::new_test_store(&[&core_pubkey_hex], &[], &[]);
+
+        let imp_eval = evaluate_package_directory_crypto(
+            &bundle_dir,
+            &manifest,
+            Some(TrustTier::Official),
+            &official_impersonator_store,
+        )
+        .unwrap();
+
+        assert!(
+            !imp_eval.can_install,
+            "Official claim without Core Root key must fail closed"
+        );
+        assert_eq!(imp_eval.status, CryptographicStatus::OfficialImpersonation);
+    }
+
+    #[test]
+    fn test_phase12_zero_command_execution() {
+        let src_dir = Path::new("src");
+        let forbidden_needles = [
+            "std::process::Command",
+            "process::Command",
+            "Command::new",
+            r#""sh""#,
+            r#""bash""#,
+            r#""sudo""#,
+            r#""pkexec""#,
+            r#""pacman""#,
+            r#""yay""#,
+            r#""paru""#,
+            r#""apt""#,
+            r#""gpg""#,
+            r#""openssl""#,
+        ];
+
+        let files = [
+            "crypto.rs",
             "distribution.rs",
             "authoring.rs",
             "repository.rs",

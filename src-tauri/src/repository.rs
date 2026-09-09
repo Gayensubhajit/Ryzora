@@ -76,6 +76,44 @@ pub struct RepositoryPackageEntry {
     pub maintainer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<crate::crypto::PackageSignatureMetadata>,
+}
+
+impl Default for RepositoryPackageEntry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            version: "1.0.0".to_string(),
+            package_type: PackageType::Rice,
+            description: String::new(),
+            manifest: String::new(),
+            category: "rice".to_string(),
+            tags: Vec::new(),
+            author: AuthorInfo {
+                name: String::new(),
+                avatar: String::new(),
+                verified: false,
+            },
+            color_palette: Vec::new(),
+            hero_image: None,
+            screenshots: Vec::new(),
+            featured: None,
+            trending: None,
+            rating: None,
+            downloads: None,
+            content_hash: None,
+            package_size_bytes: None,
+            release_channel: None,
+            trust_tier: None,
+            moderation_status: None,
+            trending_score: None,
+            maintainer: None,
+            release_notes: None,
+            signature: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,6 +234,10 @@ pub struct FrontendPackageItem {
     pub maintainer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<crate::crypto::PackageSignatureMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cryptographic_status: Option<crate::crypto::CryptographicStatus>,
 }
 
 fn default_integrity_status() -> String {
@@ -2034,6 +2076,17 @@ impl RepositoryManager {
                     "unverified".to_string()
                 };
 
+                // Phase 12 Cryptographic Trust Chain Evaluation
+                let trust_store = crate::crypto::TrustStore::load_default();
+                let tree_h = entry.content_hash.as_deref().unwrap_or("");
+                let crypto_eval = crate::crypto::evaluate_trust_chain(
+                    entry.signature.as_ref(),
+                    &entry.id,
+                    tree_h,
+                    entry.trust_tier,
+                    &trust_store,
+                );
+
                 let item = FrontendPackageItem {
                     id: entry.id.clone(),
                     title: entry.name.clone(),
@@ -2116,6 +2169,8 @@ impl RepositoryManager {
                     })),
                     maintainer: entry.maintainer.clone(),
                     release_notes: entry.release_notes.clone(),
+                    signature: entry.signature.clone(),
+                    cryptographic_status: Some(crypto_eval.status),
                 };
 
                 all_packages.push(item);
@@ -3946,6 +4001,7 @@ mod tests {
             trending_score: None,
             maintainer: None,
             release_notes: None,
+            signature: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -3988,6 +4044,7 @@ mod tests {
             trending_score: None,
             maintainer: None,
             release_notes: None,
+            signature: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4026,6 +4083,7 @@ mod tests {
             trending_score: None,
             maintainer: None,
             release_notes: None,
+            signature: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4603,6 +4661,7 @@ mod tests {
             trending_score: None,
             maintainer: None,
             release_notes: None,
+            signature: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());

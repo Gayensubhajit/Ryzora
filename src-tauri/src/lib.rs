@@ -1,5 +1,6 @@
 pub mod authoring;
 pub mod compatibility;
+pub mod crypto;
 pub mod dependency;
 pub mod distribution;
 pub mod installer;
@@ -58,6 +59,13 @@ pub fn run() {
             // Store & Distribution Infrastructure (Phase 11)
             distribution::audit_store_submission,
             distribution::build_distribution_release,
+            // Cryptographic Trust & Signatures (Phase 12)
+            crypto::get_author_keypair,
+            crypto::list_trusted_keys,
+            crypto::list_revoked_keys,
+            crypto::add_trusted_key,
+            crypto::revoke_trusted_key,
+            crypto::verify_package_cryptography,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

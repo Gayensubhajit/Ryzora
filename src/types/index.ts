@@ -317,6 +317,8 @@ export interface PackageItem {
   trending_score?: number;
   maintainer?: string;
   release_notes?: string;
+  signature?: PackageSignatureMetadata;
+  cryptographic_status?: CryptographicStatus;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -643,3 +645,68 @@ export interface DistributionReleaseResult {
   message: string;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cryptographic Trust & Signature Architecture types (Phase 12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SignerIdentity {
+  author_id: string;
+  name: string;
+  handle?: string;
+}
+
+export interface PackageSignatureMetadata {
+  schema_version: number;
+  algorithm: string;
+  key_id: string;
+  public_key: string;
+  signed_tree_hash: string;
+  signature: string;
+  signer_identity: SignerIdentity;
+  signed_at: string;
+}
+
+export type CryptographicStatus =
+  | "official_verified"
+  | "author_verified"
+  | "self_signed_unvetted"
+  | "unsigned"
+  | "invalid_signature"
+  | "revoked_key"
+  | "official_impersonation";
+
+export interface CryptographicEvaluation {
+  status: CryptographicStatus;
+  key_id?: string;
+  public_key?: string;
+  signer_name?: string;
+  is_valid: boolean;
+  is_trusted: boolean;
+  can_install: boolean;
+  error_message?: string;
+}
+
+export interface AuthorKeyPairInfo {
+  key_id: string;
+  public_key_hex: string;
+  author_name: string;
+  private_key_path: string;
+  public_key_path: string;
+}
+
+export interface TrustedKeyEntry {
+  key_id: string;
+  public_key: string;
+  author_name: string;
+  role: string;
+  added_at: string;
+  notes: string;
+}
+
+export interface RevokedKeyEntry {
+  key_id: string;
+  public_key: string;
+  reason: string;
+  revoked_at: string;
+}

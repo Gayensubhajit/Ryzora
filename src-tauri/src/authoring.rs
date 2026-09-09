@@ -866,7 +866,12 @@ pub fn export_to_repository(
         .map_err(|e| format!("Failed to write manifest.json in staging: {}", e))?;
 
     // Copy optional release artifacts into staging if present
-    for extra_file in &["release.json", "checksums.sha256", "SUBMISSION.md"] {
+    for extra_file in &[
+        "release.json",
+        "checksums.sha256",
+        "SUBMISSION.md",
+        "release.sig",
+    ] {
         let src_extra = package_dir.join(extra_file);
         if src_extra.is_file() {
             let dest_extra = staging_pkg_dir.join(extra_file);
@@ -1010,6 +1015,7 @@ pub fn export_to_repository(
         trending_score: Some(0.0),
         maintainer: inherited_maintainer,
         release_notes: inherited_notes,
+        signature: crate::crypto::load_package_signature(package_dir),
     };
 
     if let Some(pos) = index.packages.iter().position(|p| p.id == manifest.id) {
