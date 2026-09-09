@@ -40,3 +40,8 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
