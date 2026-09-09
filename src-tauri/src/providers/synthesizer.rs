@@ -66,9 +66,23 @@ impl ManifestSynthesizer {
         }
 
         // 3. Construct compatibility spec
+        let desktops = if item.package_type == PackageType::Fastfetch
+            || item.package_type == PackageType::Wallpaper
+            || item
+                .supported_desktops
+                .iter()
+                .any(|d| d.to_lowercase() == "universal" || d.to_lowercase() == "all")
+            || item.supported_desktops.is_empty()
+            || item.supported_desktops.len() > 1
+        {
+            vec!["universal".to_string()]
+        } else {
+            item.supported_desktops.clone()
+        };
+
         let compatibility = ManifestCompatibility {
-            desktops: item.supported_desktops.clone(),
-            sessions: item.supported_display.clone(),
+            desktops,
+            sessions: Vec::new(),
             distros: Vec::new(),
             required: Vec::new(),
             optional: Vec::new(),

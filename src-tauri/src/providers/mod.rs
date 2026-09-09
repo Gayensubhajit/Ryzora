@@ -259,6 +259,67 @@ impl ProviderManager {
 
     /// Queries all enabled providers, captures partial failures without failing the search,
     /// normalizes items into FrontendPackageItem, and deduplicates by canonical source identity.
+
+    /// Finds and retrieves a raw ProviderItem along with its handling provider.
+    pub fn fetch_raw_item(
+        &self,
+        package_id: &str,
+    ) -> Result<(Arc<dyn ContentProvider>, ProviderItem), String> {
+        for provider in &self.providers {
+            if !provider.is_enabled() {
+                continue;
+            }
+            if let Ok(item) = provider.fetch_item(package_id) {
+                return Ok((provider.clone(), item));
+            }
+        }
+        Err(format!(
+            "Provider package '{}' not found in any registered provider",
+            package_id
+        ))
+    }
+
+    /// Stages a provider package into the specified directory, synthesizes its canonical
+    /// RyzoraManifest, validates it, and writes `manifest.json`.
+    pub fn stage_provider_package(
+        &self,
+        package_id: &str,
+        dest_parent_dir: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        let (provider, item) = self.fetch_raw_item(package_id)?;
+
+        std::fs::create_dir_all(dest_parent_dir)
+            .map_err(|e| format!("Failed to create destination dir: {}", e))?;
+
+        // Stage payload: returns the created package directory `dest_parent_dir.join(clean_id)`
+        let staged_dir = provider.stage_payload(&item, dest_parent_dir)?;
+
+        // Synthesize authoritative manifest
+        let manifest = synthesizer::ManifestSynthesizer::synthesize(&item)?;
+
+        // Serialize and write manifest.json into the staged package directory
+        let manifest_json = serde_json::to_string_pretty(&manifest)
+            .map_err(|e| format!("Failed to serialize synthesized manifest: {}", e))?;
+        std::fs::write(staged_dir.join("manifest.json"), manifest_json)
+            .map_err(|e| format!("Failed to write synthesized manifest.json: {}", e))?;
+
+        Ok(staged_dir)
+    }
+
+    /// Prepares a provider package in a target packages root directory (e.g. `~/.local/share/ryzora/packages/<pkg_id>`).
+    pub fn prepare_provider_package_in(
+        &self,
+        package_id: &str,
+        base_packages_dir: &std::path::Path,
+    ) -> Result<std::path::PathBuf, String> {
+        let clean_id = package_id.trim().to_lowercase();
+        let target_dir = base_packages_dir.join(&clean_id);
+        if target_dir.join("manifest.json").is_file() {
+            return Ok(target_dir);
+        }
+        self.stage_provider_package(&clean_id, base_packages_dir)
+    }
+
     pub fn search_all(&self, query: &ProviderQuery) -> ProviderSearchResponse {
         let mut raw_items: Vec<ProviderItem> = Vec::new();
         let mut statuses: HashMap<String, ProviderStatus> = HashMap::new();
@@ -291,18 +352,27 @@ impl ProviderManager {
         }
 
         // Deduplicate items across providers:
-        // Key is (source_url, normalized_id)
-        let mut seen_keys = std::collections::HashSet::new();
+        // Key is normalized_id (with priority given to earlier providers)
+        let mut seen_ids = std::collections::HashSet::new();
         let mut deduplicated_items = Vec::new();
 
         for item in raw_items {
-            let key = (
-                item.provenance.source_url.trim().to_lowercase(),
-                item.id.trim().to_lowercase(),
-            );
-            if !seen_keys.contains(&key) {
-                seen_keys.insert(key);
+            let norm_id = item.id.trim().to_lowercase();
+            if seen_ids.insert(norm_id) {
                 deduplicated_items.push(item);
+            }
+        }
+
+        // Apply desktop environment filtering if specified
+        if let Some(ref dt) = query.desktop {
+            let dt_lower = dt.trim().to_lowercase();
+            if !dt_lower.is_empty() && dt_lower != "all" {
+                deduplicated_items.retain(|item| {
+                    item.supported_desktops.iter().any(|d| {
+                        let dl = d.trim().to_lowercase();
+                        dl == "universal" || dl == "all" || dl == dt_lower
+                    })
+                });
             }
         }
 
@@ -372,4 +442,20 @@ pub fn synthesize_provider_manifest(
     item: ProviderItem,
 ) -> Result<crate::manifest::RyzoraManifest, String> {
     synthesizer::ManifestSynthesizer::synthesize(&item)
+}
+
+/// Explicitly stages and prepares a provider package into the application data directory
+/// `~/.local/share/ryzora/packages/<package_id>` so it can be resolved by the standard installer.
+pub fn prepare_provider_package_dir(package_id: &str) -> Result<std::path::PathBuf, String> {
+    let packages_dir = crate::installer::get_ryzora_base_dir().join("packages");
+    let mgr = get_global_provider_manager()
+        .lock()
+        .map_err(|e| e.to_string())?;
+    mgr.prepare_provider_package_in(package_id, &packages_dir)
+}
+
+#[tauri::command]
+pub fn prepare_provider_package(package_id: String) -> Result<String, String> {
+    let path = prepare_provider_package_dir(&package_id)?;
+    Ok(path.to_string_lossy().to_string())
 }

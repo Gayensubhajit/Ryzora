@@ -119,6 +119,7 @@ pub fn run() {
             providers::list_content_providers,
             providers::search_content_providers,
             providers::synthesize_provider_manifest,
+            providers::prepare_provider_package,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

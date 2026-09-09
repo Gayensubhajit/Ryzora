@@ -61,6 +61,14 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
 
         {/* Top-Left: Integrity / Cache / Offline indicator */}
         <div className="absolute top-2 left-2 flex items-center gap-1">
+          {packageItem.repository_id?.startsWith("provider:") && (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm"
+              title={`Content Provider: ${packageItem.repository_id.replace("provider:", "")}`}
+            >
+              {packageItem.repository_id.replace("provider:", "")}
+            </div>
+          )}
           {packageItem.trust_tier === "official" && (
             <div
               className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-amber-500/25 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"

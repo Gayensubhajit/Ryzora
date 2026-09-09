@@ -86,7 +86,16 @@ export const CategoryView: React.FC = () => {
 
   const categoryPackages = useMemo(() => {
     let list = packages.filter((pkg) => {
-      const matchesCategory = pkg.category === activeCategory;
+      const matchesCategory =
+        pkg.category === activeCategory ||
+        (activeCategory === "fastfetch" && (pkg.package_type === "fastfetch" || pkg.category === "fastfetch")) ||
+        (activeCategory === "wallpapers" && (pkg.package_type === "wallpaper" || pkg.category === "wallpapers")) ||
+        (activeCategory === "rices" && (pkg.package_type === "rice" || pkg.category === "rices")) ||
+        (activeCategory === "themes" && (pkg.package_type === "theme" || pkg.category === "themes")) ||
+        (activeCategory === "icons" && (pkg.package_type === "icon" || pkg.category === "icons")) ||
+        (activeCategory === "bars" && (pkg.package_type === "waybar" || pkg.category === "bars")) ||
+        (activeCategory === "lockscreens" && (pkg.package_type === "lockscreen" || pkg.category === "lockscreens")) ||
+        (activeCategory === "terminal" && (pkg.package_type === "terminal" || pkg.category === "terminal"));
 
       const matchesSearch =
         !searchQuery ||

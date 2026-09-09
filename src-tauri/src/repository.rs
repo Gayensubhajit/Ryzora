@@ -2314,20 +2314,99 @@ pub fn find_package_dir(package_id: &str) -> Result<PathBuf, String> {
 #[tauri::command]
 pub fn get_catalog_packages() -> Result<Vec<FrontendPackageItem>, String> {
     let manager = create_default_manager();
-    manager.list_all_packages()
+    let mut packages = manager.list_all_packages()?;
+
+    // Phase 18.8: Unified Content Integration
+    // Merge lightweight in-memory metadata from all registered Content Providers
+    // (Fastfetch, Rice, Wallpaper, KDE, GNOME, GitHub, Community).
+    // ZERO payload download, ZERO disk staging, ZERO filesystem mutation during search/browse.
+    if let Ok(mgr) = crate::providers::get_global_provider_manager().lock() {
+        let query = crate::providers::ProviderQuery {
+            query: String::new(),
+            category: None,
+            desktop: None,
+            page: 1,
+            page_size: 200,
+        };
+        let response = mgr.search_all(&query);
+
+        // Strong Deduplication:
+        // 1. Canonical source identity and normalized package ID
+        // 2. Local repository packages take precedence on duplicate IDs
+        let mut seen_ids: std::collections::HashSet<String> =
+            packages.iter().map(|p| p.id.to_lowercase()).collect();
+
+        for item in response.items {
+            let norm_id = item.id.to_lowercase();
+            if seen_ids.insert(norm_id) {
+                packages.push(item);
+            }
+        }
+    }
+
+    Ok(packages)
 }
 
 #[tauri::command]
 pub fn refresh_catalog() -> Result<Vec<FrontendPackageItem>, String> {
     let mut manager = create_default_manager();
     let _ = manager.refresh_all();
-    manager.list_all_packages()
+    let mut packages = manager.list_all_packages()?;
+
+    if let Ok(mgr) = crate::providers::get_global_provider_manager().lock() {
+        let query = crate::providers::ProviderQuery {
+            query: String::new(),
+            category: None,
+            desktop: None,
+            page: 1,
+            page_size: 200,
+        };
+        let response = mgr.search_all(&query);
+
+        let mut seen_ids: std::collections::HashSet<String> =
+            packages.iter().map(|p| p.id.to_lowercase()).collect();
+
+        for item in response.items {
+            let norm_id = item.id.to_lowercase();
+            if seen_ids.insert(norm_id) {
+                packages.push(item);
+            }
+        }
+    }
+
+    Ok(packages)
 }
 
 #[tauri::command]
 pub fn get_repository_info() -> Result<Vec<RepositorySummary>, String> {
     let manager = create_default_manager();
-    Ok(manager.list_repositories())
+    let mut repos = manager.list_repositories();
+
+    // Include virtual content providers in repository summaries for UI source filtering
+    if let Ok(mgr) = crate::providers::get_global_provider_manager().lock() {
+        for summary in mgr.list_providers() {
+            let status_str = match summary.status {
+                crate::providers::ProviderStatus::Online => "online".to_string(),
+                crate::providers::ProviderStatus::Offline => "offline".to_string(),
+                crate::providers::ProviderStatus::RateLimited { .. } => "rate_limited".to_string(),
+                crate::providers::ProviderStatus::Disabled => "disabled".to_string(),
+                crate::providers::ProviderStatus::Error(e) => format!("error: {}", e),
+            };
+            repos.push(RepositorySummary {
+                id: format!("provider:{}", summary.id),
+                name: summary.name,
+                package_count: 0,
+                path: format!("virtual://provider/{}", summary.id),
+                repo_type: "provider".to_string(),
+                enabled: summary.enabled,
+                status: status_str,
+                last_refreshed: None,
+                last_error: None,
+            });
+        }
+    }
+
+    Ok(repos)
 }
 
 #[tauri::command]

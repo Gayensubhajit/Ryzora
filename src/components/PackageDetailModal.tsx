@@ -862,6 +862,29 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Provider Provenance Card */}
+                  {selectedPackage.repository_id?.startsWith("provider:") && (
+                    <div className="p-3 rounded-md bg-indigo-950/20 border border-indigo-800/30 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-semibold text-indigo-300">
+                          <PackageIcon className="w-3.5 h-3.5" />
+                          <span>Provider Origin: {selectedPackage.repository_id.replace("provider:", "").toUpperCase()} Provider</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-indigo-400 uppercase px-1.5 py-0.5 rounded bg-indigo-900/40 border border-indigo-700/50">
+                          Declarative Ecosystem
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-indigo-200/80 leading-relaxed">
+                        Sourced via native {selectedPackage.repository_id.replace("provider:", "")} integration. Staged lazily on-demand only upon installation, validated against component-aware directory boundaries, and protected by Ryzora's pre-install snapshot and rollback guarantees.
+                      </p>
+                      {selectedPackage.maintainer && (
+                        <div className="text-[11px] text-indigo-300 font-mono">
+                          Original Author: <span className="text-white">{selectedPackage.maintainer}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Repository & Integrity Metadata */}
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
                     <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">

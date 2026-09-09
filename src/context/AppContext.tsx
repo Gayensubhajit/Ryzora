@@ -517,6 +517,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const previewInstallation = async (packageId: string): Promise<InstallationPlan> => {
+    try {
+      await invoke("prepare_provider_package", { packageId });
+    } catch {
+      // Non-provider package or already present locally
+    }
     return await invoke<InstallationPlan>("preview_installation", { packageId });
   };
 
@@ -532,6 +537,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]);
 
     try {
+      // Step 0: Ensure provider package payload is prepared & synthesized
+      if (pkg.repository_id?.startsWith("provider:")) {
+        setInstallLogs((prev) => [
+          ...prev,
+          `[Provider] Validating declarative payload from ${pkg.repository_id}...`,
+        ]);
+        try {
+          await invoke("prepare_provider_package", { packageId: pkg.id });
+        } catch (prepErr) {
+          console.warn("Provider package prepare warning:", prepErr);
+        }
+      }
+
       // Step 1: Pre-flight preview/plan
       const plan = await previewInstallation(pkg.id);
       setInstallProgress(25);

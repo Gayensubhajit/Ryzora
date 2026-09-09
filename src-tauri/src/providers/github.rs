@@ -774,6 +774,38 @@ impl Default for GitHubProvider {
     }
 }
 
+fn filter_github_items(items: Vec<ProviderItem>, query: &ProviderQuery) -> Vec<ProviderItem> {
+    items
+        .into_iter()
+        .filter(|item| {
+            if let Some(ref cat) = query.category {
+                let cat_lower = cat.to_lowercase();
+                let matches_cat = item.category.to_lowercase() == cat_lower
+                    || (cat_lower == "rices" && item.category == "rice")
+                    || (cat_lower == "rice" && item.category == "rices")
+                    || (cat_lower == "themes" && item.category == "theme")
+                    || (cat_lower == "desktop" && item.category == "desktop")
+                    || (cat_lower == "wallpapers" && item.category == "wallpapers");
+                if !matches_cat {
+                    return false;
+                }
+            }
+            if let Some(ref dt) = query.desktop {
+                let dt_lower = dt.to_lowercase();
+                let matches_dt = item.supported_desktops.contains(&"universal".to_string())
+                    || item
+                        .supported_desktops
+                        .iter()
+                        .any(|d| d.to_lowercase() == dt_lower);
+                if !matches_dt {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect()
+}
+
 impl ContentProvider for GitHubProvider {
     fn id(&self) -> &str {
         "github"
@@ -806,7 +838,7 @@ impl ContentProvider for GitHubProvider {
 
         // 1. Check cache first to avoid consuming unauthenticated rate limit
         if let Some(cached_items) = self.cache.get_search(&query_key) {
-            return Ok(cached_items);
+            return Ok(filter_github_items(cached_items, query));
         }
 
         // 2. Build GitHub Search API query
@@ -831,7 +863,7 @@ impl ContentProvider for GitHubProvider {
         // 6. Cache valid items
         self.cache.set_search(&query_key, &items);
 
-        Ok(items)
+        Ok(filter_github_items(items, query))
     }
 
     fn fetch_item(&self, id: &str) -> Result<ProviderItem, ProviderError> {
