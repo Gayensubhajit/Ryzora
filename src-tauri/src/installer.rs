@@ -376,7 +376,14 @@ pub fn validate_target_safety(target_str: &str, home_dir: &Path) -> Result<PathB
         .strip_prefix(home_dir)
         .map_err(|_| format!("Target '{}' is outside user home directory", target_str))?;
 
-    let allowed_prefixes = [".config", ".local/share", ".local/state"];
+    let allowed_prefixes = [
+        ".config",
+        ".local/share",
+        ".local/state",
+        "Pictures/Wallpapers",
+        ".themes",
+        ".icons",
+    ];
     let is_allowed = allowed_prefixes
         .iter()
         .any(|p| rel_to_home.starts_with(Path::new(p)));
@@ -385,7 +392,7 @@ pub fn validate_target_safety(target_str: &str, home_dir: &Path) -> Result<PathB
     // if under .config
     if !is_allowed {
         return Err(format!(
-            "Target '{}' is outside allowed configuration scope (must be inside ~/.config/ or ~/.local/)",
+            "Target '{}' is outside allowed configuration scope (must be inside ~/.config/, ~/.local/, ~/Pictures/Wallpapers/, ~/.themes/, or ~/.icons/)",
             target_str
         ));
     }

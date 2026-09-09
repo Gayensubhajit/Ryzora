@@ -11,6 +11,7 @@ pub mod installer;
 pub mod integrity;
 pub mod manifest;
 pub mod notifications;
+pub mod providers;
 pub mod repository;
 pub mod repository_sync;
 pub mod settings;
@@ -114,6 +115,10 @@ pub fn run() {
             integrity::run_integrity_scan,
             integrity::verify_package_integrity,
             integrity::get_last_integrity_report,
+            // Content Ecosystem & Providers (Phase 18)
+            providers::list_content_providers,
+            providers::search_content_providers,
+            providers::synthesize_provider_manifest,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");
