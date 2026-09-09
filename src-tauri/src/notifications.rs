@@ -5,13 +5,20 @@
 /// IntegrityFailure, SignatureInvalid) are NEVER auto-deleted regardless
 /// of the age filter supplied to clear_old_notifications.
 ///
-/// Toasts remain for immediate in-process feedback; this module is the
-/// durable, queryable record.
+/// CONCURRENCY & ATOMICITY HARDENING:
+/// - All mutations (append, read-modify-write) are serialized using an in-process Mutex.
+/// - Rewrites use atomic temp file + rename rather than in-place truncation.
+/// - Permissions on directory (0700) and log file (0600) are strictly enforced.
+/// - Malformed log entries are gracefully handled and preserved without panic.
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Global lock serializing all mutations to the activity log.
+static ACTIVITY_LOG_LOCK: Mutex<()> = Mutex::new(());
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -86,11 +93,15 @@ pub struct ActivityEntry {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Paths
+// Paths & Permissions
 // ─────────────────────────────────────────────────────────────────────────────
 
+pub fn activity_log_dir() -> PathBuf {
+    crate::snapshot::get_home_dir().join(".local/share/ryzora")
+}
+
 pub fn activity_log_path() -> PathBuf {
-    crate::snapshot::get_home_dir().join(".local/share/ryzora/activity_log.jsonl")
+    activity_log_dir().join("activity_log.jsonl")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,13 +121,11 @@ fn iso_timestamp() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // Minimal RFC 3339 / ISO 8601 UTC representation without chrono dependency.
     let s = secs;
     let sec = s % 60;
     let min = (s / 60) % 60;
     let hour = (s / 3600) % 24;
     let days = s / 86400;
-    // Approximate calendar conversion (good enough for log timestamps).
     let (year, month, day) = days_to_ymd(days);
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
@@ -125,7 +134,6 @@ fn iso_timestamp() -> String {
 }
 
 fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
-    // Julian day arithmetic from Unix epoch (1970-01-01).
     let year_base: u64 = 1970;
     let mut year = year_base;
     loop {
@@ -142,11 +150,11 @@ fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
         [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     };
     let mut month = 1u64;
-    for &md in &month_days {
-        if days < md {
+    for &m in &month_days {
+        if days < m {
             break;
         }
-        days -= md;
+        days -= m;
         month += 1;
     }
     (year, month, days + 1)
@@ -156,12 +164,81 @@ fn is_leap(year: u64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
 
+fn parse_iso_secs(iso: &str) -> Option<u64> {
+    if iso.len() < 10 {
+        return None;
+    }
+    let parts: Vec<&str> = iso.split('T').collect();
+    let date_parts: Vec<u64> = parts[0].split('-').filter_map(|p| p.parse().ok()).collect();
+    if date_parts.len() != 3 {
+        return None;
+    }
+    let (year, month, day) = (date_parts[0], date_parts[1], date_parts[2]);
+    if year < 1970 || month < 1 || month > 12 || day < 1 || day > 31 {
+        return None;
+    }
+
+    let mut days = 0u64;
+    for y in 1970..year {
+        days += if is_leap(y) { 366 } else { 365 };
+    }
+    let month_days: [u64; 12] = if is_leap(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    for m in 0..(month.saturating_sub(1) as usize) {
+        days += month_days[m];
+    }
+    days += day.saturating_sub(1);
+
+    let (hour, min, sec) = if parts.len() > 1 {
+        let time_str = parts[1].trim_end_matches('Z');
+        let t_parts: Vec<u64> = time_str.split(':').filter_map(|p| p.parse().ok()).collect();
+        (
+            t_parts.first().copied().unwrap_or(0),
+            t_parts.get(1).copied().unwrap_or(0),
+            t_parts.get(2).copied().unwrap_or(0),
+        )
+    } else {
+        (0, 0, 0)
+    };
+
+    Some(days * 86400 + hour * 3600 + min * 60 + sec)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Core operations
+// Core operations (Thread-safe, atomic temp+rename, permission-hardened)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Append a new activity entry to the log.
-pub fn append_entry(
+/// Atomically rewrite the activity log using a temporary file and rename.
+pub fn atomic_write_log_to(path: &Path, content: &str) -> Result<(), String> {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(dir)
+        .map_err(|e| format!("Failed to create activity log directory: {}", e))?;
+    let _ = crate::crypto::set_secure_permissions(dir, 0o700);
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    let tmp = dir.join(format!(".activity_log.tmp.{}", nanos));
+
+    fs::write(&tmp, content)
+        .map_err(|e| format!("Failed to write temporary activity log: {}", e))?;
+    let _ = crate::crypto::set_secure_permissions(&tmp, 0o600);
+
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("Failed to atomically replace activity log: {}", e)
+    })?;
+    let _ = crate::crypto::set_secure_permissions(path, 0o600);
+    Ok(())
+}
+
+/// Append a new activity entry to an explicit log path under the global lock.
+pub fn append_entry_to(
+    path: &Path,
     kind: NotificationKind,
     severity: Severity,
     title: &str,
@@ -169,10 +246,12 @@ pub fn append_entry(
     related_package_id: Option<&str>,
     related_repository_id: Option<&str>,
 ) -> Result<ActivityEntry, String> {
-    let path = activity_log_path();
+    let _guard = ACTIVITY_LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create activity log directory: {}", e))?;
+        let _ = crate::crypto::set_secure_permissions(parent, 0o700);
     }
 
     let entry = ActivityEntry {
@@ -203,21 +282,43 @@ pub fn append_entry(
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open(path)
         .map_err(|e| format!("Failed to open activity log for append: {}", e))?;
+    let _ = crate::crypto::set_secure_permissions(path, 0o600);
 
     writeln!(file, "{}", line).map_err(|e| format!("Failed to write activity entry: {}", e))?;
 
     Ok(entry)
 }
 
-/// Load all entries from the log, newest first.
-pub fn load_all_entries() -> Vec<ActivityEntry> {
-    let path = activity_log_path();
+/// Append a new activity entry to the system activity log.
+pub fn append_entry(
+    kind: NotificationKind,
+    severity: Severity,
+    title: &str,
+    message: &str,
+    related_package_id: Option<&str>,
+    related_repository_id: Option<&str>,
+) -> Result<ActivityEntry, String> {
+    append_entry_to(
+        &activity_log_path(),
+        kind,
+        severity,
+        title,
+        message,
+        related_package_id,
+        related_repository_id,
+    )
+}
+
+/// Load all entries from an explicit log path, newest first.
+pub fn load_all_entries_from(path: &Path) -> Vec<ActivityEntry> {
+    let _guard = ACTIVITY_LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if !path.is_file() {
         return Vec::new();
     }
-    let Ok(file) = fs::File::open(&path) else {
+    let Ok(file) = fs::File::open(path) else {
         return Vec::new();
     };
     let reader = BufReader::new(file);
@@ -232,14 +333,20 @@ pub fn load_all_entries() -> Vec<ActivityEntry> {
     entries
 }
 
-/// Mark a specific entry as read. Rewrites the log file in-place.
-pub fn mark_read(id: &str) -> Result<(), String> {
-    let path = activity_log_path();
+/// Load all entries from the log, newest first.
+pub fn load_all_entries() -> Vec<ActivityEntry> {
+    load_all_entries_from(&activity_log_path())
+}
+
+/// Mark a specific entry as read in an explicit log path.
+pub fn mark_read_in(path: &Path, id: &str) -> Result<(), String> {
+    let _guard = ACTIVITY_LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if !path.is_file() {
         return Ok(());
     }
     let raw =
-        fs::read_to_string(&path).map_err(|e| format!("Failed to read activity log: {}", e))?;
+        fs::read_to_string(path).map_err(|e| format!("Failed to read activity log: {}", e))?;
 
     let new_content: String = raw
         .lines()
@@ -253,21 +360,29 @@ pub fn mark_read(id: &str) -> Result<(), String> {
             }
             line.to_string()
         })
-        .map(|l| l + "\n")
+        .map(|l| {
+            l + "
+"
+        })
         .collect();
 
-    fs::write(&path, new_content).map_err(|e| format!("Failed to rewrite activity log: {}", e))?;
-    Ok(())
+    atomic_write_log_to(path, &new_content)
 }
 
-/// Mark all entries as read.
-pub fn mark_all_read_impl() -> Result<(), String> {
-    let path = activity_log_path();
+/// Mark a specific entry as read. Rewrites the log file atomically.
+pub fn mark_read(id: &str) -> Result<(), String> {
+    mark_read_in(&activity_log_path(), id)
+}
+
+/// Mark all entries as read in an explicit log path.
+pub fn mark_all_read_in(path: &Path) -> Result<(), String> {
+    let _guard = ACTIVITY_LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if !path.is_file() {
         return Ok(());
     }
     let raw =
-        fs::read_to_string(&path).map_err(|e| format!("Failed to read activity log: {}", e))?;
+        fs::read_to_string(path).map_err(|e| format!("Failed to read activity log: {}", e))?;
 
     let new_content: String = raw
         .lines()
@@ -280,22 +395,31 @@ pub fn mark_all_read_impl() -> Result<(), String> {
                 line.to_string()
             }
         })
-        .map(|l| l + "\n")
+        .map(|l| {
+            l + "
+"
+        })
         .collect();
 
-    fs::write(&path, new_content).map_err(|e| format!("Failed to rewrite activity log: {}", e))?;
-    Ok(())
+    atomic_write_log_to(path, &new_content)
 }
 
-/// Delete entries older than `days` days, but NEVER delete security-critical
-/// entries (IntegrityFailure, SignatureInvalid, KeyRevoked).
-pub fn clear_old_entries_impl(days: u32) -> Result<usize, String> {
-    let path = activity_log_path();
+/// Mark all entries as read.
+pub fn mark_all_read_impl() -> Result<(), String> {
+    mark_all_read_in(&activity_log_path())
+}
+
+/// Delete entries older than  days in an explicit log path.
+/// Security-critical entries (IntegrityFailure, SignatureInvalid, KeyRevoked)
+/// are NEVER deleted regardless of age.
+pub fn clear_old_entries_in(path: &Path, days: u32) -> Result<usize, String> {
+    let _guard = ACTIVITY_LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     if !path.is_file() {
         return Ok(0);
     }
     let raw =
-        fs::read_to_string(&path).map_err(|e| format!("Failed to read activity log: {}", e))?;
+        fs::read_to_string(path).map_err(|e| format!("Failed to read activity log: {}", e))?;
 
     let cutoff_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -319,65 +443,39 @@ pub fn clear_old_entries_impl(days: u32) -> Result<usize, String> {
                 if security_categories.contains(entry.category.as_str()) {
                     return true;
                 }
-                // Retain if within the retention window
-                // Parse timestamp (secs since epoch) from ISO string crudely
-                let entry_secs = parse_iso_secs(&entry.timestamp).unwrap_or(u64::MAX);
-                if entry_secs >= cutoff_secs {
-                    return true;
+                if let Some(entry_secs) = parse_iso_secs(&entry.timestamp) {
+                    if entry_secs < cutoff_secs {
+                        removed += 1;
+                        return false;
+                    }
                 }
-                removed += 1;
-                return false;
+                true
+            } else {
+                // Preserve malformed lines — never discard unparsed content
+                true
             }
-            true // Keep malformed lines rather than silently drop them
         })
-        .map(|l| l.to_string() + "\n")
+        .map(|l| {
+            l.to_string()
+                + "
+"
+        })
         .collect();
 
-    fs::write(&path, new_content).map_err(|e| format!("Failed to rewrite activity log: {}", e))?;
-
+    atomic_write_log_to(path, &new_content)?;
     Ok(removed)
 }
 
-/// Very lightweight ISO 8601 UTC parser returning seconds since Unix epoch.
-fn parse_iso_secs(ts: &str) -> Option<u64> {
-    // Expected format: YYYY-MM-DDTHH:MM:SSZ
-    let ts = ts.trim_end_matches('Z');
-    let parts: Vec<&str> = ts.splitn(2, 'T').collect();
-    if parts.len() != 2 {
-        return None;
-    }
-    let date_parts: Vec<u64> = parts[0].split('-').filter_map(|p| p.parse().ok()).collect();
-    let time_parts: Vec<u64> = parts[1].split(':').filter_map(|p| p.parse().ok()).collect();
-    if date_parts.len() != 3 || time_parts.len() != 3 {
-        return None;
-    }
-    let (y, m, d) = (date_parts[0], date_parts[1], date_parts[2]);
-    let (h, min, s) = (time_parts[0], time_parts[1], time_parts[2]);
-
-    // Days since Unix epoch (1970-01-01)
-    let mut days: u64 = 0;
-    for yr in 1970..y {
-        days += if is_leap(yr) { 366 } else { 365 };
-    }
-    let month_days: [u64; 12] = if is_leap(y) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    for i in 0..(m as usize - 1) {
-        days += month_days[i];
-    }
-    days += d - 1;
-
-    Some(days * 86400 + h * 3600 + min * 60 + s)
+/// Delete entries older than  days, but NEVER delete security-critical
+/// entries (IntegrityFailure, SignatureInvalid, KeyRevoked).
+pub fn clear_old_entries_impl(days: u32) -> Result<usize, String> {
+    clear_old_entries_in(&activity_log_path(), days)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tauri Commands
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// List recent notifications, optionally filtered by category keyword.
-/// Returns newest first.
 #[tauri::command]
 pub fn list_notifications(
     limit: Option<usize>,
@@ -407,7 +505,7 @@ pub fn mark_all_notifications_read() -> Result<(), String> {
     mark_all_read_impl()
 }
 
-/// Delete notifications older than `days` days.
+/// Delete notifications older than  days.
 /// Security-critical events (IntegrityFailure, SignatureInvalid, KeyRevoked)
 /// are NEVER deleted regardless of age.
 #[tauri::command]
@@ -427,7 +525,6 @@ pub fn notify(
     package_id: Option<&str>,
     repo_id: Option<&str>,
 ) {
-    // Best-effort; notification failures must never abort the primary operation.
     let _ = append_entry(kind, severity, title, message, package_id, repo_id);
 }
 
@@ -439,6 +536,8 @@ pub fn notify(
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Arc;
+    use std::thread;
 
     fn temp_log(label: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -446,16 +545,6 @@ mod tests {
             .unwrap_or_default()
             .subsec_nanos();
         env::temp_dir().join(format!("ryzora-notif-test-{}-{}.jsonl", label, nanos))
-    }
-
-    fn write_entry_to(path: &PathBuf, entry: &ActivityEntry) {
-        let line = serde_json::to_string(entry).unwrap();
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .unwrap();
-        writeln!(file, "{}", line).unwrap();
     }
 
     fn make_entry(id: &str, category: &str, severity: &str, ts: &str) -> ActivityEntry {
@@ -475,12 +564,112 @@ mod tests {
     #[test]
     fn test_notifications_append_entry() {
         let path = temp_log("append");
-        // Write directly
-        let entry = make_entry("e1", "package_installed", "info", "2026-01-01T00:00:00Z");
-        write_entry_to(&path, &entry);
+        let entry = append_entry_to(
+            &path,
+            NotificationKind::PackageInstalled,
+            Severity::Info,
+            "Test Package",
+            "Successfully installed",
+            Some("pkg-test"),
+            None,
+        )
+        .unwrap();
+
         let raw = fs::read_to_string(&path).unwrap();
-        assert!(raw.contains("e1"));
+        assert!(raw.contains(&entry.id));
         assert!(raw.contains("package_installed"));
+        assert!(raw.contains("pkg-test"));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "Activity log file must have 0600 permissions");
+        }
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_notifications_concurrent_append_and_rewrite_no_lost_events() {
+        let path = temp_log("concurrent");
+        let path_arc = Arc::new(path.clone());
+
+        // Spawn 4 writer threads, each appending 15 events
+        let mut handles = Vec::new();
+        for thread_idx in 0..4 {
+            let p = Arc::clone(&path_arc);
+            let handle = thread::spawn(move || {
+                for i in 0..15 {
+                    let title = format!("Thread-{} Entry-{}", thread_idx, i);
+                    let _ = append_entry_to(
+                        &p,
+                        NotificationKind::PackageInstalled,
+                        Severity::Info,
+                        &title,
+                        "Concurrent message",
+                        None,
+                        None,
+                    );
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Simultaneously spawn 2 rewriter threads running mark_all_read_in
+        for _ in 0..2 {
+            let p = Arc::clone(&path_arc);
+            let handle = thread::spawn(move || {
+                for _ in 0..5 {
+                    let _ = mark_all_read_in(&p);
+                    thread::yield_now();
+                }
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // Check that ALL 60 appended events are present in the file — zero lost events!
+        let all_entries = load_all_entries_from(&path);
+        assert_eq!(
+            all_entries.len(),
+            60,
+            "Concurrent append/rewrite must not lose any events"
+        );
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_notifications_malformed_entries_preserved_without_crash() {
+        let path = temp_log("malformed");
+        let e1 = make_entry("e1", "package_installed", "info", "2026-01-01T00:00:00Z");
+        let valid_line = serde_json::to_string(&e1).unwrap();
+        let malformed_line = "{ this is corrupt json ";
+        fs::write(
+            &path,
+            format!(
+                "{}
+{}
+",
+                valid_line, malformed_line
+            ),
+        )
+        .unwrap();
+
+        // Loading all entries should skip malformed line gracefully
+        let entries = load_all_entries_from(&path);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "e1");
+
+        // Rewriting (e.g. mark_read) should preserve malformed line rather than drop it
+        mark_read_in(&path, "e1").unwrap();
+        let updated_raw = fs::read_to_string(&path).unwrap();
+        assert!(updated_raw.contains("{ this is corrupt json "));
+
         let _ = fs::remove_file(&path);
     }
 
@@ -499,106 +688,89 @@ mod tests {
         let ts = "2026-09-09T12:00:00Z";
         let secs = parse_iso_secs(ts);
         assert!(secs.is_some());
-        // 2026-09-09 should be >50 years of seconds from epoch
         assert!(secs.unwrap() > 1_000_000_000);
     }
 
     #[test]
     fn test_notifications_mark_read_updates_flag() {
-        // Build a log with two entries and mark one as read
         let path = temp_log("markread");
-        let e1 = make_entry(
-            "evt-001",
-            "package_installed",
-            "info",
-            "2026-01-01T00:00:00Z",
-        );
-        let e2 = make_entry(
-            "evt-002",
-            "repository_synced",
-            "info",
-            "2026-01-02T00:00:00Z",
-        );
-        write_entry_to(&path, &e1);
-        write_entry_to(&path, &e2);
+        let e1 = append_entry_to(
+            &path,
+            NotificationKind::PackageInstalled,
+            Severity::Info,
+            "E1",
+            "msg1",
+            None,
+            None,
+        )
+        .unwrap();
+        let e2 = append_entry_to(
+            &path,
+            NotificationKind::RepositorySynced,
+            Severity::Info,
+            "E2",
+            "msg2",
+            None,
+            None,
+        )
+        .unwrap();
 
-        // Manually test the rewrite logic using the raw file
-        let raw = fs::read_to_string(&path).unwrap();
-        let new_content: String = raw
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(|line| {
-                if let Ok(mut entry) = serde_json::from_str::<ActivityEntry>(line) {
-                    if entry.id == "evt-001" {
-                        entry.read = true;
-                        return serde_json::to_string(&entry).unwrap();
-                    }
-                }
-                line.to_string()
-            })
-            .map(|l| l + "\n")
-            .collect();
-        fs::write(&path, new_content).unwrap();
+        mark_read_in(&path, &e1.id).unwrap();
 
-        let updated = fs::read_to_string(&path).unwrap();
-        let entries: Vec<ActivityEntry> = updated
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect();
-
-        let e1_updated = entries.iter().find(|e| e.id == "evt-001").unwrap();
-        let e2_updated = entries.iter().find(|e| e.id == "evt-002").unwrap();
+        let entries = load_all_entries_from(&path);
+        let e1_updated = entries.iter().find(|e| e.id == e1.id).unwrap();
+        let e2_updated = entries.iter().find(|e| e.id == e2.id).unwrap();
         assert!(e1_updated.read);
         assert!(!e2_updated.read);
+
         let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_notifications_clear_old_preserves_security_alerts() {
-        // Simulate a log with old and new entries, including a security alert
-        // The security alert must survive the clear even if it's old.
-        let old_ts = "2020-01-01T00:00:00Z"; // very old
-        let new_ts = "2026-09-09T00:00:00Z"; // recent
+        let path = temp_log("clear_old");
 
-        let security_cats = ["integrity_failure", "signature_invalid", "key_revoked"];
-        let normal_cats = ["package_installed", "repository_synced"];
+        // Write an old regular event and an old security alert
+        let old_regular = make_entry(
+            "old_reg",
+            "package_installed",
+            "info",
+            "2020-01-01T00:00:00Z",
+        );
+        let old_security = make_entry(
+            "old_sec",
+            "integrity_failure",
+            "critical",
+            "2020-01-01T00:00:00Z",
+        );
+        let line1 = serde_json::to_string(&old_regular).unwrap();
+        let line2 = serde_json::to_string(&old_security).unwrap();
+        fs::write(
+            &path,
+            format!(
+                "{}
+{}
+",
+                line1, line2
+            ),
+        )
+        .unwrap();
 
-        // Parse old timestamp — should be < any reasonable cutoff
-        let old_secs = parse_iso_secs(old_ts).unwrap();
-        let new_secs = parse_iso_secs(new_ts).unwrap();
-        let cutoff = new_secs.saturating_sub(30 * 86400); // 30 days before new_ts
+        // Clear entries older than 30 days
+        let removed = clear_old_entries_in(&path, 30).unwrap();
+        assert_eq!(removed, 1, "Only the non-security event should be removed");
 
-        assert!(old_secs < cutoff, "Old timestamp should be before cutoff");
+        let remaining = load_all_entries_from(&path);
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, "old_sec");
+        assert_eq!(remaining[0].category, "integrity_failure");
 
-        // Security categories must be retained regardless
-        for cat in &security_cats {
-            let is_security = matches!(
-                *cat,
-                "integrity_failure" | "signature_invalid" | "key_revoked"
-            );
-            assert!(is_security, "Category {} should be security-critical", cat);
-        }
-
-        // Normal old entries should be removable
-        for cat in &normal_cats {
-            let is_security = matches!(
-                *cat,
-                "integrity_failure" | "signature_invalid" | "key_revoked"
-            );
-            assert!(
-                !is_security,
-                "Category {} should NOT be security-critical",
-                cat
-            );
-        }
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_notifications_zero_command_execution() {
-        // The notifications module is pure file I/O — no subprocess execution.
         let entry = make_entry("e0", "package_installed", "info", "2026-01-01T00:00:00Z");
         assert!(!entry.id.is_empty());
-        // No std::process::Command used.
     }
 }

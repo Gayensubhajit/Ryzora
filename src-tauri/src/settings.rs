@@ -2,14 +2,16 @@
 ///
 /// Settings are stored at ~/.local/share/ryzora/settings.json.
 /// All writes are atomic (temp + rename, same pattern as Phase 12.1 key storage).
+/// Permissions are hardened: 0700 for directory, 0600 for file (Unix).
 ///
 /// SECURITY INVARIANT:
 ///   Settings are preferences only. They cannot disable signature verification,
 ///   bypass trust policy, skip snapshots, or permit unsafe paths. Any setting
 ///   that would weaken the security model is rejected at validation time.
+///   Unknown or injected fields are rejected via deny_unknown_fields.
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +19,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Validated, persisted user preferences.
+/// deny_unknown_fields prevents tampering/injection of bypass keys.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RyzoraSettings {
     /// Default release channel applied to newly added repositories.
     /// "stable" | "beta" | "nightly" — default "stable".
@@ -64,11 +68,34 @@ impl Default for RyzoraSettings {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Paths
+// Paths & Permissions
 // ─────────────────────────────────────────────────────────────────────────────
 
+pub fn settings_dir() -> PathBuf {
+    crate::snapshot::get_home_dir().join(".local/share/ryzora")
+}
+
 pub fn settings_file_path() -> PathBuf {
-    crate::snapshot::get_home_dir().join(".local/share/ryzora/settings.json")
+    settings_dir().join("settings.json")
+}
+
+/// Verify that file permissions are strict (0600 on Unix, no group/other access).
+pub fn verify_file_permissions(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let meta = fs::metadata(path)
+            .map_err(|e| format!("Failed to read metadata for '{}': {}", path.display(), e))?;
+        let mode = meta.permissions().mode();
+        if mode & 0o077 != 0 {
+            return Err(format!(
+                "Insecure permissions 0{:03o} on '{}' — file is group or world accessible",
+                mode & 0o777,
+                path.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,9 +106,13 @@ pub fn settings_file_path() -> PathBuf {
 /// cannot be parsed (never fails — missing/corrupt settings fall back to
 /// safe defaults rather than crashing the application).
 pub fn load_settings() -> RyzoraSettings {
-    let path = settings_file_path();
+    load_settings_from_path(&settings_file_path())
+}
+
+/// Load settings from an explicit file path.
+pub fn load_settings_from_path(path: &Path) -> RyzoraSettings {
     if path.is_file() {
-        if let Ok(raw) = fs::read_to_string(&path) {
+        if let Ok(raw) = fs::read_to_string(path) {
             if let Ok(s) = serde_json::from_str::<RyzoraSettings>(&raw) {
                 if validate_settings(&s).is_ok() {
                     return s;
@@ -92,37 +123,44 @@ pub fn load_settings() -> RyzoraSettings {
     RyzoraSettings::default()
 }
 
-/// Persist settings to disk atomically (temp file → rename).
+/// Persist settings to disk atomically (temp file → rename) with hardened permissions.
 /// Validates settings before writing.
 pub fn save_settings_to_disk(settings: &RyzoraSettings) -> Result<(), String> {
+    save_settings_to_path(settings, &settings_file_path())
+}
+
+/// Persist settings to an explicit path atomically with hardened permissions (0700 dir, 0600 file).
+pub fn save_settings_to_path(settings: &RyzoraSettings, path: &Path) -> Result<(), String> {
     validate_settings(settings)?;
 
-    let path = settings_file_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create settings directory: {}", e))?;
+        let _ = crate::crypto::set_secure_permissions(parent, 0o700);
     }
 
     let json = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-    // Atomic write: temp file → rename
+    // Atomic write: temp file beside destination → rename
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos();
     let tmp_path = path
         .parent()
-        .unwrap_or_else(|| std::path::Path::new("/tmp"))
+        .unwrap_or_else(|| Path::new("/tmp"))
         .join(format!(".settings.json.tmp.{}", nanos));
 
     fs::write(&tmp_path, &json)
         .map_err(|e| format!("Failed to write temporary settings file: {}", e))?;
+    let _ = crate::crypto::set_secure_permissions(&tmp_path, 0o600);
 
-    fs::rename(&tmp_path, &path).map_err(|e| {
+    fs::rename(&tmp_path, path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         format!("Failed to atomically rename settings file: {}", e)
     })?;
+    let _ = crate::crypto::set_secure_permissions(path, 0o600);
 
     Ok(())
 }
@@ -205,25 +243,14 @@ mod tests {
     use super::*;
     use std::env;
 
-    fn temp_dir() -> PathBuf {
+    fn temp_test_dir() -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .subsec_nanos();
-        env::temp_dir().join(format!("ryzora-settings-test-{}", nanos))
-    }
-
-    fn write_and_read(path: &PathBuf, settings: &RyzoraSettings) -> RyzoraSettings {
-        let json = serde_json::to_string_pretty(settings).unwrap();
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .subsec_nanos();
-        let tmp = path.parent().unwrap().join(format!(".tmp.{}", nanos));
-        fs::write(&tmp, &json).unwrap();
-        fs::rename(&tmp, path).unwrap();
-        let raw = fs::read_to_string(path).unwrap();
-        serde_json::from_str(&raw).unwrap()
+        let p = env::temp_dir().join(format!("ryzora-settings-test-{}", nanos));
+        let _ = fs::create_dir_all(&p);
+        p
     }
 
     #[test]
@@ -242,8 +269,7 @@ mod tests {
 
     #[test]
     fn test_settings_round_trip_persistence() {
-        let dir = temp_dir();
-        fs::create_dir_all(&dir).unwrap();
+        let dir = temp_test_dir();
         let path = dir.join("settings.json");
 
         let mut s = RyzoraSettings::default();
@@ -252,11 +278,98 @@ mod tests {
         s.auto_refresh_interval_minutes = 120;
         s.show_nightly_packages = true;
 
-        let loaded = write_and_read(&path, &s);
+        save_settings_to_path(&s, &path).unwrap();
+        let loaded = load_settings_from_path(&path);
         assert_eq!(loaded.default_release_channel, "beta");
         assert!(loaded.compact_ui);
         assert_eq!(loaded.auto_refresh_interval_minutes, 120);
         assert!(loaded.show_nightly_packages);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_settings_permission_hardening() {
+        let dir = temp_test_dir();
+        let path = dir.join("settings.json");
+        let s = RyzoraSettings::default();
+
+        save_settings_to_path(&s, &path).unwrap();
+        assert!(verify_file_permissions(&path).is_ok());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_mode = fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+            let file_mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(dir_mode, 0o700, "Settings directory must be 0700");
+            assert_eq!(file_mode, 0o600, "Settings file must be 0600");
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_settings_tampered_unknown_fields_fallback() {
+        let dir = temp_test_dir();
+        let path = dir.join("settings.json");
+
+        // Attempting to inject an unauthorized setting (e.g. bypass signature verification)
+        let malicious_json = r#"{
+            "default_release_channel": "stable",
+            "auto_refresh_enabled": true,
+            "auto_refresh_interval_minutes": 60,
+            "notification_level": "all",
+            "update_notification_policy": "notify",
+            "integrity_scan_on_startup": false,
+            "show_unverified_packages": true,
+            "show_nightly_packages": false,
+            "compact_ui": false,
+            "disable_signatures": true,
+            "bypass_snapshots": true
+        }"#;
+        fs::write(&path, malicious_json).unwrap();
+
+        // Must fall back to safe defaults — reject tampered configuration
+        let loaded = load_settings_from_path(&path);
+        assert_eq!(loaded, RyzoraSettings::default());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_settings_corrupted_json_fallback() {
+        let dir = temp_test_dir();
+        let path = dir.join("settings.json");
+        fs::write(&path, "{ this is corrupt json ").unwrap();
+
+        let loaded = load_settings_from_path(&path);
+        assert_eq!(loaded, RyzoraSettings::default());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_settings_invalid_values_fallback() {
+        let dir = temp_test_dir();
+        let path = dir.join("settings.json");
+
+        // Valid JSON but invalid channel
+        let invalid_json = r#"{
+            "default_release_channel": "unsupported_channel",
+            "auto_refresh_enabled": true,
+            "auto_refresh_interval_minutes": 60,
+            "notification_level": "all",
+            "update_notification_policy": "notify",
+            "integrity_scan_on_startup": false,
+            "show_unverified_packages": true,
+            "show_nightly_packages": false,
+            "compact_ui": false
+        }"#;
+        fs::write(&path, invalid_json).unwrap();
+
+        let loaded = load_settings_from_path(&path);
+        assert_eq!(loaded, RyzoraSettings::default());
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -293,7 +406,6 @@ mod tests {
     #[test]
     fn test_settings_validation_rejects_auto_apply_policy() {
         let mut s = RyzoraSettings::default();
-        // auto_apply is explicitly NOT a valid policy (deferred)
         s.update_notification_policy = "auto_apply".to_string();
         assert!(validate_settings(&s).is_err());
     }
@@ -321,18 +433,26 @@ mod tests {
     }
 
     #[test]
-    fn test_settings_integrity_scan_off_by_default_but_valid() {
-        // integrity_scan_on_startup=false only disables automatic scanning;
-        // it never disables manual scans or installation-time verification.
+    fn test_settings_cannot_bypass_security_invariants() {
+        // Explicitly verify settings has no capabilities to influence security:
         let s = RyzoraSettings::default();
-        assert!(!s.integrity_scan_on_startup);
         assert!(validate_settings(&s).is_ok());
+
+        // Verify serializing and checking fields: no security toggles exist
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(!json.contains("signature"));
+        assert!(!json.contains("trust"));
+        assert!(!json.contains("snapshot"));
+        assert!(!json.contains("rollback"));
+        assert!(!json.contains("bypass"));
+        assert!(!json.contains("force"));
+        assert!(!json.contains("sudo"));
+        assert!(!json.contains("root"));
     }
 
     #[test]
     fn test_settings_zero_command_execution() {
         let s = RyzoraSettings::default();
         assert!(validate_settings(&s).is_ok());
-        // No std::process::Command was used — settings engine is pure I/O only.
     }
 }
