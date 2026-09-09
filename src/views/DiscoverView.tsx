@@ -1,24 +1,25 @@
 import React, { useState, useMemo } from "react";
-import { ArrowUpDown } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { HeroBanner } from "../components/HeroBanner";
-import { PackageCard } from "../components/PackageCard";
-import { PackageType, CategoryId } from "../types";
+import { StoreCard } from "../components/StoreCard";
+import { ContentTabBar, STORE_CONTENT_TABS } from "../components/ContentTabBar";
+import { CategoryId } from "../types";
 
 type SortOption = "relevance" | "trending" | "rating" | "downloads" | "name" | "newest";
-type StatusFilterOption =
-  | "all"
-  | "official"
-  | "verified"
-  | "community"
-  | "compatible"
-  | "featured"
-  | "trending"
-  | "installed"
-  | "update_available"
-  | "stable"
-  | "beta"
-  | "nightly";
+type ActiveTab = CategoryId | "all";
+
+const PORTRAIT_TABS = new Set<ActiveTab>(["lockscreens", "wallpapers"]);
+
+/** Per-tab sub-filter pills (mirrors CategoryView logic) */
+const TAB_SUB_FILTERS: Partial<Record<ActiveTab, string[]>> = {
+  lockscreens: ["All", "Hyprlock", "Quickshell", "Swaylock", "SDDM"],
+  rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
+  themes: ["All", "GTK", "Qt", "Application"],
+  wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
+  bars: ["All", "Waybar", "Eww", "Polybar"],
+  terminal: ["All", "Kitty", "Alacritty", "Foot"],
+};
 
 export function compareSemver(v1: string, v2: string): number {
   const clean = (v: string) => v.replace(/^v/, "").trim();
@@ -46,319 +47,320 @@ export const DiscoverView: React.FC = () => {
   const {
     packages,
     searchQuery,
+    setSearchQuery,
     desktopFilter,
     systemInfo,
     installedPackages,
     repositories,
-    checkCompatibility,
   } = useApp();
 
-  const [typeFilter, setTypeFilter] = useState<PackageType | "all">("all");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryId | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilterOption>("all");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("all");
+  const [subFilter, setSubFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [repoFilter, setRepoFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortOption>("relevance");
+  const [showFilters, setShowFilters] = useState(false);
 
-  const filteredAndSortedPackages = useMemo(() => {
-    let result = packages.filter((pkg) => {
-      // 1. Search Query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const matches =
-          pkg.title.toLowerCase().includes(q) ||
-          pkg.subtitle.toLowerCase().includes(q) ||
-          pkg.description.toLowerCase().includes(q) ||
-          pkg.author.name.toLowerCase().includes(q) ||
-          pkg.category.toLowerCase().includes(q) ||
-          pkg.package_type.toLowerCase().includes(q) ||
-          pkg.tags.some((t) => t.toLowerCase().includes(q));
+  // Reset sub-filter when tab changes
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    setSubFilter("All");
+  };
 
-        if (!matches) return false;
-      }
+  const currentWm = systemInfo?.window_manager?.toLowerCase() || "";
 
-      // 2. Desktop Filter
-      if (desktopFilter !== "all") {
-        const matchesDesktop =
-          pkg.supported_desktops.includes("universal") ||
-          pkg.supported_desktops.includes(desktopFilter);
-        if (!matchesDesktop) return false;
-      }
+  const filteredPackages = useMemo(() => {
+    let list = packages.filter((pkg) => {
+      // Tab / category filter
+      const matchesTab =
+        activeTab === "all" ||
+        pkg.category === activeTab ||
+        (activeTab === "lockscreens" && (pkg.package_type === "lockscreen" || pkg.category === "lockscreens")) ||
+        (activeTab === "rices" && (pkg.package_type === "rice" || pkg.category === "rices")) ||
+        (activeTab === "themes" && (pkg.package_type === "theme" || pkg.category === "themes")) ||
+        (activeTab === "wallpapers" && (pkg.package_type === "wallpaper" || pkg.category === "wallpapers")) ||
+        (activeTab === "bars" && (pkg.package_type === "waybar" || pkg.category === "bars")) ||
+        (activeTab === "fastfetch" && (pkg.package_type === "fastfetch" || pkg.category === "fastfetch")) ||
+        (activeTab === "terminal" && (pkg.package_type === "terminal" || pkg.category === "terminal")) ||
+        (activeTab === "bundles" && pkg.category === "bundles");
 
-      // 3. Category Filter
-      if (categoryFilter !== "all" && pkg.category !== categoryFilter) {
-        return false;
-      }
+      // Search
+      const matchesSearch =
+        !searchQuery ||
+        pkg.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.author.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pkg.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      // 4. Package Type Filter
-      if (typeFilter !== "all" && pkg.package_type !== typeFilter) {
-        return false;
-      }
+      // Desktop
+      const matchesDesktop =
+        desktopFilter === "all" ||
+        pkg.supported_desktops.includes("universal") ||
+        pkg.supported_desktops.includes(desktopFilter as any);
 
-      // 5. Repository Filter
-      if (repoFilter !== "all" && pkg.repository_id !== repoFilter) {
-        return false;
-      }
-
-      // 6. Status Filter
+      // Status filter
       const installedRecord = installedPackages.find((p) => p.package_id === pkg.id);
       const isInstalled = !!installedRecord;
-      const isUpdate =
-        isInstalled && installedRecord
-          ? compareSemver(pkg.version, installedRecord.version) > 0
-          : false;
-      const compat = checkCompatibility(pkg);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "official" && pkg.trust_tier === "official") ||
+        (statusFilter === "verified" && pkg.trust_tier === "verified") ||
+        (statusFilter === "community" && pkg.trust_tier === "community") ||
+        (statusFilter === "featured" && pkg.featured) ||
+        (statusFilter === "trending" && pkg.trending) ||
+        (statusFilter === "installed" && isInstalled) ||
+        (statusFilter === "stable" && pkg.release_channel === "stable") ||
+        (statusFilter === "beta" && pkg.release_channel === "beta") ||
+        (statusFilter === "nightly" && pkg.release_channel === "nightly");
 
-      if (statusFilter === "compatible" && compat.level !== "Compatible") {
-        return false;
-      }
-      if (statusFilter === "featured" && !pkg.featured) {
-        return false;
-      }
-      if (statusFilter === "trending" && !pkg.trending) {
-        return false;
-      }
-      if (statusFilter === "installed" && !isInstalled) {
-        return false;
-      }
-      if (statusFilter === "update_available" && !isUpdate) {
-        return false;
-      }
-      if (statusFilter === "official" && pkg.trust_tier !== "official") {
-        return false;
-      }
-      if (statusFilter === "verified" && pkg.trust_tier !== "verified" && pkg.trust_tier !== "official") {
-        return false;
-      }
-      if (statusFilter === "community" && pkg.trust_tier !== "community") {
-        return false;
-      }
-      if (statusFilter === "stable" && pkg.release_channel && pkg.release_channel !== "stable") {
-        return false;
-      }
-      if (statusFilter === "beta" && pkg.release_channel !== "beta") {
-        return false;
-      }
-      if (statusFilter === "nightly" && pkg.release_channel !== "nightly") {
-        return false;
-      }
+      // Repository filter
+      const matchesRepo = repoFilter === "all" || pkg.repository_id === repoFilter;
 
-      return true;
+      // Sub-filter
+      const matchesSubFilter =
+        subFilter === "All" ||
+        pkg.tags.some((t) => t.toLowerCase() === subFilter.toLowerCase()) ||
+        pkg.supported_desktops.some((d) => d.toLowerCase() === subFilter.toLowerCase()) ||
+        (pkg.components ?? []).some((c) =>
+          c.component_type?.toLowerCase().includes(subFilter.toLowerCase())
+        );
+
+      return matchesTab && matchesSearch && matchesDesktop && matchesStatus && matchesRepo && matchesSubFilter;
     });
 
     // Sort
-    result = [...result].sort((a, b) => {
-      if (sortBy === "trending") {
-        const scoreA = a.trending_score ?? (a.trending ? 100 : 0);
-        const scoreB = b.trending_score ?? (b.trending ? 100 : 0);
-        return scoreB - scoreA;
-      }
-      if (sortBy === "rating") {
-        return b.rating - a.rating;
-      }
-      if (sortBy === "downloads") {
-        return b.downloads - a.downloads;
-      }
-      if (sortBy === "name") {
-        return a.title.localeCompare(b.title);
-      }
-      if (sortBy === "newest") {
-        return compareSemver(b.version, a.version);
-      }
-      // "relevance": if search query, sort by title match precedence
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const aTitle = a.title.toLowerCase().includes(q) ? 1 : 0;
-        const bTitle = b.title.toLowerCase().includes(q) ? 1 : 0;
-        if (aTitle !== bTitle) return bTitle - aTitle;
-      }
-      return (b.downloads || 0) - (a.downloads || 0);
+    list = [...list].sort((a, b) => {
+      if (sortBy === "trending") return (b.trending ? 1 : 0) - (a.trending ? 1 : 0) || b.downloads - a.downloads;
+      if (sortBy === "rating") return b.rating - a.rating;
+      if (sortBy === "downloads") return b.downloads - a.downloads;
+      if (sortBy === "name") return a.title.localeCompare(b.title);
+      if (sortBy === "newest") return compareSemver(b.version, a.version);
+      // relevance: featured first, then trending, then downloads
+      const aScore = (a.featured ? 2 : 0) + (a.trending ? 1 : 0);
+      const bScore = (b.featured ? 2 : 0) + (b.trending ? 1 : 0);
+      return bScore - aScore || b.downloads - a.downloads;
     });
 
-    return result;
-  }, [
-    packages,
-    searchQuery,
-    desktopFilter,
-    categoryFilter,
-    typeFilter,
-    statusFilter,
-    repoFilter,
-    sortBy,
-    installedPackages,
-    checkCompatibility,
-  ]);
+    return list;
+  }, [packages, activeTab, searchQuery, desktopFilter, statusFilter, repoFilter, sortBy, installedPackages, subFilter]);
 
-  const featuredRice = packages.find((p) => p.featured) || packages[0];
-  const currentWm = systemInfo?.window_manager.toLowerCase() || "hyprland";
-  const compatiblePackages = packages.filter(
-    (p) =>
-      p.supported_desktops.includes("universal") ||
-      p.supported_desktops.some((d) => d === currentWm || currentWm.includes(d))
+  const featuredRice = useMemo(() => packages.find((p) => p.featured), [packages]);
+
+  const compatiblePackages = useMemo(
+    () =>
+      packages.filter((p) =>
+        p.supported_desktops.some((d) => d === currentWm || currentWm.includes(d))
+      ),
+    [packages, currentWm]
   );
 
-  const isFiltering =
-    categoryFilter !== "all" ||
-    typeFilter !== "all" ||
-    statusFilter !== "all" ||
-    repoFilter !== "all" ||
-    sortBy !== "relevance" ||
-    searchQuery !== "";
+  const isAllTab = activeTab === "all";
+  const isFiltering = !isAllTab || statusFilter !== "all" || repoFilter !== "all" || sortBy !== "relevance" || searchQuery !== "";
+  const subFilters = TAB_SUB_FILTERS[activeTab];
+  const usePortrait = PORTRAIT_TABS.has(activeTab);
 
   return (
-    <div className="space-y-6 pb-10">
-      {/* Featured Card (When not searching or active filter) */}
-      {!isFiltering && desktopFilter === "all" && featuredRice && (
-        <HeroBanner featuredPackage={featuredRice} />
-      )}
+    <div className="space-y-0 pb-10">
+      {/* ── Content tab bar ── */}
+      <div className="-mx-6 -mt-6 mb-4 sticky top-0 z-10">
+        <ContentTabBar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          tabs={STORE_CONTENT_TABS}
+        />
+      </div>
 
-      {/* Compatible with your setup (When not searching or active filter) */}
-      {!isFiltering && desktopFilter === "all" && compatiblePackages.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[var(--text-primary)]">
-              Compatible with your setup ({systemInfo?.window_manager || "Desktop"})
-            </h2>
-            <span className="text-xs text-[var(--text-faint)]">
-              {compatiblePackages.length} available
-            </span>
-          </div>
+      {/* ── All tab: editorial home ── */}
+      {isAllTab && !searchQuery && (
+        <>
+          {/* Hero */}
+          {featuredRice && (
+            <div className="mb-6">
+              <HeroBanner featuredPackage={featuredRice} />
+            </div>
+          )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {compatiblePackages.slice(0, 3).map((pkg) => (
-              <PackageCard key={pkg.id} packageItem={pkg} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Main Catalog Header & Filter Bar */}
-      <div className="space-y-3 pt-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-[var(--text-primary)]">
-              {searchQuery ? `Results for "${searchQuery}"` : "Community Catalog"}
-            </h2>
-            <span className="text-xs text-[var(--text-faint)] font-mono">
-              ({filteredAndSortedPackages.length} packages)
-            </span>
-          </div>
-
-          {/* Filter & Sort Controls */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {/* Category Selector */}
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as any)}
-              className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
-            >
-              <option value="all">All Categories</option>
-              <option value="rices">Complete Rices</option>
-              <option value="themes">Themes</option>
-              <option value="bars">Status Bars</option>
-              <option value="fastfetch">Fastfetch</option>
-              <option value="lockscreens">Lockscreens</option>
-              <option value="wallpapers">Wallpapers</option>
-              <option value="terminal">Terminal</option>
-            </select>
-
-            {/* Type Selector */}
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as any)}
-              className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
-            >
-              <option value="all">All Types</option>
-              <option value="rice">Rice Packages</option>
-              <option value="theme">Theme Packages</option>
-              <option value="waybar">Status Bars (Waybar)</option>
-              <option value="fastfetch">Fastfetch</option>
-              <option value="lockscreen">Lockscreens</option>
-              <option value="wallpaper">Wallpapers</option>
-              <option value="terminal">Terminal</option>
-            </select>
-
-            {/* Status & Trust Selector */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
-            >
-              <option value="all">All Status & Tiers</option>
-              <option value="official">Official Core (Ryzora)</option>
-              <option value="verified">Verified Authors (Reviewed)</option>
-              <option value="community">Community Packages</option>
-              <option value="compatible">Compatible Only</option>
-              <option value="installed">Installed</option>
-              <option value="update_available">Update Available</option>
-              <option value="featured">Featured</option>
-              <option value="trending">Trending</option>
-              <option value="stable">Stable Channel</option>
-              <option value="beta">Beta Channel</option>
-              <option value="nightly">Nightly Channel</option>
-            </select>
-
-            {/* Repository Selector */}
-            {repositories.length > 1 && (
-              <select
-                value={repoFilter}
-                onChange={(e) => setRepoFilter(e.target.value)}
-                className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
-              >
-                <option value="all">All Repositories</option>
-                {repositories.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
+          {/* Compatible with your setup */}
+          {compatiblePackages.length > 0 && (
+            <section className="mb-8">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Compatible with {systemInfo?.window_manager || "your desktop"}
+                </h2>
+                <span className="text-[11px] text-[var(--text-faint)] font-mono">{compatiblePackages.length} available</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {compatiblePackages.slice(0, 6).map((pkg) => (
+                  <StoreCard key={pkg.id} packageItem={pkg} />
                 ))}
-              </select>
-            )}
+              </div>
+            </section>
+          )}
 
-            {/* Sort Selector */}
-            <div className="flex items-center gap-1.5 pl-1 border-l border-[var(--border-subtle)]">
-              <ArrowUpDown className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+          {/* Trending */}
+          <section className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Trending</h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {packages
+                .filter((p) => p.trending)
+                .slice(0, 12)
+                .map((pkg) => (
+                  <StoreCard key={pkg.id} packageItem={pkg} />
+                ))}
+            </div>
+          </section>
+
+          {/* New arrivals */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">New & Noteworthy</h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {[...packages]
+                .sort((a, b) => compareSemver(b.version, a.version))
+                .slice(0, 12)
+                .map((pkg) => (
+                  <StoreCard key={pkg.id} packageItem={pkg} />
+                ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* ── Category tab or search: dense catalogue ── */}
+      {(!isAllTab || searchQuery) && (
+        <>
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-3 pt-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-[var(--text-primary)] capitalize">
+                {searchQuery ? `Results for "${searchQuery}"` : (activeTab === "all" ? "All Packages" : activeTab)}
+              </h1>
+              <span className="text-[11px] text-[var(--text-faint)] font-mono">
+                ({filteredPackages.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowFilters((v) => !v)}
+                className={[
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border transition-colors",
+                  showFilters
+                    ? "bg-[var(--accent-muted)] border-[var(--accent)] text-[var(--accent-text)]"
+                    : "border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
+                ].join(" ")}
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                Filters
+              </button>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] outline-none text-[11px] cursor-pointer"
               >
                 <option value="relevance">Relevance</option>
-                <option value="trending">Trending Score</option>
+                <option value="trending">Trending</option>
                 <option value="rating">Highest Rated</option>
-                <option value="downloads">Most Downloads</option>
+                <option value="downloads">Most Downloaded</option>
                 <option value="name">Name (A-Z)</option>
-                <option value="newest">Newest Version</option>
+                <option value="newest">Newest</option>
               </select>
             </div>
           </div>
-        </div>
 
-        {/* Package Grid */}
-        {filteredAndSortedPackages.length === 0 ? (
-          <div className="p-12 text-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs text-[var(--text-muted)] space-y-2">
-            <div>No packages match your search or filter criteria.</div>
-            {isFiltering && (
-              <button
-                onClick={() => {
-                  setCategoryFilter("all");
-                  setTypeFilter("all");
-                  setStatusFilter("all");
-                  setRepoFilter("all");
-                  setSortBy("relevance");
-                }}
-                className="px-3 py-1 text-[11px] rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--accent-text)] hover:border-[var(--accent)]"
+          {/* Expanded filter panel */}
+          {showFilters && (
+            <div className="mb-4 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-wrap gap-2 text-[11px]">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] outline-none"
               >
-                Reset Filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredAndSortedPackages.map((pkg) => (
-              <PackageCard key={pkg.id} packageItem={pkg} />
-            ))}
-          </div>
-        )}
-      </div>
+                <option value="all">All Tiers</option>
+                <option value="official">Official</option>
+                <option value="verified">Verified</option>
+                <option value="community">Community</option>
+                <option value="featured">Featured</option>
+                <option value="trending">Trending</option>
+                <option value="installed">Installed</option>
+                <option value="stable">Stable</option>
+                <option value="beta">Beta</option>
+                <option value="nightly">Nightly</option>
+              </select>
+              {repositories.length > 1 && (
+                <select
+                  value={repoFilter}
+                  onChange={(e) => setRepoFilter(e.target.value)}
+                  className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] outline-none"
+                >
+                  <option value="all">All Repositories</option>
+                  {repositories.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              )}
+              {isFiltering && (
+                <button
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setRepoFilter("all");
+                    setSortBy("relevance");
+                    setSearchQuery("");
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-white hover:border-[var(--border-strong)] transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Sub-filter pills (per-category) */}
+          {subFilters && subFilters.length > 0 && (
+            <div className="flex items-center gap-1.5 mb-4 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
+              {subFilters.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setSubFilter(f)}
+                  className={[
+                    "flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-medium transition-all",
+                    subFilter === f
+                      ? "bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/30"
+                      : "bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]",
+                  ].join(" ")}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Grid */}
+          {filteredPackages.length === 0 ? (
+            <div className="py-20 text-center text-xs text-[var(--text-muted)]">
+              No packages match your search or filter criteria.
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="block mx-auto mt-3 px-3 py-1 text-[11px] rounded border border-[var(--border-subtle)] text-[var(--accent-text)] hover:border-[var(--accent)] transition-colors"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {filteredPackages.map((pkg) => (
+                <StoreCard key={pkg.id} packageItem={pkg} portrait={usePortrait} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

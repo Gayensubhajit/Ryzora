@@ -224,9 +224,17 @@ export const PackageDetailModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/70 backdrop-blur-sm select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 select-none" style={{ background: "rgba(0,0,0,0.82)" }}>
+      {/* Blurred artwork backdrop */}
+      {selectedPackage.hero_image && (
+        <div
+          className="absolute inset-0 -z-0 bg-cover bg-center opacity-20"
+          style={{ backgroundImage: `url(${selectedPackage.hero_image})`, filter: "blur(40px) saturate(1.4)" }}
+        />
+      )}
+      <div className="absolute inset-0 -z-0 bg-black/60" />
       <div
-        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg bg-[var(--bg-surface)] border border-[var(--border-strong)] shadow-2xl overflow-hidden"
+        className="relative z-10 w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-strong)] shadow-2xl overflow-hidden backdrop-blur-md"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -774,7 +782,7 @@ export const PackageDetailModal: React.FC = () => {
               {/* Screenshots Carousel */}
               {selectedPackage.screenshots && selectedPackage.screenshots.length > 0 && (
                 <div className="space-y-2">
-                  <div className="aspect-[16/9] w-full rounded-md overflow-hidden bg-[var(--bg-canvas)] border border-[var(--border-subtle)] relative">
+                  <div className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-[var(--bg-canvas)] relative shadow-xl">
                     <img
                       src={selectedPackage.screenshots[selectedScreenshotIndex]}
                       alt={selectedPackage.title}

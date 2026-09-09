@@ -365,3 +365,31 @@
 }
 .btn-sm { padding: 4px 8px; font-size: 11px; }
 .danger:hover { color: #e05c5c; border-color: rgba(224,92,92,0.3); }
+
+/* ─── Content-First Visual System (Phase 21) ─────────────────────────────── */
+
+/* Store card — art-forward tile */
+.store-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.store-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.store-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Scrollbar-none utility */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
