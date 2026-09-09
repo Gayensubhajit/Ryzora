@@ -16,10 +16,10 @@ permissions:
 
 jobs:
   build-release:
-    name: Build & Package Linux Release
+    name: Build, Package, Sign & Publish Linux Release
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout Repository
+      - name: Clean Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -52,23 +52,35 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
+            appstream \
+            dpkg-dev \
             file \
             patchelf
 
-      - name: Install Frontend Dependencies & Build UI
+      - name: Verify Version Consistency
+        run: |
+          CARGO_VER=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f 2)
+          NPM_VER=$(node -p "require('./package.json').version")
+          TAURI_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+
+          echo "Cargo.toml: $CARGO_VER"
+          echo "package.json: $NPM_VER"
+          echo "tauri.conf.json: $TAURI_VER"
+
+          if [ "$CARGO_VER" != "$NPM_VER" ] || [ "$NPM_VER" != "$TAURI_VER" ]; then
+            echo "Version mismatch detected across manifests!"
+            exit 1
+          fi
+          echo "All version strings match: $CARGO_VER"
+
+      - name: Build Frontend & Release Binaries
         run: |
           npm ci || npm install
           npm run build
-
-      - name: Build Standalone Release Binaries
-        env:
-          # In official release CI, the operator can provide RYZORA_OFFICIAL_ROOT_KEY secret
-          RYZORA_OFFICIAL_ROOT_KEY: ${{ secrets.RYZORA_OFFICIAL_ROOT_KEY || '' }}
-        run: |
           cargo build --manifest-path src-tauri/Cargo.toml --release --locked
 
-      - name: Assemble Release Tarball
-        id: package-tarball
+      - name: Assemble Release Artifacts
+        id: package
         run: |
           TAG_NAME="${{ github.ref_name }}"
           VERSION="${TAG_NAME#v}"
@@ -76,40 +88,60 @@ jobs:
             VERSION="${{ github.event.inputs.version || '0.1.0' }}"
           fi
 
+          mkdir -p release-artifacts
+
+          # Tarball packaging
           DIST_DIR="ryzora-v${VERSION}-linux-x86_64"
           mkdir -p "$DIST_DIR/icons"
           cp src-tauri/target/release/ryzora "$DIST_DIR/"
           cp src-tauri/target/release/ryzora-ci "$DIST_DIR/"
-          cp dist-assets/ryzora.desktop "$DIST_DIR/"
+          cp dist-assets/io.ryzora.Ryzora.desktop "$DIST_DIR/"
+          cp dist-assets/io.ryzora.Ryzora.metainfo.xml "$DIST_DIR/"
           cp -r dist-assets/icons/hicolor "$DIST_DIR/icons/"
           cp LICENSE README.md "$DIST_DIR/"
+          tar -czvf "release-artifacts/${DIST_DIR}.tar.gz" "$DIST_DIR"
 
-          tar -czvf "${DIST_DIR}.tar.gz" "$DIST_DIR"
-          echo "tarball=${DIST_DIR}.tar.gz" >> $GITHUB_OUTPUT
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Build AppImage Bundle
-        run: |
-          # Download appimagetool
+          # AppImage packaging
           curl -sL https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -o appimagetool
           chmod +x appimagetool
           ./appimagetool --appimage-extract
           export APPIMAGETOOL="$PWD/squashfs-root/AppRun"
-
           ./scripts/build-appimage.sh
-          mv target/appimage/Ryzora-x86_64.AppImage "Ryzora-${{ steps.package-tarball.outputs.version }}-x86_64.AppImage" || true
+          cp target/appimage/Ryzora-*.AppImage release-artifacts/
 
-      - name: Generate Checksums & Metadata
+          # Debian packaging
+          ./scripts/build-deb.sh
+          cp target/deb/*.deb release-artifacts/ 2>/dev/null || true
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate Checksums & Sign Artifacts
+        env:
+          RYZORA_RELEASE_SIGNING_KEY: ${{ secrets.RYZORA_RELEASE_SIGNING_KEY }}
+          RYZORA_RELEASE_PUBKEY: ${{ secrets.RYZORA_RELEASE_PUBKEY }}
         run: |
-          mkdir -p release-artifacts
-          cp ryzora-v*.tar.gz release-artifacts/ 2>/dev/null || true
-          cp Ryzora-*.AppImage release-artifacts/ 2>/dev/null || true
-
           cd release-artifacts
-          sha256sum * > SHA256SUMS
-          cat SHA256SUMS
 
-      - name: Create GitHub Release
+          # Generate canonical SHA256SUMS
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+          # If release signing key is provided in secrets, perform Ed25519 signature
+          if [ -n "$RYZORA_RELEASE_SIGNING_KEY" ]; then
+            echo "$RYZORA_RELEASE_SIGNING_KEY" > release.key
+            chmod 600 release.key
+
+            ../src-tauri/target/release/ryzora-ci sign-file SHA256SUMS.txt release.key --out SHA256SUMS.txt.sig
+            rm -f release.key
+
+            # Fail-closed signature verification
+            ../src-tauri/target/release/ryzora-ci verify-file SHA256SUMS.txt SHA256SUMS.txt.sig "$RYZORA_RELEASE_PUBKEY"
+            echo "Release signature verified successfully!"
+          else
+            echo "Notice: No RYZORA_RELEASE_SIGNING_KEY secret configured. Release signing skipped in non-production run."
+          fi
+
+      - name: Publish Verified GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:

@@ -1,7 +1,7 @@
 use ryzora_lib::crypto::{
     compute_key_fingerprint, evaluate_package_directory_crypto, generate_ed25519_keypair,
-    load_author_signing_key, sign_package_tree_hash, write_private_key_atomic, SignerIdentity,
-    TrustStore, VerifyingKey,
+    load_author_signing_key, sign_package_tree_hash, write_private_key_atomic, Signature, Signer,
+    SignerIdentity, TrustStore, Verifier, VerifyingKey,
 };
 use ryzora_lib::ingestion::{ingest_submission_into_repository, run_ci_audit};
 use ryzora_lib::installer::load_package_manifest;
@@ -21,6 +21,8 @@ fn print_usage() {
     eprintln!("  ryzora-ci fingerprint <pubkey-hex-or-file>");
     eprintln!("  ryzora-ci sign-package <pkg-dir> <private-key-file> [--author-id <id>] [--author-name <name>] [--author-handle <handle>]");
     eprintln!("  ryzora-ci verify-package <pkg-dir>");
+    eprintln!("  ryzora-ci sign-file <file> <private-key-file> [--out <sig-file>]");
+    eprintln!("  ryzora-ci verify-file <file> <sig-file> <pubkey-hex-or-file>");
 }
 
 fn main() -> ExitCode {
@@ -322,6 +324,142 @@ fn main() -> ExitCode {
             println!("Signature:  {:?}", sig_path);
             println!("==================================================");
             ExitCode::SUCCESS
+        }
+        "sign-file" => {
+            if args.len() < 4 {
+                eprintln!(
+                    "Usage: ryzora-ci sign-file <file> <private-key-file> [--out <sig-file>]"
+                );
+                return ExitCode::from(1);
+            }
+            let file_path = PathBuf::from(&args[2]);
+            let key_path = PathBuf::from(&args[3]);
+            let mut out_path = PathBuf::from(format!("{}.sig", file_path.to_string_lossy()));
+            if args.len() >= 6 && args[4] == "--out" {
+                out_path = PathBuf::from(&args[5]);
+            }
+
+            let file_data = match fs::read(&file_path) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Failed to read file {:?}: {}", file_path, e);
+                    return ExitCode::from(1);
+                }
+            };
+            let signing_key = match load_author_signing_key(&key_path) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("Failed to load signing key {:?}: {}", key_path, e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            let signature: Signature = signing_key.sign(&file_data);
+            let sig_hex = hex::encode(signature.to_bytes());
+            if let Err(e) = fs::write(
+                &out_path,
+                format!(
+                    "{}
+",
+                    sig_hex
+                ),
+            ) {
+                eprintln!("Failed to write signature file {:?}: {}", out_path, e);
+                return ExitCode::from(1);
+            }
+
+            println!("File signed successfully: {:?}", out_path);
+            ExitCode::SUCCESS
+        }
+        "verify-file" => {
+            if args.len() < 5 {
+                eprintln!("Usage: ryzora-ci verify-file <file> <sig-file> <pubkey-hex-or-file>");
+                return ExitCode::from(1);
+            }
+            let file_path = PathBuf::from(&args[2]);
+            let sig_path = PathBuf::from(&args[3]);
+            let key_arg = &args[4];
+
+            let file_data = match fs::read(&file_path) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Failed to read file {:?}: {}", file_path, e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            let sig_str = match fs::read_to_string(&sig_path) {
+                Ok(s) => s.trim().to_string(),
+                Err(e) => {
+                    eprintln!("Failed to read signature {:?}: {}", sig_path, e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            let sig_bytes = match hex::decode(&sig_str) {
+                Ok(b) if b.len() == 64 => b,
+                Ok(b) => {
+                    eprintln!(
+                        "Invalid signature length: expected 64 bytes, got {}",
+                        b.len()
+                    );
+                    return ExitCode::from(1);
+                }
+                Err(e) => {
+                    eprintln!("Invalid signature hex: {}", e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            let mut sig_arr = [0u8; 64];
+            sig_arr.copy_from_slice(&sig_bytes);
+            let signature = Signature::from_bytes(&sig_arr);
+
+            // Load pubkey
+            let pubkey_hex = if Path::new(key_arg).exists() {
+                match fs::read_to_string(key_arg) {
+                    Ok(s) => s.trim().to_string(),
+                    Err(e) => {
+                        eprintln!("Failed to read pubkey file: {}", e);
+                        return ExitCode::from(1);
+                    }
+                }
+            } else {
+                key_arg.clone()
+            };
+
+            let pub_bytes = match hex::decode(&pubkey_hex) {
+                Ok(b) if b.len() == 32 => b,
+                Ok(b) => {
+                    eprintln!("Invalid pubkey length: expected 32 bytes, got {}", b.len());
+                    return ExitCode::from(1);
+                }
+                Err(e) => {
+                    eprintln!("Invalid pubkey hex: {}", e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            let mut pub_arr = [0u8; 32];
+            pub_arr.copy_from_slice(&pub_bytes);
+            let verifying_key = match VerifyingKey::from_bytes(&pub_arr) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("Failed to parse verifying key: {}", e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            match verifying_key.verify(&file_data, &signature) {
+                Ok(()) => {
+                    println!("Signature verified successfully.");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Signature verification failed: {}", e);
+                    ExitCode::from(1)
+                }
+            }
         }
         "verify-package" => {
             if args.len() < 3 {

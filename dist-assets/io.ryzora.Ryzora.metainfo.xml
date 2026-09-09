@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.ryzora.Ryzora</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Ryzora</name>
+  <summary>Universal Linux Desktop Customization Platform</summary>
+  <description>
+    <p>
+      Ryzora is a standalone native Linux desktop customization marketplace and configuration manager.
+      It enables users to safely discover, preview, install, manage, and roll back complete desktop rices,
+      status bars (Waybar), terminal configs, wallpapers, icon packs, and system themes.
+    </p>
+    <p>
+      Engineered with a strict zero-root, declarative packaging model, Ryzora enforces deterministic
+      user-space directory confinement, cryptographic signature verification (Ed25519), and pre-install
+      atomic snapshots for instant, byte-for-byte rollback.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.ryzora.Ryzora.desktop</launchable>
+  <url type="homepage">https://github.com/Gayensubhajit/Ryzora</url>
+  <url type="bugtracker">https://github.com/Gayensubhajit/Ryzora/issues</url>
+  <url type="help">https://github.com/Gayensubhajit/Ryzora#readme</url>
+  <developer id="io.ryzora">
+    <name>Ryzora Contributors</name>
+  </developer>
+  <categories>
+    <category>Settings</category>
+    <category>DesktopSettings</category>
+  </categories>
+  <keywords>
+    <keyword>rice</keyword>
+    <keyword>hyprland</keyword>
+    <keyword>theme</keyword>
+    <keyword>waybar</keyword>
+    <keyword>wallpaper</keyword>
+    <keyword>dotfiles</keyword>
+    <keyword>customization</keyword>
+    <keyword>fastfetch</keyword>
+    <keyword>kde</keyword>
+    <keyword>gnome</keyword>
+  </keywords>
+  <provides>
+    <binary>ryzora</binary>
+    <mediatype>x-scheme-handler/ryzora</mediatype>
+    <mediatype>application/x-ryzlist</mediatype>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-09-09">
+      <description>
+        <p>
+          Initial production-ready release featuring unified content providers, declarative package management,
+          multi-tier Ed25519 cryptographic trust verification, and atomic snapshot rollbacks.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>

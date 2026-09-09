@@ -21,26 +21,37 @@ source=("$url/releases/download/v$pkgver/ryzora-v$pkgver-linux-x86_64.tar.gz")
 sha256sums=('SKIP')
 
 package() {
-    cd "$srcdir"
+    cd "$srcdir/ryzora-v$pkgver-linux-x86_64"
 
-    # Install binaries
+    # Explicitly install precompiled binaries only
     install -Dm755 "ryzora" "$pkgdir/usr/bin/ryzora"
     if [ -f "ryzora-ci" ]; then
         install -Dm755 "ryzora-ci" "$pkgdir/usr/bin/ryzora-ci"
     fi
 
-    # Install desktop entry
-    if [ -f "ryzora.desktop" ]; then
+    # Desktop entries and MIME registration
+    if [ -f "io.ryzora.Ryzora.desktop" ]; then
+        install -Dm644 "io.ryzora.Ryzora.desktop" "$pkgdir/usr/share/applications/io.ryzora.Ryzora.desktop"
+        ln -sf "io.ryzora.Ryzora.desktop" "$pkgdir/usr/share/applications/ryzora.desktop"
+    elif [ -f "ryzora.desktop" ]; then
         install -Dm644 "ryzora.desktop" "$pkgdir/usr/share/applications/ryzora.desktop"
     fi
 
-    # Install icons
-    if [ -d "icons" ]; then
-        cp -r icons/* "$pkgdir/usr/share/icons/"
+    # AppStream metainfo
+    if [ -f "io.ryzora.Ryzora.metainfo.xml" ]; then
+        install -Dm644 "io.ryzora.Ryzora.metainfo.xml" "$pkgdir/usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml"
     fi
 
-    # Install license and documentation
+    # Icons
+    if [ -d "icons/hicolor" ]; then
+        cp -r icons/hicolor "$pkgdir/usr/share/icons/"
+    fi
+
+    # License and documentation
     if [ -f "LICENSE" ]; then
         install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    fi
+    if [ -f "README.md" ]; then
+        install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
     fi
 }

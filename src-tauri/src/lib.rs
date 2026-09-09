@@ -3,6 +3,7 @@ pub mod collections;
 pub mod compatibility;
 pub mod creator;
 pub mod crypto;
+pub mod deeplink;
 pub mod dependency;
 pub mod distribution;
 pub mod hub;
@@ -26,6 +27,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // System Probe
             system::detect_system_info,
+            // Deep Link Handler (Phase 19)
+            deeplink::handle_deeplink,
             // Manifest — validation only (Phase 2)
             manifest::validate_manifest,
             manifest::parse_manifest,

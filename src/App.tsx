@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { AppProvider, useApp } from "./context/AppContext";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -17,10 +17,13 @@ import { NotificationsView } from "./views/NotificationsView";
 import { CollectionsView } from "./views/CollectionsView";
 import { IntegrityView } from "./views/IntegrityView";
 import { PackageDetailModal } from "./components/PackageDetailModal";
+import { AboutModal } from "./components/AboutModal";
+import { FirstRunBanner } from "./components/FirstRunBanner";
 import { Toast } from "./components/Toast";
 
 const MainLayout: React.FC = () => {
   const { activeCategory } = useApp();
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const renderActiveView = () => {
     switch (activeCategory) {
@@ -58,16 +61,20 @@ const MainLayout: React.FC = () => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased font-sans">
       {/* Fixed Navigation Sidebar */}
-      <Sidebar />
+      <Sidebar onOpenAbout={() => setAboutOpen(true)} />
 
       {/* Main Content Pane */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Header */}
-        <TopBar />
+        <TopBar onOpenAbout={() => setAboutOpen(true)} />
 
         {/* Viewport */}
         <main className="flex-1 overflow-y-auto px-6 py-6">
           <div className="max-w-6xl mx-auto">
+            {/* Dismissible First-Run Onboarding Banner */}
+            <FirstRunBanner />
+
+            {/* Active Content View */}
             {renderActiveView()}
           </div>
         </main>
@@ -75,6 +82,9 @@ const MainLayout: React.FC = () => {
 
       {/* Package Detail Modal Dialog */}
       <PackageDetailModal />
+
+      {/* Compact Native About Modal */}
+      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
 
       {/* Notification Toast */}
       <Toast />

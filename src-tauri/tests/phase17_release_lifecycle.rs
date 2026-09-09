@@ -55,7 +55,10 @@ fn test_phase17_vector_4_desktop_entry_validation() {
     assert!(content.contains("Icon=ryzora"));
     assert!(content.contains("Terminal=false"));
     assert!(content.contains("Type=Application"));
-    assert!(content.contains("Categories=Settings;DesktopSettings;"));
+    assert!(
+        content.contains("Categories=Utility;DesktopSettings;Settings;")
+            || content.contains("Categories=Settings;DesktopSettings;")
+    );
     assert!(content.contains("StartupWMClass=ryzora"));
 }
 

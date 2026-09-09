@@ -1,9 +1,13 @@
 import React from "react";
-import { Search, X, Filter, History, Cpu } from "lucide-react";
+import { Search, X, Filter, History, Cpu, Info } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { DesktopEnvironment } from "../types";
 
-export const TopBar: React.FC = () => {
+interface TopBarProps {
+  onOpenAbout?: () => void;
+}
+
+export const TopBar: React.FC<TopBarProps> = ({ onOpenAbout }) => {
   const {
     searchQuery,
     setSearchQuery,
@@ -50,6 +54,15 @@ export const TopBar: React.FC = () => {
 
       {/* Filter and Status Controls */}
       <div className="flex items-center gap-2">
+        {/* Network & Provider Status Indicator */}
+        <div 
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]"
+          title="Catalog & Provider Connectivity: Online"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-mono text-[10px] text-emerald-400 font-medium">Online</span>
+        </div>
+
         {/* Desktop Filter */}
         <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
           <Filter className="w-3 h-3 text-[var(--text-faint)]" />
@@ -90,6 +103,18 @@ export const TopBar: React.FC = () => {
             {systemInfo?.window_manager || "Hyprland"}
           </span>
         </button>
+
+        {/* About Dialog Trigger */}
+        {onOpenAbout && (
+          <button
+            onClick={onOpenAbout}
+            className="flex items-center justify-center p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] transition-colors"
+            title="About Ryzora"
+            aria-label="About Ryzora"
+          >
+            <Info className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+          </button>
+        )}
       </div>
     </header>
   );

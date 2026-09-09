@@ -24,7 +24,11 @@ import {
 import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  onOpenAbout?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ onOpenAbout }) => {
   const { activeCategory, setActiveCategory, installedPackageIds, snapshots, systemInfo, updatesSummary } = useApp();
 
   const mainCategories: { id: CategoryId; label: string; icon: React.ReactNode }[] = [
@@ -184,10 +188,11 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Compact System Footer */}
-      <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]/50">
+      <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]/50 flex items-center justify-between gap-1">
         <button
           onClick={() => setActiveCategory("system")}
-          className="w-full text-left p-2 rounded-md hover:bg-[var(--bg-surface-elevated)] transition-colors group"
+          className="flex-1 text-left p-2 rounded-md hover:bg-[var(--bg-surface-elevated)] transition-colors group"
+          title="Open system diagnostics"
         >
           <div className="text-xs font-semibold text-[var(--text-primary)] truncate">
             {systemInfo?.distro_name || "Linux Host"}
@@ -198,6 +203,16 @@ export const Sidebar: React.FC = () => {
             <span className="capitalize">{systemInfo?.session_type || "wayland"}</span>
           </div>
         </button>
+        {onOpenAbout && (
+          <button
+            onClick={onOpenAbout}
+            className="p-2 text-[var(--text-faint)] hover:text-white rounded-md hover:bg-[var(--bg-surface-elevated)] transition-colors"
+            title="About Ryzora"
+            aria-label="About Ryzora"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </aside>
   );
