@@ -710,3 +710,40 @@ export interface RevokedKeyEntry {
   reason: string;
   revoked_at: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Community Ingestion & CI Automation Types (Phase 13)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface IngestionCheckResult {
+  check_id: string;
+  name: string;
+  passed: boolean;
+  level: "info" | "warning" | "error" | string;
+  message: string;
+}
+
+export interface IngestionReport {
+  package_id: string;
+  package_name: string;
+  version: string;
+  passed: boolean;
+  audit_score: number;
+  computed_trust_tier: TrustTier;
+  moderation_status: ModerationStatus;
+  checks: IngestionCheckResult[];
+  errors: string[];
+  warnings: string[];
+  pr_comment_markdown: string;
+  tree_hash: string;
+  signature_status: CryptographicStatus;
+  signer_key_id?: string;
+}
+
+export interface IngestionResult {
+  success: boolean;
+  package_id: string;
+  version: string;
+  repository_path: string;
+  report: IngestionReport;
+}

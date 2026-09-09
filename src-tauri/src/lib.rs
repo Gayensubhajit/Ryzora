@@ -3,6 +3,7 @@ pub mod compatibility;
 pub mod crypto;
 pub mod dependency;
 pub mod distribution;
+pub mod ingestion;
 pub mod installer;
 pub mod manifest;
 pub mod repository;
@@ -66,6 +67,9 @@ pub fn run() {
             crypto::add_trusted_key,
             crypto::revoke_trusted_key,
             crypto::verify_package_cryptography,
+            // Community Ingestion & CI Automation (Phase 13)
+            ingestion::run_ci_submission_audit,
+            ingestion::ingest_community_submission,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

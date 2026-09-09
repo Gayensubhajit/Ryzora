@@ -250,6 +250,22 @@ export const PackageDetailModal: React.FC = () => {
                 Verified
               </span>
             )}
+            {selectedPackage.moderation_status && (
+              <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border flex items-center gap-1 shadow-sm ${
+                selectedPackage.moderation_status === "approved"
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                  : selectedPackage.moderation_status === "pending_review"
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : selectedPackage.moderation_status === "flagged"
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                  : "bg-gray-500/20 text-gray-300 border-gray-500/40"
+              }`}>
+                {selectedPackage.moderation_status === "approved" && "Approved"}
+                {selectedPackage.moderation_status === "pending_review" && "Pending Review"}
+                {selectedPackage.moderation_status === "flagged" && "Flagged"}
+                {selectedPackage.moderation_status === "deprecated" && "Deprecated"}
+              </span>
+            )}
             {selectedPackage.release_channel && (
               <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${
                 selectedPackage.release_channel === "beta"
@@ -847,7 +863,7 @@ export const PackageDetailModal: React.FC = () => {
                   )}
 
                   {/* Repository & Integrity Metadata */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
                     <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
                       <div className="text-[10px] uppercase text-[var(--text-faint)]">Source Repository</div>
                       <div className="text-[var(--text-primary)] truncate">
@@ -888,6 +904,21 @@ export const PackageDetailModal: React.FC = () => {
                           <span className="text-rose-400">Untrusted Repo</span>
                         ) : (
                           <span className="text-[var(--text-muted)]">Community Contributor</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] uppercase text-[var(--text-faint)]">CI Moderation</div>
+                      <div className="text-[var(--text-primary)] font-medium truncate flex items-center gap-1 text-xs">
+                        {selectedPackage.moderation_status === "approved" ? (
+                          <span className="text-emerald-400 font-semibold">Approved</span>
+                        ) : selectedPackage.moderation_status === "flagged" ? (
+                          <span className="text-rose-400 font-semibold">Flagged</span>
+                        ) : selectedPackage.moderation_status === "deprecated" ? (
+                          <span className="text-gray-400 font-semibold">Deprecated</span>
+                        ) : (
+                          <span className="text-amber-400 font-semibold">Pending Review</span>
                         )}
                       </div>
                     </div>

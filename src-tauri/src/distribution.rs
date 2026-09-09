@@ -498,7 +498,7 @@ pub fn audit_store_submission_internal(package_dir: &Path) -> Result<StoreAuditR
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Compute SHA-256 for a single file.
-fn compute_file_sha256(path: &Path) -> Result<String, String> {
+pub fn compute_file_sha256(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|e| format!("Cannot open file for SHA-256: {}", e))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 16384];

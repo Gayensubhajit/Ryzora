@@ -1,0 +1,109 @@
+name: Community Package CI Ingestion & Audit Gate
+
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'community/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-submission:
+    name: Pure-Rust Security & Cryptographic Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Verify Ingestion Engine Security Invariants
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml test_ci
+
+      - name: Locate Submitted Package
+        id: locate
+        run: |
+          # Detect package submissions modified in this PR
+          # Enforces pure inspection: NO scripts, binaries, or hooks in the package are EVER executed
+          CHANGED_DIRS=$(git diff --name-only origin/${{ github.base_ref || 'main' }} HEAD | grep -E '^(packages|community)/[^/]+/' | cut -d/ -f1-2 | sort -u || true)
+          if [ -z "$CHANGED_DIRS" ]; then
+            echo "No packages detected in git diff. Checking packages/ directory..."
+            CHANGED_DIRS=$(find packages -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n 1 || true)
+          fi
+          echo "Detected submission directories: $CHANGED_DIRS"
+          echo "dirs=$CHANGED_DIRS" >> $GITHUB_OUTPUT
+
+      - name: Execute Deterministic Audit
+        id: audit
+        run: |
+          mkdir -p ci-artifacts
+          AUDIT_PASSED=true
+          COMMENT_FILE="ci-artifacts/pr-comment.md"
+          echo "" > "$COMMENT_FILE"
+
+          for dir in ${{ steps.locate.outputs.dirs }}; do
+            if [ -d "$dir" ]; then
+              echo "Auditing submission in $dir..."
+              PKG_COMMENT="ci-artifacts/comment-$(basename "$dir").md"
+              
+              # Run Ryzora pure-Rust CI engine
+              # Zero subprocess execution; zero system package manager execution
+              if cargo run --manifest-path src-tauri/Cargo.toml --bin ryzora-ci -- audit "$dir" --repo "." --markdown-out "$PKG_COMMENT"; then
+                echo "Audit passed for $dir"
+              else
+                echo "Audit FAILED for $dir"
+                AUDIT_PASSED=false
+              fi
+
+              if [ -f "$PKG_COMMENT" ]; then
+                cat "$PKG_COMMENT" >> "$COMMENT_FILE"
+                echo -e "\n---\n" >> "$COMMENT_FILE"
+              fi
+            fi
+          done
+
+          echo "passed=$AUDIT_PASSED" >> $GITHUB_OUTPUT
+          if [ "$AUDIT_PASSED" = "false" ]; then
+            echo "One or more package submissions failed the Ryzora CI security gate."
+            exit 1
+          fi
+
+      - name: Post Informational PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const commentFile = 'ci-artifacts/pr-comment.md';
+            if (fs.existsSync(commentFile)) {
+              const body = fs.readFileSync(commentFile, 'utf8').trim();
+              if (body.length > 0) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: body
+                });
+              }
+            }

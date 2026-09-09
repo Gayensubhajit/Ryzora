@@ -22,6 +22,9 @@ import {
   Palette,
   Tag,
   Copy,
+  Play,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import {
@@ -33,6 +36,7 @@ import {
   StoreAuditReport,
   DistributionReleaseResult,
   ManifestValidationResult,
+  IngestionReport,
   AuthoringResult,
   PublishResult,
   AuthorKeyPairInfo,
@@ -112,6 +116,7 @@ export const AuthorView: React.FC = () => {
     auditStoreSubmission,
     buildDistributionRelease,
     getAuthorKeypair,
+    runCiSubmissionAudit,
     setActiveCategory,
     setToast,
   } = useApp();
@@ -377,6 +382,45 @@ export const AuthorView: React.FC = () => {
   const [distributionResult, setDistributionResult] = useState<DistributionReleaseResult | null>(null);
   const [copiedSubmission, setCopiedSubmission] = useState(false);
   const [authorKey, setAuthorKey] = useState<AuthorKeyPairInfo | null>(null);
+  const [isAuditingCi, setIsAuditingCi] = useState(false);
+  const [ciReport, setCiReport] = useState<IngestionReport | null>(null);
+  const [copiedCiReport, setCopiedCiReport] = useState(false);
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
+
+  const handleRunCiDryRun = async () => {
+    if (!distributionResult?.bundle_dir) return;
+    setIsAuditingCi(true);
+    try {
+      const report = await runCiSubmissionAudit(distributionResult.bundle_dir);
+      setCiReport(report);
+      if (report.passed) {
+        setToast({
+          message: `Local CI Dry-Run PASSED (${report.audit_score}/100) — Ready for PR!`,
+          type: "success",
+        });
+      } else {
+        setToast({
+          message: `Local CI Dry-Run FAILED: ${report.errors[0] || "Security checks failed"}`,
+          type: "warning",
+        });
+      }
+    } catch (e: any) {
+      setToast({
+        message: `CI Dry-Run invocation failed: ${e?.message || e}`,
+        type: "warning",
+      });
+    } finally {
+      setIsAuditingCi(false);
+    }
+  };
+
+  const handleCopyCiReport = () => {
+    if (!ciReport) return;
+    navigator.clipboard.writeText(ciReport.pr_comment_markdown);
+    setCopiedCiReport(true);
+    setToast({ message: "CI Markdown audit report copied to clipboard!", type: "info" });
+    setTimeout(() => setCopiedCiReport(false), 2500);
+  };
 
   const handleLoadAuthorKey = async () => {
     try {
@@ -1747,6 +1791,147 @@ export const AuthorView: React.FC = () => {
                         >
                           GitHub PRs
                         </a>
+                      </div>
+
+                      {/* Stage D: Local CI Ingestion Dry-Run & Pre-Flight Gate */}
+                      <div className="pt-3 border-t border-purple-500/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                            <span className="font-semibold text-xs text-cyan-200">
+                              Deterministic CI Ingestion Dry-Run
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleRunCiDryRun}
+                            disabled={isAuditingCi || !distributionResult}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-xs shadow-sm transition-colors"
+                          >
+                            {isAuditingCi ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Auditing...
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3.5 h-3.5" />
+                                Run CI Pre-Flight Audit
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {ciReport && (
+                          <div className={`p-3 rounded-xl border text-xs space-y-2.5 ${
+                            ciReport.passed
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+                              : "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                                  ciReport.passed
+                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                    : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                }`}>
+                                  CI {ciReport.passed ? "PASSED" : "FAILED"}
+                                </span>
+                                <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                                  Score: <strong className="text-[var(--text-primary)]">{ciReport.audit_score}/100</strong>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase">
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                  {ciReport.computed_trust_tier} Tier
+                                </span>
+                                <span className={`px-1.5 py-0.5 rounded border ${
+                                  ciReport.moderation_status === "approved"
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                    : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                }`}>
+                                  {ciReport.moderation_status}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Inspection Checks Matrix */}
+                            <div className="space-y-1.5 pt-1">
+                              <div className="text-[10px] font-semibold uppercase text-[var(--text-muted)] tracking-wider">
+                                Automated Inspection Matrix ({ciReport.checks.filter(c => c.passed).length}/{ciReport.checks.length} Passed)
+                              </div>
+                              <div className="grid grid-cols-1 gap-1">
+                                {ciReport.checks.map((chk) => (
+                                  <div
+                                    key={chk.check_id}
+                                    className="flex items-start gap-2 p-1.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px]"
+                                  >
+                                    {chk.passed ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                                    ) : (
+                                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium text-[var(--text-primary)]">
+                                        {chk.name}
+                                      </div>
+                                      <div className="text-[10px] text-[var(--text-secondary)]">
+                                        {chk.message}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Warnings / Errors */}
+                            {ciReport.errors.length > 0 && (
+                              <div className="p-2 rounded bg-rose-950/40 border border-rose-500/30 text-rose-300 text-[11px] space-y-1">
+                                <div className="font-semibold flex items-center gap-1 text-rose-200">
+                                  <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                                  Rejection Reasons:
+                                </div>
+                                {ciReport.errors.map((err, i) => (
+                                  <div key={i} className="pl-4 font-mono text-[10px]">- {err}</div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Actions: Copy PR Markdown */}
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={handleCopyCiReport}
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:border-cyan-500 text-cyan-300 font-medium text-xs transition-colors"
+                              >
+                                {copiedCiReport ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                    Copied Markdown!
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    Copy CI Audit Markdown Report
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
+                                className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                              >
+                                {showMarkdownPreview ? "Hide Preview" : "View Preview"}
+                              </button>
+                            </div>
+
+                            {showMarkdownPreview && (
+                              <pre className="p-2.5 rounded bg-black/40 border border-[var(--border-subtle)] text-[10px] font-mono text-[var(--text-secondary)] overflow-x-auto whitespace-pre-wrap max-h-48">
+                                {ciReport.pr_comment_markdown}
+                              </pre>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

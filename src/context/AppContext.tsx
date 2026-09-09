@@ -30,6 +30,8 @@ import {
   TrustedKeyEntry,
   CryptographicEvaluation,
   ReleaseChannel,
+  IngestionReport,
+  IngestionResult,
 } from "../types";
 
 interface AppContextType {
@@ -86,6 +88,8 @@ interface AppContextType {
   getAuthorKeypair: (authorName?: string) => Promise<AuthorKeyPairInfo>;
   listTrustedKeys: () => Promise<TrustedKeyEntry[]>;
   verifyPackageCryptography: (packageDir: string) => Promise<CryptographicEvaluation>;
+  runCiSubmissionAudit: (submissionDir: string, repoDir?: string) => Promise<IngestionReport>;
+  ingestCommunitySubmission: (submissionDir: string, repoDir: string) => Promise<IngestionResult>;
   toast: { message: string; type: "success" | "info" | "warning" } | null;
   setToast: (toast: { message: string; type: "success" | "info" | "warning" } | null) => void;
 }
@@ -692,6 +696,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return await invoke<CryptographicEvaluation>("verify_package_cryptography", { packageDir });
   };
 
+  const runCiSubmissionAudit = async (
+    submissionDir: string,
+    repoDir?: string
+  ): Promise<IngestionReport> => {
+    return await invoke<IngestionReport>("run_ci_submission_audit", {
+      submissionDir,
+      repoDir: repoDir || null,
+    });
+  };
+
+  const ingestCommunitySubmission = async (
+    submissionDir: string,
+    repoDir: string
+  ): Promise<IngestionResult> => {
+    const res = await invoke<IngestionResult>("ingest_community_submission", {
+      submissionDir,
+      repoDir,
+    });
+    await refreshCatalog();
+    await refreshRepositories();
+    return res;
+  };
+
   const deleteSnapshot = async (snapId: string) => {
     try {
       await invoke("delete_snapshot", { id: snapId });
@@ -751,6 +778,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getAuthorKeypair,
         listTrustedKeys,
         verifyPackageCryptography,
+        runCiSubmissionAudit,
+        ingestCommunitySubmission,
         deleteSnapshot,
         toast,
         setToast,
