@@ -19,7 +19,7 @@ optdepends=(
 provides=('ryzora')
 conflicts=('ryzora-bin')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('f5120df510fd644cab4ff018b8faf037b490a71c59535006de40ce68a1c6cb28')
 
 build() {
     cd "$srcdir/$pkgname-$pkgver"

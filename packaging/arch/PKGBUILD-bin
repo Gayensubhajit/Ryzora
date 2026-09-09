@@ -18,7 +18,7 @@ optdepends=(
 provides=('ryzora')
 conflicts=('ryzora')
 source=("$url/releases/download/v$pkgver/ryzora-v$pkgver-linux-x86_64.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('fc537d14d92913d9d5293ee83825a6b59409f1473899f98e42204d7a600d81e6')
 
 package() {
     cd "$srcdir/ryzora-v$pkgver-linux-x86_64"

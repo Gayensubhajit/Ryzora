@@ -77,6 +77,11 @@ echo "AppDir assembled successfully at: $APP_DIR"
 # 5. Packaging into AppImage
 echo "[5/5] Packaging AppImage binary..."
 APPIMAGETOOL="${APPIMAGETOOL:-$(which appimagetool 2>/dev/null || true)}"
+if [ -z "$APPIMAGETOOL" ] || [ ! -x "$APPIMAGETOOL" ]; then
+    if [ -x "$HOME/.cache/ryzora-tools/appimagetool-extracted/AppRun" ]; then
+        APPIMAGETOOL="$HOME/.cache/ryzora-tools/appimagetool-extracted/AppRun"
+    fi
+fi
 if [ -n "$APPIMAGETOOL" ] && [ -x "$APPIMAGETOOL" ]; then
     mkdir -p "$OUT_DIR"
     ARCH=x86_64 "$APPIMAGETOOL" "$APP_DIR" "$OUT_DIR/Ryzora-${VERSION}-x86_64.AppImage"

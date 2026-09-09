@@ -14,6 +14,28 @@ The Ryzora client source code embeds only the **public key** and its fingerprint
 
 ---
 
+
+
+---
+
+---
+
+## 1.1 Architectural Separation: Root Key vs. Release Signing Key
+
+> [!IMPORTANT]
+> **Cryptographic Separation Invariant:**
+> **The production Official Root Key is NOT intended to sign release artifacts directly.**
+>
+> - **Production Official Root Key (`RYZORA_OFFICIAL_ROOT_KEY`)**:
+>   The ultimate trust anchor compiled into the Ryzora client (`TrustStore`). Used exclusively to evaluate and verify that package releases (`release.sig`) carry the authentic `Official` tier. The private key remains indefinitely air-gapped and offline in encrypted hardware storage.
+>
+> - **Release Signing Key (`RYZORA_RELEASE_SIGNING_KEY` / `RYZORA_RELEASE_PUBKEY`)**:
+>   An operational Ed25519 signing keypair used solely to generate detached cryptographic signatures (`SHA256SUMS.txt.sig`) over compiled distribution binaries, AppImages, Debian packages, and release archives. This key can be rotated across release series or CI environments without compromising the immutable air-gapped root trust anchor.
+>
+> Under NO circumstances should automated AI coding agents generate, store, or handle the real production root private key. The actual root key ceremony is an operator-controlled air-gapped procedure.
+
+---
+
 ## 2. Key Ceremony Preparation
 
 The Official Root Key must be generated in a clean, audited ceremony on an air-gapped machine.

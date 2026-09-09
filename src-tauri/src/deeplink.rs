@@ -32,9 +32,14 @@ pub fn parse_deeplink_url(url_str: &str) -> Result<DeepLinkAction, String> {
         ));
     }
 
-    if trimmed.contains("..") {
+    let decoded = percent_encoding::percent_decode_str(trimmed).decode_utf8_lossy();
+    if decoded.contains("..")
+        || decoded.contains('\0')
+        || trimmed.contains("..")
+        || trimmed.contains('\0')
+    {
         return Err(format!(
-            "Forbidden path traversal sequence detected in deep link: '{}'",
+            "Forbidden path traversal sequence or null byte detected in deep link: '{}'",
             trimmed
         ));
     }
@@ -174,5 +179,40 @@ mod tests {
     fn test_rejects_invalid_scheme() {
         assert!(parse_deeplink_url("https://package/test").is_err());
         assert!(parse_deeplink_url("file:///package/test").is_err());
+    }
+
+    #[test]
+    fn test_deep_link_security_vector_matrix() {
+        // 1. valid-id -> accepted
+        let res = parse_deeplink_url("ryzora://package/valid-id");
+        assert!(res.is_ok());
+        assert_eq!(
+            res.unwrap(),
+            DeepLinkAction::ViewPackage {
+                package_id: "valid-id".to_string()
+            }
+        );
+
+        // 2. ../secret -> rejected
+        assert!(parse_deeplink_url("ryzora://package/../secret").is_err());
+
+        // 3. %2e%2e/secret -> rejected
+        assert!(parse_deeplink_url("ryzora://package/%2e%2e/secret").is_err());
+
+        // 4. exec -> rejected
+        assert!(parse_deeplink_url("ryzora://exec/arbitrary-cmd").is_err());
+
+        // 5. shell -> rejected
+        assert!(parse_deeplink_url("ryzora://shell/bash").is_err());
+
+        // 6. file -> rejected
+        assert!(parse_deeplink_url("ryzora://file/etc/shadow").is_err());
+
+        // 7. null byte -> rejected
+        assert!(parse_deeplink_url("ryzora://package/test\0evil").is_err());
+
+        // 8. oversized-id -> rejected (len > 128)
+        let oversized = "a".repeat(129);
+        assert!(parse_deeplink_url(&format!("ryzora://package/{}", oversized)).is_err());
     }
 }

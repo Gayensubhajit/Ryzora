@@ -76,13 +76,31 @@ CONTROL
 
 echo "Package structure assembled at: $PKG_DIR"
 
-# 7. Build .deb if dpkg-deb is available
+# 7. Build .deb package (using dpkg-deb or native user-space ar fallback)
+mkdir -p "$OUT_DIR"
+DEB_FILE="$OUT_DIR/${PKG_NAME}_${VERSION}_${ARCH}.deb"
 DPKG_DEB="$(which dpkg-deb 2>/dev/null || true)"
+
 if [ -n "$DPKG_DEB" ] && [ -x "$DPKG_DEB" ]; then
-    mkdir -p "$OUT_DIR"
-    dpkg-deb --build --root-owner-group "$PKG_DIR" "$OUT_DIR/${PKG_NAME}_${VERSION}_${ARCH}.deb"
-    echo "Debian package created at: $OUT_DIR/${PKG_NAME}_${VERSION}_${ARCH}.deb"
+    echo "Using dpkg-deb to assemble package..."
+    dpkg-deb --build --root-owner-group "$PKG_DIR" "$DEB_FILE"
+    echo "Debian package created at: $DEB_FILE"
 else
-    echo "dpkg-deb not found on local PATH. Package tree is fully ready in:"
-    echo "  $PKG_DIR"
+    echo "dpkg-deb not found. Using pure user-space ar/tar packaging fallback (zero sudo)..."
+    STAGING_TMP="$(mktemp -d)"
+    echo "2.0" > "$STAGING_TMP/debian-binary"
+    (
+        cd "$PKG_DIR/DEBIAN"
+        tar --owner=0 --group=0 --numeric-owner -czf "$STAGING_TMP/control.tar.gz" ./control ./md5sums
+    )
+    (
+        cd "$PKG_DIR"
+        tar --owner=0 --group=0 --numeric-owner -cJf "$STAGING_TMP/data.tar.xz" ./usr
+    )
+    (
+        cd "$STAGING_TMP"
+        ar rcs "$DEB_FILE" debian-binary control.tar.gz data.tar.xz
+    )
+    rm -rf "$STAGING_TMP"
+    echo "Debian package created successfully via native user-space ar fallback at: $DEB_FILE"
 fi

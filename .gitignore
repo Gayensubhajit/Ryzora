@@ -26,3 +26,9 @@ dist-ssr
 # Tauri auto-generated ignores
 src-tauri/target/
 target/
+
+# Security: Private Keys and Air-Gapped Key Ceremony Artifacts
+*.key
+*.priv
+release-keys/
+release-artifacts/

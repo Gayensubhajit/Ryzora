@@ -102,7 +102,7 @@ jobs:
           tar -czvf "release-artifacts/${DIST_DIR}.tar.gz" "$DIST_DIR"
 
           # AppImage packaging
-          curl -sL https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -o appimagetool
+          curl -sL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
           chmod +x appimagetool
           ./appimagetool --appimage-extract
           export APPIMAGETOOL="$PWD/squashfs-root/AppRun"
