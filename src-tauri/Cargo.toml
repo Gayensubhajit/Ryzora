@@ -1,5 +1,6 @@
 [package]
 name = "ryzora"
+default-run = "ryzora"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
