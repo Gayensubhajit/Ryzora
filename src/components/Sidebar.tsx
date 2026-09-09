@@ -16,6 +16,10 @@ import {
   History,
   Cpu,
   PackagePlus,
+  Bookmark,
+  ShieldCheck,
+  Bell,
+  Settings,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
@@ -73,6 +77,26 @@ export const Sidebar: React.FC = () => {
       id: "author",
       label: "Package Creator",
       icon: <PackagePlus className="w-4 h-4" />,
+    },
+    {
+      id: "collections",
+      label: "Collections",
+      icon: <Bookmark className="w-4 h-4" />,
+    },
+    {
+      id: "integrity",
+      label: "Integrity",
+      icon: <ShieldCheck className="w-4 h-4" />,
+    },
+    {
+      id: "notifications",
+      label: "Activity",
+      icon: <Bell className="w-4 h-4" />,
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      icon: <Settings className="w-4 h-4" />,
     },
   ];
 

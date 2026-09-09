@@ -1,4 +1,5 @@
 pub mod authoring;
+pub mod collections;
 pub mod compatibility;
 pub mod creator;
 pub mod crypto;
@@ -7,9 +8,12 @@ pub mod distribution;
 pub mod hub;
 pub mod ingestion;
 pub mod installer;
+pub mod integrity;
 pub mod manifest;
+pub mod notifications;
 pub mod repository;
 pub mod repository_sync;
+pub mod settings;
 pub mod snapshot;
 pub mod system;
 pub mod updates;
@@ -85,6 +89,31 @@ pub fn run() {
             repository_sync::refresh_all_repositories_sync,
             repository_sync::switch_repository_channel,
             repository_sync::list_repository_channels,
+            // Settings & Preferences (Phase 15.1)
+            settings::get_settings,
+            settings::save_settings,
+            settings::reset_settings,
+            // Notifications & Activity Log (Phase 15.2)
+            notifications::list_notifications,
+            notifications::mark_notification_read,
+            notifications::mark_all_notifications_read,
+            notifications::clear_old_notifications,
+            // Collections — .ryzlist (Phase 15.4)
+            collections::list_collections,
+            collections::get_collection,
+            collections::create_collection,
+            collections::rename_collection,
+            collections::delete_collection,
+            collections::add_package_to_collection,
+            collections::remove_package_from_collection,
+            collections::export_collection,
+            collections::import_collection,
+            collections::preview_collection_install,
+            collections::install_collection,
+            // Integrity Health Dashboard (Phase 15.5)
+            integrity::run_integrity_scan,
+            integrity::verify_package_integrity,
+            integrity::get_last_integrity_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

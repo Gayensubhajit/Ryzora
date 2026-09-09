@@ -19,7 +19,11 @@ export type CategoryId =
   | "installed"
   | "backups"
   | "system"
-  | "author";
+  | "author"
+  | "settings"
+  | "notifications"
+  | "collections"
+  | "integrity";
 
 export type DesktopEnvironment =
   | "hyprland"
@@ -837,3 +841,120 @@ export interface HubOverview {
   latest_releases: any[];
   sync_summary: RepositorySyncStatus[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 15 — Settings, Notifications, Collections & Integrity
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 15.1 — Settings
+export interface RyzoraSettings {
+  default_release_channel: "stable" | "beta" | "nightly";
+  auto_refresh_enabled: boolean;
+  auto_refresh_interval_minutes: number;
+  notification_level: "all" | "security_only" | "none";
+  update_notification_policy: "notify" | "silent";
+  integrity_scan_on_startup: boolean;
+  show_unverified_packages: boolean;
+  show_nightly_packages: boolean;
+  compact_ui: boolean;
+}
+
+// 15.2 — Notifications & Activity
+export type NotificationSeverity = "info" | "warning" | "error" | "critical";
+
+export interface ActivityEntry {
+  id: string;
+  timestamp: string;
+  severity: NotificationSeverity;
+  category: string;
+  title: string;
+  message: string;
+  read: boolean;
+  related_package_id?: string;
+  related_repository_id?: string;
+}
+
+// 15.4 — Collections
+export interface CollectionPackage {
+  id: string;
+  version_req?: string;
+  repository?: string;
+}
+
+export interface Collection {
+  ryzora_collection: "1";
+  id: string;
+  name: string;
+  description?: string;
+  author?: string;
+  created_at: string;
+  updated_at: string;
+  packages: CollectionPackage[];
+}
+
+export interface CollectionSummary {
+  id: string;
+  name: string;
+  description?: string;
+  package_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionInstallPreview {
+  collection_id: string;
+  collection_name: string;
+  total_packages: number;
+  already_installed: string[];
+  to_install: string[];
+  unavailable: string[];
+  warnings: string[];
+}
+
+export interface CollectionInstallResult {
+  collection_id: string;
+  total_packages: number;
+  installed: string[];
+  skipped: string[];
+  failed: string[];
+  rolled_back: boolean;
+  errors: string[];
+}
+
+// 15.5 — Integrity Health
+export type IntegrityStatus =
+  | "healthy"
+  | "modified"
+  | "missing_files"
+  | "unexpected_files"
+  | "signature_failed"
+  | "key_revoked"
+  | "unable_to_verify";
+
+export interface PackageIntegrityResult {
+  package_id: string;
+  name: string;
+  version: string;
+  trust_tier: string;
+  status: IntegrityStatus;
+  status_label: string;
+  detail: string;
+  signing_key_id?: string;
+  scanned_at: string;
+}
+
+export interface IntegrityScanReport {
+  total_checked: number;
+  healthy: number;
+  issues: PackageIntegrityResult[];
+  all_results: PackageIntegrityResult[];
+  scanned_at: string;
+  duration_ms: number;
+}
+
+// CategoryId extension for Phase 15
+export type Phase15CategoryId =
+  | "settings"
+  | "notifications"
+  | "collections"
+  | "integrity";

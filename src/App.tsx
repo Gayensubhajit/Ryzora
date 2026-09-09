@@ -12,6 +12,10 @@ import { InstalledView } from "./views/InstalledView";
 import { BackupsView } from "./views/BackupsView";
 import { SystemView } from "./views/SystemView";
 import { AuthorView } from "./views/AuthorView";
+import { SettingsView } from "./views/SettingsView";
+import { NotificationsView } from "./views/NotificationsView";
+import { CollectionsView } from "./views/CollectionsView";
+import { IntegrityView } from "./views/IntegrityView";
 import { PackageDetailModal } from "./components/PackageDetailModal";
 import { Toast } from "./components/Toast";
 
@@ -38,6 +42,14 @@ const MainLayout: React.FC = () => {
         return <SystemView />;
       case "author":
         return <AuthorView />;
+      case "settings":
+        return <SettingsView />;
+      case "notifications":
+        return <NotificationsView />;
+      case "collections":
+        return <CollectionsView />;
+      case "integrity":
+        return <IntegrityView />;
       default:
         return <CategoryView />;
     }
