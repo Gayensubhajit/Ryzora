@@ -6,6 +6,7 @@ pub mod normalizer;
 pub mod rice;
 pub mod synthesizer;
 pub mod wallpaper;
+pub use wallpaper::is_suspicious_svg_content;
 
 use crate::manifest::PackageType;
 use crate::repository::{AuthorInfo, FrontendPackageItem};

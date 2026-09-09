@@ -406,6 +406,19 @@ impl ContentProvider for KdeProvider {
                     }
                 }
 
+                // If SVG, check for prohibited executable tags or active content
+                if file.source.to_lowercase().ends_with(".svg") {
+                    if let Ok(svg_bytes) = fs::read(&src_file) {
+                        if crate::providers::wallpaper::is_suspicious_svg_content(&svg_bytes) {
+                            let _ = fs::remove_dir_all(&tmp_stage_dir);
+                            return Err(format!(
+                                "Security violation: SVG asset '{}' contains prohibited active script elements",
+                                file.source
+                            ));
+                        }
+                    }
+                }
+
                 let dest_file = tmp_stage_dir.join(&file.source);
                 if let Some(parent) = dest_file.parent() {
                     if let Err(e) = fs::create_dir_all(parent) {
@@ -1168,6 +1181,19 @@ impl ContentProvider for GnomeProvider {
                             "Security violation: file '{}' escapes package root via symlink",
                             file.source
                         ));
+                    }
+                }
+
+                // If SVG, check for prohibited executable tags or active content
+                if file.source.to_lowercase().ends_with(".svg") {
+                    if let Ok(svg_bytes) = fs::read(&src_file) {
+                        if crate::providers::wallpaper::is_suspicious_svg_content(&svg_bytes) {
+                            let _ = fs::remove_dir_all(&tmp_stage_dir);
+                            return Err(format!(
+                                "Security violation: SVG asset '{}' contains prohibited active script elements",
+                                file.source
+                            ));
+                        }
                     }
                 }
 

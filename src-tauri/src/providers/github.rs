@@ -559,6 +559,17 @@ pub fn discover_conventions(repo_root: &Path) -> Result<Vec<ProviderFileSpec>, S
             if is_image_extension(&lower)
                 && (lower.starts_with("wallpaper.") || lower.starts_with("background."))
             {
+                if lower.ends_with(".svg") {
+                    let full_path = repo_root.join(&rel_path_str);
+                    if let Ok(bytes) = fs::read(&full_path) {
+                        if crate::providers::wallpaper::is_suspicious_svg_content(&bytes) {
+                            return Err(format!(
+                                "Security violation: Discovered SVG file '{}' contains prohibited active scripts or elements",
+                                rel_path_str
+                            ));
+                        }
+                    }
+                }
                 specs.push(ProviderFileSpec {
                     source: rel_path_str.clone(),
                     target: format!("~/Pictures/Wallpapers/{}", rel_path_str),

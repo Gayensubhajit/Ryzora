@@ -395,21 +395,15 @@ impl ContentProvider for WallpaperProvider {
                     }
                 }
 
-                // If SVG, check for prohibited executable tags (<script>)
+                // If SVG, check for prohibited executable tags or active content
                 if file.source.to_lowercase().ends_with(".svg") {
                     if let Ok(svg_bytes) = fs::read(&src_file) {
-                        if let Ok(svg_text) = std::str::from_utf8(&svg_bytes) {
-                            let lower = svg_text.to_lowercase();
-                            if lower.contains("<script")
-                                || lower.contains("javascript:")
-                                || lower.contains("onload=")
-                            {
-                                let _ = fs::remove_dir_all(&tmp_stage_dir);
-                                return Err(format!(
-                                    "Security violation: SVG wallpaper '{}' contains prohibited active script elements",
-                                    file.source
-                                ));
-                            }
+                        if is_suspicious_svg_content(&svg_bytes) {
+                            let _ = fs::remove_dir_all(&tmp_stage_dir);
+                            return Err(format!(
+                                "Security violation: SVG wallpaper '{}' contains prohibited active script elements",
+                                file.source
+                            ));
                         }
                     }
                 }
@@ -649,6 +643,25 @@ pub fn validate_wallpaper_target_and_source(
 }
 
 /// Normalizes target paths for collision detection (collapsing redundant slashes and `./`).
+/// Inspects SVG bytes for prohibited active script elements, event handlers, or foreign objects.
+///
+/// SVG files are strictly treated as declarative image assets. Any executable or interactive
+/// markup (<script>, onload, onclick, onerror, javascript:, data:text/html, foreignObject) is rejected.
+pub fn is_suspicious_svg_content(svg_bytes: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(svg_bytes) else {
+        return true;
+    };
+    let lower = text.to_lowercase();
+    lower.contains("<script")
+        || lower.contains("javascript:")
+        || lower.contains("onload=")
+        || lower.contains("onclick=")
+        || lower.contains("onerror=")
+        || lower.contains("data:text/html")
+        || lower.contains("<foreignobject")
+        || lower.contains("foreignobject")
+}
+
 pub fn normalize_target_path(tgt: &str) -> String {
     let mut normalized = String::new();
     let mut last_was_slash = false;
