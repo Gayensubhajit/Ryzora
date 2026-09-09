@@ -1,4 +1,5 @@
 pub mod community;
+pub mod desktop;
 pub mod fastfetch;
 pub mod github;
 pub mod normalizer;
@@ -345,6 +346,8 @@ pub fn create_default_provider_manager() -> ProviderManager {
     mgr.register_provider(Arc::new(fastfetch::FastfetchProvider::new()));
     mgr.register_provider(Arc::new(rice::RiceProvider::new()));
     mgr.register_provider(Arc::new(wallpaper::WallpaperProvider::new()));
+    mgr.register_provider(Arc::new(desktop::KdeProvider::new()));
+    mgr.register_provider(Arc::new(desktop::GnomeProvider::new()));
     mgr
 }
 
