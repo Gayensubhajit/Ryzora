@@ -197,6 +197,13 @@ export const AuthorView: React.FC = () => {
 
   const handleAddColor = () => {
     const c = colorInput.trim();
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(c)) {
+      setToast({
+        message: "Invalid hex color format (expected #RGB, #RRGGBB, or #RRGGBBAA)",
+        type: "warning",
+      });
+      return;
+    }
     if (c && !colorPalette.includes(c)) {
       setColorPalette([...colorPalette, c]);
     }
@@ -248,6 +255,13 @@ export const AuthorView: React.FC = () => {
   const handleAddDependency = () => {
     const depId = depIdInput.trim().toLowerCase();
     if (!depId) return;
+    if (depId === id.trim().toLowerCase()) {
+      setToast({
+        message: "Package cannot declare a dependency on itself",
+        type: "warning",
+      });
+      return;
+    }
     const newDep: DependencySpec = {
       id: depId,
       kind: "package",
@@ -407,7 +421,7 @@ export const AuthorView: React.FC = () => {
             { num: 2, label: "Compatibility" },
             { num: 3, label: "Files" },
             { num: 4, label: "Validate" },
-            { num: 5, label: "Publish" },
+            { num: 5, label: "Export" },
           ].map((s) => (
             <button
               key={s.num}
@@ -1163,11 +1177,22 @@ export const AuthorView: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
               <UploadCloud className="w-5 h-5 text-[var(--accent)]" />
-              Step 5: Bundle Generation & Store Publishing
+              Step 5: Bundle Generation & Local Repository Export
             </h2>
             <p className="text-xs text-[var(--text-muted)] mt-1">
-              Build the standalone package directory and optionally publish directly into a local or community repository
+              Build the standalone package directory and export it into a local Ryzora repository on this machine
             </p>
+          </div>
+
+          {/* Local Export vs Remote Distribution Banner */}
+          <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-200 text-xs flex items-start gap-2.5">
+            <span className="text-base leading-none">ℹ️</span>
+            <div>
+              <span className="font-semibold text-blue-100">Local Testing vs Remote Distribution: </span>
+              Exporting stages your package into a local repository on this system for testing and catalog preview.
+              Remote community publishing (e.g. GitHub Releases / Official Index submission) will be provided via Phase 11 distribution workflows.
+              Remote repository URLs cannot be targeted directly via local file operations.
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1175,7 +1200,7 @@ export const AuthorView: React.FC = () => {
             <div className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4">
               <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
                 <Folder className="w-4 h-4 text-[var(--accent)]" />
-                Phase A: Build Package Bundle
+                Phase A: Build Local Package Bundle
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
                 Copies all configuration files into a canonical package directory with `ryzora.json` and computed SHA-256 digests.
@@ -1229,11 +1254,11 @@ export const AuthorView: React.FC = () => {
               )}
             </div>
 
-            {/* Stage B: Publish to Repository */}
+            {/* Stage B: Export to Local Repository */}
             <div className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4">
               <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
                 <UploadCloud className="w-4 h-4 text-[var(--accent)]" />
-                Phase B: Publish to Repository
+                Phase B: Export to Local Repository
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
                 Registers the package in a repository's `repository.json` catalog and stages the bundle into `packages/`.
@@ -1241,39 +1266,52 @@ export const AuthorView: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
-                  Select Configured Repository
+                  Select Configured Local Repository
                 </label>
                 <select
                   value={selectedRepoPath}
                   onChange={(e) => setSelectedRepoPath(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs focus:outline-none focus:border-[var(--accent)]"
                 >
-                  <option value="">Select a repository...</option>
-                  {repositories.map((repo) => (
-                    <option key={repo.id} value={repo.path}>
-                      {repo.name} ({repo.id}) — {repo.path}
-                    </option>
-                  ))}
+                  <option value="">Select a local repository...</option>
+                  {repositories
+                    .filter((repo) => repo.repo_type === "local")
+                    .map((repo) => (
+                      <option key={repo.id} value={repo.path}>
+                        {repo.name} ({repo.id}) — {repo.path}
+                      </option>
+                    ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
-                  Or Custom Repository Directory
+                  Or Custom Local Repository Directory
                 </label>
                 <input
                   type="text"
                   value={customRepoPath}
                   onChange={(e) => setCustomRepoPath(e.target.value)}
-                  placeholder="/path/to/my-custom-repo or ~/my-repo"
+                  placeholder="/path/to/my-local-repo or ~/my-repo"
                   className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs font-mono focus:outline-none focus:border-[var(--accent)]"
                 />
+                {(customRepoPath.trim().startsWith("http://") ||
+                  customRepoPath.trim().startsWith("https://")) && (
+                  <p className="text-[11px] text-amber-400 font-semibold mt-1">
+                    ⚠️ Remote URLs are read-only and cannot be targeted for local export.
+                  </p>
+                )}
               </div>
 
               <button
                 type="button"
                 onClick={handlePublish}
-                disabled={isPublishing || !authoringResult}
+                disabled={
+                  isPublishing ||
+                  !authoringResult ||
+                  customRepoPath.trim().startsWith("http://") ||
+                  customRepoPath.trim().startsWith("https://")
+                }
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 text-white font-medium text-xs hover:opacity-90 disabled:opacity-50 shadow-sm"
               >
                 {isPublishing ? (
@@ -1284,7 +1322,7 @@ export const AuthorView: React.FC = () => {
                 ) : (
                   <>
                     <UploadCloud className="w-4 h-4" />
-                    Publish to Repository
+                    Export to Local Repository
                   </>
                 )}
               </button>
