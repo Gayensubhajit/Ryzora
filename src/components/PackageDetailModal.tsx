@@ -871,9 +871,23 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
 
                     <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
-                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Trust Tier</div>
-                      <div className="text-[var(--text-primary)] capitalize truncate">
-                        {selectedPackage.trust_tier || "community"}
+                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Store Trust Tier</div>
+                      <div className="text-[var(--text-primary)] font-medium truncate flex items-center gap-1.5 text-xs">
+                        {selectedPackage.trust_tier === "official" ? (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="text-amber-300">Official (Core)</span>
+                          </>
+                        ) : selectedPackage.trust_tier === "verified" ? (
+                          <>
+                            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="text-blue-300">Verified Author</span>
+                          </>
+                        ) : selectedPackage.trust_tier === "untrusted" ? (
+                          <span className="text-rose-400">Untrusted Repo</span>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">Community Contributor</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -886,7 +900,7 @@ export const PackageDetailModal: React.FC = () => {
                           <>
                             <ShieldCheck className="w-4 h-4 text-emerald-400" />
                             <span className="text-[var(--text-primary)]">
-                              Cryptographically Verified Package
+                              Declarative SHA-256 Integrity Verified
                             </span>
                           </>
                         ) : selectedPackage.integrity_status === "corrupted" ? (
@@ -924,7 +938,7 @@ export const PackageDetailModal: React.FC = () => {
                         }`}
                       >
                         {selectedPackage.integrity_status === "verified"
-                          ? "Attested SHA-256 Verified"
+                          ? "SHA-256 Checksum Verified"
                           : selectedPackage.integrity_status === "corrupted"
                           ? "Corrupted Cache"
                           : selectedPackage.integrity_status === "pending_download"

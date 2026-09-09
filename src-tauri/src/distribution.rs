@@ -1296,4 +1296,325 @@ pub mod tests {
         assert_eq!(result.channel, ReleaseChannel::Beta);
         assert!(result.submission_text.contains("Release Channel"));
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 11.1: Interactive End-to-End Audit Tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_phase11_1_full_pipeline_audit() {
+        let sandbox = TestSandbox::new("p11-1-pipeline");
+
+        // 1. Authoring draft creation
+        let conf_file = sandbox.root.join("hyprland.conf");
+        fs::write(
+            &conf_file,
+            "# Hyprland config for Phase 11.1\ngeneral {\n  gaps_in = 5\n}\n",
+        )
+        .unwrap();
+        let bar_file = sandbox.root.join("waybar.jsonc");
+        fs::write(
+            &bar_file,
+            "{\n  \"layer\": \"top\",\n  \"position\": \"top\"\n}\n",
+        )
+        .unwrap();
+
+        let draft = crate::authoring::PackageDraft {
+            id: "nord-rice-beta".to_string(),
+            name: "Nord Rice Beta".to_string(),
+            version: "1.0.0-beta.1".to_string(),
+            author: "NordArchitect".to_string(),
+            package_type: PackageType::Rice,
+            description: "A complete Nord aesthetic rice tested during Phase 11.1 audit"
+                .to_string(),
+            tags: vec![
+                "hyprland".to_string(),
+                "nord".to_string(),
+                "beta".to_string(),
+            ],
+            color_palette: vec!["#2e3440".to_string(), "#88c0d0".to_string()],
+            compatibility: crate::manifest::ManifestCompatibility {
+                desktops: vec!["hyprland".to_string()],
+                sessions: vec!["wayland".to_string()],
+                distros: vec![],
+                required: vec![],
+                optional: vec![],
+            },
+            dependencies: vec![],
+            files: vec![
+                crate::authoring::FileMappingDraft {
+                    source_path: conf_file.to_string_lossy().to_string(),
+                    target: "~/.config/hypr/hyprland.conf".to_string(),
+                    package_rel_path: None,
+                    description: "Main Hyprland config".to_string(),
+                },
+                crate::authoring::FileMappingDraft {
+                    source_path: bar_file.to_string_lossy().to_string(),
+                    target: "~/.config/waybar/config.jsonc".to_string(),
+                    package_rel_path: Some("files/waybar/config.jsonc".to_string()),
+                    description: "Waybar status bar config".to_string(),
+                },
+            ],
+        };
+
+        // 2. Validate & Build Draft
+        let val_res = crate::authoring::validate_package_draft_internal(&draft);
+        assert!(
+            val_res.valid,
+            "Draft validation should pass: {:?}",
+            val_res.errors
+        );
+
+        let draft_build_dir = sandbox.root.join("draft_output");
+        fs::create_dir_all(&draft_build_dir).unwrap();
+        let build_res = crate::authoring::create_package_bundle(draft, &draft_build_dir).unwrap();
+        assert!(build_res.success);
+        let authored_pkg_dir = PathBuf::from(&build_res.package_dir);
+        assert!(authored_pkg_dir.join("ryzora.json").is_file());
+        assert!(authored_pkg_dir.join("manifest.json").is_file());
+
+        // 3. Pre-Flight Store Audit
+        let audit = audit_store_submission_internal(&authored_pkg_dir).unwrap();
+        assert!(audit.passed, "Store audit should pass for clean dotfiles");
+        assert_eq!(audit.score, 100);
+        assert!(
+            audit.binary_executables_found.is_empty(),
+            "Must have zero compiled binaries"
+        );
+        assert!(
+            audit.script_hooks_found.is_empty(),
+            "Must have zero script hooks"
+        );
+        assert_eq!(audit.total_files, 2);
+        assert!(!audit.tree_hash.is_empty());
+
+        // 4. Build Distribution Release Bundle
+        let releases_dir = sandbox.root.join("releases");
+        fs::create_dir_all(&releases_dir).unwrap();
+
+        let dist_res = build_distribution_release_internal(
+            &authored_pkg_dir,
+            &releases_dir,
+            ReleaseChannel::Beta,
+            Some("Phase 11.1 interactive audit release".to_string()),
+            Some("@silentbyte".to_string()),
+        )
+        .unwrap();
+
+        assert!(dist_res.success);
+        assert_eq!(dist_res.channel, ReleaseChannel::Beta);
+        assert!(!dist_res.tree_hash.is_empty());
+
+        // Inspect distribution release bundle artifacts
+        let bundle_dir = PathBuf::from(&dist_res.bundle_dir);
+        assert!(bundle_dir.join("ryzora.json").is_file());
+        assert!(bundle_dir.join("manifest.json").is_file());
+        assert!(bundle_dir.join("release.json").is_file());
+        assert!(bundle_dir.join("checksums.sha256").is_file());
+        assert!(bundle_dir.join("SUBMISSION.md").is_file());
+        assert!(bundle_dir.join("files/waybar/config.jsonc").is_file());
+
+        // Parse and verify release.json
+        let rel_content = fs::read_to_string(bundle_dir.join("release.json")).unwrap();
+        let release_meta: DistributionRelease = serde_json::from_str(&rel_content).unwrap();
+        assert_eq!(release_meta.package_id, "nord-rice-beta");
+        assert_eq!(release_meta.channel, ReleaseChannel::Beta);
+        assert_eq!(release_meta.trust_tier, TrustTier::Community); // Honest default
+        assert_eq!(release_meta.maintainer, Some("@silentbyte".to_string()));
+        assert_eq!(release_meta.files_count, 2);
+
+        // 5. Publish Distribution Bundle to Local Repository
+        let repo_dir = sandbox.root.join("test_repo");
+        fs::create_dir_all(repo_dir.join("packages")).unwrap();
+        let initial_repo_index = crate::repository::RepositoryIndex {
+            schema: 1,
+            id: "test-community-repo".to_string(),
+            name: "Test Community Repository".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Repository for Phase 11.1 audit".to_string(),
+            packages: vec![],
+        };
+        fs::write(
+            repo_dir.join("repository.json"),
+            serde_json::to_string_pretty(&initial_repo_index).unwrap(),
+        )
+        .unwrap();
+
+        let pub_res = crate::authoring::export_to_repository(&bundle_dir, &repo_dir).unwrap();
+        assert!(pub_res.success);
+
+        // Verify repository index inherited release metadata
+        let updated_repo_raw = fs::read_to_string(repo_dir.join("repository.json")).unwrap();
+        let updated_repo_index: crate::repository::RepositoryIndex =
+            serde_json::from_str(&updated_repo_raw).unwrap();
+        assert_eq!(updated_repo_index.packages.len(), 1);
+        let repo_entry = &updated_repo_index.packages[0];
+        assert_eq!(repo_entry.id, "nord-rice-beta");
+        assert_eq!(repo_entry.release_channel, Some(ReleaseChannel::Beta));
+        assert_eq!(repo_entry.maintainer, Some("@silentbyte".to_string()));
+        assert_eq!(repo_entry.trust_tier, Some(TrustTier::Community));
+        assert_eq!(repo_entry.content_hash, Some(dist_res.tree_hash.clone()));
+
+        // 6. Refresh & Discover in RepositoryManager
+        let local_repo = crate::repository::LocalRepository::load_from_dir(&repo_dir).unwrap();
+        let mut manager = crate::repository::RepositoryManager::new();
+        manager.add_repository(Box::new(local_repo));
+        let _ = manager.refresh_all();
+
+        let all_packages = manager.list_all_packages().unwrap();
+        assert_eq!(all_packages.len(), 1);
+        let pkg_item = &all_packages[0];
+        assert_eq!(pkg_item.id, "nord-rice-beta");
+        assert_eq!(pkg_item.release_channel, Some(ReleaseChannel::Beta));
+        assert_eq!(pkg_item.trust_tier, Some(TrustTier::Community));
+        assert_eq!(pkg_item.maintainer, Some("@silentbyte".to_string()));
+        assert_eq!(pkg_item.integrity_status, "verified");
+
+        // 7. Test Truth-in-Advertising & Filtering Invariants
+        // Community packages must NOT match Official or Verified filter
+        let matches_official_filter = pkg_item.trust_tier == Some(TrustTier::Official);
+        let matches_verified_filter = pkg_item.trust_tier == Some(TrustTier::Verified)
+            || pkg_item.trust_tier == Some(TrustTier::Official);
+        let matches_community_filter = pkg_item.trust_tier == Some(TrustTier::Community);
+
+        assert!(
+            !matches_official_filter,
+            "Community package must not match Official filter"
+        );
+        assert!(
+            !matches_verified_filter,
+            "Community package must not match Verified filter"
+        );
+        assert!(matches_community_filter, "Must match Community filter");
+
+        // Channel filter
+        assert_eq!(pkg_item.release_channel, Some(ReleaseChannel::Beta));
+        assert_ne!(pkg_item.release_channel, Some(ReleaseChannel::Stable));
+    }
+
+    #[test]
+    fn test_phase11_1_trust_tier_and_checksum_separation() {
+        let sandbox = TestSandbox::new("trust-vs-checksum");
+        let pkg_dir = sandbox.root.join("valid-community-pkg");
+        fs::create_dir_all(pkg_dir.join("files")).unwrap();
+
+        let manifest = create_test_manifest("honesty-pkg", "1.0.0");
+        fs::write(
+            pkg_dir.join("ryzora.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        fs::write(pkg_dir.join("files/style.css"), "body { color: cyan; }").unwrap();
+
+        let audit = audit_store_submission_internal(&pkg_dir).unwrap();
+        assert!(audit.passed);
+
+        let export_dir = sandbox.root.join("export");
+        fs::create_dir_all(&export_dir).unwrap();
+
+        let result = build_distribution_release_internal(
+            &pkg_dir,
+            &export_dir,
+            ReleaseChannel::Stable,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let bundle_dir = PathBuf::from(&result.bundle_dir);
+        let release_json_raw = fs::read_to_string(bundle_dir.join("release.json")).unwrap();
+        let release: DistributionRelease = serde_json::from_str(&release_json_raw).unwrap();
+
+        // Checksum is verified, but trust tier is Community
+        assert_eq!(release.trust_tier, TrustTier::Community);
+        assert_eq!(release.author.verified, false);
+    }
+
+    #[test]
+    fn test_phase11_1_distribution_bundle_tamper_detection() {
+        let sandbox = TestSandbox::new("tamper-detect");
+        let pkg_dir = sandbox.root.join("tamper-pkg");
+        fs::create_dir_all(pkg_dir.join("files")).unwrap();
+
+        let manifest = create_test_manifest("tamper-pkg", "1.0.0");
+        fs::write(
+            pkg_dir.join("ryzora.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        fs::write(pkg_dir.join("files/style.css"), "body { margin: 0; }").unwrap();
+
+        let export_dir = sandbox.root.join("releases");
+        fs::create_dir_all(&export_dir).unwrap();
+
+        let result = build_distribution_release_internal(
+            &pkg_dir,
+            &export_dir,
+            ReleaseChannel::Stable,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let bundle_dir = PathBuf::from(&result.bundle_dir);
+        let checksums_file = bundle_dir.join("checksums.sha256");
+        let orig_checksums = fs::read_to_string(&checksums_file).unwrap();
+
+        // Verify initial checksum matches
+        let style_file = bundle_dir.join("files/style.css");
+        let style_hash = compute_file_sha256(&style_file).unwrap();
+        assert!(orig_checksums.contains(&style_hash));
+
+        // Tamper with payload file
+        fs::write(&style_file, "body { margin: 0; } /* malicious addition */").unwrap();
+        let tampered_hash = compute_file_sha256(&style_file).unwrap();
+
+        assert_ne!(style_hash, tampered_hash);
+        assert!(
+            !orig_checksums.contains(&tampered_hash),
+            "Tampered file hash must not match recorded checksums"
+        );
+    }
+
+    #[test]
+    fn test_phase11_1_zero_command_execution() {
+        let src_dir = Path::new("src");
+        let forbidden_needles = [
+            "std::process::Command",
+            "process::Command",
+            "Command::new",
+            "\"sh\"",
+            "\"bash\"",
+            "\"sudo\"",
+            "\"pkexec\"",
+            "\"pacman\"",
+            "\"yay\"",
+        ];
+
+        let files = [
+            "distribution.rs",
+            "authoring.rs",
+            "repository.rs",
+            "installer.rs",
+            "manifest.rs",
+            "snapshot.rs",
+            "lib.rs",
+        ];
+
+        for file_name in &files {
+            let file_path = src_dir.join(file_name);
+            if file_path.is_file() {
+                let code = fs::read_to_string(&file_path).unwrap();
+                let prod_code = code.split("#[cfg(test)]").next().unwrap_or(&code);
+                for pat in &forbidden_needles {
+                    assert!(
+                        !prod_code.contains(pat),
+                        "Production file '{}' must not contain forbidden pattern '{}'",
+                        file_name,
+                        pat
+                    );
+                }
+            }
+        }
+    }
 }

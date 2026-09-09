@@ -865,6 +865,15 @@ pub fn export_to_repository(
     fs::write(&staging_manifest, &manifest_raw)
         .map_err(|e| format!("Failed to write manifest.json in staging: {}", e))?;
 
+    // Copy optional release artifacts into staging if present
+    for extra_file in &["release.json", "checksums.sha256", "SUBMISSION.md"] {
+        let src_extra = package_dir.join(extra_file);
+        if src_extra.is_file() {
+            let dest_extra = staging_pkg_dir.join(extra_file);
+            let _ = fs::copy(&src_extra, &dest_extra);
+        }
+    }
+
     // Copy payload files into staging
     let mut total_bytes = 0u64;
     for f in &manifest.files {
@@ -931,6 +940,46 @@ pub fn export_to_repository(
         ));
     }
 
+    // Inherit release metadata if release.json was created
+    let (inherited_channel, inherited_maintainer, inherited_notes, inherited_trust_tier) = {
+        let release_json_path = package_dir.join("release.json");
+        if release_json_path.is_file() {
+            if let Ok(raw_rel) = fs::read_to_string(&release_json_path) {
+                if let Ok(dist_rel) =
+                    serde_json::from_str::<crate::distribution::DistributionRelease>(&raw_rel)
+                {
+                    (
+                        Some(dist_rel.channel),
+                        dist_rel.maintainer,
+                        Some(dist_rel.release_notes),
+                        Some(dist_rel.trust_tier),
+                    )
+                } else {
+                    (
+                        Some(crate::distribution::ReleaseChannel::Stable),
+                        None,
+                        None,
+                        Some(crate::distribution::TrustTier::Community),
+                    )
+                }
+            } else {
+                (
+                    Some(crate::distribution::ReleaseChannel::Stable),
+                    None,
+                    None,
+                    Some(crate::distribution::TrustTier::Community),
+                )
+            }
+        } else {
+            (
+                Some(crate::distribution::ReleaseChannel::Stable),
+                None,
+                None,
+                Some(crate::distribution::TrustTier::Community),
+            )
+        }
+    };
+
     // Prepare updated repository entry
     let new_entry = RepositoryPackageEntry {
         id: manifest.id.clone(),
@@ -955,12 +1004,12 @@ pub fn export_to_repository(
         downloads: Some(0),
         content_hash: Some(content_hash.clone()),
         package_size_bytes: Some(total_bytes),
-        release_channel: Some(crate::distribution::ReleaseChannel::Stable),
-        trust_tier: Some(crate::distribution::TrustTier::Community),
+        release_channel: inherited_channel,
+        trust_tier: inherited_trust_tier,
         moderation_status: Some(crate::distribution::ModerationStatus::Approved),
         trending_score: Some(0.0),
-        maintainer: None,
-        release_notes: None,
+        maintainer: inherited_maintainer,
+        release_notes: inherited_notes,
     };
 
     if let Some(pos) = index.packages.iter().position(|p| p.id == manifest.id) {

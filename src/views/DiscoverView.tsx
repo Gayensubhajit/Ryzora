@@ -17,7 +17,8 @@ type StatusFilterOption =
   | "installed"
   | "update_available"
   | "stable"
-  | "beta";
+  | "beta"
+  | "nightly";
 
 export function compareSemver(v1: string, v2: string): number {
   const clean = (v: string) => v.replace(/^v/, "").trim();
@@ -125,7 +126,7 @@ export const DiscoverView: React.FC = () => {
       if (statusFilter === "official" && pkg.trust_tier !== "official") {
         return false;
       }
-      if (statusFilter === "verified" && pkg.trust_tier !== "verified" && pkg.trust_tier !== "official" && pkg.integrity_status !== "verified") {
+      if (statusFilter === "verified" && pkg.trust_tier !== "verified" && pkg.trust_tier !== "official") {
         return false;
       }
       if (statusFilter === "community" && pkg.trust_tier !== "community") {
@@ -135,6 +136,9 @@ export const DiscoverView: React.FC = () => {
         return false;
       }
       if (statusFilter === "beta" && pkg.release_channel !== "beta") {
+        return false;
+      }
+      if (statusFilter === "nightly" && pkg.release_channel !== "nightly") {
         return false;
       }
 
@@ -280,8 +284,8 @@ export const DiscoverView: React.FC = () => {
               className="px-2 py-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-muted)] focus:text-[var(--text-primary)] focus:border-[var(--border-strong)] outline-none text-[11px]"
             >
               <option value="all">All Status & Tiers</option>
-              <option value="official">Official Ryzora Only</option>
-              <option value="verified">Verified Authors</option>
+              <option value="official">Official Core (Ryzora)</option>
+              <option value="verified">Verified Authors (Reviewed)</option>
               <option value="community">Community Packages</option>
               <option value="compatible">Compatible Only</option>
               <option value="installed">Installed</option>
@@ -290,6 +294,7 @@ export const DiscoverView: React.FC = () => {
               <option value="trending">Trending</option>
               <option value="stable">Stable Channel</option>
               <option value="beta">Beta Channel</option>
+              <option value="nightly">Nightly Channel</option>
             </select>
 
             {/* Repository Selector */}

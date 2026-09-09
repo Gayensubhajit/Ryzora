@@ -64,10 +64,19 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
           {packageItem.trust_tier === "official" && (
             <div
               className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-amber-500/25 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"
-              title="Official Ryzora Package"
+              title="Official Ryzora Package (Curated by Ryzora Core)"
             >
               <Sparkles className="w-3 h-3 text-amber-400" />
               <span>Official</span>
+            </div>
+          )}
+          {packageItem.trust_tier === "verified" && (
+            <div
+              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-blue-500/25 text-blue-300 border border-blue-500/40 flex items-center gap-1 shadow-sm"
+              title="Verified Author (Reviewed Community Contributor)"
+            >
+              <ShieldCheck className="w-3 h-3 text-blue-400" />
+              <span>Verified</span>
             </div>
           )}
           {packageItem.release_channel === "beta" && (
@@ -89,10 +98,10 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
           {packageItem.integrity_status === "verified" ? (
             <div
               className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--bg-surface)]/90 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"
-              title="Cryptographically verified SHA-256 tree hash"
+              title="SHA-256 Checksum Verified: File hashes match manifest declaration"
             >
               <ShieldCheck className="w-3 h-3 text-emerald-400" />
-              <span>Verified</span>
+              <span>SHA-256 OK</span>
             </div>
           ) : packageItem.integrity_status === "corrupted" ? (
             <div
