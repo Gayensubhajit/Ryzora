@@ -222,11 +222,15 @@ export function resolveLockscreenCapabilities(
   }
 
   const desktop = systemInfo.desktop_environment?.toLowerCase() || "";
-  const isKdePlasma = desktop.includes("kde") || desktop.includes("plasma");
+  const wm = systemInfo.window_manager?.toLowerCase() || "";
+  const isKdePlasma = desktop.includes("kde") || desktop.includes("plasma") || wm.includes("kwin");
+  const isGnome = desktop.includes("gnome") || wm.includes("mutter");
   const isWayland = systemInfo.session_type === "wayland";
+  const displayManager = ((systemInfo as any).display_manager || "").toLowerCase();
+  const isGdm = displayManager === "gdm";
 
   // Protocol Check: Quickshell session lock requires ext-session-lock-v1
-  // KWin (KDE Plasma) currently lacks ext-session-lock-v1 support
+  // KWin (KDE Plasma) and Mutter (GNOME) lack ext-session-lock-v1 support for external lockers
   if (isKdePlasma) {
     result.session_lock_supported = false;
     result.warnings.push(
@@ -234,9 +238,24 @@ export function resolveLockscreenCapabilities(
     );
   }
 
+  if (isGnome) {
+    result.session_lock_supported = false;
+    result.warnings.push(
+      "ext-session-lock-v1 is unsupported on GNOME/Mutter. Quickshell session locking is disabled."
+    );
+  }
+
   if (!isWayland) {
     result.session_lock_supported = false;
     result.warnings.push("Quickshell lockscreen requires a Wayland session.");
+  }
+
+  // Display Manager Check: SDDM themes cannot be applied to GDM
+  if (isGdm) {
+    result.login_screen_supported = false;
+    result.warnings.push(
+      "Your system uses GDM (GNOME Display Manager). Qylock SDDM themes cannot be installed into GDM."
+    );
   }
 
   const quickshellTarget = manifest?.targets?.quickshell;
@@ -278,6 +297,9 @@ export function resolveLockscreenCapabilities(
   }
 
   if (includeSddm && sddmTarget) {
+    if (!result.login_screen_supported) {
+      result.can_install = false;
+    }
     result.requires_root = true;
     result.privilege_notice =
       "Administrator permissions (pkexec) required to copy themes to /usr/share/sddm/ and update /etc/sddm.conf.d/";

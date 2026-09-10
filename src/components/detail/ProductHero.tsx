@@ -97,12 +97,13 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
     if (isInstalling) return "Installing...";
     if (isUpdateAvailable) return "Update";
     if (isInstalled) return "Installed";
+    if (!canTargetQs && !canTargetSddm) return "Unsupported on Current Desktop";
     if (isDualTarget) {
       if (selectedTarget === "quickshell") return "Install Session Lock";
       if (selectedTarget === "sddm") return "Install Login Screen";
       return "Install Both";
     }
-    return packageItem.supports_login_screen ? "Install Login Screen" : "Install Session Lock";
+    return canTargetSddm ? "Install Login Screen" : "Install Session Lock";
   };
 
   return (
@@ -386,7 +387,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             /* 1. NOT INSTALLED: Show Install action */
             <button
               type="button"
-              disabled={isBlocked || isInstalling}
+              disabled={isBlocked || isInstalling || (!canTargetQs && !canTargetSddm)}
               onClick={onInstall}
               className={[
                 "w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-md",

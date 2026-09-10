@@ -307,19 +307,30 @@ pub fn detect_host_capabilities_in(home: &Path) -> HostCapabilities {
     let has_hyprlock = *installed_commands.get("hyprlock").unwrap_or(&false);
     let has_swaylock = *installed_commands.get("swaylock").unwrap_or(&false);
     let has_sddm = *installed_commands.get("sddm").unwrap_or(&false);
+    let has_gdm = *installed_commands.get("gdm").unwrap_or(&false);
+
+    // Authentication check: probe for valid PAM service
+    let has_pam_auth = Path::new("/etc/pam.d/hyprlock").exists()
+        || Path::new("/etc/pam.d/login").exists()
+        || Path::new("/etc/pam.d/system-auth").exists()
+        || Path::new("/etc/pam.d/system-local-login").exists()
+        || Path::new("/etc/pam.d/gdm-password").exists();
 
     let mut supported_adapters = Vec::new();
 
     // 1. Quickshell Adapter
-    let qs_supported = xdg_session == "wayland" && has_quickshell && (compositor == "Hyprland" || compositor == "Sway" || compositor == "COSMIC Comp");
+    let has_ext_session_lock = compositor == "Hyprland" || compositor == "Sway" || compositor == "COSMIC Comp" || compositor == "River";
+    let qs_supported = xdg_session == "wayland" && has_quickshell && has_ext_session_lock && has_pam_auth;
     let qs_reason = if !has_quickshell {
         "Quickshell binary is not installed on this host system (pacman -S quickshell or build from source)".to_string()
     } else if xdg_session != "wayland" {
-        "Quickshell lockscreen requires a Wayland compositor with ext-session-lock-v1 support".to_string()
-    } else if compositor != "Hyprland" && compositor != "Sway" && compositor != "COSMIC Comp" {
-        format!("Desktop compositor '{}' does not use ext-session-lock-v1 with Quickshell", compositor)
+        "Quickshell lockscreen requires a Wayland session with ext-session-lock-v1 protocol".to_string()
+    } else if !has_ext_session_lock {
+        format!("Desktop compositor '{}' does not support ext-session-lock-v1 with Quickshell (Mutter and KWin use compositor-native lockscreens)", compositor)
+    } else if !has_pam_auth {
+        "Host PAM configuration lacks compatible login/hyprlock authentication service for Quickshell".to_string()
     } else {
-        "Fully compatible with your Wayland compositor and ext-session-lock-v1".to_string()
+        "Fully compatible with your Wayland compositor, ext-session-lock-v1, and PAM authentication".to_string()
     };
     supported_adapters.push(LockscreenTargetCapability {
         adapter: "quickshell".to_string(),
@@ -374,11 +385,14 @@ pub fn detect_host_capabilities_in(home: &Path) -> HostCapabilities {
     });
 
     // 4. SDDM Login Screen Adapter
-    let sddm_supported = dm == "sddm" || has_sddm;
-    let sddm_reason = if dm != "sddm" && !has_sddm {
-        "SDDM is not installed or active as your display manager".to_string()
-    } else if dm != "sddm" && has_sddm {
-        "SDDM binary is installed but not active as the primary display-manager service".to_string()
+    let is_gdm = dm == "gdm";
+    let sddm_supported = dm == "sddm";
+    let sddm_reason = if is_gdm {
+        "Your system uses GDM as its active display manager. SDDM themes cannot be applied to GDM.".to_string()
+    } else if dm == "lightdm" {
+        "Your system uses LightDM as its active display manager. SDDM themes cannot be applied to LightDM.".to_string()
+    } else if dm != "sddm" {
+        "SDDM is not active as your system display manager.".to_string()
     } else {
         "SDDM is your active system display manager (requires administrator elevation to install system theme)".to_string()
     };
@@ -392,6 +406,23 @@ pub fn detect_host_capabilities_in(home: &Path) -> HostCapabilities {
         runtime_binary: "sddm".to_string(),
         binary_installed: has_sddm,
         protocol: "sddm-greeter".to_string(),
+    });
+
+    // 5. GDM Login Screen Adapter (Universal Linux Architecture)
+    supported_adapters.push(LockscreenTargetCapability {
+        adapter: "gdm".to_string(),
+        name: "GDM Login Screen".to_string(),
+        category: "login_screen".to_string(),
+        supported: false,
+        reason: if is_gdm {
+            "GDM is your active display manager, but Qylock does not provide GDM packages (only SDDM login screens). Ryzora protects GDM configuration from being modified.".to_string()
+        } else {
+            "GDM is not active as your system display manager.".to_string()
+        },
+        required_privilege: "administrator".to_string(),
+        runtime_binary: "gdm".to_string(),
+        binary_installed: has_gdm,
+        protocol: "gdm-shell".to_string(),
     });
 
     HostCapabilities {

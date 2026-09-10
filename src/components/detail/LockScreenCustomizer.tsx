@@ -115,25 +115,24 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
   return (
     <section
-      data-theme="dark"
-      className="rounded-2xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface,#131720)] text-[var(--rz-text,#f5f5f7)] overflow-hidden shadow-xl my-5"
+      className="rounded-2xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] text-[var(--rz-text)] overflow-hidden shadow-xl my-5"
     >
       {/* ── Header ── */}
-      <div className="px-5 py-4 border-b border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)]/80 flex items-center justify-between gap-4 flex-wrap">
+      <div className="px-5 py-4 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]/80 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400">
             <Sliders size={18} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-[var(--rz-text,#f5f5f7)] tracking-tight">
+              <h2 className="text-sm font-bold text-[var(--rz-text)] tracking-tight">
                 Authentic Theme Customization
               </h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 UPSTREAM VERIFIED
               </span>
             </div>
-            <p className="text-xs text-[var(--rz-text-secondary,#a6aab3)] mt-0.5">
+            <p className="text-xs text-[var(--rz-text-secondary)] mt-0.5">
               Configure supported runtime parameters for {packageItem.title}.
             </p>
           </div>
@@ -142,7 +141,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
         <button
           type="button"
           onClick={handleResetDefaults}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)] bg-[var(--rz-surface,#131720)] border border-[var(--rz-border-subtle,#242b38)] hover:border-[var(--rz-border-strong,#363e50)] transition-all cursor-pointer select-none"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong,#363e50)] transition-all cursor-pointer select-none"
         >
           <RotateCcw size={13} />
           <span>Reset Defaults</span>
@@ -155,7 +154,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Palette size={14} className="text-purple-400" />
-              <h3 className="text-[11px] font-mono font-bold uppercase tracking-wider text-[var(--rz-text-secondary,#a6aab3)]">
+              <h3 className="text-[11px] font-mono font-bold uppercase tracking-wider text-[var(--rz-text-secondary)]">
                 Theme Variant
               </h3>
             </div>
@@ -173,7 +172,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                     className={`relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex gap-3 select-none ${
                       isSelected
                         ? "bg-emerald-950/25 border-emerald-500 ring-1 ring-emerald-500/50 shadow-md"
-                        : "bg-[var(--rz-surface-elevated,#1a202c)] border-[var(--rz-border-subtle,#242b38)] hover:border-[var(--rz-border-strong,#363e50)] hover:bg-[var(--rz-surface-hover,#222938)]"
+                        : "bg-[var(--rz-surface-elevated)] border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong,#363e50)] hover:bg-[var(--rz-surface-hover,#222938)]"
                     }`}
                   >
                     {previewImg && (
@@ -189,12 +188,12 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
                     <div className="flex-1 min-w-0 pr-6">
                       <div className="flex items-center gap-1.5">
-                        <h4 className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] truncate">
+                        <h4 className="text-xs font-bold text-[var(--rz-text)] truncate">
                           {v.name}
                         </h4>
                       </div>
                       {v.description && (
-                        <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 line-clamp-2 leading-relaxed">
+                        <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5 line-clamp-2 leading-relaxed">
                           {v.description}
                         </p>
                       )}
@@ -217,7 +216,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Sliders size={14} className="text-emerald-400" />
-              <h3 className="text-[11px] font-mono font-bold uppercase tracking-wider text-[var(--rz-text-secondary,#a6aab3)]">
+              <h3 className="text-[11px] font-mono font-bold uppercase tracking-wider text-[var(--rz-text-secondary)]">
                 Runtime Options
               </h3>
             </div>
@@ -225,18 +224,18 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Option: themeMode (Dark / Light) */}
               {themeModeSpec && (
-                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
                   <div>
-                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-[var(--rz-text)] flex items-center gap-1.5">
                       <Moon size={14} className="text-purple-400" />
                       <span>{themeModeSpec.label || "Theme Appearance"}</span>
                     </span>
-                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                    <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5 leading-normal">
                       Select light or dark contrast palette for interface elements.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)]">
                     {themeModeSpec.options?.map((opt) => {
                       const currentVal = currentConfig["themeMode"] ?? themeModeSpec.default;
                       const active = String(currentVal) === String(opt.value);
@@ -249,7 +248,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                           className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                             active
                               ? "bg-emerald-500 text-black shadow-xs font-bold"
-                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                              : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                           }`}
                         >
                           {opt.value === "light" ? <Sun size={13} /> : <Moon size={13} />}
@@ -258,11 +257,11 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       );
                     })}
                   </div>
-                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted)] flex-wrap gap-1">
                     <span className="flex items-center gap-1">
                       <span className="text-emerald-400 font-bold">themeMode</span>
                       <span>→</span>
-                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["themeMode"] ?? themeModeSpec.default)}</span>
+                      <span className="text-[var(--rz-text)] font-semibold">{String(currentConfig["themeMode"] ?? themeModeSpec.default)}</span>
                     </span>
                     <span className="text-[10px] text-purple-300/90 text-right">
                       {getOptionEffect("themeMode", currentConfig["themeMode"] ?? themeModeSpec.default, packageItem.id)}
@@ -273,13 +272,13 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
               {/* Option: enableWindup (Windup toggle) */}
               {enableWindupSpec && (
-                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
                   <div>
-                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-[var(--rz-text)] flex items-center gap-1.5">
                       <Play size={14} className="text-amber-400" />
                       <span>{enableWindupSpec.label || "Windup Animation"}</span>
                     </span>
-                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                    <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5 leading-normal">
                       {enableWindupSpec.description || "Play mechanical gear train windup sequence during unlock."}
                     </p>
                   </div>
@@ -289,8 +288,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                     const isChecked = Boolean(val);
 
                     return (
-                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
-                        <span className="text-xs font-medium text-[var(--rz-text,#f5f5f7)]">
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)]">
+                        <span className="text-xs font-medium text-[var(--rz-text)]">
                           {isChecked ? "Windup Enabled (On)" : "Windup Disabled (Off)"}
                         </span>
                         <button
@@ -307,11 +306,11 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       </div>
                     );
                   })()}
-                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted)] flex-wrap gap-1">
                     <span className="flex items-center gap-1">
                       <span className="text-emerald-400 font-bold">enableWindup</span>
                       <span>→</span>
-                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["enableWindup"] !== undefined ? currentConfig["enableWindup"] : enableWindupSpec.default)}</span>
+                      <span className="text-[var(--rz-text)] font-semibold">{String(currentConfig["enableWindup"] !== undefined ? currentConfig["enableWindup"] : enableWindupSpec.default)}</span>
                     </span>
                     <span className="text-[10px] text-purple-300/90 text-right">
                       {getOptionEffect("enableWindup", currentConfig["enableWindup"] !== undefined ? currentConfig["enableWindup"] : enableWindupSpec.default, packageItem.id)}
@@ -322,18 +321,18 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
               {/* Option: background_mode (Terraria / Genshin atmosphere transition) */}
               {bgModeSpec && (
-                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
                   <div>
-                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-[var(--rz-text)] flex items-center gap-1.5">
                       <Shuffle size={14} className="text-cyan-400" />
                       <span>{bgModeSpec.label || "Background Mode"}</span>
                     </span>
-                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                    <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5 leading-normal">
                       {bgModeSpec.description || "Controls how dynamic wallpapers transition."}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                  <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)]">
                     {bgModeSpec.options?.map((opt) => {
                       const currentVal = currentConfig["background_mode"] ?? bgModeSpec.default;
                       const active = String(currentVal) === String(opt.value);
@@ -346,7 +345,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                           className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium rounded-md transition-all cursor-pointer text-center truncate ${
                             active
                               ? "bg-emerald-500 text-black font-bold shadow-xs"
-                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                              : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                           }`}
                         >
                           {opt.value === "time" ? <Clock size={12} /> : opt.value === "random" ? <Shuffle size={12} /> : <ImageIcon size={12} />}
@@ -355,11 +354,11 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       );
                     })}
                   </div>
-                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted)] flex-wrap gap-1">
                     <span className="flex items-center gap-1">
                       <span className="text-emerald-400 font-bold">background_mode</span>
                       <span>→</span>
-                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentBgMode)}</span>
+                      <span className="text-[var(--rz-text)] font-semibold">{String(currentBgMode)}</span>
                     </span>
                     <span className="text-[10px] text-purple-300/90 text-right">
                       {getOptionEffect("background_mode", currentBgMode, packageItem.id)}
@@ -373,13 +372,13 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                 <div
                   className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
                     isStaticBgActive
-                      ? "border-emerald-500/60 bg-[var(--rz-surface-elevated,#1a202c)] shadow-sm"
-                      : "border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)]/60 opacity-75"
+                      ? "border-emerald-500/60 bg-[var(--rz-surface-elevated)] shadow-sm"
+                      : "border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]/60 opacity-75"
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-[var(--rz-text)] flex items-center gap-1.5">
                         <ImageIcon size={14} className="text-amber-400" />
                         <span>{bgIndexSpec.label || "Static Biome Wallpaper"}</span>
                       </span>
@@ -389,12 +388,12 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                    <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5 leading-normal">
                       {bgIndexSpec.description || "Active wallpaper selection when in static mode."}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)]">
                     {bgIndexSpec.options?.map((opt) => {
                       const currentVal = currentConfig["background_index"] ?? bgIndexSpec.default;
                       const active = String(currentVal) === String(opt.value);
@@ -412,7 +411,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                           className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer text-center truncate ${
                             active
                               ? "bg-emerald-500 text-black font-bold shadow-xs"
-                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                              : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                           }`}
                         >
                           {opt.label}
@@ -420,11 +419,11 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       );
                     })}
                   </div>
-                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted)] flex-wrap gap-1">
                     <span className="flex items-center gap-1">
                       <span className="text-emerald-400 font-bold">background_index</span>
                       <span>→</span>
-                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["background_index"] ?? bgIndexSpec?.default)}</span>
+                      <span className="text-[var(--rz-text)] font-semibold">{String(currentConfig["background_index"] ?? bgIndexSpec?.default)}</span>
                     </span>
                     <span className="text-[10px] text-purple-300/90 text-right">
                       {getOptionEffect("background_index", currentConfig["background_index"] ?? bgIndexSpec?.default, packageItem.id)}
@@ -435,18 +434,18 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
               {/* Option: gameMode (osu / osumania rhythm gate vs direct login) */}
               {gameModeSpec && (
-                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
                   <div>
-                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-[var(--rz-text)] flex items-center gap-1.5">
                       <Gamepad2 size={14} className="text-pink-400" />
                       <span>{gameModeSpec.label || "Login Mode"}</span>
                     </span>
-                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                    <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5 leading-normal">
                       {gameModeSpec.description || "Select between rhythm game unlock gate or direct password authentication."}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)]">
                     {gameModeSpec.options?.map((opt) => {
                       const currentVal = currentConfig["gameMode"] ?? gameModeSpec.default;
                       const active = String(currentVal) === String(opt.value);
@@ -459,7 +458,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                           className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                             active
                               ? "bg-emerald-500 text-black font-bold shadow-xs"
-                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                              : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                           }`}
                         >
                           {opt.value === "game" ? <Gamepad2 size={13} /> : <KeyRound size={13} />}
@@ -468,11 +467,11 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       );
                     })}
                   </div>
-                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted)] flex-wrap gap-1">
                     <span className="flex items-center gap-1">
                       <span className="text-emerald-400 font-bold">gameMode</span>
                       <span>→</span>
-                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["gameMode"] ?? gameModeSpec.default)}</span>
+                      <span className="text-[var(--rz-text)] font-semibold">{String(currentConfig["gameMode"] ?? gameModeSpec.default)}</span>
                     </span>
                     <span className="text-[10px] text-purple-300/90 text-right">
                       {getOptionEffect("gameMode", currentConfig["gameMode"] ?? gameModeSpec.default, packageItem.id)}
@@ -491,14 +490,14 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                   return (
                     <div
                       key={key}
-                      className="p-3.5 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-2"
+                      className="p-3.5 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-2"
                     >
                       <div>
-                        <label className="text-xs font-bold text-[var(--rz-text,#f5f5f7)]">
+                        <label className="text-xs font-bold text-[var(--rz-text)]">
                           {spec.label}
                         </label>
                         {spec.description && (
-                          <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5">
+                          <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5">
                             {spec.description}
                           </p>
                         )}
@@ -508,7 +507,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                         <select
                           value={String(val)}
                           onChange={(e) => handleOptionChange(key, e.target.value)}
-                          className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)] text-[var(--rz-text,#f5f5f7)] focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
+                          className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
                         >
                           {spec.options.map((opt) => (
                             <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-100">
@@ -519,8 +518,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       )}
 
                       {spec.type === "boolean" && (
-                        <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
-                          <span className="text-xs font-medium text-[var(--rz-text,#f5f5f7)]">
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)]">
+                          <span className="text-xs font-medium text-[var(--rz-text)]">
                             {val ? "Enabled" : "Disabled"}
                           </span>
                           <button
@@ -545,15 +544,15 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
         )}
 
         {/* ── 3. Live Configuration Summary Readout ── */}
-        <div className="p-3.5 rounded-xl bg-[var(--rz-surface-elevated,#1a202c)] border border-[var(--rz-border-subtle,#242b38)] flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="p-3.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-[var(--rz-text,#f5f5f7)]">Materialization Target:</span>
+            <span className="font-semibold text-[var(--rz-text)]">Materialization Target:</span>
             <span className="font-mono text-emerald-400 font-bold">
               {activeVariant ? activeVariant.name : "Default"}
             </span>
             {optionEntries.length > 0 && (
-              <span className="text-[11px] text-[var(--rz-text-muted,#747d8f)]">
+              <span className="text-[11px] text-[var(--rz-text-muted)]">
                 ({optionEntries.length} verified parameters)
               </span>
             )}

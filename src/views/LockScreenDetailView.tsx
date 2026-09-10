@@ -102,19 +102,33 @@ export const LockScreenDetailView: React.FC = () => {
     systemInfo?.desktop_environment?.toLowerCase().includes("plasma");
   const isWayland = systemInfo?.session_type?.toLowerCase() === "wayland";
 
-  const isSessionLockSupported =
-    (systemIntegrationReport
-      ? systemIntegrationReport.display_server.toLowerCase() === "wayland" &&
-        !systemIntegrationReport.desktop.toLowerCase().includes("kde")
-      : (isWayland && !isKde)) ||
-    (hostCapabilities?.supported_adapters?.find((a) => a.adapter === "quickshell")?.supported ?? false);
+  const isGnome =
+    (systemIntegrationReport?.desktop?.toLowerCase().includes("gnome") ?? false) ||
+    (systemInfo?.desktop_environment?.toLowerCase().includes("gnome") ?? false);
 
-  const isLoginScreenSupported = systemIntegrationReport
-    ? systemIntegrationReport.login_manager !== "Unknown"
-    : true;
+  const isGdmActive =
+    systemIntegrationReport?.login_manager?.toLowerCase() === "gdm" ||
+    hostCapabilities?.display_manager?.toLowerCase() === "gdm" ||
+    ((systemInfo as any)?.display_manager?.toLowerCase() === "gdm");
+
+  const isSddmActiveHost =
+    (systemIntegrationReport?.login_manager?.toLowerCase() === "sddm" ||
+     hostCapabilities?.display_manager?.toLowerCase() === "sddm" ||
+     ((systemInfo as any)?.display_manager?.toLowerCase() === "sddm")) &&
+    !isGdmActive;
+
+  const isSessionLockSupported =
+    (hostCapabilities
+      ? (hostCapabilities.supported_adapters?.find((a) => a.adapter === "quickshell")?.supported ?? false)
+      : (isWayland && !isKde && !isGnome));
+
+  const isLoginScreenSupported =
+    (hostCapabilities
+      ? (hostCapabilities.supported_adapters?.find((a) => a.adapter === "sddm")?.supported ?? false)
+      : isSddmActiveHost);
 
   const canQs = Boolean(selectedPackage.supports_session_lock && isSessionLockSupported);
-  const canSddm = Boolean(selectedPackage.supports_login_screen && isLoginScreenSupported);
+  const canSddm = Boolean(selectedPackage.supports_login_screen && isLoginScreenSupported && !isGdmActive);
 
   const [selectedTarget, setSelectedTarget] = useState<"quickshell" | "sddm" | "both">(() => {
     if (canQs && canSddm) return "quickshell";
@@ -357,6 +371,8 @@ export const LockScreenDetailView: React.FC = () => {
         missingDependencies={missingDependencies}
         selectedTarget={selectedTarget}
         isSessionLockSupported={isSessionLockSupported}
+        isLoginScreenSupported={isLoginScreenSupported}
+        isGdmActive={isGdmActive}
       />
 
       {/* ── Technical Detail Tabs ── */}

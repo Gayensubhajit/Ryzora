@@ -551,6 +551,12 @@ pub fn generate_installation_plan_target_in_with_trust(
         }
     }
 
+    // Display manager compatibility guard (Universal Linux Architecture)
+    let (active_dm, _, _) = crate::host::detect_display_manager();
+    if (target == Some("sddm") || target == Some("both")) && active_dm == "gdm" && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+        conflicts.push("Your system uses GDM as its active display manager. SDDM themes cannot be installed into GDM.".to_string());
+    }
+
     // Compatibility check (SDDM is a display manager greeter, not a user desktop session)
     let is_sddm_target = target == Some("sddm");
     let reqs = CompatibilityRequirements {
@@ -3520,6 +3526,10 @@ pub fn apply_lockscreen_target_in_with_config(
 
     // 2. SDDM target activation (privileged system integration)
     if target_norm == "sddm" || target_norm == "both" {
+        let (active_dm, _, _) = crate::host::detect_display_manager();
+        if active_dm == "gdm" && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+            return Err("Cannot apply SDDM theme: GDM is active as the system display manager. SDDM themes are not compatible with GDM.".to_string());
+        }
         let helper_status = crate::sddm_helper::detect_privileged_helper_status();
         if !helper_status.installed {
             return Err(format!(
@@ -4026,6 +4036,21 @@ if [ "$XDG_CURRENT_DESKTOP" = "Hyprland" ] || [ -n "$HYPRLAND_INSTANCE_SIGNATURE
     hyprctl keyword misc:allow_session_lock_restore 1 2>/dev/null || true
 fi
 
+# Detect best available PAM service for Quickshell unlock
+if [ -f /etc/pam.d/hyprlock ]; then
+    export RYZORA_PAM_SERVICE="hyprlock"
+elif [ -f /etc/pam.d/login ]; then
+    export RYZORA_PAM_SERVICE="login"
+elif [ -f /etc/pam.d/system-local-login ]; then
+    export RYZORA_PAM_SERVICE="system-local-login"
+elif [ -f /etc/pam.d/system-auth ]; then
+    export RYZORA_PAM_SERVICE="system-auth"
+elif [ -f /etc/pam.d/gdm-password ]; then
+    export RYZORA_PAM_SERVICE="gdm-password"
+else
+    export RYZORA_PAM_SERVICE="login"
+fi
+
 # Do NOT kill existing lockers with kill -9! Wayland ext_session_lock_v1 treats killed clients as security breach.
 # If quickshell lockscreen is already running, avoid launching a duplicate.
 if pgrep -f "quickshell.*lock_shell.qml" > /dev/null 2>&1; then
@@ -4245,7 +4270,7 @@ Item {
 
     PamContext {
         id: pam
-        config: "hyprlock"
+        config: Quickshell.env("RYZORA_PAM_SERVICE") || "hyprlock"
         property string pendingPassword: ""
         onResponseRequiredChanged: {
             if (responseRequired && pendingPassword !== "") {

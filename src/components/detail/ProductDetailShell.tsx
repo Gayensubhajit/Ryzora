@@ -26,7 +26,7 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
   }, [onClose]);
 
   return (
-    <div data-theme="dark" className="fixed inset-0 z-50 flex flex-col bg-[var(--rz-bg,#090b0e)] text-[var(--rz-text,#f5f5f7)] antialiased overflow-hidden opacity-100 animate-in fade-in duration-200 dark">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--rz-bg)] text-[var(--rz-text)] antialiased overflow-hidden opacity-100 animate-in fade-in duration-200">
       {/* ── Ambient Blurred Artwork Background (Detail View only) ── */}
       {bgImage && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
@@ -39,7 +39,7 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
       )}
 
       {/* ── Top Fixed Navigation Bar ── */}
-      <header className="relative z-10 flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-bg,#090b0e)]/95 backdrop-blur-md shrink-0">
+      <header className="relative z-10 flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-bg)]/95 backdrop-blur-md shrink-0">
         <button
           type="button"
           onClick={onClose}

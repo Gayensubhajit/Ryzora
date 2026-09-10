@@ -9,6 +9,8 @@ interface CompatibilityPanelProps {
   missingDependencies?: string[];
   selectedTarget?: "quickshell" | "sddm" | "both";
   isSessionLockSupported?: boolean;
+  isLoginScreenSupported?: boolean;
+  isGdmActive?: boolean;
 }
 
 export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
@@ -17,6 +19,8 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   missingDependencies = [],
   selectedTarget = "quickshell",
   isSessionLockSupported = true,
+  isLoginScreenSupported = true,
+  isGdmActive = false,
 }) => {
   const [showEvidence, setShowEvidence] = React.useState(false);
   const currentWm = systemInfo?.window_manager?.toLowerCase() || "";
@@ -131,17 +135,42 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
     );
   }
 
-  // KDE / KWin protocol failure warning for Session Lock
+  // GDM Display Manager Incompatibility Warning
+  if (isGdmActive && (selectedTarget === "sddm" || selectedTarget === "both" || !isLoginScreenSupported)) {
+    return (
+      <div className="p-3.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-900 dark:text-sky-200 my-3 text-xs flex items-start gap-2.5">
+        <Monitor className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-sky-950 dark:text-sky-100">
+              Login Screen — Unsupported on GDM
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase bg-sky-500/20 text-sky-300 border border-sky-400/30 shrink-0">
+              Display Manager: GDM
+            </span>
+          </div>
+          <p className="mt-1 text-sky-900 dark:text-sky-900/90 dark:text-sky-200/90 text-[11px] leading-relaxed">
+            This package provides an SDDM login theme, but your system uses <strong>GDM (GNOME Display Manager)</strong>. GDM uses GNOME Shell instead of Qt/QML greeters. Ryzora protects your display manager by not installing SDDM themes into GDM.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // KDE / GNOME protocol failure warning for Session Lock
   if (!isSessionLockSupported && (selectedTarget === "quickshell" || selectedTarget === "both")) {
+    const isGnome = (systemInfo?.desktop_environment || "").toLowerCase().includes("gnome") || currentWm.includes("mutter");
     return (
       <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 my-3 text-xs flex items-start gap-2.5">
         <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="min-w-0">
           <div className="font-bold text-amber-950 dark:text-amber-100">
-            Protocol Unsupported: ext-session-lock-v1
+            Session Lock Unavailable
           </div>
           <p className="mt-1 text-amber-900 dark:text-amber-900/90 dark:text-amber-200/90 text-[11px] leading-relaxed">
-            Your current window manager ({currentWm || "KWin"}) does not implement the Wayland <code>ext-session-lock-v1</code> protocol required by Quickshell. You can still install this theme as an <strong>SDDM Login Screen</strong>.
+            {isGnome
+              ? "GNOME / Mutter uses a built-in lockscreen and does not support ext-session-lock-v1 for external lockers. Quickshell session lock is unavailable."
+              : `Your current window manager (${currentWm || "KWin"}) does not implement the Wayland ext-session-lock-v1 protocol required by Quickshell.`}
           </p>
         </div>
       </div>
