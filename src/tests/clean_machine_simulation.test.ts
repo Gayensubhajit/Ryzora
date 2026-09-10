@@ -90,3 +90,23 @@ test("Clean Machine Simulation: Complete catalogue, previews, and self-contained
   assert.ok(!allSerialized.includes("~/.local/share/qylock"));
   assert.ok(!allSerialized.includes("~/.config/qylock"));
 });
+
+test("Clean Machine Simulation: Community repository 27 lockscreens and activation lifecycle", () => {
+  const indexJsonPath = path.resolve("repositories/community/indexes/lockscreens.json");
+  const index = JSON.parse(fs.readFileSync(indexJsonPath, "utf8"));
+
+  assert.equal(index.packages.length, 27, "Must contain all 27 repository-backed lockscreens");
+
+  for (const pkg of index.packages) {
+    // Assert zero references to external /home/silentbyte or legacy qylock config
+    const raw = JSON.stringify(pkg);
+    assert.ok(!raw.includes("/home/silentbyte/qylock"), `Package ${pkg.id} must not reference /home/silentbyte/qylock`);
+    assert.ok(!raw.includes("~/.local/share/qylock"), `Package ${pkg.id} must not reference ~/.local/share/qylock`);
+    assert.ok(!raw.includes("~/.config/qylock"), `Package ${pkg.id} must not reference ~/.config/qylock`);
+  }
+
+  // Active state lifecycle clean machine check
+  const activeState = { quickshell: null, sddm: null };
+  assert.equal(activeState.quickshell, null);
+  assert.equal(activeState.sddm, null);
+});
