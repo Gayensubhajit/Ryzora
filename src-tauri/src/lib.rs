@@ -22,6 +22,9 @@ pub mod system;
 pub mod updates;
 pub mod sddm_helper;
 pub mod hypridle;
+pub mod ownership;
+pub mod engine;
+pub mod app_adapters;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -144,6 +147,20 @@ pub fn run() {
             providers::search_content_providers,
             providers::synthesize_provider_manifest,
             providers::prepare_provider_package,
+            // Universal Package Engine & Ownership Ledger (Phase 22)
+            engine::get_pipeline_stages,
+            engine::engine_install_package,
+            engine::engine_uninstall_package,
+            ownership::query_file_owner,
+            ownership::list_owned_files,
+            ownership::check_ownership_conflicts,
+            // Universal Application Center & Adapters (Phase 23)
+            app_adapters::get_host_app_ecosystem,
+            app_adapters::pacman_search_packages,
+            app_adapters::pacman_get_package_details,
+            app_adapters::pacman_list_installed_packages,
+            app_adapters::pacman_install_package,
+            app_adapters::pacman_uninstall_package, app_adapters::resolve_desktop_app_icon,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

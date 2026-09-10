@@ -33,6 +33,7 @@ const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
   collections: { title: "Collections", subtitle: "Saved package lists in .ryzlist format" },
   integrity: { title: "Integrity Health", subtitle: "Read-only verification of installed packages" },
   "compatibility-lab": { title: "Compatibility Lab", subtitle: "Host capabilities and runtime adapter intersection visualizer" },
+  apps: { title: "Applications", subtitle: "Linux native and universal software packages" },
 };
 
 /** Categories that use the new art-forward dense store grid */

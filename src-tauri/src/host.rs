@@ -475,7 +475,7 @@ pub fn get_compatibility_lab_profiles_in(home: &Path) -> Vec<HostProfileFixture>
     ubuntu_cmds.insert("sddm".to_string(), false);
     ubuntu_cmds.insert("gdm".to_string(), true);
     ubuntu_cmds.insert("lightdm".to_string(), false);
-    ubuntu_cmds.insert("pkexec".to_string(), true);
+    ubuntu_cmds.insert("pkexec".to_string(), true); // probe binary
 
     profiles.push(HostProfileFixture {
         id: "simulated_ubuntu_gnome".to_string(),
@@ -572,7 +572,7 @@ pub fn get_compatibility_lab_profiles_in(home: &Path) -> Vec<HostProfileFixture>
     fedora_cmds.insert("sddm".to_string(), true);
     fedora_cmds.insert("gdm".to_string(), false);
     fedora_cmds.insert("lightdm".to_string(), false);
-    fedora_cmds.insert("pkexec".to_string(), true);
+    fedora_cmds.insert("pkexec".to_string(), true); // probe binary
 
     profiles.push(HostProfileFixture {
         id: "simulated_fedora_kde".to_string(),
@@ -647,7 +647,7 @@ pub fn get_compatibility_lab_profiles_in(home: &Path) -> Vec<HostProfileFixture>
     arch_cmds.insert("sddm".to_string(), true);
     arch_cmds.insert("gdm".to_string(), false);
     arch_cmds.insert("lightdm".to_string(), false);
-    arch_cmds.insert("pkexec".to_string(), true);
+    arch_cmds.insert("pkexec".to_string(), true); // probe binary
 
     profiles.push(HostProfileFixture {
         id: "simulated_arch_hyprland".to_string(),
@@ -733,7 +733,7 @@ pub fn get_compatibility_lab_profiles_in(home: &Path) -> Vec<HostProfileFixture>
     sway_cmds.insert("sddm".to_string(), false);
     sway_cmds.insert("gdm".to_string(), true);
     sway_cmds.insert("lightdm".to_string(), false);
-    sway_cmds.insert("pkexec".to_string(), true);
+    sway_cmds.insert("pkexec".to_string(), true); // probe binary
 
     profiles.push(HostProfileFixture {
         id: "simulated_arch_sway".to_string(),
@@ -819,7 +819,7 @@ pub fn get_compatibility_lab_profiles_in(home: &Path) -> Vec<HostProfileFixture>
     debian_cmds.insert("sddm".to_string(), false);
     debian_cmds.insert("gdm".to_string(), false);
     debian_cmds.insert("lightdm".to_string(), true);
-    debian_cmds.insert("pkexec".to_string(), true);
+    debian_cmds.insert("pkexec".to_string(), true); // probe binary
 
     profiles.push(HostProfileFixture {
         id: "simulated_debian_x11".to_string(),

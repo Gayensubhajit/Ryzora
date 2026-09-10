@@ -1073,6 +1073,7 @@ listener {
 
     #[test]
     fn test_hook_and_unhook_waybar_lock_trigger() {
+        let _guard = crate::TEST_ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
         let home = test_home("waybar-hook");
         std::env::set_var("RYZORA_SYSTEM_ROOT", &home);
 

@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   FlaskConical,
+  AppWindow,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
@@ -41,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenAbout }) => {
   const primaryNav: NavItem[] = [
     { id: "hub",         label: "Home",        icon: <Globe className="w-4 h-4" /> },
     { id: "discover",    label: "Discover",    icon: <Compass className="w-4 h-4" /> },
+    { id: "apps",        label: "Apps",        icon: <AppWindow className="w-4 h-4" /> },
     {
       id: "installed",   label: "Library",     icon: <Library className="w-4 h-4" />,
       badge: installedPackageIds.length,

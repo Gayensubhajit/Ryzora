@@ -6,6 +6,7 @@ import type {
   LockscreenSourceSpec,
   LockscreenTargetsSpec,
   LockscreenProvenance,
+  PackageMediaSpec,
 } from "./types.ts";
 import type {
   PackageItem,
@@ -716,9 +717,20 @@ export function getCatalogueLockScreens(): PackageItem[] {
 export const qylockLockscreenProvider: LockscreenProvider = {
   id: "qylock",
   name: "Qylock Upstream Provider",
+  // Phase 22: category field required by PackageProvider<T>
+  category: "lockscreen",
   discover: () => RAW_QYLOCK_THEMES.map(normalizeQylockTheme),
   normalize: (raw: any) => normalizeQylockTheme(raw),
+  // getPreview kept for backward compatibility with LockscreenProvider callers
   getPreview: (pkg: PackageItem): LockscreenMediaSpec => ({
+    poster: pkg.preview_poster_url || pkg.hero_image,
+    preview_video: pkg.preview_video_url,
+    preview_animated: pkg.lockscreen?.media.preview_animated,
+    upstream_video: pkg.lockscreen?.media.upstream_video,
+    upstream_animated: pkg.lockscreen?.media.upstream_animated,
+  }),
+  // Phase 22: getMedia implements PackageProvider<T>.getMedia
+  getMedia: (pkg: PackageItem): PackageMediaSpec => ({
     poster: pkg.preview_poster_url || pkg.hero_image,
     preview_video: pkg.preview_video_url,
     preview_animated: pkg.lockscreen?.media.preview_animated,
@@ -731,6 +743,7 @@ export const qylockLockscreenProvider: LockscreenProvider = {
     revision: "main",
     path: "themes/" + pkg.id.replace("lockscreen-qylock-", ""),
   }),
+  // Phase 22: getTargets returns PackageTargetSpec[] alongside legacy LockscreenTargetsSpec
   getTargets: (pkg: PackageItem): LockscreenTargetsSpec => ({
     quickshell: pkg.supports_session_lock ?? true,
     sddm: pkg.supports_login_screen ?? true,

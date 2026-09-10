@@ -24,7 +24,8 @@ export type CategoryId =
   | "notifications"
   | "collections"
   | "integrity"
-  | "compatibility-lab";
+  | "compatibility-lab"
+  | "apps";
 
 export type DesktopEnvironment =
   | "hyprland"
@@ -54,7 +55,8 @@ export type PackageType =
   | "cursor"
   | "font"
   | "widget"
-  | "bundle";
+  | "bundle"
+  | "app";
 
 /** Compatibility block inside a manifest — uses author-facing field names. */
 export interface ManifestCompatibility {
@@ -1074,7 +1076,8 @@ export type Phase15CategoryId =
   | "notifications"
   | "collections"
   | "integrity"
-  | "compatibility-lab";
+  | "compatibility-lab"
+  | "apps";
 
 export interface ActiveLockscreenState {
   quickshell?: string | null;
