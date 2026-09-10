@@ -109,7 +109,7 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
             mode="card"
             isHovered={isHovered}
             aspectRatio="16/9"
-            showBadge={packageItem.media_type === "video" || packageItem.media_type === "animated"}
+            showBadge={false}
             className="transition-transform duration-500 ease-out group-hover:scale-105"
           />
         ) : (
@@ -155,10 +155,22 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
 
         {/* Top-Left Trust & Login badges (Normal state) */}
-        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-10">
+        <div className="absolute top-2 left-2 flex items-center gap-1.5 z-10">
           {isSddmLogin && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500/85 text-black shadow-xs">
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500/90 text-black shadow-xs">
               SDDM
+            </span>
+          )}
+          {packageItem.media_type === "video" && (
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/60 text-white/95 border border-white/10 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              Video
+            </span>
+          )}
+          {packageItem.media_type === "animated" && (
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/60 text-white/95 border border-white/10 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Animated
             </span>
           )}
           {packageItem.trust_tier === "official" && (
