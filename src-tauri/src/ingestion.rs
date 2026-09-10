@@ -1128,6 +1128,12 @@ pub fn ingest_submission_into_repository(
         trending_score: Some(0.0),
         maintainer,
         release_notes,
+        provider: None,
+        targets: None,
+        preview_video: None,
+        preview_animated: None,
+        source: None,
+        provenance: None,
         signature: sig_meta,
     };
 
@@ -1913,6 +1919,12 @@ fake
                 maintainer: None,
                 release_notes: None,
                 signature: None,
+                provider: None,
+                targets: None,
+                preview_video: None,
+                preview_animated: None,
+                source: None,
+                provenance: None,
             }],
         };
         fs::write(

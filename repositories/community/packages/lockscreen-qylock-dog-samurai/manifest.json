@@ -44,5 +44,27 @@
       "target": "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/theme.conf",
       "description": "Dog Samurai configuration file."
     }
-  ]
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": true,
+    "sddm": true
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/dog-samurai"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/dog-samurai"
+  },
+  "media": {
+    "poster": "assets/lockscreens/dog-samurai-poster.jpg",
+    "preview_video": "assets/lockscreens/dog-samurai-preview.mp4",
+    "preview_animated": "assets/lockscreens/dog-samurai.gif"
+  }
 }

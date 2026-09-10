@@ -1016,6 +1016,12 @@ pub fn export_to_repository(
         maintainer: inherited_maintainer,
         release_notes: inherited_notes,
         signature: crate::crypto::load_package_signature(package_dir),
+        provider: None,
+        targets: None,
+        preview_video: None,
+        preview_animated: None,
+        source: None,
+        provenance: None,
     };
 
     if let Some(pos) = index.packages.iter().position(|p| p.id == manifest.id) {

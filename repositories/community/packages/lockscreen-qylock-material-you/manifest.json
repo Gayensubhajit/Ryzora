@@ -43,5 +43,27 @@
       "target": "~/.local/share/ryzora/lockscreens/qylock/material-you/theme.conf",
       "description": "Material You configuration file."
     }
-  ]
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": true,
+    "sddm": true
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/material-you"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/material-you"
+  },
+  "media": {
+    "poster": "assets/lockscreens/material-you-poster.jpg",
+    "preview_video": "assets/lockscreens/material-you-preview.mp4",
+    "preview_animated": "assets/lockscreens/material-you.gif"
+  }
 }

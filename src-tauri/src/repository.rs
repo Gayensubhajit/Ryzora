@@ -32,6 +32,32 @@ pub struct AuthorInfo {
     pub verified: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PackageSourceSpec {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PackageProvenanceSpec {
+    pub upstream: String,
+    pub revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepositoryPackageEntry {
     pub id: String,
@@ -78,6 +104,18 @@ pub struct RepositoryPackageEntry {
     pub release_notes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<crate::crypto::PackageSignatureMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub targets: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_video: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_animated: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<PackageSourceSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<PackageProvenanceSpec>,
 }
 
 impl Default for RepositoryPackageEntry {
@@ -112,6 +150,12 @@ impl Default for RepositoryPackageEntry {
             maintainer: None,
             release_notes: None,
             signature: None,
+            provider: None,
+            targets: None,
+            preview_video: None,
+            preview_animated: None,
+            source: None,
+            provenance: None,
         }
     }
 }
@@ -238,6 +282,18 @@ pub struct FrontendPackageItem {
     pub signature: Option<crate::crypto::PackageSignatureMetadata>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cryptographic_status: Option<crate::crypto::CryptographicStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub targets: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_video: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_animated: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<PackageSourceSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<PackageProvenanceSpec>,
 }
 
 fn default_integrity_status() -> String {
@@ -1858,12 +1914,24 @@ impl RepositoryManager {
                 continue;
             }
 
+            // Direct repository check (e.g. if search_dir itself is a repository root)
+            if search_dir.join("repository.json").is_file() {
+                if let Ok(local_repo) = LocalRepository::load_from_dir(search_dir) {
+                    if !self.repositories.iter().any(|r| r.id() == local_repo.id()) {
+                        self.repositories.push(Box::new(local_repo));
+                    }
+                    continue;
+                }
+            }
+
             if let Ok(entries) = fs::read_dir(search_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.is_dir() && path.join("repository.json").is_file() {
                         if let Ok(local_repo) = LocalRepository::load_from_dir(&path) {
-                            self.repositories.push(Box::new(local_repo));
+                            if !self.repositories.iter().any(|r| r.id() == local_repo.id()) {
+                                self.repositories.push(Box::new(local_repo));
+                            }
                         }
                     }
                 }
@@ -2189,6 +2257,12 @@ impl RepositoryManager {
                     release_notes: entry.release_notes.clone(),
                     signature: entry.signature.clone(),
                     cryptographic_status: Some(crypto_eval.status),
+                    provider: entry.provider.clone(),
+                    targets: entry.targets.clone(),
+                    preview_video: entry.preview_video.clone(),
+                    preview_animated: entry.preview_animated.clone(),
+                    source: entry.source.clone(),
+                    provenance: entry.provenance.clone(),
                 };
 
                 all_packages.push(item);
@@ -2222,7 +2296,7 @@ pub fn load_repository_configs() -> Vec<RepositorySourceConfig> {
     }
 
     // Default configurations: Official & Community remotes (GitHub-backed) + Local repository
-    vec![
+    let mut default_configs = vec![
         RepositorySourceConfig {
             id: "ryzora-official".to_string(),
             name: "Ryzora Official (GitHub)".to_string(),
@@ -2247,7 +2321,21 @@ pub fn load_repository_configs() -> Vec<RepositorySourceConfig> {
             enabled: true,
             repo_type: "local".to_string(),
         },
-    ]
+    ];
+
+    if let Ok(override_repo) = std::env::var("RYZORA_REPOSITORY") {
+        let trimmed = override_repo.trim();
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            for cfg in &mut default_configs {
+                if cfg.id == "ryzora-community" {
+                    cfg.url = trimmed.to_string();
+                    cfg.enabled = true;
+                }
+            }
+        }
+    }
+
+    default_configs
 }
 
 pub fn save_repository_configs(configs: &[RepositorySourceConfig]) -> Result<(), String> {
@@ -2263,6 +2351,24 @@ pub fn save_repository_configs(configs: &[RepositorySourceConfig]) -> Result<(),
 
 pub fn get_default_repository_search_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
+
+    // Check developer override RYZORA_REPOSITORY (file:// or local path)
+    if let Ok(override_repo) = std::env::var("RYZORA_REPOSITORY") {
+        let trimmed = override_repo.trim();
+        if !trimmed.is_empty() {
+            if let Some(file_path) = trimmed.strip_prefix("file://") {
+                let p = PathBuf::from(file_path);
+                if p.is_dir() {
+                    dirs.push(p);
+                }
+            } else if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+                let p = PathBuf::from(trimmed);
+                if p.is_dir() {
+                    dirs.push(p);
+                }
+            }
+        }
+    }
 
     if let Ok(cwd) = std::env::current_dir() {
         dirs.push(cwd.join("repositories"));
@@ -4099,6 +4205,12 @@ mod tests {
             maintainer: None,
             release_notes: None,
             signature: None,
+            provider: None,
+            targets: None,
+            preview_video: None,
+            preview_animated: None,
+            source: None,
+            provenance: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4142,6 +4254,12 @@ mod tests {
             maintainer: None,
             release_notes: None,
             signature: None,
+            provider: None,
+            targets: None,
+            preview_video: None,
+            preview_animated: None,
+            source: None,
+            provenance: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4181,6 +4299,12 @@ mod tests {
             maintainer: None,
             release_notes: None,
             signature: None,
+            provider: None,
+            targets: None,
+            preview_video: None,
+            preview_animated: None,
+            source: None,
+            provenance: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4759,6 +4883,12 @@ mod tests {
             maintainer: None,
             release_notes: None,
             signature: None,
+            provider: None,
+            targets: None,
+            preview_video: None,
+            preview_animated: None,
+            source: None,
+            provenance: None,
         };
 
         assert!(validate_repository_package_entry(&pkg).is_err());
@@ -4930,5 +5060,111 @@ mod tests {
 
         assert_eq!(tampered_item.integrity_status, "corrupted");
         assert_eq!(tampered_item.safety_audit.rating, "corrupted");
+    }
+
+    static REPO_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct EnvGuard(&'static str);
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(self.0);
+        }
+    }
+
+    #[test]
+    fn test_ryzora_repository_file_override() {
+        let _lock = REPO_ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard("RYZORA_REPOSITORY");
+        let temp_base = std::env::temp_dir().join(format!("ryzora_test_repo_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let repo_path = temp_base.join("my-custom-repo");
+        fs::create_dir_all(&repo_path).unwrap();
+
+        let repo_json = r#"{
+            "schema": 1,
+            "id": "my-custom-repo",
+            "name": "Custom Repo",
+            "version": "1.0.0",
+            "description": "Custom developer repository",
+            "packages": []
+        }"#;
+        fs::write(repo_path.join("repository.json"), repo_json).unwrap();
+
+        std::env::set_var(
+            "RYZORA_REPOSITORY",
+            format!("file://{}", repo_path.to_str().unwrap()),
+        );
+
+        let search_dirs = get_default_repository_search_dirs();
+        assert!(search_dirs.contains(&repo_path));
+
+        let mut manager = RepositoryManager::new();
+        manager.discover_local_repositories(&search_dirs);
+        assert!(manager.repositories.iter().any(|r| r.id() == "my-custom-repo"));
+
+        std::env::remove_var("RYZORA_REPOSITORY");
+        let _ = fs::remove_dir_all(&temp_base);
+        let _ = fs::remove_dir_all(&temp_base);
+    }
+
+    #[test]
+    fn test_ryzora_repository_remote_override() {
+        let _lock = REPO_ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard("RYZORA_REPOSITORY");
+        std::env::set_var(
+            "RYZORA_REPOSITORY",
+            "https://my-custom-mirror.org/ryzora-community",
+        );
+
+        let configs = load_repository_configs();
+        let community = configs.iter().find(|c| c.id == "ryzora-community").unwrap();
+        assert_eq!(
+            community.url,
+            "https://my-custom-mirror.org/ryzora-community"
+        );
+        assert!(community.enabled);
+
+        std::env::remove_var("RYZORA_REPOSITORY");
+    }
+
+    #[test]
+    fn test_qylock_package_schema_provenance_and_source() {
+        let entry_json = r#"{
+            "id": "lockscreen-qylock-dog-samurai",
+            "name": "Dog Samurai",
+            "version": "1.0.0",
+            "package_type": "lockscreen",
+            "description": "A cinematic video lock",
+            "manifest": "packages/lockscreen-qylock-dog-samurai/manifest.json",
+            "category": "lockscreens",
+            "tags": ["samurai", "video"],
+            "author": { "name": "Darkkal44", "avatar": "", "verified": true },
+            "provider": "qylock",
+            "targets": ["quickshell", "sddm"],
+            "preview_video": "assets/lockscreens/dog-samurai-preview.mp4",
+            "preview_animated": "assets/lockscreens/dog-samurai.gif",
+            "source": {
+                "type": "git",
+                "repository": "https://github.com/Darkkal44/qylock",
+                "revision": "main",
+                "path": "themes/dog-samurai"
+            },
+            "provenance": {
+                "upstream": "https://github.com/Darkkal44/qylock",
+                "revision": "main",
+                "license": "GPL-3.0",
+                "path": "themes/dog-samurai"
+            }
+        }"#;
+
+        let entry: RepositoryPackageEntry = serde_json::from_str(entry_json).unwrap();
+        assert_eq!(entry.provider, Some("qylock".to_string()));
+        assert_eq!(entry.targets, Some(vec!["quickshell".to_string(), "sddm".to_string()]));
+        assert_eq!(entry.preview_video, Some("assets/lockscreens/dog-samurai-preview.mp4".to_string()));
+        let source = entry.source.unwrap();
+        assert_eq!(source.source_type, "git");
+        assert_eq!(source.repository, Some("https://github.com/Darkkal44/qylock".to_string()));
+        let prov = entry.provenance.unwrap();
+        assert_eq!(prov.upstream, "https://github.com/Darkkal44/qylock");
+        assert_eq!(prov.license, Some("GPL-3.0".to_string()));
     }
 }

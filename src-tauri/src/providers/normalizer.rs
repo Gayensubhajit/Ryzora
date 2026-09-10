@@ -88,5 +88,11 @@ pub fn normalize_provider_item(item: ProviderItem) -> FrontendPackageItem {
         release_notes: None,
         signature: None,
         cryptographic_status: None,
+        provider: None,
+        targets: None,
+        preview_video: None,
+        preview_animated: None,
+        source: None,
+        provenance: None,
     }
 }

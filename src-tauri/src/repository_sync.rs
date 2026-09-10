@@ -342,13 +342,13 @@ mod tests {
             "Default manager should discover repositories"
         );
 
-        let first = &list[0];
-        assert!(!first.id.is_empty());
-        assert_eq!(first.available_channels, vec!["stable", "beta", "nightly"]);
+        let target = list.iter().find(|r| r.id == "community").unwrap_or(&list[0]);
+        assert!(!target.id.is_empty());
+        assert_eq!(target.available_channels, vec!["stable", "beta", "nightly"]);
 
-        let report = refresh_repository_sync(first.id.clone());
+        let report = refresh_repository_sync(target.id.clone());
         assert!(report.is_ok());
         let r = report.unwrap();
-        assert_eq!(r.repository_id, first.id);
+        assert_eq!(r.repository_id, target.id);
     }
 }

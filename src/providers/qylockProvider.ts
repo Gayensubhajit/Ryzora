@@ -1,4 +1,11 @@
 import type {
+  LockscreenProvider,
+  LockscreenMediaSpec,
+  LockscreenSourceSpec,
+  LockscreenTargetsSpec,
+  LockscreenProvenance,
+} from "./types.ts";
+import type {
   PackageItem,
   LockscreenManifest,
   LockscreenTargetType,
@@ -585,3 +592,42 @@ export function getCatalogueLockScreens(): PackageItem[] {
 
   return [...normalizedQylock, auroraHyprlock, swaylockBlur];
 }
+
+
+/**
+ * Pluggable LockscreenProvider implementation for Qylock themes.
+ */
+export const qylockLockscreenProvider: LockscreenProvider = {
+  id: "qylock",
+  name: "Qylock Upstream Provider",
+  discover: () => RAW_QYLOCK_THEMES.map(normalizeQylockTheme),
+  normalize: (raw: any) => normalizeQylockTheme(raw),
+  getPreview: (pkg: PackageItem): LockscreenMediaSpec => ({
+    poster: pkg.preview_poster_url || pkg.hero_image,
+    preview_video: pkg.preview_video_url,
+    preview_animated: pkg.lockscreen?.media.preview_animated,
+    upstream_video: pkg.lockscreen?.media.upstream_video,
+    upstream_animated: pkg.lockscreen?.media.upstream_animated,
+  }),
+  getSource: (pkg: PackageItem): LockscreenSourceSpec => ({
+    type: "git",
+    repository: "https://github.com/Darkkal44/qylock",
+    revision: "main",
+    path: "themes/" + pkg.id.replace("lockscreen-qylock-", ""),
+  }),
+  getTargets: (pkg: PackageItem): LockscreenTargetsSpec => ({
+    quickshell: pkg.supports_session_lock ?? true,
+    sddm: pkg.supports_login_screen ?? true,
+  }),
+  getDependencies: (_pkg: PackageItem, target: string): string[] => {
+    if (target === "sddm") return ["sddm", "qt6-declarative", "qt6-svg"];
+    if (target === "quickshell") return ["quickshell", "qt6-multimedia"];
+    return ["quickshell", "sddm", "qt6-multimedia"];
+  },
+  getProvenance: (pkg: PackageItem): LockscreenProvenance => ({
+    upstream: "https://github.com/Darkkal44/qylock",
+    revision: "main",
+    license: "GPL-3.0",
+    path: "themes/" + pkg.id.replace("lockscreen-qylock-", ""),
+  }),
+};

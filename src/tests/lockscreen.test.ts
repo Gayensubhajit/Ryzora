@@ -1,3 +1,8 @@
+import {
+  qylockLockscreenProvider,
+  getLockscreenProvider,
+  getAllLockscreenProviders,
+} from "../providers/index.ts";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -539,5 +544,107 @@ test("18. Animated & Video Theme Invariants: Never silently degrade to generic s
       theme.lockscreen?.media.preview_animated,
       `Theme ${theme.title} must have animated preview fallback`
     );
+  }
+});
+
+test("19. Pluggable LockscreenProvider Contract: Providers implement uniform lifecycle interface", () => {
+  const qylock = getLockscreenProvider("qylock");
+  assert.ok(qylock, "qylock provider must be registered");
+  assert.equal(qylock.id, "qylock");
+
+  const packages = qylock.discover() as any[];
+  assert.ok(packages.length >= 5, "Qylock provider must discover at least 5 canonical themes");
+
+  const sample = packages[0];
+  const preview = qylock.getPreview(sample);
+  assert.ok(preview.poster, "getPreview must return poster");
+
+  const source = qylock.getSource(sample);
+  assert.equal(source.type, "git");
+  assert.equal(source.repository, "https://github.com/Darkkal44/qylock");
+  assert.ok(source.path?.startsWith("themes/"));
+
+  const targets = qylock.getTargets(sample);
+  assert.equal(targets.quickshell, true);
+  assert.equal(targets.sddm, true);
+
+  const deps = qylock.getDependencies(sample, "quickshell");
+  assert.ok(deps.includes("quickshell"));
+
+  const prov = qylock.getProvenance(sample);
+  assert.equal(prov.upstream, "https://github.com/Darkkal44/qylock");
+  assert.equal(prov.license, "GPL-3.0");
+
+  const allProviders = getAllLockscreenProviders();
+  assert.ok(allProviders.some(p => p.id === "hyprlock"));
+  assert.ok(allProviders.some(p => p.id === "swaylock"));
+});
+
+test("20. Clean Machine Guarantee: Zero runtime dependencies on /home/silentbyte/qylock or ~/.local/share/qylock", () => {
+  // Test that provider discovery and catalogue generation succeed completely in absence of external qylock folder
+  const fakeCleanEnv = { ...process.env };
+  delete fakeCleanEnv.QYLOCK_DIR;
+
+  const catalogue = getCatalogueLockScreens();
+  assert.equal(catalogue.length, 7, "Clean machine catalogue must load all 7 lockscreens");
+
+  for (const pkg of catalogue) {
+    const rawStr = JSON.stringify(pkg);
+    assert.ok(
+      !rawStr.includes("/home/silentbyte/qylock"),
+      `Package ${pkg.title} must not contain references to /home/silentbyte/qylock`
+    );
+    assert.ok(
+      !rawStr.includes("~/.local/share/qylock"),
+      `Package ${pkg.title} must not contain references to ~/.local/share/qylock`
+    );
+    assert.ok(
+      !rawStr.includes("~/.config/qylock"),
+      `Package ${pkg.title} must not contain references to ~/.config/qylock`
+    );
+  }
+});
+
+test("21. Authoritative Repository Root & Derived Index Invariant", () => {
+  const repoJsonPath = path.resolve("repositories/community/repository.json");
+  const indexJsonPath = path.resolve("repositories/community/indexes/lockscreens.json");
+
+  assert.ok(fs.existsSync(repoJsonPath), "repository.json must exist as root authoritative manifest");
+  assert.ok(fs.existsSync(indexJsonPath), "indexes/lockscreens.json must exist as derived index");
+
+  const repo = JSON.parse(fs.readFileSync(repoJsonPath, "utf8"));
+  const index = JSON.parse(fs.readFileSync(indexJsonPath, "utf8"));
+
+  const repoLockScreens = repo.packages.filter((p: any) => p.package_type === "lockscreen");
+  assert.equal(
+    index.packages.length,
+    repoLockScreens.length,
+    "Derived lockscreens.json must match count of lockscreens in repository.json"
+  );
+
+  const qylockRepoItems = repoLockScreens.filter((p: any) => p.provider === "qylock");
+  assert.equal(qylockRepoItems.length, 5, "Must have 5 Qylock lockscreens with declared provider");
+
+  for (const item of qylockRepoItems) {
+    assert.deepEqual(item.targets, ["quickshell", "sddm"]);
+    assert.equal(item.source.type, "git");
+    assert.equal(item.source.repository, "https://github.com/Darkkal44/qylock");
+    assert.equal(item.provenance.upstream, "https://github.com/Darkkal44/qylock");
+    assert.equal(item.provenance.license, "GPL-3.0");
+  }
+});
+
+test("22. Upstream Provenance & Licensing Invariant: Non-redistributable or upstream-licensed media strictly tracked", () => {
+  const catalogue = getCatalogueLockScreens();
+  const qylockThemes = catalogue.filter((p) => p.lockscreen?.provider === "qylock");
+
+  for (const theme of qylockThemes) {
+    assert.ok(theme.lockscreen?.provenance, `Theme ${theme.title} must have provenance`);
+    assert.equal(
+      theme.lockscreen?.provenance.upstream_repo,
+      "https://github.com/Darkkal44/qylock"
+    );
+    assert.equal(theme.lockscreen?.provenance.license, "GPL-3.0");
+    assert.equal(theme.lockscreen?.provenance.author, "Darkkal44");
   }
 });

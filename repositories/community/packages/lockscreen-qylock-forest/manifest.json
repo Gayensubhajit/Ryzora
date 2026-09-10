@@ -44,5 +44,27 @@
       "target": "~/.local/share/ryzora/lockscreens/qylock/forest/theme.conf",
       "description": "Forest configuration file."
     }
-  ]
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": true,
+    "sddm": true
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/forest"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/forest"
+  },
+  "media": {
+    "poster": "assets/lockscreens/forest-poster.jpg",
+    "preview_video": "assets/lockscreens/forest-preview.mp4",
+    "preview_animated": "assets/lockscreens/forest.gif"
+  }
 }

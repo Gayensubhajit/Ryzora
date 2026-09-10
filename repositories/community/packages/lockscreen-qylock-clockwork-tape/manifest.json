@@ -44,5 +44,27 @@
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
       "description": "Tape (Clockwork) configuration file."
     }
-  ]
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": true,
+    "sddm": true
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/clockwork/tape"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/clockwork/tape"
+  },
+  "media": {
+    "poster": "assets/lockscreens/clockwork-poster.jpg",
+    "preview_video": "assets/lockscreens/clockwork-preview.mp4",
+    "preview_animated": "assets/lockscreens/clockwork.gif"
+  }
 }

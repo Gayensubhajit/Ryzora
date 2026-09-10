@@ -43,5 +43,27 @@
       "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
       "description": "NieR: Automata configuration file."
     }
-  ]
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": true,
+    "sddm": true
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/nier-automata"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/nier-automata"
+  },
+  "media": {
+    "poster": "assets/lockscreens/nier-poster.jpg",
+    "preview_video": "assets/lockscreens/nier-preview.mp4",
+    "preview_animated": "assets/lockscreens/nier-automata.gif"
+  }
 }
