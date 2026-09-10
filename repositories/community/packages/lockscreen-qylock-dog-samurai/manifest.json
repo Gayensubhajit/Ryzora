@@ -1,0 +1,48 @@
+{
+  "id": "lockscreen-qylock-dog-samurai",
+  "name": "Dog Samurai",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "A cinematic video lock: a straw-hatted samurai dog with a sheathed katana as crimson petals fall, paired with a bold digital clock and minimal login field.",
+  "tags": [
+    "samurai",
+    "cinematic",
+    "video",
+    "animated",
+    "qylock",
+    "quickshell",
+    "sddm"
+  ],
+  "color_palette": [
+    "#945a46",
+    "#141612",
+    "#24283b",
+    "#a9b1d6"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "quickshell"
+    ],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/theme.conf",
+      "description": "Dog Samurai configuration file."
+    }
+  ]
+}

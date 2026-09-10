@@ -619,8 +619,28 @@ pub fn install_package_in(
     home_dir: &Path,
     system_info: &SystemInfo,
 ) -> Result<InstallResult, String> {
+    install_package_options_in(
+        package_dir,
+        snapshots_root,
+        installed_root,
+        staging_root,
+        home_dir,
+        system_info,
+        true,
+    )
+}
+
+pub fn install_package_options_in(
+    package_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    staging_root: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    create_snapshot: bool,
+) -> Result<InstallResult, String> {
     let trust_store = crate::crypto::TrustStore::load_default();
-    install_package_in_with_trust(
+    install_package_options_in_with_trust(
         package_dir,
         snapshots_root,
         installed_root,
@@ -628,6 +648,7 @@ pub fn install_package_in(
         home_dir,
         system_info,
         &trust_store,
+        create_snapshot,
     )
 }
 
@@ -639,6 +660,28 @@ pub fn install_package_in_with_trust(
     home_dir: &Path,
     system_info: &SystemInfo,
     trust_store: &crate::crypto::TrustStore,
+) -> Result<InstallResult, String> {
+    install_package_options_in_with_trust(
+        package_dir,
+        snapshots_root,
+        installed_root,
+        staging_root,
+        home_dir,
+        system_info,
+        trust_store,
+        true,
+    )
+}
+
+pub fn install_package_options_in_with_trust(
+    package_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    staging_root: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    trust_store: &crate::crypto::TrustStore,
+    create_snapshot: bool,
 ) -> Result<InstallResult, String> {
     let manifest = load_package_manifest(package_dir)?;
 
@@ -682,22 +725,24 @@ pub fn install_package_in_with_trust(
         return Err(format!("Cryptographic Verification Error: {}", err_msg));
     }
 
-    // 2. Collect all declared target paths for snapshot
-    let target_paths: Vec<String> = manifest.files.iter().map(|f| f.target.clone()).collect();
+    // 2. Collect target paths and optionally create pre-install snapshot
+    let snapshot_id_opt: Option<String> = if create_snapshot {
+        let target_paths: Vec<String> = manifest.files.iter().map(|f| f.target.clone()).collect();
+        let snapshot_label = format!("pre-install-{}", manifest.id);
+        let snapshot_meta =
+            create_snapshot_in(&snapshot_label, &target_paths, home_dir, snapshots_root)
+                .map_err(|e| format!("Failed to create pre-install snapshot: {}", e))?;
 
-    // 3. Create snapshot
-    let snapshot_label = format!("pre-install-{}", manifest.id);
-    let snapshot_meta =
-        create_snapshot_in(&snapshot_label, &target_paths, home_dir, snapshots_root)
-            .map_err(|e| format!("Failed to create pre-install snapshot: {}", e))?;
+        let snapshot_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
+            .map_err(|e| format!("Snapshot verification error: {}", e))?;
 
-    // 4. Verify snapshot immediately
-    let snapshot_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
-        .map_err(|e| format!("Snapshot verification error: {}", e))?;
-
-    if !snapshot_valid {
-        return Err("Pre-install snapshot failed integrity verification — installation aborted before modification".to_string());
-    }
+        if !snapshot_valid {
+            return Err("Pre-install snapshot failed integrity verification — installation aborted before modification".to_string());
+        }
+        Some(snapshot_meta.id)
+    } else {
+        None
+    };
 
     // 5. Create staging directory
     let now = SystemTime::now()
@@ -959,24 +1004,40 @@ pub fn install_package_in_with_trust(
     if let Some(err) = apply_error {
         clean_staging(&staging_dir);
 
-        // Perform rollback using snapshot
-        let rollback_res = restore_snapshot_in(&snapshot_meta.id, home_dir, snapshots_root);
-        let rolled_back_ok = rollback_res.map(|r| r.success).unwrap_or(false);
+        let (_rolled_back_ok, rollback_msg) = if let Some(ref snap_id) = snapshot_id_opt {
+            let rollback_res = restore_snapshot_in(snap_id, home_dir, snapshots_root);
+            let ok = rollback_res.map(|r| r.success).unwrap_or(false);
+            (
+                ok,
+                if ok {
+                    "automatic rollback was successful".to_string()
+                } else {
+                    "automatic rollback was attempted with warnings".to_string()
+                },
+            )
+        } else {
+            // No snapshot was created: remove any partially written target files
+            for target_str in &applied_targets {
+                if let Ok(target_p) = validate_target_safety(target_str, home_dir) {
+                    let _ = fs::remove_file(&target_p);
+                }
+            }
+            (
+                true,
+                "partially applied files were cleaned up (no pre-install snapshot created)".to_string(),
+            )
+        };
 
         return Ok(InstallResult {
             success: false,
             package_id: manifest.id,
             version: manifest.version,
-            snapshot_id: snapshot_meta.id,
+            snapshot_id: snapshot_id_opt.unwrap_or_default(),
             installed_files: vec![],
             errors: vec![format!(
-                "Installation failed ({}); automatic rollback was {}",
+                "Installation failed ({}); {}",
                 err,
-                if rolled_back_ok {
-                    "successful"
-                } else {
-                    "attempted with warnings"
-                }
+                rollback_msg
             )],
             rolled_back: true,
         });
@@ -998,10 +1059,12 @@ pub fn install_package_in_with_trust(
 
     let tree_hash_val = crate::repository::compute_package_tree_hash(package_dir, &manifest).ok();
 
+    let record_snapshot_id = snapshot_id_opt.unwrap_or_default();
+
     let history_entry = InstalledHistoryEntry {
         version: manifest.version.clone(),
         installed_at: now,
-        snapshot_id: snapshot_meta.id.clone(),
+        snapshot_id: record_snapshot_id.clone(),
         repository_id: repo_id.clone(),
         tree_hash: tree_hash_val,
     };
@@ -1013,7 +1076,7 @@ pub fn install_package_in_with_trust(
         package_type: Some(manifest.package_type),
         repository_id: repo_id,
         installed_at: now,
-        snapshot_id: snapshot_meta.id.clone(),
+        snapshot_id: record_snapshot_id.clone(),
         installed_files: applied_targets.clone(),
         files: applied_entries,
         package_source_path: package_dir.display().to_string(),
@@ -1034,7 +1097,7 @@ pub fn install_package_in_with_trust(
         success: true,
         package_id: manifest.id,
         version: manifest.version,
-        snapshot_id: snapshot_meta.id,
+        snapshot_id: record_snapshot_id,
         installed_files: applied_targets,
         errors: vec![],
         rolled_back: false,
@@ -2587,7 +2650,7 @@ pub fn preview_installation(package_id: String) -> Result<InstallationPlan, Stri
 }
 
 #[tauri::command]
-pub fn install_package(package_id: String) -> Result<InstallResult, String> {
+pub fn install_package(package_id: String, create_snapshot: Option<bool>) -> Result<InstallResult, String> {
     let home = get_home_dir();
     let package_dir = find_package_dir(&package_id, None)?;
     let snapshots_root = get_ryzora_snapshots_dir();
@@ -2595,13 +2658,14 @@ pub fn install_package(package_id: String) -> Result<InstallResult, String> {
     let staging_root = get_ryzora_staging_dir();
     let sys = detect_system_info();
 
-    install_package_in(
+    install_package_options_in(
         &package_dir,
         &snapshots_root,
         &installed_root,
         &staging_root,
         &home,
         &sys,
+        create_snapshot.unwrap_or(true),
     )
 }
 
@@ -3084,6 +3148,66 @@ mod tests {
         assert_eq!(installed.len(), 1);
         assert_eq!(installed[0].package_id, "real-install-pkg");
         assert_eq!(installed[0].installed_files.len(), 2);
+    }
+
+    #[test]
+    fn test_install_without_snapshot_option() {
+        let sandbox = TestSandbox::new("no-snap-opt");
+        let sys = TestSandbox::mock_system();
+
+        let pkg_dir = sandbox.create_sample_package(
+            "no-snap-pkg",
+            &[
+                (
+                    "files/hypr/hyprland.conf",
+                    "~/.config/hypr/hyprland.conf",
+                    "hyprland config without snapshot",
+                ),
+            ],
+            &["hyprland"],
+        );
+
+        // Install with create_snapshot = false
+        let res = install_package_options_in(
+            &pkg_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+        )
+        .unwrap();
+
+        assert!(res.success);
+        assert!(!res.rolled_back);
+        assert_eq!(res.snapshot_id, "");
+        assert_eq!(res.installed_files.len(), 1);
+
+        // Verify destination file exists and matches
+        let dest = sandbox.home_dir.join(".config/hypr/hyprland.conf");
+        assert!(dest.is_file());
+        assert_eq!(fs::read_to_string(dest).unwrap(), "hyprland config without snapshot");
+
+        // Verify NO snapshots were created
+        let snapshots = crate::snapshot::list_snapshots_in(&sandbox.snapshots_dir).unwrap();
+        assert_eq!(snapshots.len(), 0);
+
+        // Verify installed metadata was persisted with empty snapshot_id
+        let installed = list_installed_packages_in(&sandbox.installed_dir).unwrap();
+        assert_eq!(installed.len(), 1);
+        assert_eq!(installed[0].package_id, "no-snap-pkg");
+        assert_eq!(installed[0].snapshot_id, "");
+
+        // Verify uninstalling works cleanly even when installed without pre-install snapshot
+        let uninst = uninstall_package_in(
+            "no-snap-pkg",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        ).unwrap();
+        assert!(uninst.success);
+        assert!(!sandbox.home_dir.join(".config/hypr/hyprland.conf").exists());
     }
 
     #[test]

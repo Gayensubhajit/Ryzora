@@ -273,6 +273,60 @@ export interface SafetyAudit {
   files_modified_count: number;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lock Screen / Upstream Target & Media types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LockscreenTargetType = "quickshell" | "sddm" | "hyprlock" | "swaylock";
+
+export interface LockscreenTargetSpec {
+  id: LockscreenTargetType;
+  name: string;
+  scope: "user" | "system";
+  supported: boolean;
+  entrypoint: string;
+  dependencies: string[];
+  optional_dependencies?: string[];
+  requires_session_lock?: boolean;
+  requires_root?: boolean;
+  install_destination: string;
+  config_file?: string;
+  shortcut_target?: string;
+}
+
+export interface LockscreenMediaSpec {
+  poster: string;
+  preview_video?: string;
+  preview_animated?: string;
+  has_audio?: boolean;
+  aspect_ratio?: "16:9" | "4:3";
+}
+
+export interface LockscreenRuntimeSpec {
+  entrypoint: string;
+  assets: string[];
+  bg_video_path?: string;
+  fonts?: { name: string; filename: string; bundled: boolean }[];
+  requires_multimedia?: boolean;
+}
+
+export interface LockscreenProvenance {
+  provider_name: "qylock" | "hyprlock-community" | "swaylock-community" | "ryzora-native" | string;
+  upstream_repo?: string;
+  upstream_revision?: string;
+  author: string;
+  license: string;
+}
+
+export interface LockscreenManifest {
+  provider: "qylock" | "hyprlock" | "swaylock" | "custom";
+  targets: Partial<Record<LockscreenTargetType, LockscreenTargetSpec>>;
+  media: LockscreenMediaSpec;
+  runtime: LockscreenRuntimeSpec;
+  provenance: LockscreenProvenance;
+}
+
 export interface PackageItem {
   id: string;
   title: string;
@@ -327,6 +381,12 @@ export interface PackageItem {
   release_notes?: string;
   signature?: PackageSignatureMetadata;
   cryptographic_status?: CryptographicStatus;
+  media_type?: "video" | "image" | "animated";
+  preview_video_url?: string;
+  preview_poster_url?: string;
+  supports_session_lock?: boolean;
+  supports_login_screen?: boolean;
+  lockscreen?: LockscreenManifest;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

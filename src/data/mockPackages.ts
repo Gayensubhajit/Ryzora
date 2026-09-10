@@ -1,3 +1,4 @@
+import { getCatalogueLockScreens } from "../providers/qylockProvider";
 /**
  * @deprecated TEMPORARY DEVELOPMENT FALLBACK ONLY (Phase 5).
  * The authoritative source of marketplace packages is now the Repository Manager
@@ -489,85 +490,10 @@ export const MOCK_PACKAGES: PackageItem[] = [
       ],
     },
   },
-  {
-    id: "lockscreen-hyprlock-aurora",
-    title: "Aurora Glass Hyprlock",
-    subtitle: "Clean biometric & clock lockscreen for Hyprland",
-    description:
-      "Minimal lockscreen displaying a live clock, weather summary, and PAM authentication feedback.",
-    version: "1.4.1",
-    package_type: "lockscreen",
-    author: {
-      name: "WaylandEnthusiast",
-      avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=WaylandEnthusiast",
-      verified: true,
-    },
-    category: "lockscreens",
-    tags: ["Hyprlock", "Lockscreen", "Hyprland", "Security", "Wayland"],
-    supported_desktops: ["hyprland"],
-    supported_display: ["wayland"],
-    rating: 4.87,
-    rating_count: 94,
-    downloads: 7300,
-    hero_image: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1600&q=80",
-    screenshots: [
-      "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80",
-    ],
-    color_palette: ["#ec4899", "#8b5cf6", "#3b82f6", "#090d16"],
-    safety_audit: {
-      rating: "verified",
-      changes_system_files: false,
-      requires_root: false,
-      sandbox_compatible: true,
-      files_modified_count: 1,
-    },
-    dependencies: {
-      packages: ["hyprlock"],
-      optional: [],
-    },
-    compatibility: {
-      supported_distros: ["all"],
-      supported_desktops: ["hyprland"],
-      supported_sessions: ["wayland"],
-      required_binaries: ["hyprlock"],
-      optional_binaries: [],
-    },
-    components: [
-      {
-        name: "Hyprlock Configuration",
-        component_type: "hyprlock",
-        target_path: "~/.config/hypr/hyprlock.conf",
-        description: "Configures blurred background snapshot with PAM authentication feedback.",
-      },
-    ],
-    manifest: {
-      id: "lockscreen-hyprlock-aurora",
-      name: "Aurora Glass Hyprlock",
-      version: "1.4.1",
-      ryzora_spec: "1",
-      author: "WaylandEnthusiast",
-      package_type: "lockscreen",
-      description: "Minimal lockscreen with live clock, weather summary, and PAM authentication feedback.",
-      tags: ["Hyprlock", "Lockscreen", "Hyprland", "Wayland"],
-      color_palette: ["#ec4899", "#8b5cf6", "#3b82f6", "#090d16"],
-      compatibility: {
-        desktops: ["hyprland"],
-        sessions: ["wayland"],
-        distros: [],
-        required: ["hyprlock"],
-        optional: [],
-      },
-      files: [
-        {
-          source: "files/hypr/hyprlock.conf",
-          target: "~/.config/hypr/hyprlock.conf",
-          description: "Hyprlock lockscreen — blurred background and PAM auth.",
-        },
-      ],
-    },
-  },
+  ...getCatalogueLockScreens(),
   {
     id: "theme-fluent-dark-gtk",
+
     title: "Fluent Dark Modern GTK",
     subtitle: "Dark theme for GTK3, GTK4, Libadwaita & Qt",
     description:

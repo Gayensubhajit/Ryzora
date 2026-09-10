@@ -176,7 +176,7 @@ export const UpdatesView: React.FC = () => {
         <button
           onClick={() => refreshUpdates()}
           disabled={loadingUpdates}
-          className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+          className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loadingUpdates ? "animate-spin" : ""}`} />
           <span>{loadingUpdates ? "Checking Updates..." : "Refresh Updates"}</span>
@@ -281,7 +281,7 @@ export const UpdatesView: React.FC = () => {
               </div>
               <button
                 onClick={() => setActivePlan(null)}
-                className="text-[var(--text-muted)] hover:text-white text-xs px-2 py-1"
+                className="text-[var(--text-muted)] hover:text-[var(--rz-text)] text-xs px-2 py-1"
               >
                 ✕
               </button>
@@ -384,7 +384,7 @@ export const UpdatesView: React.FC = () => {
             <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)] flex items-center justify-end space-x-2">
               <button
                 onClick={() => setActivePlan(null)}
-                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)]"
+                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--text-muted)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)]"
               >
                 Close
               </button>

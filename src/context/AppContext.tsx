@@ -1,5 +1,7 @@
+import { getCatalogueLockScreens } from "../providers/qylockProvider";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { MOCK_PACKAGES } from "../data/mockPackages";
 import {
   DependencyResolutionReport,
   UninstallResult,
@@ -60,7 +62,7 @@ interface AppContextType {
   installLogs: string[];
   previewInstallation: (packageId: string) => Promise<InstallationPlan>;
   resolvePackageDependencies: (packageId: string) => Promise<DependencyResolutionReport>;
-  installPackage: (pkg: PackageItem) => Promise<InstallResult>;
+  installPackage: (pkg: PackageItem, createSnapshot?: boolean) => Promise<InstallResult>;
   uninstallPackage: (packageId: string) => Promise<UninstallResult>;
   checkPackageUpdate: (packageId: string) => Promise<PackageUpdateStatus>;
   checkAllUpdates: () => Promise<PackageUpdateStatus[]>;
@@ -73,6 +75,9 @@ interface AppContextType {
   repositorySources: RepositorySourceConfig[];
   refreshCatalog: () => Promise<void>;
   refreshRepositories: () => Promise<void>;
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   addRepositorySource: (config: RepositorySourceConfig) => Promise<void>;
   removeRepositorySource: (id: string) => Promise<void>;
   getCacheStats: () => Promise<CacheStats>;
@@ -306,6 +311,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loadingSystem, setLoadingSystem] = useState<boolean>(true);
   const [activeCategory, setActiveCategory] = useState<CategoryId>("discover");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem("ryzora_sidebar_collapsed");
+    return saved !== null ? saved === "true" : false;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("ryzora_sidebar_collapsed", String(next));
+      return next;
+    });
+  };
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [desktopFilter, setDesktopFilter] = useState<DesktopEnvironment | "all">("all");
   const [packages, setPackages] = useState<PackageItem[]>([]);
@@ -384,14 +401,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const mergeCanonicalLockScreens = (basePackages: PackageItem[]): PackageItem[] => {
+    const lockscreens = getCatalogueLockScreens();
+    const merged: PackageItem[] = [...basePackages];
+
+    for (const ls of lockscreens) {
+      const existingIdx = merged.findIndex(
+        (p) =>
+          p.id === ls.id ||
+          p.id === `lockscreen-qylock-${ls.id}` ||
+          p.id === `lockscreen-${ls.id}` ||
+          (ls.id === "aurora-hyprlock" && p.id === "lockscreen-hyprlock-aurora") ||
+          (ls.id === "swaylock-blur" && p.id === "lockscreen-swaylock-blur")
+      );
+      if (existingIdx >= 0) {
+        merged[existingIdx] = {
+          ...merged[existingIdx],
+          ...ls,
+          id: merged[existingIdx].id,
+          manifest: merged[existingIdx].manifest || ls.manifest,
+        };
+      } else {
+        merged.push(ls);
+      }
+    }
+    return merged;
+  };
+
   const loadCatalogPackages = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("get_catalog_packages");
-      setPackages(catalog || []);
+      setPackages(mergeCanonicalLockScreens(catalog || []));
       const repos = await invoke<RepositorySummary[]>("get_repository_info");
       setRepositories(repos);
     } catch (e) {
-      console.warn("Failed to load catalog from RepositoryManager", e);
+      console.warn("Failed to load catalog from RepositoryManager, using fallback in dev/browser", e);
+      setPackages(mergeCanonicalLockScreens(MOCK_PACKAGES));
     }
   };
 
@@ -407,7 +452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshCatalog = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("refresh_catalog");
-      setPackages(catalog || []);
+      setPackages(mergeCanonicalLockScreens(catalog || []));
       const repos = await invoke<RepositorySummary[]>("get_repository_info");
       setRepositories(repos);
     } catch (e) {
@@ -418,7 +463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshRepositories = async () => {
     try {
       const catalog = await invoke<PackageItem[]>("refresh_catalog");
-      setPackages(catalog || []);
+      setPackages(mergeCanonicalLockScreens(catalog || []));
       const repos = await invoke<RepositorySummary[]>("get_repository_info");
       setRepositories(repos);
       await loadRepositorySources();
@@ -529,7 +574,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return await invoke<DependencyResolutionReport>("resolve_package_dependencies", { packageId });
   };
 
-  const installPackage = async (pkg: PackageItem): Promise<InstallResult> => {
+  const installPackage = async (
+    pkg: PackageItem,
+    createSnapshot: boolean = true
+  ): Promise<InstallResult> => {
     setIsInstalling(true);
     setInstallProgress(10);
     setInstallLogs([
@@ -566,10 +614,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setInstallProgress(40);
-      setInstallLogs((prev) => [
-        ...prev,
-        `[Step 2/5] Creating & verifying pre-install snapshot...`,
-      ]);
+      if (createSnapshot) {
+        setInstallLogs((prev) => [
+          ...prev,
+          `[Step 2/5] Creating & verifying pre-install snapshot...`,
+        ]);
+      } else {
+        setInstallLogs((prev) => [
+          ...prev,
+          `[Step 2/5] Skipping pre-install snapshot per user request (fast install)...`,
+        ]);
+      }
 
       setInstallProgress(65);
       setInstallLogs((prev) => [
@@ -583,18 +638,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `[Step 4/5] Safely applying configuration to target paths...`,
       ]);
 
-      const result = await invoke<InstallResult>("install_package", { packageId: pkg.id });
+      const result = await invoke<InstallResult>("install_package", {
+        packageId: pkg.id,
+        createSnapshot,
+      });
 
       if (result.success) {
         setInstallProgress(100);
         setInstallLogs((prev) => [
           ...prev,
-          `[Step 5/5] Verified on disk! Snapshot created: ${result.snapshot_id}`,
+          result.snapshot_id
+            ? `[Step 5/5] Verified on disk! Snapshot created: ${result.snapshot_id}`
+            : `[Step 5/5] Verified on disk! Direct install completed without snapshot.`,
           `✓ '${pkg.title}' installed successfully (${result.installed_files.length} files).`,
         ]);
 
         await loadInstalledPackages();
-        await loadSnapshots();
+        if (createSnapshot) {
+          await loadSnapshots();
+        }
 
         setToast({
           message: `Installed ${pkg.title}`,
@@ -609,7 +671,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...prev,
           `[Failed] ${errorMsg}`,
           result.rolled_back
-            ? `[Rollback] Restored original configuration from snapshot ${result.snapshot_id}.`
+            ? result.snapshot_id
+              ? `[Rollback] Restored original configuration from snapshot ${result.snapshot_id}.`
+              : `[Rollback] Cleaned up partially written target files.`
             : ``,
         ]);
         setToast({
@@ -917,6 +981,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         repositorySources,
         refreshCatalog,
         refreshRepositories,
+        sidebarCollapsed,
+        toggleSidebar,
+        setSidebarCollapsed,
         addRepositorySource,
         removeRepositorySource,
         getCacheStats,

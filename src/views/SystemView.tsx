@@ -145,7 +145,7 @@ export const SystemView: React.FC = () => {
           <button
             onClick={handleRefreshRepos}
             disabled={refreshingRepos}
-            className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-white transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--rz-text)] transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3 h-3 ${refreshingRepos ? "animate-spin" : ""}`} />
             <span>{refreshingRepos ? "Refreshing..." : "Refresh All"}</span>

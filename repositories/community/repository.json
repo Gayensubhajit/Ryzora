@@ -318,6 +318,224 @@
       "trending": false,
       "rating": 4.84,
       "downloads": 7320
+    },
+    {
+      "id": "lockscreen-qylock-dog-samurai",
+      "name": "Dog Samurai",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "A cinematic video lock: a straw-hatted samurai dog with a sheathed katana as crimson petals fall, paired with a bold digital clock and minimal login field.",
+      "manifest": "packages/lockscreen-qylock-dog-samurai/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "samurai",
+        "cinematic",
+        "video",
+        "animated",
+        "qylock",
+        "quickshell",
+        "sddm"
+      ],
+      "color_palette": [
+        "#945a46",
+        "#141612",
+        "#24283b",
+        "#a9b1d6"
+      ],
+      "author": {
+        "name": "Darkkal44",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
+        "verified": true
+      },
+      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+      ],
+      "featured": true,
+      "trending": true,
+      "rating": 4.95,
+      "downloads": 14200
+    },
+    {
+      "id": "lockscreen-qylock-clockwork-tape",
+      "name": "Tape (Clockwork)",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "A tactile retro lock: deep warm amber tones, rotating magnetic reel animations, and an authentic cassette tape aesthetic.",
+      "manifest": "packages/lockscreen-qylock-clockwork-tape/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "clockwork",
+        "retro",
+        "warm",
+        "animated",
+        "qylock",
+        "quickshell",
+        "sddm"
+      ],
+      "color_palette": [
+        "#d7a45f",
+        "#101010",
+        "#24283b",
+        "#a9b1d6"
+      ],
+      "author": {
+        "name": "Darkkal44",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
+        "verified": true
+      },
+      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.88,
+      "downloads": 9800
+    },
+    {
+      "id": "lockscreen-qylock-nier-automata",
+      "name": "NieR: Automata",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Minimal monochrome YoRHa interface with tactical HUD styling, glitch micro-interactions, and high contrast typography.",
+      "manifest": "packages/lockscreen-qylock-nier-automata/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "nier",
+        "minimal",
+        "yorha",
+        "qylock",
+        "quickshell",
+        "sddm"
+      ],
+      "color_palette": [
+        "#dcd8cd",
+        "#1a1917",
+        "#32302b",
+        "#b5af9f"
+      ],
+      "author": {
+        "name": "Darkkal44",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
+        "verified": true
+      },
+      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.92,
+      "downloads": 11500
+    },
+    {
+      "id": "lockscreen-qylock-forest",
+      "name": "Forest",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Deep atmospheric mist passing through pine trees with gentle ambient particle motion and organic typography.",
+      "manifest": "packages/lockscreen-qylock-forest/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "forest",
+        "nature",
+        "ambient",
+        "animated",
+        "qylock",
+        "quickshell",
+        "sddm"
+      ],
+      "color_palette": [
+        "#4e7a5d",
+        "#0e1611",
+        "#1e2e23",
+        "#a8c5b0"
+      ],
+      "author": {
+        "name": "Darkkal44",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
+        "verified": true
+      },
+      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.81,
+      "downloads": 7600
+    },
+    {
+      "id": "lockscreen-qylock-material-you",
+      "name": "Material You",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Dynamic wallpaper-adaptive pastel palette, rounded pill elements, large clock typography, and fluid status pills.",
+      "manifest": "packages/lockscreen-qylock-material-you/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "material-you",
+        "minimal",
+        "modern",
+        "qylock",
+        "quickshell",
+        "sddm"
+      ],
+      "color_palette": [
+        "#a8c7fa",
+        "#10131c",
+        "#1f2430",
+        "#d3e3fd"
+      ],
+      "author": {
+        "name": "Darkkal44",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
+        "verified": true
+      },
+      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.89,
+      "downloads": 13100
+    },
+    {
+      "id": "lockscreen-swaylock-blur",
+      "name": "Swaylock Effects Blur",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Minimal Wayland lockscreen utilizing swaylock-effects for real-time dual-screen desktop blur, fade-in animations, and pam security.",
+      "manifest": "packages/lockscreen-swaylock-blur/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "swaylock",
+        "sway",
+        "blur",
+        "minimal",
+        "wayland"
+      ],
+      "color_palette": [
+        "#5e81ac",
+        "#2e3440",
+        "#3b4252",
+        "#eceff4"
+      ],
+      "author": {
+        "name": "WaylandEnthusiast",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=WaylandEnthusiast",
+        "verified": true
+      },
+      "hero_image": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
+      "screenshots": [
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.72,
+      "downloads": 5400
     }
   ]
 }

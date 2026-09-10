@@ -1,42 +1,15 @@
 @import "tailwindcss";
 
+@import "./theme/tokens.css";
+
 @layer base {
-  :root {
-    /* Neutrals & Surfaces with clear hierarchy */
-    --bg-canvas: #090b0e;
-    --bg-sidebar: #0e1116;
-    --bg-surface: #141820;
-    --bg-surface-elevated: #1b202b;
-    --bg-surface-hover: #212735;
-    --bg-surface-active: #283040;
-
-    /* Borders with crisp 1px definition */
-    --border-subtle: #242b38;
-    --border-strong: #363e50;
-
-    /* Typography */
-    --text-primary: #e8eaf0;
-    --text-muted: #929aa8;
-    --text-faint: #5e6678;
-
-    /* Single Themeable Accent */
-    --accent: #3b82f6;
-    --accent-hover: #2563eb;
-    --accent-muted: rgba(59, 130, 246, 0.12);
-    --accent-text: #60a5fa;
-
-    /* Functional Status */
-    --status-success: #10b981;
-    --status-warning: #f59e0b;
-    --status-error: #ef4444;
-  }
-
-  body {
-    background-color: var(--bg-canvas);
-    color: var(--text-primary);
+  html, body, #root {
+    background-color: var(--rz-bg);
+    color: var(--rz-text);
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
     user-select: none;
+    opacity: 1 !important;
   }
 }
 
@@ -49,27 +22,31 @@
   background: var(--bg-canvas);
 }
 ::-webkit-scrollbar-thumb {
-  background: #252b38;
+  background: var(--rz-border-strong);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #363e50;
+  background: var(--rz-text-faint);
 }
 
 .surface-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  background-color: var(--rz-surface);
+  border: 1px solid var(--rz-border);
+  border-radius: 12px;
+  box-shadow: var(--rz-card-shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .surface-card:hover {
-  border-color: var(--border-strong);
+  border-color: var(--rz-border-strong);
+  box-shadow: var(--rz-card-hover-shadow);
 }
 
 .surface-elevated {
-  background-color: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  background-color: var(--rz-surface-elevated);
+  border: 1px solid var(--rz-border);
+  border-radius: 12px;
+  box-shadow: var(--rz-card-shadow);
 }
 
 /* ─── Phase 15 — Settings, Notifications, Collections & Integrity ────────── */
@@ -77,9 +54,10 @@
 /* Settings */
 .settings-grid { display: flex; flex-direction: column; gap: 16px; }
 .settings-section {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  background: var(--rz-surface);
+  border: 1px solid var(--rz-border);
+  border-radius: 12px;
+  box-shadow: var(--rz-card-shadow);
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -176,7 +154,7 @@
   transition: all 0.15s;
 }
 .radio-option input[type=radio] { display: none; }
-.radio-option.selected { border-color: var(--accent); color: var(--accent); background: rgba(92,112,224,0.08); }
+.radio-option.selected { border-color: var(--accent); color: var(--accent); background: var(--rz-accent-muted); }
 .radio-label { font-size: 12px; font-weight: 500; }
 
 /* Notifications */
@@ -271,7 +249,7 @@
   transition: background 0.15s;
 }
 .collection-item:hover { background: var(--bg-hover); }
-.collection-item.active { background: rgba(92,112,224,0.08); border-left: 2px solid var(--accent); }
+.collection-item.active { background: var(--rz-accent-muted); border-left: 2px solid var(--accent); }
 .collection-item-main { display: flex; align-items: center; gap: 8px; }
 .collection-name { font-size: 13px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .collection-meta { font-size: 11px; color: var(--text-muted); }
@@ -300,7 +278,7 @@
 }
 .collection-pkg-id { font-family: monospace; color: var(--text-primary); flex: 1; }
 .collection-version-req { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-muted); }
-.collection-repo-tag { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(92,112,224,0.08); color: var(--accent); }
+.collection-repo-tag { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--rz-accent-muted); color: var(--accent); }
 .btn-icon { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; }
 .btn-icon:hover { color: #e05c5c; background: rgba(224,92,92,0.08); }
 .collection-install-section { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
@@ -366,18 +344,22 @@
 .btn-sm { padding: 4px 8px; font-size: 11px; }
 .danger:hover { color: #e05c5c; border-color: rgba(224,92,92,0.3); }
 
-/* ─── Content-First Visual System (Phase 21) ─────────────────────────────── */
+/* ─── Content-First Visual System ────────────────────────────────────────── */
 
-/* Store card — art-forward tile */
+/* Store card — 16:9 art tile with minimal footer */
 .store-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  background-color: var(--rz-surface);
+  border: 1px solid var(--rz-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--rz-card-shadow);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .store-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-color: var(--rz-accent);
+  box-shadow: var(--rz-card-hover-shadow);
+  transform: translateY(-2px);
 }
 
 .store-card:focus-visible {
@@ -392,4 +374,212 @@
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* ─── Dark form controls (global) ────────────────────────────────────────── */
+/*
+ * Override browser-default light backgrounds on all native form controls.
+ * Tailwind's appearance utilities still apply on top of these; this baseline
+ * ensures no control ever renders with a white/OS-native background in Ryzora.
+ */
+
+/* ── Select ── */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color-scheme: dark;
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 28px 4px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  /* Custom chevron via background SVG — dark-safe */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235e6678' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  outline: none;
+}
+
+select:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+select:focus {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  outline: none;
+}
+
+/* Force dark option menus in Chromium/WebKit (WebView) */
+select option {
+  background-color: var(--rz-surface);
+  color: var(--rz-text);
+  border-color: var(--rz-border-subtle);
+}
+
+/* ── Text inputs ── */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="url"] {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+input[type="text"]::placeholder,
+input[type="search"]::placeholder {
+  color: var(--text-faint);
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus {
+  border-color: var(--accent);
+}
+
+/* ── Textarea ── */
+textarea {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: var(--accent);
+}
+
+/* ── Named utility: ryz-select ─────────────────────────────────────────────
+ * Apply to any <select> that needs the Ryzora dark-control style.
+ * Inherits the global select baseline above; this class is a no-op alias
+ * that makes intent explicit in component code.
+ */
+.ryz-select {
+  /* inherits all global select rules; add component-specific overrides here */
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Views & Layout Utilities */
+.view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.view-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rz-border-subtle);
+}
+.view-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--rz-text);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.view-subtitle {
+  font-size: 13px;
+  color: var(--rz-text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* Button utilities */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background-color: var(--rz-accent);
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--rz-accent-hover);
+}
+.btn-ghost {
+  background-color: var(--rz-surface);
+  color: var(--rz-text-secondary);
+  border: 1px solid var(--rz-border-subtle);
+}
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--rz-surface-hover);
+  color: var(--rz-text);
+  border-color: var(--rz-border-strong);
+}
+
+
+/* ─── Responsive fluid store grid (Reference Desktop Density: 6 -> 2 cols) ─── */
+.store-grid-fluid,
+.catalogue-grid-density {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Small / Tablet (3 columns) */
+@media (min-width: 640px) {
+  .store-grid-fluid,
+  .catalogue-grid-density {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+/* Laptop (4 columns) */
+@media (min-width: 980px) {
+  .store-grid-fluid,
+  .catalogue-grid-density {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+/* Medium Desktop (5 columns) */
+@media (min-width: 1280px) {
+  .store-grid-fluid,
+  .catalogue-grid-density {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+/* Large Desktop (6 columns) */
+@media (min-width: 1560px) {
+  .store-grid-fluid,
+  .catalogue-grid-density {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+  }
 }

@@ -1,0 +1,48 @@
+{
+  "id": "lockscreen-qylock-clockwork-tape",
+  "name": "Tape (Clockwork)",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "A tactile retro lock: deep warm amber tones, rotating magnetic reel animations, and an authentic cassette tape aesthetic.",
+  "tags": [
+    "clockwork",
+    "retro",
+    "warm",
+    "animated",
+    "qylock",
+    "quickshell",
+    "sddm"
+  ],
+  "color_palette": [
+    "#d7a45f",
+    "#101010",
+    "#24283b",
+    "#a9b1d6"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "quickshell"
+    ],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
+      "description": "Tape (Clockwork) configuration file."
+    }
+  ]
+}

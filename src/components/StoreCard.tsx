@@ -1,16 +1,68 @@
-import React from "react";
-import { Sparkles, ShieldCheck, Download } from "lucide-react";
-import { PackageItem } from "../types";
+import React, { useState, useEffect } from "react";
+import {
+  Sparkles,
+  ShieldCheck,
+  Star,
+  Download,
+  Eye,
+  Layers,
+  Terminal,
+  Palette,
+  Image as ImageIcon,
+  Lock,
+  Layout,
+  Package as PackageIcon,
+} from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { PackageItem } from "../types";
+import {
+  getPackageSubtype,
+  formatDownloads,
+  isLoginScreen,
+  getConciseCompatibility,
+} from "./catalogue/catalogueUtils";
+import { InstalledBadge } from "./catalogue/InstalledBadge";
+import { CompatibilityBadge } from "./catalogue/CompatibilityBadge";
+import { MediaPreview } from "./media/MediaPreview";
 
 interface StoreCardProps {
   packageItem: PackageItem;
-  /** When true shows a taller portrait aspect ratio (e.g. lockscreens) */
-  portrait?: boolean;
 }
 
-export const StoreCard: React.FC<StoreCardProps> = ({ packageItem, portrait = false }) => {
-  const { setSelectedPackage, installedPackages } = useApp();
+/** Generates deterministic gradient accents for fallback artwork */
+function getGenerativeGradient(id: string): string {
+  const hash = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const gradients = [
+    "from-slate-900 via-indigo-950 to-slate-900",
+    "from-zinc-900 via-purple-950 to-zinc-950",
+    "from-stone-900 via-neutral-900 to-cyan-950",
+    "from-slate-950 via-teal-950 to-slate-900",
+    "from-neutral-950 via-rose-950 to-zinc-900",
+    "from-gray-900 via-sky-950 to-slate-950",
+  ];
+  return gradients[hash % gradients.length];
+}
+
+/** Category icon helper for fallback artwork */
+function getCategoryIcon(cat: string) {
+  const c = cat.toLowerCase();
+  if (c.includes("lock")) return <Lock className="w-4 h-4 text-emerald-400" />;
+  if (c.includes("rice")) return <Layout className="w-4 h-4 text-violet-400" />;
+  if (c.includes("theme")) return <Palette className="w-4 h-4 text-pink-400" />;
+  if (c.includes("wall")) return <ImageIcon className="w-4 h-4 text-amber-400" />;
+  if (c.includes("bar")) return <Layers className="w-4 h-4 text-sky-400" />;
+  if (c.includes("term") || c.includes("fetch")) return <Terminal className="w-4 h-4 text-cyan-400" />;
+  return <PackageIcon className="w-4 h-4 text-zinc-400" />;
+}
+
+export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
+  const { setSelectedPackage, installedPackages, systemInfo } = useApp();
+  const [imgError, setImgError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [packageItem.hero_image]);
 
   const installedRecord = installedPackages.find((p) => p.package_id === packageItem.id);
   const isInstalled = !!installedRecord;
@@ -21,105 +73,180 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem, portrait = fa
 
   const handleClick = () => setSelectedPackage(packageItem);
 
-  const aspectClass = portrait ? "aspect-[3/4]" : "aspect-[16/10]";
+  const subtype = getPackageSubtype(packageItem);
+  const authorName = packageItem.author?.name || "Community";
+  const isSddmLogin = isLoginScreen(packageItem);
+  const currentWm = systemInfo?.window_manager?.toLowerCase();
+  const compatibility = getConciseCompatibility(packageItem, currentWm);
+
+  const hasImage = Boolean(
+    packageItem.hero_image && packageItem.hero_image.trim().length > 0 && !imgError
+  );
 
   return (
     <div
       onClick={handleClick}
-      className="store-card group relative overflow-hidden rounded-lg cursor-pointer select-none"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseOver={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
+      className="store-card group relative overflow-hidden rounded-xl cursor-pointer select-none border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] hover:border-[var(--rz-border-strong)] transition-all duration-200 shadow-xs hover:shadow-md flex flex-col"
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && handleClick()}
-      aria-label={`${packageItem.title} – ${packageItem.category}`}
+      aria-label={`${packageItem.title} — ${subtype} by ${authorName}`}
     >
-      {/* Art fill */}
-      <div className={`${aspectClass} w-full relative overflow-hidden bg-[var(--bg-canvas)]`}>
-        <img
-          src={packageItem.hero_image}
-          alt={packageItem.title}
-          className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
-          loading="lazy"
-          decoding="async"
-        />
+      {/* ── Artwork Container (Hero) ── */}
+      <div className="aspect-video w-full relative overflow-hidden bg-[var(--rz-surface-elevated)]">
+        {hasImage ? (
+          <MediaPreview
+            poster={packageItem.hero_image}
+            videoSrc={packageItem.preview_video_url}
+            mediaType={packageItem.media_type || "image"}
+            alt={packageItem.title}
+            mode="card"
+            isHovered={isHovered}
+            aspectRatio="16/9"
+            showBadge={packageItem.media_type === "video" || packageItem.media_type === "animated"}
+            className="transition-transform duration-500 ease-out group-hover:scale-105"
+          />
+        ) : (
+          /* Sleek Generative Tech Artwork Fallback */
+          <div
+            className={`w-full h-full flex flex-col justify-between p-3 relative overflow-hidden bg-gradient-to-br ${getGenerativeGradient(
+              packageItem.id
+            )} transition-transform duration-500 ease-out group-hover:scale-105`}
+          >
+            {/* Tech grid texture */}
+            <div
+              className="absolute inset-0 opacity-15 pointer-events-none"
+              style={{
+                backgroundImage:
+                  "radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px)",
+                backgroundSize: "12px 12px",
+              }}
+            />
 
-        {/* Permanent dark gradient at bottom for legibility */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
+            {/* Top row: category icon and subtle type */}
+            <div className="flex items-center justify-between z-10">
+              <div className="p-1 rounded-md bg-black/40 border border-white/10 backdrop-blur-xs">
+                {getCategoryIcon(packageItem.category || packageItem.package_type)}
+              </div>
+              <span className="text-[10px] font-mono text-white/60 tracking-wider">
+                {subtype}
+              </span>
+            </div>
 
-        {/* ── Static badges (top-left) ── */}
-        <div className="absolute top-2 left-2 flex items-center gap-1 flex-wrap">
+            {/* Bottom visual: preview title and command snippet */}
+            <div className="z-10 mt-auto">
+              <div className="text-[9px] font-mono text-white/50 truncate">
+                ~/.config/{packageItem.title.toLowerCase().replace(/\s+/g, "-")}
+              </div>
+              <div className="text-xs font-semibold text-white/90 truncate tracking-tight mt-0.5">
+                {packageItem.title}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Subtle gradient vignette at the bottom of artwork */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+
+        {/* Top-Left Trust & Login badges (Normal state) */}
+        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-10">
+          {isSddmLogin && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500/85 text-black shadow-xs">
+              SDDM
+            </span>
+          )}
           {packageItem.trust_tier === "official" && (
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-amber-500/25 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm backdrop-blur-sm"
-              title="Official Ryzora Package"
-            >
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-500/25 text-amber-200 border border-amber-400/35 backdrop-blur-xs flex items-center gap-0.5">
               <Sparkles className="w-2.5 h-2.5" />
               Official
             </span>
           )}
-          {packageItem.trust_tier === "verified" && (
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-blue-500/25 text-blue-300 border border-blue-500/40 flex items-center gap-1 shadow-sm backdrop-blur-sm"
-              title="Verified Author"
-            >
+          {packageItem.trust_tier === "verified" && !isSddmLogin && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-sky-500/25 text-sky-200 border border-sky-400/35 backdrop-blur-xs flex items-center gap-0.5">
               <ShieldCheck className="w-2.5 h-2.5" />
               Verified
             </span>
           )}
         </div>
 
-        {/* ── Install state badge (top-right) ── */}
-        {isUpdateAvailable ? (
-          <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/30 text-amber-300 border border-amber-500/40 backdrop-blur-sm">
-            Update
-          </span>
-        ) : isInstalled ? (
-          <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 backdrop-blur-sm">
-            Installed
-          </span>
-        ) : null}
-
-        {/* ── Static name strip (always visible at bottom) ── */}
-        <div className="absolute bottom-0 inset-x-0 p-2.5 pointer-events-none">
-          <div className="text-white text-xs font-semibold leading-tight truncate drop-shadow-sm">
-            {packageItem.title}
-          </div>
-          <div className="text-white/50 text-[10px] font-mono uppercase tracking-wide mt-0.5">
-            {packageItem.category}
-          </div>
+        {/* Top-Right Installation State Badge (Normal state) */}
+        <div className="absolute top-1.5 right-1.5 z-10">
+          <InstalledBadge
+            isInstalled={isInstalled}
+            isUpdateAvailable={isUpdateAvailable}
+          />
         </div>
 
-        {/* ── Hover overlay: slides up, reveals author + quick-install ── */}
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 pointer-events-none group-hover:pointer-events-auto">
-          <div className="text-white font-semibold text-xs truncate">{packageItem.title}</div>
-          <div className="text-white/60 text-[11px] truncate mt-0.5">
-            by {packageItem.author.name}
-            {packageItem.repository_id?.startsWith("provider:") &&
-              ` · ${packageItem.repository_id.replace("provider:", "")}`}
+        {/* ── Hover Overlay: Revealing Secondary Information ── */}
+        <div
+          className={[
+            "absolute inset-0 bg-black/55 backdrop-blur-xs flex flex-col justify-between p-2.5 z-20 pointer-events-none transition-opacity duration-200",
+            isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          ].join(" ")}
+        >
+          {/* Top row of hover overlay: compatibility */}
+          <div className="flex items-center justify-between gap-1">
+            <CompatibilityBadge
+              label={compatibility.label}
+              isWarning={compatibility.isWarning}
+            />
           </div>
 
-          {/* Colour palette dots */}
+          {/* Center action button */}
+          <div className="flex items-center justify-center">
+            <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/90 text-black shadow-lg flex items-center gap-1.5 font-sans">
+              <Eye className="w-3.5 h-3.5 text-black" />
+              Details
+            </span>
+          </div>
+
+          {/* Bottom row of hover overlay: metrics & rating */}
+          <div className="flex items-center justify-between text-[11px] font-medium text-white/90 pt-1">
+            <span className="flex items-center gap-1 font-mono">
+              <Download className="w-3 h-3 text-white/70" />
+              {formatDownloads(packageItem.downloads)}
+            </span>
+            {packageItem.rating > 0 && (
+              <span className="flex items-center gap-1 font-mono">
+                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                {packageItem.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Card Footer: Art-First Title & Subtitle (Always Visible) ── */}
+      <div className="p-2.5 bg-[var(--rz-surface)] border-t border-[var(--rz-border-subtle)]/70 flex-1 flex flex-col justify-center">
+        {/* Primary Title */}
+        <div className="text-xs sm:text-[13px] font-bold text-[var(--rz-text)] truncate leading-tight tracking-tight">
+          {packageItem.title}
+        </div>
+
+        {/* Secondary Subtitle: Type · Author */}
+        <div className="flex items-center justify-between gap-1.5 mt-1 text-[11px] text-[var(--rz-text-secondary)]">
+          <span className="truncate">
+            <strong className="font-semibold text-[var(--rz-text)]">{subtype}</strong>
+            <span className="mx-1 text-[var(--rz-text-muted)]">·</span>
+            <span>{authorName}</span>
+          </span>
           {packageItem.color_palette && packageItem.color_palette.length > 0 && (
-            <div className="flex items-center gap-1 mt-2">
-              {packageItem.color_palette.slice(0, 5).map((color, i) => (
+            <div className="flex items-center gap-0.5 shrink-0">
+              {packageItem.color_palette.slice(0, 3).map((c, i) => (
                 <span
                   key={i}
-                  className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0 shadow-sm"
-                  style={{ backgroundColor: color }}
-                  title={color}
+                  className="w-1.5 h-1.5 rounded-full border border-black/20"
+                  style={{ backgroundColor: c }}
+                  title={c}
                 />
               ))}
             </div>
           )}
-
-          <div className="flex items-center justify-between mt-2.5">
-            <span className="text-white/50 text-[10px] flex items-center gap-1">
-              <Download className="w-3 h-3" />
-              {(packageItem.downloads / 1000).toFixed(0)}k
-            </span>
-            <span className="text-[10px] text-white/90 font-medium px-2.5 py-1 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer pointer-events-auto" onClick={handleClick}>
-              View Details
-            </span>
-          </div>
         </div>
       </div>
     </div>

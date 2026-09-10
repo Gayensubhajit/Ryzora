@@ -51,7 +51,7 @@ export const HubView: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner & Refresh */}
-      <div className="p-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-5 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2 mb-1">
             <Globe className="w-5 h-5 text-[var(--accent)]" />
@@ -69,7 +69,7 @@ export const HubView: React.FC = () => {
           <button
             onClick={() => refreshAllRepositoriesSync()}
             disabled={loadingRepoSync}
-            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] bg-[var(--rz-surface-elevated)] shadow-xs transition-colors flex items-center space-x-1.5 disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingRepoSync ? "animate-spin" : ""}`} />
             <span>{loadingRepoSync ? "Syncing Repos..." : "Sync Repositories"}</span>
@@ -78,7 +78,7 @@ export const HubView: React.FC = () => {
           <button
             onClick={() => refreshHub()}
             disabled={loadingHub}
-            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors"
+            className="p-1.5 rounded-lg text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] border border-[var(--rz-border)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] shadow-xs transition-colors"
             title="Refresh Hub Overview"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingHub ? "animate-spin" : ""}`} />
@@ -113,7 +113,7 @@ export const HubView: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div
           onClick={() => setActiveCategory("installed")}
-          className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] transition-all cursor-pointer group"
+          className="p-4 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer group shadow-xs hover:shadow-md"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-medium text-[var(--text-muted)]">Installed</span>
@@ -130,7 +130,7 @@ export const HubView: React.FC = () => {
 
         <div
           onClick={() => setActiveCategory("updates")}
-          className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] transition-all cursor-pointer group"
+          className="p-4 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer group shadow-xs hover:shadow-md"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-medium text-[var(--text-muted)]">Updates</span>
@@ -139,7 +139,7 @@ export const HubView: React.FC = () => {
           <div className="text-xl font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
             <span>{updatesCount}</span>
             {updatesCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-950/60 border border-sky-800/40 text-sky-300 font-normal">
+              <span className="text-[10px] px-2 py-0.5 rounded font-mono font-medium border border-[var(--rz-badge-info-border)] bg-[var(--rz-badge-info-bg)] text-[var(--rz-badge-info-text)]">
                 Available
               </span>
             )}
@@ -152,7 +152,7 @@ export const HubView: React.FC = () => {
 
         <div
           onClick={() => setActiveCategory("repositories")}
-          className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] transition-all cursor-pointer group"
+          className="p-4 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer group shadow-xs hover:shadow-md"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-medium text-[var(--text-muted)]">Repositories</span>
@@ -160,7 +160,7 @@ export const HubView: React.FC = () => {
           </div>
           <div className="text-xl font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
             <span>{onlineRepos}/{totalRepos}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 font-normal">
+            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-medium border border-[var(--rz-badge-success-border)] bg-[var(--rz-badge-success-bg)] text-[var(--rz-badge-success-text)]">
               Online
             </span>
           </div>
@@ -172,7 +172,7 @@ export const HubView: React.FC = () => {
 
         <div
           onClick={() => setActiveCategory("creators")}
-          className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] transition-all cursor-pointer group"
+          className="p-4 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer group shadow-xs hover:shadow-md"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-medium text-[var(--text-muted)]">Creators</span>
@@ -189,7 +189,7 @@ export const HubView: React.FC = () => {
       </div>
 
       {/* Repository Sync Status Summary */}
-      <div className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
+      <div className="p-5 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] shadow-xs space-y-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Server className="w-4 h-4 text-[var(--text-secondary)]" />
@@ -210,7 +210,7 @@ export const HubView: React.FC = () => {
           {syncStatuses.map((repo) => (
             <div
               key={repo.id}
-              className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-card)] space-y-2 text-xs"
+              className="p-3.5 rounded-lg border border-[var(--rz-border)] bg-[var(--rz-surface-elevated)] space-y-2 text-xs shadow-xs hover:border-[var(--rz-border-strong)] transition-all"
             >
               <div className="flex items-center justify-between">
                 <div className="font-semibold text-[var(--text-primary)] truncate max-w-[150px]" title={repo.name}>
@@ -219,10 +219,10 @@ export const HubView: React.FC = () => {
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-semibold ${
                     repo.status === "online"
-                      ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
+                      ? "border border-[var(--rz-badge-success-border)] bg-[var(--rz-badge-success-bg)] text-[var(--rz-badge-success-text)]"
                       : repo.status === "cached"
-                      ? "bg-sky-950/60 text-sky-400 border border-sky-800/40"
-                      : "bg-red-950/60 text-red-400 border border-red-800/40"
+                      ? "border border-[var(--rz-badge-info-border)] bg-[var(--rz-badge-info-bg)] text-[var(--rz-badge-info-text)]"
+                      : "border border-[var(--rz-badge-danger-border)] bg-[var(--rz-badge-danger-bg)] text-[var(--rz-badge-danger-text)]"
                   }`}
                 >
                   {repo.status}
@@ -249,7 +249,7 @@ export const HubView: React.FC = () => {
       {/* Featured Creators & Recent Installs */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Verified Creators */}
-        <div className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
+        <div className="p-5 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] shadow-xs space-y-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Users className="w-4 h-4 text-violet-400" />
@@ -271,15 +271,15 @@ export const HubView: React.FC = () => {
               <div
                 key={creator.id}
                 onClick={() => setActiveCategory("creators")}
-                className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] transition-all flex items-center justify-between cursor-pointer group"
+                className="p-3.5 rounded-lg border border-[var(--rz-border)] bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all flex items-center justify-between cursor-pointer group shadow-xs"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-violet-950/60 border border-violet-800/40 flex items-center justify-center text-xs font-bold text-violet-300">
+                  <div className="w-8 h-8 rounded-full border border-[var(--rz-badge-purple-border)] bg-[var(--rz-badge-purple-bg)] text-[var(--rz-badge-purple-text)] flex items-center justify-center text-xs font-bold shrink-0">
                     {creator.display_name.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-xs font-semibold text-[var(--text-primary)] group-hover:text-white transition-colors">
+                      <span className="text-xs font-semibold text-[var(--text-primary)] group-hover:text-[var(--rz-accent)] transition-colors">
                         {creator.display_name}
                       </span>
                       {creator.verified && (
@@ -308,7 +308,7 @@ export const HubView: React.FC = () => {
         </div>
 
         {/* Recent Active Installs */}
-        <div className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
+        <div className="p-5 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface)] shadow-xs space-y-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <DownloadCloud className="w-4 h-4 text-[var(--accent)]" />
@@ -335,10 +335,10 @@ export const HubView: React.FC = () => {
                 <div
                   key={inst.package_id}
                   onClick={() => setActiveCategory("installed")}
-                  className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] transition-all flex items-center justify-between cursor-pointer group"
+                  className="p-3.5 rounded-lg border border-[var(--rz-border)] bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all flex items-center justify-between cursor-pointer group shadow-xs"
                 >
                   <div>
-                    <div className="text-xs font-semibold text-[var(--text-primary)] group-hover:text-white transition-colors">
+                    <div className="text-xs font-semibold text-[var(--text-primary)] group-hover:text-[var(--rz-accent)] transition-colors">
                       {inst.name || inst.package_id}
                     </div>
                     <div className="text-[10px] text-[var(--text-muted)] font-mono">

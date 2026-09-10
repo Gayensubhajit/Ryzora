@@ -1,0 +1,48 @@
+{
+  "id": "lockscreen-qylock-forest",
+  "name": "Forest",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Deep atmospheric mist passing through pine trees with gentle ambient particle motion and organic typography.",
+  "tags": [
+    "forest",
+    "nature",
+    "ambient",
+    "animated",
+    "qylock",
+    "quickshell",
+    "sddm"
+  ],
+  "color_palette": [
+    "#4e7a5d",
+    "#0e1611",
+    "#1e2e23",
+    "#a8c5b0"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "quickshell"
+    ],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/forest/theme.conf",
+      "description": "Forest configuration file."
+    }
+  ]
+}

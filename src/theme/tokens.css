@@ -1,0 +1,373 @@
+/**
+ * Ryzora Semantic Design Tokens
+ * Standard prefix: --rz-*
+ * Dedicated theme token layer supporting System / Dark / Light appearances,
+ * selective accents, depth hierarchies, and accessibility primitives.
+ */
+
+:root {
+  /* Default to Dark Ryzora Glass */
+  color-scheme: dark;
+
+  /* Surfaces & Canvas (Dark Reference) */
+  --rz-bg: #090b0e;
+  --rz-sidebar-bg: #0e1116;
+  --rz-surface: #131720;
+  --rz-surface-elevated: #1a202c;
+  --rz-surface-hover: #222938;
+  --rz-surface-active: #293244;
+
+  /* Borders (Subtle 1px definition) */
+  --rz-border: rgba(255, 255, 255, 0.09);
+  --rz-border-subtle: #242b38;
+  --rz-border-strong: #363e50;
+
+  /* Typography */
+  --rz-text: #f5f5f7;
+  --rz-text-secondary: #a6aab3;
+  --rz-text-muted: #747d8f;
+  --rz-text-faint: #4e5666;
+
+  /* Navigation Specific */
+  --rz-nav-item: #949db0;
+  --rz-nav-item-hover: #ffffff;
+  --rz-nav-item-active-bg: rgba(52, 120, 229, 0.14);
+  --rz-nav-item-active-text: #ffffff;
+  --rz-nav-section-label: #5e6678;
+
+  /* Ryzora Glass Materials (Dark Reference) */
+  --rz-glass: rgba(18, 22, 28, 0.72);
+  --rz-glass-border: 1px solid rgba(255, 255, 255, 0.10);
+  --rz-glass-modal-bg: linear-gradient(135deg, rgba(30, 35, 44, 0.80), rgba(12, 15, 20, 0.86));
+  --rz-glass-modal-border: 1px solid rgba(255, 255, 255, 0.10);
+  --rz-glass-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --rz-glass-header-bg: rgba(35, 38, 43, 0.62);
+  --rz-glass-body-bg: rgba(8, 12, 18, 0.62);
+  --rz-glass-footer-bg: rgba(255, 255, 255, 0.045);
+  --rz-glass-nested-bg: rgba(255, 255, 255, 0.025);
+  --rz-glass-nested-border: 1px solid rgba(255, 255, 255, 0.06);
+  --rz-glass-popover-bg: rgba(24, 28, 36, 0.88);
+  --rz-glass-popover-border: 1px solid rgba(255, 255, 255, 0.12);
+  --rz-glass-backdrop: blur(24px) saturate(130%);
+
+  /* Neutral Controls & Search */
+  --rz-search-bg: var(--rz-surface);
+  --rz-search-border: 1px solid var(--rz-border-subtle);
+  --rz-search-placeholder: var(--rz-text-faint);
+
+  --rz-btn-preview-bg: rgba(255, 255, 255, 0.07);
+  --rz-btn-preview-border: 1px solid rgba(255, 255, 255, 0.12);
+  --rz-btn-preview-text: rgba(255, 255, 255, 0.85);
+  --rz-btn-preview-hover: rgba(255, 255, 255, 0.12);
+  --rz-modal-backdrop: rgba(0, 0, 0, 0.72);
+
+  /* Functional Status (Restrained & Muted) */
+  --rz-status-success: #6fd6a5;
+  --rz-status-success-bg: rgba(111, 214, 165, 0.10);
+  --rz-status-success-border: rgba(111, 214, 165, 0.20);
+
+  --rz-status-warning: #e5b85c;
+  --rz-status-warning-bg: rgba(230, 184, 92, 0.10);
+  --rz-status-warning-border: rgba(230, 184, 92, 0.20);
+
+  --rz-status-error: #e98a91;
+  --rz-status-error-bg: rgba(220, 70, 80, 0.08);
+  --rz-status-error-border: rgba(220, 90, 100, 0.20);
+
+  /* Badges */
+  --rz-badge-success-bg: rgba(111, 214, 165, 0.12);
+  --rz-badge-success-text: #6fd6a5;
+  --rz-badge-success-border: rgba(111, 214, 165, 0.25);
+
+  --rz-badge-info-bg: rgba(88, 132, 235, 0.12);
+  --rz-badge-info-text: #7aa2ff;
+  --rz-badge-info-border: rgba(88, 132, 235, 0.25);
+
+  --rz-badge-warning-bg: rgba(230, 184, 92, 0.12);
+  --rz-badge-warning-text: #e5b85c;
+  --rz-badge-warning-border: rgba(230, 184, 92, 0.25);
+
+  --rz-badge-danger-bg: rgba(220, 70, 80, 0.12);
+  --rz-badge-danger-text: #e98a91;
+  --rz-badge-danger-border: rgba(220, 90, 100, 0.25);
+
+  --rz-badge-purple-bg: rgba(139, 92, 246, 0.12);
+  --rz-badge-purple-text: #a78bfa;
+  --rz-badge-purple-border: rgba(139, 92, 246, 0.25);
+
+  /* Shadows & Depth */
+  --rz-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --rz-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --rz-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --rz-card-shadow: 0 4px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --rz-card-hover-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--rz-accent), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+
+  /* Default Accent: Blue */
+  --rz-accent: #3478e5;
+  --rz-accent-hover: #2664cb;
+  --rz-accent-muted: rgba(52, 120, 229, 0.12);
+  --rz-accent-text: #60a5fa;
+  --rz-accent-glass: rgba(90, 130, 220, 0.72);
+  --rz-accent-glass-hover: rgba(105, 145, 235, 0.85);
+  --rz-accent-glass-border: 1px solid rgba(160, 190, 255, 0.35);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 16px rgba(60, 100, 200, 0.16);
+
+  /* Backward Compatibility Mappings */
+  --bg-card: var(--rz-surface);
+  --bg-canvas: var(--rz-bg);
+  --bg-sidebar: var(--rz-sidebar-bg);
+  --bg-surface: var(--rz-surface);
+  --bg-surface-elevated: var(--rz-surface-elevated);
+  --bg-surface-hover: var(--rz-surface-hover);
+  --bg-surface-active: var(--rz-surface-active);
+  --border-subtle: var(--rz-border-subtle);
+  --border-strong: var(--rz-border-strong);
+  --text-primary: var(--rz-text);
+  --text-secondary: var(--rz-text-secondary);
+  --text-muted: var(--rz-text-muted);
+  --text-faint: var(--rz-text-faint);
+  --accent: var(--rz-accent);
+  --accent-hover: var(--rz-accent-hover);
+  --accent-muted: var(--rz-accent-muted);
+  --accent-text: var(--rz-accent-text);
+  --status-success: var(--rz-status-success);
+  --status-warning: var(--rz-status-warning);
+  --status-error: var(--rz-status-error);
+}
+
+/* ── Light Appearance Mode (Soft Premium Desktop Light Theme) ────────── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Clear Semantic Layers */
+  --rz-bg: #f3f5f7;
+  --rz-sidebar-bg: #eaedf2;
+  --rz-surface: #f8f9fa;
+  --rz-surface-elevated: #ffffff;
+  --rz-surface-hover: #edf0f5;
+  --rz-surface-active: #e2e6ed;
+
+  /* Borders (Subtle dark alpha definition) */
+  --rz-border: rgba(20, 24, 30, 0.08);
+  --rz-border-subtle: rgba(20, 24, 30, 0.06);
+  --rz-border-strong: rgba(20, 24, 30, 0.16);
+
+  /* Typography (High contrast & readability) */
+  --rz-text: #202124;
+  --rz-text-secondary: #5f6368;
+  --rz-text-muted: #70757f;
+  --rz-text-faint: #808692;
+
+  /* Navigation Specific (Crisp contrast) */
+  --rz-nav-item: #35373c;
+  --rz-nav-item-hover: #17181b;
+  --rz-nav-item-active-bg: rgba(50, 110, 220, 0.09);
+  --rz-nav-item-active-text: #1d1f23;
+  --rz-nav-section-label: #7c828f;
+
+  /* Ryzora Glass Materials (Translucent White Glass) */
+  --rz-glass: rgba(255, 255, 255, 0.72);
+  --rz-glass-border: 1px solid rgba(20, 24, 30, 0.10);
+  --rz-glass-modal-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(246, 248, 252, 0.94));
+  --rz-glass-modal-border: 1px solid rgba(20, 24, 30, 0.10);
+  --rz-glass-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.90);
+  --rz-glass-header-bg: rgba(255, 255, 255, 0.78);
+  --rz-glass-body-bg: rgba(246, 248, 252, 0.82);
+  --rz-glass-footer-bg: rgba(255, 255, 255, 0.88);
+  --rz-glass-nested-bg: rgba(20, 24, 30, 0.03);
+  --rz-glass-nested-border: 1px solid rgba(20, 24, 30, 0.07);
+  --rz-glass-popover-bg: rgba(255, 255, 255, 0.94);
+  --rz-glass-popover-border: 1px solid rgba(20, 24, 30, 0.12);
+  --rz-glass-backdrop: blur(24px) saturate(130%);
+
+  /* TopBar Search (Visibly separated surface) */
+  --rz-search-bg: #ffffff;
+  --rz-search-border: 1px solid rgba(20, 24, 30, 0.12);
+  --rz-search-placeholder: #888e99;
+
+  /* Neutral Controls */
+  --rz-btn-preview-bg: rgba(20, 24, 30, 0.05);
+  --rz-btn-preview-border: 1px solid rgba(20, 24, 30, 0.12);
+  --rz-btn-preview-text: #202124;
+  --rz-btn-preview-hover: rgba(20, 24, 30, 0.09);
+  --rz-modal-backdrop: rgba(15, 20, 30, 0.35);
+
+  /* Status Colors for Light Background */
+  --rz-status-success: #059669;
+  --rz-status-success-bg: rgba(16, 185, 129, 0.08);
+  --rz-status-success-border: rgba(16, 185, 129, 0.22);
+
+  --rz-status-warning: #d97706;
+  --rz-status-warning-bg: rgba(245, 158, 11, 0.08);
+  --rz-status-warning-border: rgba(245, 158, 11, 0.22);
+
+  --rz-status-error: #dc2626;
+  --rz-status-error-bg: rgba(239, 68, 68, 0.08);
+  --rz-status-error-border: rgba(239, 68, 68, 0.20);
+
+  /* Badges */
+  --rz-badge-success-bg: rgba(16, 185, 129, 0.09);
+  --rz-badge-success-text: #047857;
+  --rz-badge-success-border: rgba(16, 185, 129, 0.22);
+
+  --rz-badge-info-bg: rgba(37, 99, 235, 0.08);
+  --rz-badge-info-text: #1d4ed8;
+  --rz-badge-info-border: rgba(37, 99, 235, 0.20);
+
+  --rz-badge-warning-bg: rgba(217, 119, 6, 0.09);
+  --rz-badge-warning-text: #b45309;
+  --rz-badge-warning-border: rgba(217, 119, 6, 0.22);
+
+  --rz-badge-danger-bg: rgba(220, 38, 38, 0.08);
+  --rz-badge-danger-text: #dc2626;
+  --rz-badge-danger-border: rgba(220, 38, 38, 0.20);
+
+  --rz-badge-purple-bg: rgba(124, 58, 237, 0.08);
+  --rz-badge-purple-text: #7c3aed;
+  --rz-badge-purple-border: rgba(124, 58, 237, 0.20);
+
+  /* Shadows & Depth (Soft ambient desktop cards) */
+  --rz-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --rz-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --rz-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.10);
+  --rz-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --rz-card-hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), 0 16px 36px rgba(0, 0, 0, 0.06);
+
+  /* Default Accent for Light: Restrained Blue */
+  --rz-accent: #4f7fdc;
+  --rz-accent-hover: #3b6bc6;
+  --rz-accent-muted: rgba(79, 127, 220, 0.09);
+  --rz-accent-text: #2f62be;
+  --rz-accent-glass: rgba(79, 127, 220, 0.84);
+  --rz-accent-glass-hover: rgba(59, 107, 198, 0.94);
+  --rz-accent-glass-border: 1px solid rgba(147, 197, 253, 0.50);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30), 0 4px 14px rgba(79, 127, 220, 0.22);
+}
+
+/* ── Dark Appearance Mode ─────────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* ── Accent Color Overrides ─────────────────────────────────────────────── */
+/* Purple */
+[data-accent="purple"] {
+  --rz-accent: #8b5cf6;
+  --rz-accent-hover: #7c3aed;
+  --rz-accent-muted: rgba(139, 92, 246, 0.12);
+  --rz-accent-text: #a78bfa;
+  --rz-accent-glass: rgba(139, 92, 246, 0.76);
+  --rz-accent-glass-hover: rgba(155, 112, 250, 0.88);
+  --rz-accent-glass-border: 1px solid rgba(196, 181, 253, 0.35);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 16px rgba(124, 58, 237, 0.16);
+}
+[data-theme="light"][data-accent="purple"] {
+  --rz-accent: #7c3aed;
+  --rz-accent-hover: #6d28d9;
+  --rz-accent-muted: rgba(124, 58, 237, 0.08);
+  --rz-accent-text: #6d28d9;
+  --rz-accent-glass: rgba(124, 58, 237, 0.84);
+  --rz-accent-glass-hover: rgba(109, 40, 217, 0.94);
+  --rz-accent-glass-border: 1px solid rgba(216, 180, 254, 0.50);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30), 0 4px 14px rgba(124, 58, 237, 0.22);
+}
+
+/* Green */
+[data-accent="green"] {
+  --rz-accent: #10b981;
+  --rz-accent-hover: #059669;
+  --rz-accent-muted: rgba(16, 185, 129, 0.12);
+  --rz-accent-text: #34d399;
+  --rz-accent-glass: rgba(16, 185, 129, 0.76);
+  --rz-accent-glass-hover: rgba(30, 200, 145, 0.88);
+  --rz-accent-glass-border: 1px solid rgba(167, 243, 208, 0.35);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 16px rgba(16, 185, 129, 0.16);
+}
+[data-theme="light"][data-accent="green"] {
+  --rz-accent: #059669;
+  --rz-accent-hover: #047857;
+  --rz-accent-muted: rgba(5, 150, 105, 0.08);
+  --rz-accent-text: #047857;
+  --rz-accent-glass: rgba(5, 150, 105, 0.84);
+  --rz-accent-glass-hover: rgba(4, 120, 87, 0.94);
+  --rz-accent-glass-border: 1px solid rgba(110, 231, 183, 0.50);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30), 0 4px 14px rgba(5, 150, 105, 0.22);
+}
+
+/* Orange */
+[data-accent="orange"] {
+  --rz-accent: #f97316;
+  --rz-accent-hover: #ea580c;
+  --rz-accent-muted: rgba(249, 115, 22, 0.12);
+  --rz-accent-text: #fb923c;
+  --rz-accent-glass: rgba(249, 115, 22, 0.78);
+  --rz-accent-glass-hover: rgba(251, 135, 55, 0.90);
+  --rz-accent-glass-border: 1px solid rgba(254, 215, 170, 0.35);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 16px rgba(234, 88, 12, 0.16);
+}
+[data-theme="light"][data-accent="orange"] {
+  --rz-accent: #ea580c;
+  --rz-accent-hover: #c2410c;
+  --rz-accent-muted: rgba(234, 88, 12, 0.08);
+  --rz-accent-text: #c2410c;
+  --rz-accent-glass: rgba(234, 88, 12, 0.84);
+  --rz-accent-glass-hover: rgba(194, 65, 12, 0.94);
+  --rz-accent-glass-border: 1px solid rgba(253, 186, 116, 0.50);
+  --rz-accent-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30), 0 4px 14px rgba(234, 88, 12, 0.22);
+}
+
+/* ── Accessibility: Reduced Transparency ──────────────────────────────── */
+@media (prefers-reduced-transparency: reduce) {
+  :root, [data-theme="dark"], [data-theme="light"] {
+    --rz-glass-backdrop: none !important;
+    --rz-glass-modal-bg: var(--rz-surface-elevated) !important;
+    --rz-glass-header-bg: var(--rz-surface) !important;
+    --rz-glass-body-bg: var(--rz-bg) !important;
+    --rz-glass-footer-bg: var(--rz-surface) !important;
+    --rz-glass-popover-bg: var(--rz-surface-elevated) !important;
+  }
+}
+
+[data-reduced-transparency="true"] {
+  --rz-glass-backdrop: none !important;
+  --rz-glass-modal-bg: var(--rz-surface-elevated) !important;
+  --rz-glass-header-bg: var(--rz-surface) !important;
+  --rz-glass-body-bg: var(--rz-bg) !important;
+  --rz-glass-footer-bg: var(--rz-surface) !important;
+  --rz-glass-popover-bg: var(--rz-surface-elevated) !important;
+}
+
+/* ── Accessibility: Reduced Motion ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-reduced-motion="true"] *,
+[data-reduced-motion="true"] ::before,
+[data-reduced-motion="true"] ::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── Accessibility: Increased Contrast ────────────────────────────────── */
+[data-increase-contrast="true"] {
+  --rz-border: rgba(255, 255, 255, 0.25) !important;
+  --rz-border-subtle: rgba(255, 255, 255, 0.20) !important;
+  --rz-text-muted: #a4adbd !important;
+  --rz-text-faint: #808899 !important;
+}
+
+[data-theme="light"][data-increase-contrast="true"] {
+  --rz-border: rgba(0, 0, 0, 0.25) !important;
+  --rz-border-subtle: rgba(0, 0, 0, 0.20) !important;
+  --rz-text-secondary: #272a30 !important;
+  --rz-text-muted: #3a3f4a !important;
+  --rz-text-faint: #525968 !important;
+}

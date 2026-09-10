@@ -112,7 +112,7 @@ export const RepositoryView: React.FC = () => {
           <button
             onClick={() => refreshAllRepositoriesSync()}
             disabled={loadingRepoSync}
-            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingRepoSync ? "animate-spin" : ""}`} />
             <span>{loadingRepoSync ? "Syncing All..." : "Sync All Sources"}</span>
@@ -167,7 +167,7 @@ export const RepositoryView: React.FC = () => {
                 <button
                   onClick={() => handleSyncSingle(repo.id)}
                   disabled={syncingId === repo.id}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${syncingId === repo.id ? "animate-spin" : ""}`} />
                   <span>{syncingId === repo.id ? "Syncing..." : "Sync Now"}</span>
@@ -211,7 +211,7 @@ export const RepositoryView: React.FC = () => {
                       className={`px-2 py-0.5 rounded text-[11px] font-mono capitalize transition-all ${
                         repo.channel === ch
                           ? "bg-[var(--accent)] text-white font-semibold shadow-xs"
-                          : "text-[var(--text-muted)] hover:text-white"
+                          : "text-[var(--text-muted)] hover:text-[var(--rz-text)]"
                       }`}
                     >
                       {ch}
@@ -236,7 +236,7 @@ export const RepositoryView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-[var(--text-muted)] hover:text-white text-xs px-2 py-1"
+                className="text-[var(--text-muted)] hover:text-[var(--rz-text)] text-xs px-2 py-1"
               >
                 ✕
               </button>
@@ -293,7 +293,7 @@ export const RepositoryView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)]"
+                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--text-muted)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)]"
               >
                 Cancel
               </button>

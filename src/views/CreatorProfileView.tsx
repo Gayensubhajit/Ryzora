@@ -140,7 +140,7 @@ export const CreatorProfileView: React.FC = () => {
                 </div>
                 <button
                   onClick={() => copyToClipboard(creator.public_key_fingerprint!)}
-                  className="p-1 hover:text-white text-[var(--text-muted)] shrink-0 ml-2"
+                  className="p-1 hover:text-[var(--rz-text)] text-[var(--text-muted)] shrink-0 ml-2"
                   title="Copy Fingerprint"
                 >
                   {copiedKey === creator.public_key_fingerprint ? (
@@ -187,7 +187,7 @@ export const CreatorProfileView: React.FC = () => {
                   <button
                     key={p.id}
                     onClick={() => handleSelectPackage(p.id)}
-                    className="px-2 py-1 rounded bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] hover:text-white transition-colors flex items-center space-x-1"
+                    className="px-2 py-1 rounded bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--rz-text)] transition-colors flex items-center space-x-1"
                   >
                     <Package className="w-3 h-3 text-[var(--accent)]" />
                     <span>{p.name || p.id}</span>

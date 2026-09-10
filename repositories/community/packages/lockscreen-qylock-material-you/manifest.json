@@ -1,0 +1,47 @@
+{
+  "id": "lockscreen-qylock-material-you",
+  "name": "Material You",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Dynamic wallpaper-adaptive pastel palette, rounded pill elements, large clock typography, and fluid status pills.",
+  "tags": [
+    "material-you",
+    "minimal",
+    "modern",
+    "qylock",
+    "quickshell",
+    "sddm"
+  ],
+  "color_palette": [
+    "#a8c7fa",
+    "#10131c",
+    "#1f2430",
+    "#d3e3fd"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "quickshell"
+    ],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/material-you/theme.conf",
+      "description": "Material You configuration file."
+    }
+  ]
+}

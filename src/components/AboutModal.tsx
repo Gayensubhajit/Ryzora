@@ -33,7 +33,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-white p-1 rounded-md hover:bg-[var(--bg-surface-elevated)] transition-colors"
+            className="text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] p-1 rounded-md hover:bg-[var(--rz-surface-hover)] transition-colors"
             title="Close dialog"
             aria-label="Close"
           >
@@ -104,7 +104,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             href="https://github.com/Gayensubhajit/Ryzora"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[var(--text-muted)] hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+            className="text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] transition-colors flex items-center gap-1 text-[11px]"
           >
             <span>GitHub</span>
             <ExternalLink className="w-2.5 h-2.5" />
@@ -113,7 +113,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             href="https://github.com/Gayensubhajit/Ryzora/blob/main/docs/SECURITY.md"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[var(--text-muted)] hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+            className="text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] transition-colors flex items-center gap-1 text-[11px]"
           >
             <span>Security Policy</span>
             <ExternalLink className="w-2.5 h-2.5" />
@@ -122,7 +122,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             href="https://github.com/Gayensubhajit/Ryzora/issues"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[var(--text-muted)] hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+            className="text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] transition-colors flex items-center gap-1 text-[11px]"
           >
             <span>Report Issue</span>
             <ExternalLink className="w-2.5 h-2.5" />

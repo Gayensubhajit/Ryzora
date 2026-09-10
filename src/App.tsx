@@ -1,3 +1,4 @@
+import { ThemeProvider } from "./theme";
 import React, { useState } from "react";
 import { AppProvider, useApp } from "./context/AppContext";
 import { Sidebar } from "./components/Sidebar";
@@ -17,12 +18,13 @@ import { NotificationsView } from "./views/NotificationsView";
 import { CollectionsView } from "./views/CollectionsView";
 import { IntegrityView } from "./views/IntegrityView";
 import { PackageDetailModal } from "./components/PackageDetailModal";
+import { LockScreenDetailView } from "./views/LockScreenDetailView";
 import { AboutModal } from "./components/AboutModal";
 import { FirstRunBanner } from "./components/FirstRunBanner";
 import { Toast } from "./components/Toast";
 
 const MainLayout: React.FC = () => {
-  const { activeCategory } = useApp();
+  const { activeCategory, selectedPackage } = useApp();
   const [aboutOpen, setAboutOpen] = useState(false);
 
   const renderActiveView = () => {
@@ -59,17 +61,17 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--rz-bg)] text-[var(--rz-text)] antialiased font-sans opacity-100">
       {/* Fixed Navigation Sidebar */}
       <Sidebar onOpenAbout={() => setAboutOpen(true)} />
 
       {/* Main Content Pane */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
         {/* Top Header */}
         <TopBar onOpenAbout={() => setAboutOpen(true)} />
 
         {/* Viewport */}
-        <main className="flex-1 overflow-y-auto px-6 py-6">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 min-w-0">
           <div>
             {/* Dismissible First-Run Onboarding Banner */}
             <FirstRunBanner />
@@ -80,8 +82,12 @@ const MainLayout: React.FC = () => {
         </main>
       </div>
 
-      {/* Package Detail Modal Dialog */}
-      <PackageDetailModal />
+      {/* Dedicated Lock Screen Product View vs Generic Package Detail Modal */}
+      {selectedPackage && (selectedPackage.category === "lockscreens" || selectedPackage.package_type === "lockscreen") ? (
+        <LockScreenDetailView />
+      ) : (
+        <PackageDetailModal />
+      )}
 
       {/* Compact Native About Modal */}
       <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
@@ -94,8 +100,10 @@ const MainLayout: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <MainLayout />
-    </AppProvider>
+    <ThemeProvider>
+      <AppProvider>
+        <MainLayout />
+      </AppProvider>
+    </ThemeProvider>
   );
 }

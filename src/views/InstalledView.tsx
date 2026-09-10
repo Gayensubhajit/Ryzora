@@ -96,7 +96,7 @@ export const InstalledView: React.FC = () => {
             <button
               onClick={handleCheckAllUpdates}
               disabled={checkingUpdates}
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1.5 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdates ? "animate-spin" : ""}`} />
               <span>{checkingUpdates ? "Checking..." : "Check for Updates"}</span>
@@ -105,14 +105,14 @@ export const InstalledView: React.FC = () => {
 
           <button
             onClick={() => setActiveCategory("updates")}
-            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors"
+            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors"
           >
             Updates
           </button>
 
           <button
             onClick={() => setActiveCategory("backups")}
-            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors"
+            className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors"
           >
             View Backups
           </button>
@@ -199,7 +199,7 @@ export const InstalledView: React.FC = () => {
               </div>
               <button
                 onClick={() => setHistoryModalOpen(false)}
-                className="text-[var(--text-muted)] hover:text-white text-xs px-2 py-1"
+                className="text-[var(--text-muted)] hover:text-[var(--rz-text)] text-xs px-2 py-1"
               >
                 ✕
               </button>
@@ -248,22 +248,24 @@ export const InstalledView: React.FC = () => {
                         </div>
 
                         <div className="text-[11px] font-mono text-[var(--text-muted)] space-y-0.5 pt-1 border-t border-[var(--border-subtle)]/60">
-                          <div>Snapshot ID: <span className="text-[var(--text-secondary)]">{entry.snapshot_id}</span></div>
+                          <div>Snapshot ID: <span className="text-[var(--text-secondary)]">{entry.snapshot_id || "None (direct install)"}</span></div>
                           {entry.tree_hash && (
                             <div className="truncate">Tree Hash: <span className="text-[var(--text-secondary)]">{entry.tree_hash.substring(0, 16)}...</span></div>
                           )}
                         </div>
 
-                        <div className="pt-1 flex items-center justify-end">
-                          <button
-                            onClick={() => handleRollbackSnapshot(entry.snapshot_id)}
-                            disabled={rollingBackId === entry.snapshot_id}
-                            className="px-2.5 py-1 rounded text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1 disabled:opacity-50"
-                          >
-                            <RotateCcw className={`w-3 h-3 ${rollingBackId === entry.snapshot_id ? "animate-spin" : ""}`} />
-                            <span>{rollingBackId === entry.snapshot_id ? "Rolling back..." : "Rollback to Snapshot"}</span>
-                          </button>
-                        </div>
+                        {entry.snapshot_id && (
+                          <div className="pt-1 flex items-center justify-end">
+                            <button
+                              onClick={() => handleRollbackSnapshot(entry.snapshot_id)}
+                              disabled={rollingBackId === entry.snapshot_id}
+                              className="px-2.5 py-1 rounded text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors flex items-center space-x-1 disabled:opacity-50"
+                            >
+                              <RotateCcw className={`w-3 h-3 ${rollingBackId === entry.snapshot_id ? "animate-spin" : ""}`} />
+                              <span>{rollingBackId === entry.snapshot_id ? "Rolling back..." : "Rollback to Snapshot"}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -274,7 +276,7 @@ export const InstalledView: React.FC = () => {
             <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)] flex items-center justify-end">
               <button
                 onClick={() => setHistoryModalOpen(false)}
-                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)]"
+                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--text-muted)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)]"
               >
                 Close
               </button>

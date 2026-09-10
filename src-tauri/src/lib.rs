@@ -27,6 +27,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // System Probe
             system::detect_system_info,
+            system::get_system_appearance,
+            system::window_minimize,
+            system::window_toggle_maximize,
+            system::window_close,
+            system::set_window_appearance,
             // Deep Link Handler (Phase 19)
             deeplink::handle_deeplink,
             // Manifest — validation only (Phase 2)

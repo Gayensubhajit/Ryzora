@@ -14,7 +14,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredPackage }) => {
 
   return (
     <div
-      className="relative w-full h-64 md:h-72 rounded-xl overflow-hidden cursor-pointer group"
+      className="relative w-full h-56 sm:h-64 md:h-72 rounded-2xl overflow-hidden cursor-pointer group border border-[var(--rz-border)] shadow-xl"
       onClick={() => setSelectedPackage(featuredPackage)}
     >
       {/* Full-bleed artwork */}

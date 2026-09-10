@@ -1,0 +1,47 @@
+{
+  "id": "lockscreen-qylock-nier-automata",
+  "name": "NieR: Automata",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Minimal monochrome YoRHa interface with tactical HUD styling, glitch micro-interactions, and high contrast typography.",
+  "tags": [
+    "nier",
+    "minimal",
+    "yorha",
+    "qylock",
+    "quickshell",
+    "sddm"
+  ],
+  "color_palette": [
+    "#dcd8cd",
+    "#1a1917",
+    "#32302b",
+    "#b5af9f"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "quickshell"
+    ],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
+      "description": "NieR: Automata configuration file."
+    }
+  ]
+}

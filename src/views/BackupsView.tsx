@@ -157,7 +157,7 @@ export const BackupsView: React.FC = () => {
                     <button
                       onClick={() => handleRestore(snap.id)}
                       disabled={isBusy || isCorrupted}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-[var(--rz-text)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <RotateCcw className="w-3 h-3" />
                       <span>{isBusy ? "Working..." : "Restore"}</span>

@@ -269,3 +269,140 @@ pub fn detect_system_info() -> SystemInfo {
         installed_components,
     }
 }
+
+
+
+#[tauri::command]
+pub fn get_system_appearance() -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(theme_env) = std::env::var("GTK_THEME") {
+            let s = theme_env.to_lowercase();
+            if s.contains("dark") {
+                return Ok("dark".to_string());
+            } else if s.contains("light") {
+                return Ok("light".to_string());
+            }
+        }
+
+        let home = crate::snapshot::get_home_dir();
+        let candidates = [
+            home.join(".config/gtk-4.0/settings.ini"),
+            home.join(".config/gtk-3.0/settings.ini"),
+            home.join(".config/kdeglobals"),
+        ];
+
+        for path in &candidates {
+            if let Ok(cfg) = fs::read_to_string(path) {
+                let lower = cfg.to_lowercase();
+                if lower.contains("gtk-application-prefer-dark-theme=1")
+                    || lower.contains("gtk-application-prefer-dark-theme = 1")
+                    || lower.contains("gtk-application-prefer-dark-theme = true")
+                    || lower.contains("dark")
+                {
+                    return Ok("dark".to_string());
+                } else if lower.contains("gtk-application-prefer-dark-theme=0")
+                    || lower.contains("gtk-application-prefer-dark-theme = 0")
+                    || lower.contains("gtk-application-prefer-dark-theme = false")
+                {
+                    return Ok("light".to_string());
+                }
+            }
+        }
+    }
+
+    Ok("dark".to_string())
+}
+
+#[tauri::command]
+pub fn set_window_appearance(app: tauri::AppHandle, theme: String) -> Result<(), String> {
+    use tauri::Manager;
+    let is_dark = theme != "light";
+
+    if let Some(window) = app.get_webview_window("main") {
+        let t = if is_dark {
+            Some(tauri::Theme::Dark)
+        } else {
+            Some(tauri::Theme::Light)
+        };
+        let _ = window.set_theme(t);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app.run_on_main_thread(move || {
+            use gtk::prelude::*;
+            if let Some(settings) = gtk::Settings::default() {
+                settings.set_gtk_application_prefer_dark_theme(is_dark);
+                let cur = settings.gtk_theme_name().unwrap_or_default();
+                if is_dark {
+                    if cur == "adw-gtk3" {
+                        settings.set_gtk_theme_name(Some("adw-gtk3-dark"));
+                    } else if cur == "Adwaita" {
+                        settings.set_gtk_theme_name(Some("Adwaita-dark"));
+                    }
+                } else {
+                    if cur == "adw-gtk3-dark" {
+                        settings.set_gtk_theme_name(Some("adw-gtk3"));
+                    } else if cur == "Adwaita-dark" {
+                        settings.set_gtk_theme_name(Some("Adwaita"));
+                    } else if cur.ends_with("-dark") {
+                        settings.set_gtk_theme_name(Some(cur.trim_end_matches("-dark")));
+                    } else if cur.ends_with("-Dark") {
+                        settings.set_gtk_theme_name(Some(cur.trim_end_matches("-Dark")));
+                    }
+                }
+            }
+
+            if let Some(screen) = gtk::gdk::Screen::default() {
+                let provider = gtk::CssProvider::new();
+                let css = if is_dark {
+                    "headerbar, .titlebar, window.csd > headerbar { background-color: #090b0e !important; background-image: none !important; color: #f5f5f7 !important; border-bottom: 1px solid rgba(255, 255, 255, 0.09) !important; box-shadow: none !important; } headerbar .title, .titlebar .title { color: #f5f5f7 !important; font-weight: 600 !important; } headerbar button, .titlebar button { color: #a6aab3 !important; } headerbar button:hover, .titlebar button:hover { color: #ffffff !important; }"
+                } else {
+                    "headerbar, .titlebar, window.csd > headerbar { background-color: #f3f5f7 !important; background-image: none !important; color: #202124 !important; border-bottom: 1px solid rgba(20, 24, 30, 0.08) !important; box-shadow: none !important; } headerbar .title, .titlebar .title { color: #202124 !important; font-weight: 600 !important; } headerbar button, .titlebar button { color: #5f6368 !important; } headerbar button:hover, .titlebar button:hover { color: #202124 !important; }"
+                };
+                let _ = provider.load_from_data(css.as_bytes());
+                gtk::StyleContext::add_provider_for_screen(
+                    &screen,
+                    &provider,
+                    gtk::STYLE_PROVIDER_PRIORITY_USER,
+                );
+            }
+        });
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn window_minimize(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.minimize();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn window_toggle_maximize(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        if let Ok(is_max) = w.is_maximized() {
+            if is_max {
+                let _ = w.unmaximize();
+            } else {
+                let _ = w.maximize();
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn window_close(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.close();
+    }
+    Ok(())
+}

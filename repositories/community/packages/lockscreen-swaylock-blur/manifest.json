@@ -1,0 +1,44 @@
+{
+  "id": "lockscreen-swaylock-blur",
+  "name": "Swaylock Effects Blur",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "WaylandEnthusiast",
+  "package_type": "lockscreen",
+  "description": "Minimal Wayland lockscreen utilizing swaylock-effects for real-time dual-screen desktop blur, fade-in animations, and pam security.",
+  "tags": [
+    "swaylock",
+    "sway",
+    "blur",
+    "minimal",
+    "wayland"
+  ],
+  "color_palette": [
+    "#5e81ac",
+    "#2e3440",
+    "#3b4252",
+    "#eceff4"
+  ],
+  "compatibility": {
+    "desktops": [
+      "sway"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [
+      "swaylock-effects"
+    ],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.config/swaylock/config",
+      "description": "Swaylock Effects Blur configuration file."
+    }
+  ]
+}

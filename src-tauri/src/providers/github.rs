@@ -1125,7 +1125,7 @@ pub fn repo_to_provider_item(repo: &GitHubRepoItem) -> ProviderItem {
         rating: None, // Never infer official rating from GitHub stars
         rating_count: Some(repo.stargazers_count),
         downloads: Some(repo.forks_count),
-        hero_image: None,
+        hero_image: Some(format!("https://opengraph.githubassets.com/1/{}", repo.full_name)),
         screenshots: Vec::new(),
         provenance,
         files: Vec::new(), // Populated during staging

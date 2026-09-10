@@ -6,6 +6,7 @@ import {
   Sparkles,
   AlertCircle,
   ShieldCheck,
+  Shield,
   Key,
   Eye,
   FilePlus,
@@ -88,6 +89,10 @@ export const PackageDetailModal: React.FC = () => {
   const [plan, setPlan] = useState<InstallationPlan | null>(null);
   const [installCompleted, setInstallCompleted] = useState<boolean>(false);
   const [installedSnapshotId, setInstalledSnapshotId] = useState<string | null>(null);
+  const [createSnapshot, setCreateSnapshot] = useState<boolean>(() => {
+    const pref = localStorage.getItem("ryzora_snapshot_on_install");
+    return pref !== null ? pref === "true" : false;
+  });
 
   // Uninstall flow states
   const [showUninstall, setShowUninstall] = useState<boolean>(false);
@@ -113,6 +118,20 @@ export const PackageDetailModal: React.FC = () => {
   );
   const compat = checkCompatibility(selectedPackage);
   const installedRecord = installedPackages.find((p) => p.package_id === selectedPackage.id);
+
+  const hasMissingRequiredDeps = Boolean(
+    (plan && (
+      (plan.dependency_report && plan.dependency_report.missing_required.length > 0) ||
+      plan.missing_dependencies.length > 0
+    )) ||
+    compat.missing_required_apps.length > 0
+  );
+
+  const firstMissingDep =
+    plan?.dependency_report?.missing_required?.[0] ||
+    plan?.missing_dependencies?.[0] ||
+    compat.missing_required_apps?.[0] ||
+    null;
   const isLegacyRecord = installedRecord && (!installedRecord.files || installedRecord.files.length === 0);
 
   const handleCheckUpdate = async () => {
@@ -201,9 +220,9 @@ export const PackageDetailModal: React.FC = () => {
 
   const handleConfirmInstall = async () => {
     try {
-      const res = await installPackage(selectedPackage);
+      const res = await installPackage(selectedPackage, createSnapshot);
       if (res && res.success) {
-        setInstalledSnapshotId(res.snapshot_id);
+        setInstalledSnapshotId(res.snapshot_id || null);
         setInstallCompleted(true);
       }
     } catch {
@@ -224,49 +243,68 @@ export const PackageDetailModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 select-none" style={{ background: "rgba(0,0,0,0.82)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 select-none" style={{ background: "var(--rz-modal-backdrop)" }} onClick={handleClose}>
       {/* Blurred artwork backdrop */}
       {selectedPackage.hero_image && (
         <div
-          className="absolute inset-0 -z-0 bg-cover bg-center opacity-20"
-          style={{ backgroundImage: `url(${selectedPackage.hero_image})`, filter: "blur(40px) saturate(1.4)" }}
+          className="absolute inset-0 -z-0 bg-cover bg-center opacity-25 pointer-events-none transition-opacity duration-700"
+          style={{ backgroundImage: `url(${selectedPackage.hero_image})`, filter: "blur(64px) saturate(140%)" }}
         />
       )}
-      <div className="absolute inset-0 -z-0 bg-black/60" />
+      <div className="absolute inset-0 -z-0 bg-black/50 pointer-events-none" />
       <div
-        className="relative z-10 w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-strong)] shadow-2xl overflow-hidden backdrop-blur-md"
+        className="relative z-10 w-full max-w-3xl max-h-[86vh] flex flex-col rounded-[16px] overflow-hidden backdrop-blur-[28px]"
+        style={{
+          background: "var(--rz-glass-modal-bg)",
+          border: "var(--rz-glass-modal-border)",
+          boxShadow: "var(--rz-glass-modal-shadow)",
+          backdropFilter: "var(--rz-glass-backdrop)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Subtle glass top highlight */}
+        <div
+          className="absolute inset-x-0 top-0 h-[1px] pointer-events-none z-20"
+          style={{
+            background: "linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent)",
+          }}
+        />
         {/* Header */}
-        <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 bg-[var(--bg-surface-elevated)]">
+        <div
+          className="px-5 py-3.5 border-b border-[var(--rz-border-subtle)] flex items-center justify-between gap-4"
+          style={{
+            background: "var(--rz-glass-header-bg)",
+            backdropFilter: "var(--rz-glass-backdrop)",
+          }}
+        >
           <div className="flex items-center gap-2.5 truncate">
-            <span className="font-bold text-sm text-[var(--text-primary)] truncate">
+            <span className="font-semibold text-sm text-[var(--rz-text)] truncate">
               {selectedPackage.title}
             </span>
-            <span className="text-[10px] font-mono uppercase text-[var(--text-muted)] px-1.5 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+            <span className="text-[10px] font-mono text-[var(--rz-text-secondary)] px-1.5 py-0.5 rounded-[6px] bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)]">
               v{selectedPackage.version}
             </span>
             {selectedPackage.trust_tier === "official" && (
-              <span className="text-[10px] font-semibold uppercase text-amber-300 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 flex items-center gap-1 shadow-sm">
-                <Sparkles className="w-3 h-3 text-amber-400" />
+              <span className="text-[10px] font-semibold text-[var(--rz-badge-warning-text)] px-2 py-0.5 rounded-[6px] bg-[var(--rz-badge-warning-bg)] border border-[var(--rz-badge-warning-border)] flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-[var(--rz-badge-warning-text)]" />
                 Official
               </span>
             )}
             {selectedPackage.trust_tier === "verified" && (
-              <span className="text-[10px] font-semibold uppercase text-blue-300 px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 flex items-center gap-1 shadow-sm">
-                <ShieldCheck className="w-3 h-3 text-blue-400" />
+              <span className="text-[10px] font-semibold text-[var(--rz-badge-info-text)] px-2 py-0.5 rounded-[6px] bg-[var(--rz-badge-info-bg)] border border-[var(--rz-badge-info-border)] flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-[var(--rz-badge-info-text)]" />
                 Verified
               </span>
             )}
             {selectedPackage.moderation_status && (
-              <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border flex items-center gap-1 shadow-sm ${
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-[6px] border flex items-center gap-1 ${
                 selectedPackage.moderation_status === "approved"
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                  ? "bg-[var(--rz-badge-success-bg)] text-[var(--rz-badge-success-text)] border-[var(--rz-badge-success-border)]"
                   : selectedPackage.moderation_status === "pending_review"
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  ? "bg-[var(--rz-badge-warning-bg)] text-[var(--rz-badge-warning-text)] border-[var(--rz-badge-warning-border)]"
                   : selectedPackage.moderation_status === "flagged"
-                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
-                  : "bg-gray-500/20 text-gray-300 border-gray-500/40"
+                  ? "bg-[var(--rz-badge-danger-bg)] text-[var(--rz-badge-danger-text)] border-[var(--rz-badge-danger-border)]"
+                  : "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)]"
               }`}>
                 {selectedPackage.moderation_status === "approved" && "Approved"}
                 {selectedPackage.moderation_status === "pending_review" && "Pending Review"}
@@ -275,18 +313,12 @@ export const PackageDetailModal: React.FC = () => {
               </span>
             )}
             {selectedPackage.release_channel && (
-              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${
-                selectedPackage.release_channel === "beta"
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                  : selectedPackage.release_channel === "nightly"
-                  ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
-                  : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-              }`}>
+              <span className="text-[10px] font-mono capitalize px-1.5 py-0.5 rounded-[6px] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)]">
                 {selectedPackage.release_channel}
               </span>
             )}
             {showPreview && !installCompleted && (
-              <span className="text-[10px] font-mono uppercase text-[var(--accent-text)] px-1.5 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+              <span className="text-[10px] font-mono font-semibold text-[var(--rz-badge-info-text)] px-2 py-0.5 rounded-[6px] bg-[var(--rz-badge-info-bg)] border border-[var(--rz-badge-info-border)]">
                 Installation Preview
               </span>
             )}
@@ -294,14 +326,18 @@ export const PackageDetailModal: React.FC = () => {
 
           <button
             onClick={handleClose}
-            className="p-1 rounded text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-surface)] transition-colors"
+            className="p-1.5 rounded-[8px] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] border border-transparent hover:border-[var(--rz-border-subtle)] transition-colors"
+            title="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div
+          className="flex-1 overflow-y-auto p-5 space-y-4"
+          style={{ background: "var(--rz-glass-body-bg)" }}
+        >
           {/* ─────────────────────────────────────────────────────────────
               COMPLETED VIEW
           ───────────────────────────────────────────────────────────── */}
@@ -320,7 +356,7 @@ export const PackageDetailModal: React.FC = () => {
                 </p>
               </div>
 
-              {installedSnapshotId && (
+              {installedSnapshotId ? (
                 <div className="inline-block px-3 py-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-mono text-left">
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-sans">
                     Pre-install Snapshot ID
@@ -329,18 +365,39 @@ export const PackageDetailModal: React.FC = () => {
                     {installedSnapshotId}
                   </div>
                 </div>
+              ) : (
+                <div className="inline-block px-3 py-1.5 rounded-md bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] text-xs text-left">
+                  <div className="text-[10px] text-[var(--rz-text-muted)] uppercase tracking-wider font-semibold">
+                    Snapshot Status
+                  </div>
+                  <div className="text-[var(--rz-text-secondary)] mt-0.5 font-medium">
+                    Installed directly without backup snapshot
+                  </div>
+                </div>
               )}
 
               <div className="flex items-center justify-center gap-3 pt-2">
+                {installedSnapshotId && (
+                  <button
+                    onClick={() => {
+                      handleClose();
+                      setActiveCategory("backups");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Open Backups</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     handleClose();
-                    setActiveCategory("backups");
+                    setActiveCategory("installed");
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] border border-[var(--rz-border-subtle)] hover:bg-[var(--rz-surface-elevated)] transition-colors"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Open Backups</span>
+                  <span>View in Installed</span>
                 </button>
 
                 <button
@@ -589,16 +646,18 @@ export const PackageDetailModal: React.FC = () => {
               ) : plan ? (
                 <div className="space-y-4 text-xs">
                   {/* Summary Banner */}
-                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-[var(--rz-border-subtle)]">
                     <div>
-                      <div className="font-semibold text-[var(--text-primary)]">
-                        {plan.files_to_create.length + plan.files_to_replace.length} files will be installed
+                      <div className="font-semibold text-sm text-[var(--rz-text)]">
+                        {plan.files_to_create.length + plan.files_to_replace.length === 1
+                          ? "1 file will be installed"
+                          : `${plan.files_to_create.length + plan.files_to_replace.length} files will be installed`}
                       </div>
-                      <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                        {plan.files_to_create.length} new, {plan.files_to_replace.length} replaced, {plan.files_unchanged.length} unchanged
+                      <div className="text-xs text-[var(--rz-text-secondary)] mt-0.5">
+                        {plan.files_to_create.length} new · {plan.files_to_replace.length} replaced · {plan.files_unchanged.length} unchanged
                       </div>
                     </div>
-                    <span className="font-mono text-[10px] uppercase text-[var(--text-muted)] px-2 py-0.5 rounded border border-[var(--border-subtle)]">
+                    <span className="text-[10px] font-mono text-[var(--rz-text-secondary)] px-2 py-0.5 rounded-[6px] bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)]">
                       Dry Run Validated
                     </span>
                   </div>
@@ -608,15 +667,15 @@ export const PackageDetailModal: React.FC = () => {
                     {/* Files to Create */}
                     {plan.files_to_create.length > 0 && (
                       <div className="space-y-1.5">
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
-                          <FilePlus className="w-3.5 h-3.5" />
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text)]">
+                          <FilePlus className="w-3.5 h-3.5 text-[#6fd6a5]" />
                           <span>Create ({plan.files_to_create.length})</span>
                         </div>
-                        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] divide-y divide-[var(--border-subtle)] overflow-hidden font-mono text-[11px]">
+                        <div className="rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] divide-y divide-[var(--rz-border-subtle)] overflow-hidden font-mono text-xs shadow-xs">
                           {plan.files_to_create.map((path, idx) => (
-                            <div key={idx} className="p-2 flex items-center gap-2 text-[var(--text-primary)]">
-                              <span className="text-emerald-400 font-bold">+</span>
-                              <span>{path}</span>
+                            <div key={idx} className="p-2.5 flex items-center gap-2 text-[var(--rz-text)]">
+                              <span className="text-[#6fd6a5] font-bold">+</span>
+                              <span className="truncate">{path}</span>
                             </div>
                           ))}
                         </div>
@@ -626,15 +685,15 @@ export const PackageDetailModal: React.FC = () => {
                     {/* Files to Replace */}
                     {plan.files_to_replace.length > 0 && (
                       <div className="space-y-1.5">
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
-                          <FileEdit className="w-3.5 h-3.5" />
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text)]">
+                          <FileEdit className="w-3.5 h-3.5 text-[#e5b85c]" />
                           <span>Replace / Modify ({plan.files_to_replace.length})</span>
                         </div>
-                        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] divide-y divide-[var(--border-subtle)] overflow-hidden font-mono text-[11px]">
+                        <div className="rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] divide-y divide-[var(--rz-border-subtle)] overflow-hidden font-mono text-xs shadow-xs">
                           {plan.files_to_replace.map((path, idx) => (
-                            <div key={idx} className="p-2 flex items-center gap-2 text-[var(--text-primary)]">
-                              <span className="text-amber-400 font-bold">~</span>
-                              <span>{path}</span>
+                            <div key={idx} className="p-2.5 flex items-center gap-2 text-[var(--rz-text)]">
+                              <span className="text-[#e5b85c] font-bold">~</span>
+                              <span className="truncate">{path}</span>
                             </div>
                           ))}
                         </div>
@@ -644,15 +703,15 @@ export const PackageDetailModal: React.FC = () => {
                     {/* Files Unchanged */}
                     {plan.files_unchanged.length > 0 && (
                       <div className="space-y-1.5">
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                          <FileCheck className="w-3.5 h-3.5" />
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text-secondary)]">
+                          <FileCheck className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
                           <span>Unchanged ({plan.files_unchanged.length})</span>
                         </div>
-                        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] divide-y divide-[var(--border-subtle)] overflow-hidden font-mono text-[11px]">
+                        <div className="rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] divide-y divide-[var(--rz-border-subtle)] overflow-hidden font-mono text-xs shadow-xs">
                           {plan.files_unchanged.map((path, idx) => (
-                            <div key={idx} className="p-2 flex items-center gap-2 text-[var(--text-muted)]">
-                              <span className="font-bold">=</span>
-                              <span>{path}</span>
+                            <div key={idx} className="p-2.5 flex items-center gap-2 text-[var(--rz-text-secondary)]">
+                              <span className="font-bold text-[var(--rz-text-muted)]">=</span>
+                              <span className="truncate">{path}</span>
                             </div>
                           ))}
                         </div>
@@ -660,34 +719,57 @@ export const PackageDetailModal: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Safety & Backup card */}
-                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
-                    <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider">
-                      Backup
+                  {/* Safety & Backup Option */}
+                  <div className="pt-3.5 border-t border-[var(--rz-border-subtle)] space-y-2">
+                    <div className="text-[11px] font-semibold text-[var(--rz-text-muted)] flex items-center justify-between">
+                      <span>Safety & Backup Option</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-[5px] border ${
+                        createSnapshot
+                          ? "bg-[rgba(111,214,165,0.10)] text-[#6fd6a5] border-emerald-400/20"
+                          : "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)]"
+                      }`}>
+                        {createSnapshot ? "Snapshot: Enabled" : "Snapshot: Skipped"}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 text-emerald-400 font-medium">
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Automatic verified snapshot will be taken before modification</span>
-                    </div>
-                    <div className="text-[11px] text-[var(--text-faint)]">
-                      Enables 1-click verified rollback if anything fails.
-                    </div>
+
+                    <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] cursor-pointer transition-colors group">
+                      <input
+                        type="checkbox"
+                        checked={createSnapshot}
+                        onChange={(e) => {
+                          setCreateSnapshot(e.target.checked);
+                          localStorage.setItem("ryzora_snapshot_on_install", String(e.target.checked));
+                        }}
+                        className="mt-0.5 w-4 h-4 rounded border-[var(--rz-border)] text-[var(--rz-accent)] focus:ring-0 bg-transparent cursor-pointer shrink-0 accent-[var(--rz-accent)]"
+                      />
+                      <div className="space-y-0.5 flex-1 select-none">
+                        <div className="text-xs font-semibold text-[var(--rz-text)] flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5 text-[var(--rz-accent)]" />
+                          <span>Create safety backup snapshot before installing</span>
+                        </div>
+                        <div className="text-[11px] text-[var(--rz-text-secondary)] leading-relaxed">
+                          {createSnapshot
+                            ? "Takes an atomic verified snapshot of existing config files before modification. Enables 1-click rollback from Backups."
+                            : "Installs directly without taking a backup snapshot. Faster installation and uses less disk space."}
+                        </div>
+                      </div>
+                    </label>
                   </div>
 
                   {/* Dependencies & Compatibility */}
-                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
+                  <div className="pt-3.5 border-t border-[var(--rz-border-subtle)] space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-semibold uppercase text-[var(--text-muted)] tracking-wider flex items-center gap-1.5">
-                        <Cpu className="w-3.5 h-3.5 text-[var(--accent)]" />
-                        <span>Dependencies & Intelligence Resolver</span>
+                      <div className="text-xs font-semibold text-[var(--rz-text)] flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-[var(--rz-accent)]" />
+                        <span>Dependencies & Compatibility</span>
                       </div>
                       {plan.dependency_report && (
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-[6px] border ${
                           plan.dependency_report.resolved
-                            ? "bg-emerald-950/40 text-emerald-400 border border-emerald-800/40"
+                            ? "bg-[rgba(111,214,165,0.10)] text-[#6fd6a5] border-emerald-400/20"
                             : plan.dependency_report.missing_required.length === 0
-                            ? "bg-amber-950/40 text-amber-300 border border-amber-800/40"
-                            : "bg-rose-950/40 text-rose-400 border border-rose-800/40"
+                            ? "bg-[rgba(230,184,92,0.10)] text-[#e5b85c] border-amber-400/20"
+                            : "bg-rose-500/10 text-[#ef7474] border-rose-500/20"
                         }`}>
                           {plan.dependency_report.resolved
                             ? "DAG Resolved"
@@ -699,26 +781,26 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
 
                     {plan.dependency_report?.install_order && plan.dependency_report.install_order.length > 1 && (
-                      <div className="text-[11px] text-[var(--text-muted)] font-mono bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)]">
+                      <div className="text-xs text-[var(--rz-text-secondary)] font-mono bg-[var(--rz-surface-elevated)] px-2.5 py-1.5 rounded-[6px] border border-[var(--rz-border-subtle)]">
                         Install Sequence: {plan.dependency_report.install_order.join(" → ")}
                       </div>
                     )}
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5 pt-0.5">
                       {plan.required_dependencies.length > 0 ? (
                         plan.required_dependencies.map((dep, idx) => {
                           const isMissing = plan.missing_dependencies.includes(dep);
                           return (
                             <div key={idx} className="flex items-center justify-between font-mono text-xs">
-                              <span className="text-[var(--text-primary)]">{dep}</span>
+                              <span className="text-[var(--rz-text)] font-semibold">{dep}</span>
                               {isMissing ? (
-                                <span className="inline-flex items-center gap-1 text-rose-400 font-sans font-medium text-[11px]">
-                                  <AlertCircle className="w-3 h-3" />
+                                <span className="inline-flex items-center gap-1 text-[var(--rz-status-error)] font-sans font-medium text-xs">
+                                  <AlertCircle className="w-3.5 h-3.5" />
                                   Missing in PATH (Required)
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-400 font-sans font-medium text-[11px]">
-                                  <Check className="w-3 h-3" />
+                                <span className="inline-flex items-center gap-1 text-[var(--rz-status-success)] font-sans font-medium text-xs">
+                                  <Check className="w-3.5 h-3.5" />
                                   Available in PATH
                                 </span>
                               )}
@@ -726,29 +808,43 @@ export const PackageDetailModal: React.FC = () => {
                           );
                         })
                       ) : (
-                        <div className="text-[var(--text-muted)] text-[11px]">No external application dependencies required.</div>
+                        <div className="text-xs text-[var(--rz-text-secondary)]">No external application dependencies required.</div>
                       )}
                     </div>
 
                     {plan.dependency_report?.missing_required && plan.dependency_report.missing_required.length > 0 && (
-                      <div className="p-2.5 rounded bg-rose-950/20 border border-rose-800/40 text-rose-300 text-[11px] mt-2 leading-relaxed">
-                        Missing required dependency: <span className="font-mono text-white">{plan.dependency_report.missing_required.join(", ")}</span>.
-                        Ryzora will not run package managers autonomously. Please install them using pacman, apt, or dnf before proceeding.
+                      <div
+                        className="p-3.5 rounded-xl text-xs space-y-1 mt-2"
+                        style={{
+                          background: "var(--rz-status-error-bg)",
+                          border: "1px solid var(--rz-status-error-border)",
+                          color: "var(--rz-status-error)",
+                        }}
+                      >
+                        <div className="flex items-center gap-1.5 font-semibold text-[var(--rz-status-error)]">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Missing required dependency</span>
+                        </div>
+                        <p className="leading-relaxed text-[11px] text-[var(--rz-text)] pl-5">
+                          <span className="font-mono font-bold text-[var(--rz-status-error)]">{plan.dependency_report.missing_required.join(", ")}</span> isn't available on your system.
+                          Install it with your system package manager before continuing.
+                        </p>
                       </div>
                     )}
 
                     {plan.dependency_report?.missing_optional && plan.dependency_report.missing_optional.length > 0 && plan.dependency_report.missing_required.length === 0 && (
-                      <div className="p-2.5 rounded bg-amber-950/20 border border-amber-800/40 text-amber-300 text-[11px] mt-2">
+                      <div className="p-2.5 rounded-[8px] bg-amber-400/10 border border-amber-400/20 text-[#e5b85c] text-xs">
                         Optional component(s) not installed: <span className="font-mono">{plan.dependency_report.missing_optional.join(", ")}</span>. You can continue safely with available components.
                       </div>
                     )}
 
                     {plan.conflicts.length > 0 && (
-                      <div className="p-2 rounded bg-red-950/20 border border-red-800/40 text-red-300 text-[11px] mt-2 font-mono">
+                      <div className="p-2.5 rounded-[8px] bg-rose-500/10 border border-rose-500/20 text-[#ef7474] text-xs font-mono">
                         Conflicts: {plan.conflicts.join("; ")}
                       </div>
                     )}
-                  </div></div>
+                  </div>
+                </div>
               ) : null}
 
               {/* Real Installation Progress */}
@@ -811,33 +907,33 @@ export const PackageDetailModal: React.FC = () => {
               )}
 
               {/* Navigation Tabs */}
-              <div className="flex items-center gap-1 border-b border-[var(--border-subtle)] pb-px">
+              <div className="flex items-center gap-1 border-b border-[var(--rz-border-subtle)] pb-px">
                 <button
                   onClick={() => setActiveTab("overview")}
-                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                  className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                     activeTab === "overview"
-                      ? "border-[var(--accent)] text-[var(--text-primary)]"
-                      : "border-transparent text-[var(--text-muted)] hover:text-white"
+                      ? "border-[var(--rz-accent)] text-[var(--rz-text)]"
+                      : "border-transparent text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                   }`}
                 >
                   Overview
                 </button>
                 <button
                   onClick={() => setActiveTab("manifest")}
-                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                  className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
                     activeTab === "manifest"
-                      ? "border-[var(--accent)] text-[var(--text-primary)]"
-                      : "border-transparent text-[var(--text-muted)] hover:text-white"
+                      ? "border-[var(--rz-accent)] text-[var(--rz-text)]"
+                      : "border-transparent text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                   }`}
                 >
                   Files & Manifest
                 </button>
                 <button
                   onClick={() => setActiveTab("dependencies")}
-                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
                     activeTab === "dependencies"
-                      ? "border-[var(--accent)] text-[var(--text-primary)]"
-                      : "border-transparent text-[var(--text-muted)] hover:text-white"
+                      ? "border-[var(--rz-accent)] text-[var(--rz-text)]"
+                      : "border-transparent text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                   }`}
                 >
                   <span>Dependencies</span>
@@ -850,19 +946,19 @@ export const PackageDetailModal: React.FC = () => {
               {/* Tab Contents */}
               {activeTab === "overview" && (
                 <div className="space-y-4 text-xs">
-                  <p className="text-[var(--text-muted)] leading-relaxed">
+                  <p className="text-[var(--rz-text)] leading-relaxed text-xs">
                     {selectedPackage.description}
                   </p>
 
                   {selectedPackage.color_palette && selectedPackage.color_palette.length > 0 && (
                     <div>
-                      <div className="text-[11px] text-[var(--text-muted)] mb-1.5">Color Palette</div>
+                      <div className="text-[11px] font-medium text-[var(--rz-text-secondary)] mb-1.5">Color Palette</div>
                       <div className="flex items-center gap-1.5">
                         {selectedPackage.color_palette.map((c, idx) => (
                           <div
                             key={idx}
                             style={{ backgroundColor: c }}
-                            className="w-6 h-6 rounded border border-white/10"
+                            className="w-6 h-6 rounded border border-[var(--rz-border)] shadow-xs"
                             title={c}
                           />
                         ))}
@@ -870,134 +966,107 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Provider Provenance Card */}
+                  {/* Provider Provenance */}
                   {selectedPackage.repository_id?.startsWith("provider:") && (
-                    <div className="p-3 rounded-md bg-indigo-950/20 border border-indigo-800/30 text-xs space-y-1.5">
+                    <div className="pt-3 border-t border-[var(--rz-border-subtle)] space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 font-semibold text-indigo-300">
-                          <PackageIcon className="w-3.5 h-3.5" />
-                          <span>Provider Origin: {selectedPackage.repository_id.replace("provider:", "").toUpperCase()} Provider</span>
+                        <div className="flex items-center gap-1.5 font-semibold text-[var(--rz-text)] text-xs">
+                          <PackageIcon className="w-3.5 h-3.5 text-[var(--rz-accent)]" />
+                          <span>Provider Origin: {selectedPackage.repository_id.replace("provider:", "")}</span>
                         </div>
-                        <span className="text-[10px] font-mono text-indigo-400 uppercase px-1.5 py-0.5 rounded bg-indigo-900/40 border border-indigo-700/50">
+                        <span className="text-[10px] font-mono text-[var(--rz-text-secondary)] px-1.5 py-0.5 rounded-[6px] bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)]">
                           Declarative Ecosystem
                         </span>
                       </div>
-                      <p className="text-[11px] text-indigo-200/80 leading-relaxed">
+                      <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
                         Sourced via native {selectedPackage.repository_id.replace("provider:", "")} integration. Staged lazily on-demand only upon installation, validated against component-aware directory boundaries, and protected by Ryzora's pre-install snapshot and rollback guarantees.
                       </p>
                       {selectedPackage.maintainer && (
-                        <div className="text-[11px] text-indigo-300 font-mono">
-                          Original Author: <span className="text-white">{selectedPackage.maintainer}</span>
+                        <div className="text-[11px] text-[var(--rz-text-secondary)] font-mono">
+                          Original Author: <span className="text-[var(--rz-text)] font-semibold">{selectedPackage.maintainer}</span>
                         </div>
                       )}
                     </div>
                   )}
 
                   {/* Repository & Integrity Metadata */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
-                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
-                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Source Repository</div>
-                      <div className="text-[var(--text-primary)] truncate">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 border-t border-[var(--rz-border-subtle)] text-[11px]">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-medium text-[var(--rz-text-muted)]">Source repository</div>
+                      <div className="text-[13px] font-semibold text-[var(--rz-text)] truncate">
                         {selectedPackage.repository_id || "Local Community"}
                       </div>
                     </div>
 
-                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
-                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Payload Status</div>
-                      <div className="text-[var(--text-primary)] truncate">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-medium text-[var(--rz-text-muted)]">Payload status</div>
+                      <div className="text-[13px] font-semibold text-[var(--rz-text)] truncate">
                         {selectedPackage.is_cached
                           ? "Cached locally"
                           : "Remote (HTTPS on-demand)"}
                       </div>
                     </div>
 
-                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
-                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Release Channel</div>
-                      <div className="text-[var(--text-primary)] uppercase truncate">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-medium text-[var(--rz-text-muted)]">Release channel</div>
+                      <div className="text-[13px] font-semibold text-[var(--rz-text)] capitalize truncate">
                         {selectedPackage.release_channel || "stable"}
                       </div>
                     </div>
 
-                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
-                      <div className="text-[10px] uppercase text-[var(--text-faint)]">Store Trust Tier</div>
-                      <div className="text-[var(--text-primary)] font-medium truncate flex items-center gap-1.5 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-medium text-[var(--rz-text-muted)]">Store trust tier</div>
+                      <div className="text-[13px] font-semibold text-[var(--rz-text)] truncate flex items-center gap-1.5">
                         {selectedPackage.trust_tier === "official" ? (
                           <>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            <span className="text-amber-300">Official (Core)</span>
+                            <Sparkles className="w-3.5 h-3.5 text-[#e5b85c]" />
+                            <span className="text-[#e5b85c]">Official</span>
                           </>
                         ) : selectedPackage.trust_tier === "verified" ? (
                           <>
-                            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                            <span className="text-blue-300">Verified Author</span>
+                            <ShieldCheck className="w-3.5 h-3.5 text-[#7aa2ff]" />
+                            <span className="text-[#7aa2ff]">Verified</span>
                           </>
                         ) : selectedPackage.trust_tier === "untrusted" ? (
-                          <span className="text-rose-400">Untrusted Repo</span>
+                          <span className="text-[#ef7474]">Untrusted</span>
                         ) : (
-                          <span className="text-[var(--text-muted)]">Community Contributor</span>
+                          <span className="text-[var(--rz-text-secondary)]">Community</span>
                         )}
                       </div>
                     </div>
 
-                    <div className="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-0.5">
-                      <div className="text-[10px] uppercase text-[var(--text-faint)]">CI Moderation</div>
-                      <div className="text-[var(--text-primary)] font-medium truncate flex items-center gap-1 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-medium text-[var(--rz-text-muted)]">CI moderation</div>
+                      <div className="text-[13px] font-semibold text-[var(--rz-text)] truncate">
                         {selectedPackage.moderation_status === "approved" ? (
-                          <span className="text-emerald-400 font-semibold">Approved</span>
+                          <span className="text-[#6fd6a5]">Approved</span>
                         ) : selectedPackage.moderation_status === "flagged" ? (
-                          <span className="text-rose-400 font-semibold">Flagged</span>
+                          <span className="text-[#ef7474]">Flagged</span>
                         ) : selectedPackage.moderation_status === "deprecated" ? (
-                          <span className="text-gray-400 font-semibold">Deprecated</span>
+                          <span className="text-[var(--rz-text-muted)]">Deprecated</span>
                         ) : (
-                          <span className="text-amber-400 font-semibold">Pending Review</span>
+                          <span className="text-[#e5b85c]">Pending Review</span>
                         )}
                       </div>
                     </div>
                   </div>
 
                   {/* Safety & Sandbox Info */}
-                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
+                  <div className="pt-3 border-t border-[var(--rz-border-subtle)] space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold">
-                        {selectedPackage.integrity_status === "verified" ? (
-                          <>
-                            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                            <span className="text-[var(--text-primary)]">
-                              Declarative SHA-256 Integrity Verified
-                            </span>
-                          </>
-                        ) : selectedPackage.integrity_status === "corrupted" ? (
-                          <>
-                            <AlertCircle className="w-4 h-4 text-rose-400" />
-                            <span className="text-rose-300">
-                              Cache Integrity Verification Failed
-                            </span>
-                          </>
-                        ) : selectedPackage.integrity_status === "pending_download" ? (
-                          <>
-                            <ShieldCheck className="w-4 h-4 text-sky-400" />
-                            <span className="text-[var(--text-primary)]">
-                              Attested Package (Verification Pending)
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="w-4 h-4 text-amber-400" />
-                            <span className="text-[var(--text-primary)]">
-                              Declarative Package (Unverified)
-                            </span>
-                          </>
-                        )}
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text)]">
+                        <ShieldCheck className="w-4 h-4 text-[var(--rz-accent)]" />
+                        <span>Declarative Package</span>
                       </div>
                       <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-[6px] border ${
                           selectedPackage.integrity_status === "verified"
-                            ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                            ? "text-[#6fd6a5] border-emerald-400/20 bg-[rgba(111,214,165,0.10)]"
                             : selectedPackage.integrity_status === "corrupted"
-                            ? "text-rose-400 border-rose-500/30 bg-rose-500/10"
+                            ? "text-[#ef7474] border-rose-400/20 bg-rose-500/10"
                             : selectedPackage.integrity_status === "pending_download"
-                            ? "text-sky-400 border-sky-500/30 bg-sky-500/10"
-                            : "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                            ? "text-[#7aa2ff] border-sky-400/20 bg-[rgba(88,132,235,0.10)]"
+                            : "text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]"
                         }`}
                       >
                         {selectedPackage.integrity_status === "verified"
@@ -1011,47 +1080,51 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
 
                     {selectedPackage.content_hash && (
-                      <div className="font-mono text-[10px] text-[var(--text-faint)] truncate bg-[var(--bg-surface)] px-2 py-1 rounded border border-[var(--border-subtle)]">
+                      <div className="font-mono text-[10px] text-[var(--rz-text)] truncate bg-[var(--rz-surface-elevated)] px-2.5 py-1.5 rounded-[6px] border border-[var(--rz-border-subtle)]">
                         tree: {selectedPackage.content_hash}
                       </div>
                     )}
 
-                    <ul className="space-y-1 text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-subtle)]">
-                      <li className="flex items-center gap-1.5">
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span>Zero shell scripts — purely declarative configuration files</span>
+                    <ul className="space-y-1.5 text-xs text-[var(--rz-text-secondary)] pt-1">
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-[#6fd6a5] shrink-0" />
+                        <span className="text-[var(--rz-text)]">Zero shell scripts — purely declarative configuration files</span>
                       </li>
-                      <li className="flex items-center gap-1.5">
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span>No root privileges required — strictly user-level ~/.config changes</span>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-[#6fd6a5] shrink-0" />
+                        <span className="text-[var(--rz-text)]">No root privileges required — strictly user-level ~/.config changes</span>
                       </li>
-                      <li className="flex items-center gap-1.5">
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span>Automatic verified snapshot before any file modification</span>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-[#6fd6a5] shrink-0" />
+                        <span className="text-[var(--rz-text)]">
+                          {createSnapshot
+                            ? "Automatic verified snapshot before file modification"
+                            : "Direct safe installation (backup snapshot optional)"}
+                        </span>
                       </li>
                     </ul>
                   </div>
 
-                  {/* Phase 12 Cryptographic Trust & Signature Card */}
-                  <div className="p-3 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
+                  {/* Cryptographic Trust & Signature */}
+                  <div className="pt-3 border-t border-[var(--rz-border-subtle)] space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
-                        <Key className="w-4 h-4 text-purple-400" />
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text)]">
+                        <Key className="w-4 h-4 text-[var(--rz-accent)]" />
                         <span>Cryptographic Authenticity & Provenance</span>
                       </div>
                       <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border uppercase ${
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-[6px] border ${
                           selectedPackage.cryptographic_status === "official_verified"
-                            ? "text-amber-300 border-amber-500/40 bg-amber-500/10"
+                            ? "text-[#e5b85c] border-amber-400/20 bg-[rgba(230,184,92,0.10)]"
                             : selectedPackage.cryptographic_status === "author_verified"
-                            ? "text-blue-300 border-blue-500/40 bg-blue-500/10"
+                            ? "text-[#7aa2ff] border-sky-400/20 bg-[rgba(88,132,235,0.10)]"
                             : selectedPackage.cryptographic_status === "self_signed_unvetted"
-                            ? "text-purple-300 border-purple-500/30 bg-purple-500/10"
+                            ? "text-purple-300 border-purple-500/20 bg-purple-500/10"
                             : selectedPackage.cryptographic_status === "invalid_signature" ||
                               selectedPackage.cryptographic_status === "revoked_key" ||
                               selectedPackage.cryptographic_status === "official_impersonation"
-                            ? "text-rose-300 border-rose-500/40 bg-rose-500/10"
-                            : "text-[var(--text-muted)] border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+                            ? "text-[#ef7474] border-rose-500/20 bg-rose-500/10"
+                            : "text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]"
                         }`}
                       >
                         {selectedPackage.cryptographic_status === "official_verified"
@@ -1071,26 +1144,26 @@ export const PackageDetailModal: React.FC = () => {
                     </div>
 
                     {selectedPackage.signature ? (
-                      <div className="space-y-1.5 pt-1 text-[11px] font-mono border-t border-[var(--border-subtle)]">
-                        <div className="flex items-center justify-between text-[var(--text-muted)]">
+                      <div className="space-y-1.5 pt-1 text-[11px] font-mono">
+                        <div className="flex items-center justify-between text-[var(--rz-text-muted)]">
                           <span>Signer:</span>
-                          <span className="text-[var(--text-primary)] font-semibold">
+                          <span className="text-[var(--rz-text)] font-semibold">
                             {selectedPackage.signature.signer_identity.name}
                             {selectedPackage.signature.signer_identity.handle
                               ? ` (${selectedPackage.signature.signer_identity.handle})`
                               : ""}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[var(--text-muted)]">
+                        <div className="flex items-center justify-between text-[var(--rz-text-muted)]">
                           <span>Algorithm / Key ID:</span>
-                          <span className="text-[var(--accent)] truncate max-w-[200px]">
+                          <span className="text-[var(--rz-accent-text)] truncate max-w-[200px] font-semibold">
                             {selectedPackage.signature.algorithm.toUpperCase()} · {selectedPackage.signature.key_id}
                           </span>
                         </div>
-                        <div className="p-1.5 rounded bg-[var(--bg-surface)] text-[10px] text-[var(--text-faint)] truncate select-all">
+                        <div className="p-1.5 rounded-[6px] bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] text-[10px] text-[var(--rz-text-secondary)] truncate select-all">
                           pubkey: {selectedPackage.signature.public_key}
                         </div>
-                        <p className="text-[10px] font-sans text-[var(--text-faint)] pt-0.5">
+                        <p className="text-[11px] font-sans text-[var(--rz-text-secondary)] pt-0.5">
                           {selectedPackage.cryptographic_status === "official_verified"
                             ? "Verified against Ryzora Core Root Authority. Guaranteed authentic release."
                             : selectedPackage.cryptographic_status === "author_verified"
@@ -1099,7 +1172,7 @@ export const PackageDetailModal: React.FC = () => {
                         </p>
                       </div>
                     ) : (
-                      <p className="text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-subtle)]">
+                      <p className="text-xs text-[var(--rz-text-secondary)] pt-0.5">
                         This package is unsigned. Permitted as a Community contribution under declarative sandbox rules.
                       </p>
                     )}
@@ -1110,7 +1183,7 @@ export const PackageDetailModal: React.FC = () => {
               {activeTab === "manifest" && (
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center justify-between">
-                    <div className="text-[11px] text-[var(--text-muted)]">
+                    <div className="text-[11px] font-medium text-[var(--rz-text-secondary)]">
                       {selectedPackage.manifest
                         ? `Files declared by this package (ryzora_spec v${selectedPackage.manifest.ryzora_spec}):`
                         : "Files installed by this package:"}
@@ -1122,7 +1195,7 @@ export const PackageDetailModal: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] overflow-hidden">
+                  <div className="divide-y divide-[var(--rz-border-subtle)] rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] overflow-hidden shadow-xs">
                     {selectedPackage.manifest && selectedPackage.manifest.files.length > 0
                       ? selectedPackage.manifest.files.map((f, idx) => (
                           <div key={idx} className="p-2.5 flex items-start justify-between gap-3 font-mono text-[11px]">
@@ -1151,7 +1224,7 @@ export const PackageDetailModal: React.FC = () => {
                         ))}
                   </div>
 
-                  <div className="p-2.5 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-faint)]">
+                  <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] text-[11px] text-[var(--rz-text-secondary)]">
                     Declarative manifest · No shell execution · Safe target paths only
                   </div>
                 </div>
@@ -1168,13 +1241,13 @@ export const PackageDetailModal: React.FC = () => {
                     <div className="space-y-4">
                       {/* Resolution Overview Banner */}
                       {depReport.resolved ? (
-                        <div className="p-3 rounded-md bg-emerald-950/20 border border-emerald-800/40 space-y-1">
-                          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <div className="p-3 rounded-xl bg-[var(--rz-status-success-bg)] border border-[var(--rz-status-success-border)] space-y-1">
+                          <div className="flex items-center gap-1.5 text-[var(--rz-status-success)] font-semibold text-xs">
+                            <CheckCircle2 className="w-4 h-4 text-[var(--rz-status-success)]" />
                             <span>All Dependencies Satisfied</span>
                           </div>
                           {depReport.install_order.length > 0 && (
-                            <div className="text-[11px] text-emerald-300/80 font-mono">
+                            <div className="text-[11px] text-[var(--rz-text)] font-mono">
                               Topological Install Order: {depReport.install_order.join(" → ")}
                             </div>
                           )}
@@ -1182,14 +1255,14 @@ export const PackageDetailModal: React.FC = () => {
                       ) : (
                         <div className="space-y-2">
                           {depReport.missing_required.length > 0 && (
-                            <div className="p-3 rounded-md bg-rose-950/20 border border-rose-800/40 space-y-1">
-                              <div className="flex items-center gap-1.5 text-rose-400 font-semibold text-xs">
-                                <AlertCircle className="w-4 h-4 text-rose-400" />
+                            <div className="p-3 rounded-xl bg-[var(--rz-status-error-bg)] border border-[var(--rz-status-error-border)] space-y-1">
+                              <div className="flex items-center gap-1.5 text-[var(--rz-status-error)] font-semibold text-xs">
+                                <AlertCircle className="w-4 h-4 text-[var(--rz-status-error)]" />
                                 <span>Missing {depReport.missing_required.length} Required Dependency(s)</span>
                               </div>
-                              <div className="text-[11px] text-rose-300/90 leading-relaxed">
+                              <div className="text-[11px] text-[var(--rz-text)] leading-relaxed">
                                 Ryzora strictly avoids executing system package managers. Please install missing tools (
-                                <span className="font-mono text-white">{depReport.missing_required.join(", ")}</span>
+                                <span className="font-mono font-bold text-[var(--rz-status-error)]">{depReport.missing_required.join(", ")}</span>
                                 ) via your distribution package manager (pacman, apt, dnf, etc.).
                               </div>
                             </div>
@@ -1471,16 +1544,45 @@ export const PackageDetailModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] flex items-center justify-between gap-3">
-          <div className="text-[11px] text-[var(--text-faint)]">
-            Declarative manifest · Safe configuration
+        <div
+          className="px-5 py-3.5 border-t border-[var(--rz-border-subtle)] flex items-center justify-between gap-4"
+          style={{ background: "var(--rz-glass-footer-bg)" }}
+        >
+          {/* Left: Compatibility Status */}
+          <div className="flex items-center gap-2 text-xs">
+            {hasMissingRequiredDeps ? (
+              <span className="inline-flex items-center gap-1.5 text-[#e98a91] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#ef7474]" />
+                Missing required dependency{firstMissingDep ? `: ${firstMissingDep}` : ""}
+              </span>
+            ) : compat.level === "Compatible" ? (
+              <span className="inline-flex items-center gap-1.5 text-[#6fd6a5] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#6fd6a5]" />
+                Compatible with your system
+              </span>
+            ) : compat.level === "MissingDependencies" ? (
+              <span className="inline-flex items-center gap-1.5 text-[#e5b85c] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#e5b85c]" />
+                {compat.summary_label}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[var(--rz-text-secondary)] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--rz-text-muted)]" />
+                {compat.summary_label}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {installCompleted ? (
               <button
                 onClick={handleClose}
-                className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors"
+                style={{
+                  background: "var(--rz-accent-glass)",
+                  border: "var(--rz-accent-glass-border)",
+                  boxShadow: "var(--rz-accent-glass-shadow)",
+                }}
+                className="px-4 py-1.5 rounded-[9px] text-xs font-semibold text-white transition-all hover:brightness-110"
               >
                 Done
               </button>
@@ -1549,7 +1651,7 @@ export const PackageDetailModal: React.FC = () => {
                 <button
                   onClick={() => setShowPreview(false)}
                   disabled={isInstalling}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                  className="px-3.5 py-1.5 rounded-[9px] text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] transition-colors disabled:opacity-40 shadow-xs"
                 >
                   Cancel
                 </button>
@@ -1558,7 +1660,7 @@ export const PackageDetailModal: React.FC = () => {
                   <button
                     onClick={handleConfirmInstall}
                     disabled={isInstalling || loadingPlan}
-                    className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors flex items-center gap-1.5 shadow-sm"
+                    className="px-4 py-1.5 rounded-[9px] text-xs font-semibold text-white transition-all disabled:opacity-40 shadow-[0_4px_18px_rgba(70,110,220,0.20),inset_0_1px_0_rgba(255,255,255,0.18)] bg-[rgba(88,132,235,0.85)] hover:bg-[rgba(105,145,245,0.95)] border border-[rgba(150,180,255,0.45)] flex items-center gap-1.5"
                   >
                     {isInstalling ? "Installing..." : "Continue with available components"}
                   </button>
@@ -1569,19 +1671,38 @@ export const PackageDetailModal: React.FC = () => {
                       Boolean(
                         isInstalling ||
                           loadingPlan ||
+                          hasMissingRequiredDeps ||
                           (plan !== null &&
-                            (plan.missing_dependencies.length > 0 ||
-                              plan.compatibility_status === "incompatible" ||
+                            (plan.compatibility_status === "incompatible" ||
                               plan.conflicts.length > 0 ||
                               Boolean(plan.dependency_report && !plan.dependency_report.resolved)))
                       )
                     }
-                    className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
+                    style={{
+                      backgroundColor: hasMissingRequiredDeps ? "var(--rz-surface-hover)" : "var(--rz-accent)",
+                      color: hasMissingRequiredDeps ? "var(--rz-text-muted)" : "#ffffff",
+                      border: hasMissingRequiredDeps ? "1px solid var(--rz-border-subtle)" : "1px solid transparent",
+                    }}
+                    className="px-4 py-1.5 rounded-[9px] text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                    onMouseEnter={(e) => {
+                      if (!hasMissingRequiredDeps && !isInstalling) {
+                        (e.currentTarget as HTMLElement).style.backgroundColor = "var(--rz-accent-hover)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!hasMissingRequiredDeps) {
+                        (e.currentTarget as HTMLElement).style.backgroundColor = "var(--rz-accent)";
+                      }
+                    }}
                   >
                     {isInstalling
                       ? "Installing..."
-                      : plan && (plan.missing_dependencies.length > 0 || (plan.dependency_report && plan.dependency_report.missing_required.length > 0))
-                      ? `Missing: ${plan.dependency_report?.missing_required[0] || plan.missing_dependencies[0]}`
+                      : hasMissingRequiredDeps
+                      ? `Missing: ${firstMissingDep}`
+                      : plan?.compatibility_status === "incompatible"
+                      ? "Incompatible"
+                      : createSnapshot
+                      ? "Install with Snapshot"
                       : "Install"}
                   </button>
                 )}
@@ -1593,7 +1714,7 @@ export const PackageDetailModal: React.FC = () => {
                     <button
                       onClick={handleCheckUpdate}
                       disabled={checkingUpdate || isUpdating || isUninstalling}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)] transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[9px] text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] transition-colors disabled:opacity-40 shadow-xs"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? "animate-spin" : ""}`} />
                       <span>
@@ -1608,7 +1729,7 @@ export const PackageDetailModal: React.FC = () => {
                     <button
                       onClick={handleOpenUninstall}
                       disabled={isInstalling || isUpdating || isUninstalling}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[9px] text-xs font-semibold text-[var(--rz-status-error)] hover:text-rose-700 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors disabled:opacity-40"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Uninstall</span>
@@ -1618,7 +1739,7 @@ export const PackageDetailModal: React.FC = () => {
                       <button
                         onClick={() => rollbackSnapshot(relatedSnapshot.id)}
                         disabled={isInstalling}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[9px] text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] transition-colors disabled:opacity-40 shadow-xs"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>Rollback</span>
@@ -1628,7 +1749,7 @@ export const PackageDetailModal: React.FC = () => {
                     <button
                       onClick={handleOpenPreview}
                       disabled={isInstalling || isUpdating || isUninstalling}
-                      className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                      className="px-3.5 py-1.5 rounded-[9px] text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] transition-colors disabled:opacity-40 shadow-xs"
                     >
                       Reinstall
                     </button>
@@ -1638,18 +1759,33 @@ export const PackageDetailModal: React.FC = () => {
                     <button
                       onClick={handleOpenPreview}
                       disabled={isInstalling}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] hover:text-white border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[9px] text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] transition-colors disabled:opacity-40 shadow-xs"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      <Eye className="w-3.5 h-3.5 text-[var(--rz-text-secondary)]" />
                       <span>Preview</span>
                     </button>
 
                     <button
                       onClick={handleOpenPreview}
-                      disabled={isInstalling}
-                      className="px-4 py-1.5 rounded-md text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white transition-colors disabled:opacity-50"
+                      disabled={isInstalling || hasMissingRequiredDeps}
+                      style={{
+                        backgroundColor: hasMissingRequiredDeps ? "var(--rz-surface-hover)" : "var(--rz-accent)",
+                        color: hasMissingRequiredDeps ? "var(--rz-text-muted)" : "#ffffff",
+                        border: hasMissingRequiredDeps ? "1px solid var(--rz-border-subtle)" : "1px solid transparent",
+                      }}
+                      className="px-4 py-1.5 rounded-[9px] text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                      onMouseEnter={(e) => {
+                        if (!hasMissingRequiredDeps && !isInstalling) {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "var(--rz-accent-hover)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!hasMissingRequiredDeps) {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "var(--rz-accent)";
+                        }
+                      }}
                     >
-                      Install
+                      {hasMissingRequiredDeps ? `Missing: ${firstMissingDep}` : "Install"}
                     </button>
                   </>
                 )}

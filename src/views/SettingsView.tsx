@@ -11,7 +11,15 @@ import {
   Save,
   CheckCircle,
   AlertTriangle,
+  Palette,
+  Sun,
+  Moon,
+  Monitor,
+  Sliders,
+  Check,
 } from "lucide-react";
+import { useTheme, AppearanceMode, AccentColor, ACCENT_SWATCHES, ResolvedTheme } from "../theme";
+import { detectSystemTheme, getCachedSystemTheme } from "../theme/appearance";
 
 const DEFAULTS: RyzoraSettings = {
   default_release_channel: "stable",
@@ -30,6 +38,32 @@ export const SettingsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const {
+    mode,
+    accent,
+    accessibility,
+    setMode,
+    setAccent,
+    updateAccessibility,
+  } = useTheme();
+
+  const [systemScheme, setSystemScheme] = useState<ResolvedTheme>(() => getCachedSystemTheme());
+  const [snapshotOnInstall, setSnapshotOnInstall] = useState<boolean>(() => {
+    const pref = localStorage.getItem("ryzora_snapshot_on_install");
+    return pref !== null ? pref === "true" : false;
+  });
+
+  const toggleSnapshotOnInstall = () => {
+    const next = !snapshotOnInstall;
+    setSnapshotOnInstall(next);
+    localStorage.setItem("ryzora_snapshot_on_install", String(next));
+  };
+
+
+  useEffect(() => {
+    detectSystemTheme().then(setSystemScheme).catch(() => {});
+  }, []);
 
   useEffect(() => {
     invoke<RyzoraSettings>("get_settings")
@@ -73,12 +107,40 @@ export const SettingsView: React.FC = () => {
     return (
       <div className="view-container">
         <div className="loading-state">
-          <Settings className="w-8 h-8 animate-spin" style={{ color: "var(--accent)" }} />
+          <Settings className="w-8 h-8 animate-spin" style={{ color: "var(--rz-accent)" }} />
           <p>Loading settings…</p>
         </div>
       </div>
     );
   }
+
+  const appearanceCards: {
+    id: AppearanceMode;
+    label: string;
+    description: string;
+    icon: React.ReactNode;
+  }[] = [
+    {
+      id: "system",
+      label: "System",
+      description: `Follows Linux desktop scheme (${systemScheme})`,
+      icon: <Monitor className="w-4 h-4" />,
+    },
+    {
+      id: "light",
+      label: "Light",
+      description: "Clean & luminous translucent Ryzora Glass",
+      icon: <Sun className="w-4 h-4" />,
+    },
+    {
+      id: "dark",
+      label: "Dark",
+      description: "Midnight glass & deep dark surfaces",
+      icon: <Moon className="w-4 h-4" />,
+    },
+  ];
+
+  const accents: AccentColor[] = ["blue", "purple", "green", "orange"];
 
   return (
     <div className="view-container">
@@ -106,10 +168,145 @@ export const SettingsView: React.FC = () => {
       )}
 
       <div className="settings-grid">
-        {/* Repository Section */}
+        {/* Appearance Section */}
         <section className="settings-section">
           <div className="settings-section-header">
-            <RefreshCw className="w-4 h-4" style={{ color: "var(--accent)" }} />
+            <Palette className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
+            <h2>Appearance</h2>
+          </div>
+
+          {/* Theme Selection Cards */}
+          <div className="settings-field">
+            <label>Theme Mode</label>
+            <p className="settings-hint">Separated from content packages: Ryzora UI stays readable regardless of installed desktop themes.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
+              {appearanceCards.map((card) => {
+                const isSelected = mode === card.id;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => setMode(card.id)}
+                    className={[
+                      "flex flex-col p-3.5 rounded-xl border text-left transition-all relative",
+                      isSelected
+                        ? "bg-[var(--rz-surface-elevated)] border-[var(--rz-accent)] ring-1 ring-[var(--rz-accent)] shadow-sm"
+                        : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)] hover:bg-[var(--rz-surface-hover)]",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center justify-between w-full mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={isSelected ? "text-[var(--rz-accent)]" : "text-[var(--rz-text-muted)]"}>
+                          {card.icon}
+                        </span>
+                        <span className="text-xs font-semibold text-[var(--rz-text)]">{card.label}</span>
+                      </div>
+                      {isSelected && (
+                        <span className="w-4 h-4 rounded-full bg-[var(--rz-accent)] text-white flex items-center justify-center">
+                          <Check className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-[var(--rz-text-muted)] leading-normal">{card.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Accent Color Selection */}
+          <div className="settings-field mt-1">
+            <label>Accent Color</label>
+            <p className="settings-hint">Functional focus color for primary buttons, focus rings, links, and active navigation.</p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-1">
+              {accents.map((ac) => {
+                const swatch = ACCENT_SWATCHES[ac];
+                const isSelected = accent === ac;
+                return (
+                  <button
+                    key={ac}
+                    type="button"
+                    onClick={() => setAccent(ac)}
+                    className={[
+                      "flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs font-medium transition-all",
+                      isSelected
+                        ? "bg-[var(--rz-surface-elevated)] border-[var(--rz-accent)] shadow-sm text-[var(--rz-text)]"
+                        : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)] text-[var(--rz-text-secondary)]",
+                    ].join(" ")}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded-full ${swatch.bgClass} flex-shrink-0 flex items-center justify-center`}>
+                      {isSelected && <Check className="w-2 h-2 text-white" />}
+                    </span>
+                    <span className="truncate">{swatch.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Accessibility Section */}
+        <section className="settings-section">
+          <div className="settings-section-header">
+            <Sliders className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
+            <h2>Accessibility</h2>
+          </div>
+
+          <div className="settings-field">
+            <label className="toggle-label">
+              <span>
+                Reduce Transparency
+                <span className="settings-hint">Replaces frosted translucent glass with solid high-contrast surfaces.</span>
+              </span>
+              <button
+                className={`toggle ${accessibility.reduceTransparency ? "on" : "off"}`}
+                onClick={() => updateAccessibility({ reduceTransparency: !accessibility.reduceTransparency })}
+                type="button"
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </label>
+          </div>
+
+          <div className="settings-field">
+            <label className="toggle-label">
+              <span>
+                Reduce Motion
+                <span className="settings-hint">Disables fluid animations and transitions for instant layout response.</span>
+              </span>
+              <button
+                className={`toggle ${accessibility.reduceMotion ? "on" : "off"}`}
+                onClick={() => updateAccessibility({ reduceMotion: !accessibility.reduceMotion })}
+                type="button"
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </label>
+          </div>
+
+          <div className="settings-field">
+            <label className="toggle-label">
+              <span>
+                Increase Contrast
+                <span className="settings-hint">Sharpens border outlines and strengthens typographic contrast across all surfaces.</span>
+              </span>
+              <button
+                className={`toggle ${accessibility.increaseContrast ? "on" : "off"}`}
+                onClick={() => updateAccessibility({ increaseContrast: !accessibility.increaseContrast })}
+                type="button"
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </label>
+          </div>
+        </section>
+
+        {/* Repositories Section */}
+        <section className="settings-section">
+          <div className="settings-section-header">
+            <RefreshCw className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
             <h2>Repositories</h2>
           </div>
 
@@ -142,6 +339,7 @@ export const SettingsView: React.FC = () => {
                 className={`toggle ${settings.auto_refresh_enabled ? "on" : "off"}`}
                 onClick={() => patch({ auto_refresh_enabled: !settings.auto_refresh_enabled })}
                 aria-pressed={settings.auto_refresh_enabled}
+                type="button"
               >
                 <span className="toggle-thumb" />
               </button>
@@ -171,7 +369,7 @@ export const SettingsView: React.FC = () => {
         {/* Display Section */}
         <section className="settings-section">
           <div className="settings-section-header">
-            <Eye className="w-4 h-4" style={{ color: "var(--accent)" }} />
+            <Eye className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
             <h2>Display</h2>
           </div>
 
@@ -184,6 +382,7 @@ export const SettingsView: React.FC = () => {
               <button
                 className={`toggle ${settings.compact_ui ? "on" : "off"}`}
                 onClick={() => patch({ compact_ui: !settings.compact_ui })}
+                type="button"
               >
                 <span className="toggle-thumb" />
               </button>
@@ -199,6 +398,7 @@ export const SettingsView: React.FC = () => {
               <button
                 className={`toggle ${settings.show_unverified_packages ? "on" : "off"}`}
                 onClick={() => patch({ show_unverified_packages: !settings.show_unverified_packages })}
+                type="button"
               >
                 <span className="toggle-thumb" />
               </button>
@@ -214,6 +414,7 @@ export const SettingsView: React.FC = () => {
               <button
                 className={`toggle ${settings.show_nightly_packages ? "on" : "off"}`}
                 onClick={() => patch({ show_nightly_packages: !settings.show_nightly_packages })}
+                type="button"
               >
                 <span className="toggle-thumb" />
               </button>
@@ -224,7 +425,7 @@ export const SettingsView: React.FC = () => {
         {/* Notifications Section */}
         <section className="settings-section">
           <div className="settings-section-header">
-            <Bell className="w-4 h-4" style={{ color: "var(--accent)" }} />
+            <Bell className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
             <h2>Notifications</h2>
           </div>
 
@@ -270,11 +471,30 @@ export const SettingsView: React.FC = () => {
           </div>
         </section>
 
-        {/* Integrity Section */}
+        {/* Safety & Snapshots Section */}
         <section className="settings-section">
           <div className="settings-section-header">
-            <Shield className="w-4 h-4" style={{ color: "var(--accent)" }} />
-            <h2>Integrity</h2>
+            <Shield className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
+            <h2>Safety & Snapshots</h2>
+          </div>
+
+          <div className="settings-field">
+            <label className="toggle-label">
+              <span>
+                Default Backup Snapshot on Install
+                <span className="settings-hint">
+                  Enable backup snapshots by default when installing packages. When disabled, packages install directly without taking a pre-install snapshot (you can still choose in the install modal).
+                </span>
+              </span>
+              <button
+                className={`toggle ${snapshotOnInstall ? "on" : "off"}`}
+                onClick={toggleSnapshotOnInstall}
+                type="button"
+                aria-label="Toggle default backup snapshot on install"
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </label>
           </div>
 
           <div className="settings-field">
@@ -286,6 +506,7 @@ export const SettingsView: React.FC = () => {
               <button
                 className={`toggle ${settings.integrity_scan_on_startup ? "on" : "off"}`}
                 onClick={() => patch({ integrity_scan_on_startup: !settings.integrity_scan_on_startup })}
+                type="button"
               >
                 <span className="toggle-thumb" />
               </button>
@@ -294,7 +515,7 @@ export const SettingsView: React.FC = () => {
 
           <div className="settings-note">
             <Shield className="w-3 h-3" />
-            Signature verification, trust chain enforcement, and snapshot creation cannot be disabled via settings. These are engine-level invariants.
+            Signature verification, trust chain enforcement, and sandboxed staging cannot be bypassed. Pre-installation snapshot creation is user-configurable on demand.
           </div>
         </section>
       </div>
