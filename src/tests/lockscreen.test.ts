@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -417,6 +419,125 @@ test("15. Dual-target classification and non-destructive desktop integration inv
     assert.ok(
       path.startsWith("~/.local/share/ryzora/") || path.startsWith("/usr/share/sddm/") || path.startsWith("/etc/sddm.conf.d/"),
       `Path ${path} must be strictly confined to Ryzora storage or SDDM greeter directories`
+    );
+  }
+});
+
+test("16. Unique Media Identity: Every Qylock theme has a unique poster and preview asset", () => {
+  const catalogueLockScreens = getCatalogueLockScreens();
+  const qylockThemes = catalogueLockScreens.filter((p) => p.lockscreen?.provider === "qylock");
+
+  assert.equal(qylockThemes.length, 5, "Must have exactly 5 Qylock themes");
+
+  const posters = new Set<string>();
+  const previewVideos = new Set<string>();
+
+  for (const theme of qylockThemes) {
+    const poster = theme.preview_poster_url || theme.hero_image;
+    const video = theme.preview_video_url;
+
+    assert.ok(poster, `Theme ${theme.title} must declare a poster URL`);
+    assert.ok(
+      !poster.includes("Assets/title.png"),
+      `Theme ${theme.title} poster must NOT be the generic QYLOCK title.png collage`
+    );
+
+    assert.ok(
+      !posters.has(poster),
+      `Theme ${theme.title} must have a unique poster; detected collision with ${poster}`
+    );
+    posters.add(poster);
+
+    if (video) {
+      assert.ok(
+        !video.includes("Assets/title.png"),
+        `Theme ${theme.title} preview video must NOT point to static title.png`
+      );
+      assert.ok(
+        !previewVideos.has(video),
+        `Theme ${theme.title} must have a unique preview video; detected collision with ${video}`
+      );
+      previewVideos.add(video);
+    }
+  }
+
+  assert.equal(posters.size, 5, "All 5 Qylock themes must have 5 distinct posters");
+  assert.equal(previewVideos.size, 5, "All 5 Qylock themes must have distinct preview videos");
+});
+
+test("17. Media Asset Resolution & Verification: Preview videos and posters exist on disk and upstream", () => {
+  const catalogueLockScreens = getCatalogueLockScreens();
+  const qylockThemes = catalogueLockScreens.filter((p) => p.lockscreen?.provider === "qylock");
+
+  const publicDir = path.resolve(process.cwd(), "public");
+
+  for (const theme of qylockThemes) {
+    const poster = theme.preview_poster_url!;
+    const video = theme.preview_video_url!;
+    const animated = theme.lockscreen?.media.preview_animated!;
+
+    // Verify local files exist in public/
+    if (poster.startsWith("/")) {
+      const localPoster = path.join(publicDir, poster);
+      assert.ok(fs.existsSync(localPoster), `Local poster file must exist on disk: ${localPoster}`);
+      const stats = fs.statSync(localPoster);
+      assert.ok(stats.size > 1000, `Poster ${localPoster} must be a valid image file (> 1KB)`);
+    }
+
+    if (video.startsWith("/")) {
+      const localVideo = path.join(publicDir, video);
+      assert.ok(fs.existsSync(localVideo), `Local video file must exist on disk: ${localVideo}`);
+      const stats = fs.statSync(localVideo);
+      assert.ok(stats.size > 5000, `Video ${localVideo} must be a valid video stream (> 5KB)`);
+      assert.ok(video.endsWith(".mp4"), `Video ${video} must have .mp4 extension for HTML5 video`);
+    }
+
+    if (animated && animated.startsWith("/")) {
+      const localAnimated = path.join(publicDir, animated);
+      assert.ok(fs.existsSync(localAnimated), `Local animated file must exist on disk: ${localAnimated}`);
+    }
+
+    // Verify upstream provenance URLs are declared
+    if (theme.media_type === "video") {
+      assert.ok(
+        theme.lockscreen?.media.upstream_video || theme.preview_video_url,
+        `Video theme ${theme.title} must declare upstream video asset`
+      );
+    }
+  }
+});
+
+test("18. Animated & Video Theme Invariants: Never silently degrade to generic static poster", () => {
+  const catalogueLockScreens = getCatalogueLockScreens();
+
+  const dogSamurai = catalogueLockScreens.find((p) => p.title === "Dog Samurai")!;
+  const clockworkTape = catalogueLockScreens.find((p) => p.title === "Tape (Clockwork)")!;
+  const forest = catalogueLockScreens.find((p) => p.title === "Forest")!;
+  const nier = catalogueLockScreens.find((p) => p.title === "NieR: Automata")!;
+  const materialYou = catalogueLockScreens.find((p) => p.title === "Material You")!;
+
+  // Must have media_type set to video or animated
+  assert.equal(dogSamurai.media_type, "video");
+  assert.equal(forest.media_type, "video");
+  assert.equal(clockworkTape.media_type, "animated");
+  assert.equal(nier.media_type, "animated");
+  assert.equal(materialYou.media_type, "animated");
+
+  // Must provide preview_video_url for hardware-accelerated playback
+  for (const theme of [dogSamurai, clockworkTape, forest, nier, materialYou]) {
+    assert.ok(theme.preview_video_url, `Theme ${theme.title} must have preview_video_url`);
+    assert.ok(
+      theme.preview_video_url.endsWith(".mp4"),
+      `Theme ${theme.title} preview video must be an MP4 stream`
+    );
+    assert.notEqual(
+      theme.preview_video_url,
+      theme.preview_poster_url,
+      `Theme ${theme.title} preview video must not equal its poster`
+    );
+    assert.ok(
+      theme.lockscreen?.media.preview_animated,
+      `Theme ${theme.title} must have animated preview fallback`
     );
   }
 });

@@ -93,8 +93,9 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
         <div className="relative rounded-xl overflow-hidden border border-[var(--rz-border-subtle)] group">
           {/* Main Media Viewer */}
           <MediaPreview
-            poster={activeImage}
+            poster={activeScreenshotIndex === 0 && packageItem.preview_poster_url ? packageItem.preview_poster_url : activeImage}
             videoSrc={activeScreenshotIndex === 0 ? packageItem.preview_video_url : undefined}
+            animatedSrc={activeScreenshotIndex === 0 ? packageItem.lockscreen?.media.preview_animated : undefined}
             mediaType={activeScreenshotIndex === 0 ? (packageItem.media_type || "image") : "image"}
             alt={packageItem.title}
             mode="hero"

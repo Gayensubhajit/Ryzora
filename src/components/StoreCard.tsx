@@ -101,8 +101,9 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
       <div className="aspect-video w-full relative overflow-hidden bg-[var(--rz-surface-elevated)]">
         {hasImage ? (
           <MediaPreview
-            poster={packageItem.hero_image}
+            poster={packageItem.preview_poster_url || packageItem.hero_image}
             videoSrc={packageItem.preview_video_url}
+            animatedSrc={packageItem.lockscreen?.media.preview_animated}
             mediaType={packageItem.media_type || "image"}
             alt={packageItem.title}
             mode="card"

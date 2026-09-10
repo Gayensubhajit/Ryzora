@@ -347,9 +347,9 @@
         "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
         "verified": true
       },
-      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "hero_image": "assets/lockscreens/dog-samurai-poster.jpg",
       "screenshots": [
-        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+        "assets/lockscreens/dog-samurai-poster.jpg"
       ],
       "featured": true,
       "trending": true,
@@ -384,9 +384,9 @@
         "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
         "verified": true
       },
-      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "hero_image": "assets/lockscreens/clockwork-poster.jpg",
       "screenshots": [
-        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+        "assets/lockscreens/clockwork-poster.jpg"
       ],
       "featured": false,
       "trending": true,
@@ -420,9 +420,9 @@
         "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
         "verified": true
       },
-      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "hero_image": "assets/lockscreens/nier-poster.jpg",
       "screenshots": [
-        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+        "assets/lockscreens/nier-poster.jpg"
       ],
       "featured": false,
       "trending": false,
@@ -457,9 +457,9 @@
         "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
         "verified": true
       },
-      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "hero_image": "assets/lockscreens/forest-poster.jpg",
       "screenshots": [
-        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+        "assets/lockscreens/forest-poster.jpg"
       ],
       "featured": false,
       "trending": false,
@@ -493,9 +493,9 @@
         "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Darkkal44",
         "verified": true
       },
-      "hero_image": "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png",
+      "hero_image": "assets/lockscreens/material-you-poster.jpg",
       "screenshots": [
-        "https://raw.githubusercontent.com/Darkkal44/qylock/main/Assets/title.png"
+        "assets/lockscreens/material-you-poster.jpg"
       ],
       "featured": false,
       "trending": true,

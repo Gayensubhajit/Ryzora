@@ -23,6 +23,7 @@ function unregisterActiveVideo(video: HTMLVideoElement) {
 export interface MediaPreviewProps {
   poster: string;
   videoSrc?: string;
+  animatedSrc?: string;
   mediaType?: "image" | "video" | "animated";
   alt: string;
   mode?: "card" | "hero";
@@ -36,6 +37,7 @@ export interface MediaPreviewProps {
 export const MediaPreview: React.FC<MediaPreviewProps> = ({
   poster,
   videoSrc,
+  animatedSrc,
   mediaType = "image",
   alt,
   mode = "card",
@@ -86,15 +88,40 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  const hasVideo = Boolean(videoSrc && mediaType === "video" && !prefersReducedMotion && !videoError);
+  const normalizeUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/") || url.startsWith("data:") || url.startsWith("blob:")) {
+      return url;
+    }
+    return "/" + url;
+  };
 
-  // Playback control for Card Mode (plays on hover when visible)
+  const finalPoster = normalizeUrl(poster);
+  const finalVideo = normalizeUrl(videoSrc);
+  const finalAnimated = normalizeUrl(animatedSrc);
+
+  // Video is active if a video source is available, it is marked video or animated, and reduced motion is not requested
+  const hasVideo = Boolean(
+    finalVideo &&
+    (mediaType === "video" || mediaType === "animated") &&
+    !prefersReducedMotion &&
+    !videoError
+  );
+
+  const hasAnimatedImage = Boolean(
+    !hasVideo &&
+    animatedSrc &&
+    mediaType === "animated" &&
+    !prefersReducedMotion
+  );
+
+  // Playback control for Card Mode (muted loop when visible, limited to MAX_CONCURRENT_VIDEOS = 2)
   useEffect(() => {
     if (mode !== "card" || !hasVideo) return;
     const video = videoRef.current;
     if (!video) return;
 
-    if (isVisible && isHovered) {
+    if (isVisible && !prefersReducedMotion) {
       registerActiveVideo(video);
       video.play().then(() => setIsPlaying(true)).catch(() => {
         setIsPlaying(false);
@@ -108,7 +135,19 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
     return () => {
       unregisterActiveVideo(video);
     };
-  }, [mode, hasVideo, isVisible, isHovered]);
+  }, [mode, hasVideo, isVisible, prefersReducedMotion]);
+
+  // Hover prioritization: hovering immediately claims playback priority
+  useEffect(() => {
+    if (mode !== "card" || !hasVideo) return;
+    const video = videoRef.current;
+    if (!video || !isVisible || prefersReducedMotion) return;
+
+    if (isHovered) {
+      registerActiveVideo(video);
+      video.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  }, [mode, hasVideo, isVisible, isHovered, prefersReducedMotion]);
 
   // Hero Mode: Autoplays muted loop when visible
   useEffect(() => {
@@ -168,9 +207,9 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
       ref={containerRef}
       className={`relative w-full overflow-hidden select-none bg-[var(--surface-base,#141417)] ${aspectClass} ${className}`}
     >
-      {/* Fallback & Poster Image */}
+      {/* Fallback & Poster Image (or Animated GIF fallback) */}
       <img
-        src={poster}
+        src={hasAnimatedImage && isVisible ? finalAnimated : finalPoster}
         alt={alt}
         className={`w-full h-full object-cover transition-opacity duration-500 ${
           hasVideo && videoLoaded && isPlaying ? "opacity-0" : "opacity-100"
@@ -182,12 +221,13 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
       {hasVideo && (
         <video
           ref={videoRef}
-          src={videoSrc}
-          poster={poster}
+          src={finalVideo}
+          poster={finalPoster}
           muted={isMuted}
           loop
           playsInline
-          preload="metadata"
+          autoPlay
+          preload="auto"
           onLoadedData={() => setVideoLoaded(true)}
           onError={handleVideoError}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${

@@ -299,6 +299,8 @@ export interface LockscreenMediaSpec {
   poster: string;
   preview_video?: string;
   preview_animated?: string;
+  upstream_video?: string;
+  upstream_animated?: string;
   has_audio?: boolean;
   aspect_ratio?: "16:9" | "4:3";
 }
