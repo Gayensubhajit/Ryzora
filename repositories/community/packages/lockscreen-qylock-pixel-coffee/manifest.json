@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-pixel-coffee",
+  "name": "Pixel Coffee Shop",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Lo-fi pixel cafe window looking out at gentle autumn drizzle with steamy warm mugs.",
+  "tags": [
+    "coffee",
+    "lofi",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "relaxing",
+    "sddm"
+  ],
+  "color_palette": [
+    "#b45309",
+    "#29180c",
+    "#d97706",
+    "#fef3c7"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-coffee/theme.conf",
+      "description": "Pixel Coffee Shop configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-coffee/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-coffee/theme.conf",
+          "description": "Pixel Coffee Shop Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-coffee/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-coffee/Main.qml",
+          "description": "Pixel Coffee Shop SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-coffee/metadata.desktop",
+          "description": "Pixel Coffee Shop SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/pixel-coffee"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/pixel-coffee"
+  },
+  "media": {
+    "poster": "assets/lockscreens/pixel-coffee-poster.jpg",
+    "preview_video": "assets/lockscreens/pixel-coffee-preview.mp4",
+    "preview_animated": "assets/lockscreens/pixel-coffee.gif"
+  }
+}

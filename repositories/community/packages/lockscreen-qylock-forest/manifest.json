@@ -7,12 +7,12 @@
   "package_type": "lockscreen",
   "description": "Deep atmospheric mist passing through pine trees with gentle ambient particle motion and organic typography.",
   "tags": [
-    "forest",
-    "nature",
     "ambient",
     "animated",
-    "qylock",
+    "forest",
+    "nature",
     "quickshell",
+    "qylock",
     "sddm"
   ],
   "color_palette": [

@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-windows-7",
+  "name": "Windows 7 Aero Bliss",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Nostalgic translucent Aero Glass logon screen with authentic Orb button and blue aurora.",
+  "tags": [
+    "aero",
+    "glass",
+    "quickshell",
+    "qylock",
+    "retro",
+    "sddm",
+    "windows-7"
+  ],
+  "color_palette": [
+    "#0284c7",
+    "#0c4a6e",
+    "#38bdf8",
+    "#f0f9ff"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/theme.conf",
+      "description": "Windows 7 Aero Bliss configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/windows-7/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/theme.conf",
+          "description": "Windows 7 Aero Bliss Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-windows-7/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-windows-7/Main.qml",
+          "description": "Windows 7 Aero Bliss SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-windows-7/metadata.desktop",
+          "description": "Windows 7 Aero Bliss SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/windows_7"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/windows_7"
+  },
+  "media": {
+    "poster": "assets/lockscreens/windows-7-poster.jpg",
+    "preview_video": "assets/lockscreens/windows-7-preview.mp4",
+    "preview_animated": "assets/lockscreens/windows-7.gif"
+  }
+}

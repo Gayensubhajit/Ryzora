@@ -201,7 +201,9 @@ export const CategoryView: React.FC = () => {
         subFilter === "All" ||
         pkg.tags.some((t) => t.toLowerCase() === subFilter.toLowerCase()) ||
         pkg.supported_desktops.some((d) => d.toLowerCase() === subFilter.toLowerCase()) ||
-        (pkg.components ?? []).some((c) => c.component_type?.toLowerCase().includes(subFilter.toLowerCase()));
+        (pkg.components ?? []).some((c) => c.component_type?.toLowerCase().includes(subFilter.toLowerCase())) ||
+        (subFilter.toLowerCase() === "sddm" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null || Boolean(pkg.manifest?.targets?.["sddm"]))) ||
+        (subFilter.toLowerCase() === "quickshell" && (pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell != null || Boolean(pkg.manifest?.targets?.["quickshell"])));
 
       return matchesCategory && matchesSearch && matchesDesktop && matchesSubFilter;
     });

@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-osu",
+  "name": "osu! Beatmap Lock",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Dynamic rhythm game themed lockscreen with pink accent glows and combo counter aesthetic.",
+  "tags": [
+    "anime",
+    "gaming",
+    "osu",
+    "quickshell",
+    "qylock",
+    "rhythm",
+    "sddm"
+  ],
+  "color_palette": [
+    "#f43f5e",
+    "#1e1b4b",
+    "#fb7185",
+    "#ffe4e6"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
+      "description": "osu! Beatmap Lock configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
+          "description": "osu! Beatmap Lock Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-osu/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-osu/Main.qml",
+          "description": "osu! Beatmap Lock SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-osu/metadata.desktop",
+          "description": "osu! Beatmap Lock SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/osu"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/osu"
+  },
+  "media": {
+    "poster": "assets/lockscreens/osu-poster.jpg",
+    "preview_video": "assets/lockscreens/osu-preview.mp4",
+    "preview_animated": "assets/lockscreens/osu.gif"
+  }
+}

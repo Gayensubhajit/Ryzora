@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-girl-coffee",
+  "name": "Morning Coffee",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Peaceful early morning coffee break overlooking a sleepy sunlit city.",
+  "tags": [
+    "anime",
+    "coffee",
+    "morning",
+    "peaceful",
+    "quickshell",
+    "qylock",
+    "sddm"
+  ],
+  "color_palette": [
+    "#f97316",
+    "#1c1917",
+    "#ea580c",
+    "#ffedd5"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/theme.conf",
+      "description": "Morning Coffee configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/theme.conf",
+          "description": "Morning Coffee Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-girl-coffee/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-girl-coffee/Main.qml",
+          "description": "Morning Coffee SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-girl-coffee/metadata.desktop",
+          "description": "Morning Coffee SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/girl-coffee"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/girl-coffee"
+  },
+  "media": {
+    "poster": "assets/lockscreens/girl-coffee-poster.jpg",
+    "preview_video": "assets/lockscreens/girl-coffee-preview.mp4",
+    "preview_animated": "assets/lockscreens/girl-coffee.gif"
+  }
+}

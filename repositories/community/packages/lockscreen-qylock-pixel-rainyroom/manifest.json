@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-pixel-rainyroom",
+  "name": "Pixel Rainy Room",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Midnight room lit by neon monitors as soothing rain taps on the glass panes.",
+  "tags": [
+    "cozy",
+    "lofi",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "rain",
+    "sddm"
+  ],
+  "color_palette": [
+    "#6366f1",
+    "#0b0f19",
+    "#818cf8",
+    "#e0e7ff"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/theme.conf",
+      "description": "Pixel Rainy Room configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/theme.conf",
+          "description": "Pixel Rainy Room Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/Main.qml",
+          "description": "Pixel Rainy Room SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/metadata.desktop",
+          "description": "Pixel Rainy Room SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/pixel-rainyroom"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/pixel-rainyroom"
+  },
+  "media": {
+    "poster": "assets/lockscreens/pixel-rainyroom-poster.jpg",
+    "preview_video": "assets/lockscreens/pixel-rainyroom-preview.mp4",
+    "preview_animated": "assets/lockscreens/pixel-rainyroom.gif"
+  }
+}

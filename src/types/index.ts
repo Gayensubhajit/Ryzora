@@ -175,6 +175,10 @@ export interface RyzoraManifest {
   files: ManifestFile[];
   /** Typed package dependencies (Phase 9). */
   dependencies?: DependencySpec[];
+  /** Target definitions for multi-target packages (e.g. quickshell, sddm). */
+  targets?: Record<string, any>;
+  /** Media definitions (poster, preview video, animated GIF). */
+  media?: Record<string, any>;
 }
 
 /** Result returned by the Rust validate_manifest command. */

@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-last-of-us",
+  "name": "The Last of Us",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Post-apocalyptic overgrown city ruins with drifting spores and acoustic guitar motif.",
+  "tags": [
+    "atmospheric",
+    "cinematic",
+    "last-of-us",
+    "overgrown",
+    "quickshell",
+    "qylock",
+    "sddm"
+  ],
+  "color_palette": [
+    "#84cc16",
+    "#141a10",
+    "#4d7c0f",
+    "#d97706"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/theme.conf",
+      "description": "The Last of Us configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/theme.conf",
+          "description": "The Last of Us Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-last-of-us/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-last-of-us/Main.qml",
+          "description": "The Last of Us SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-last-of-us/metadata.desktop",
+          "description": "The Last of Us SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/last-of-us"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/last-of-us"
+  },
+  "media": {
+    "poster": "assets/lockscreens/last-of-us-poster.jpg",
+    "preview_video": "assets/lockscreens/last-of-us-preview.mp4",
+    "preview_animated": "assets/lockscreens/last-of-us.gif"
+  }
+}

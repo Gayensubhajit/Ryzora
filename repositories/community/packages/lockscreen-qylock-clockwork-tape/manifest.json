@@ -7,13 +7,13 @@
   "package_type": "lockscreen",
   "description": "A tactile retro lock: deep warm amber tones, rotating magnetic reel animations, and an authentic cassette tape aesthetic.",
   "tags": [
-    "clockwork",
-    "retro",
-    "warm",
     "animated",
-    "qylock",
+    "clockwork",
     "quickshell",
-    "sddm"
+    "qylock",
+    "retro",
+    "sddm",
+    "warm"
   ],
   "color_palette": [
     "#d7a45f",

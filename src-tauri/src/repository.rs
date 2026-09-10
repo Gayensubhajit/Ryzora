@@ -5167,4 +5167,23 @@ mod tests {
         assert_eq!(prov.upstream, "https://github.com/Darkkal44/qylock");
         assert_eq!(prov.license, Some("GPL-3.0".to_string()));
     }
+    #[test]
+    fn test_community_repository_catalogue_exposes_all_27_lockscreens() {
+        let manager = create_default_manager();
+        let packages = manager.list_all_packages().expect("list_all_packages failed");
+        let lockscreens: Vec<_> = packages.into_iter().filter(|p| p.package_type == crate::manifest::PackageType::Lockscreen).collect();
+        assert_eq!(lockscreens.len(), 27, "Community repository must expose all 27 lockscreens");
+
+        let qylock_items: Vec<_> = lockscreens.into_iter().filter(|p| p.id.starts_with("lockscreen-qylock-")).collect();
+        assert_eq!(qylock_items.len(), 25, "Must expose 25 Qylock themes from repository manifests");
+
+        for item in qylock_items {
+            let manifest = item.manifest.as_ref().expect("Manifest must be attached");
+            assert!(manifest.supports_target("quickshell"), "Item {} must support quickshell", item.id);
+            assert!(manifest.supports_target("sddm"), "Item {} must support sddm", item.id);
+            assert!(item.hero_image.starts_with("assets/lockscreens/"));
+            assert!(!item.hero_image.contains("/home/silentbyte"));
+        }
+    }
+
 }

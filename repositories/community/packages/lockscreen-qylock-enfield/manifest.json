@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-enfield",
+  "name": "Arknights: Endfield",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Talos-II planetary frontier tactical lockscreen with industrial telemetry and HUD overlays.",
+  "tags": [
+    "arknights",
+    "enfield",
+    "industrial",
+    "quickshell",
+    "qylock",
+    "sddm",
+    "tactical"
+  ],
+  "color_palette": [
+    "#f59e0b",
+    "#18181b",
+    "#fbbf24",
+    "#e4e4e7"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/enfield/theme.conf",
+      "description": "Arknights: Endfield configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/enfield/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/enfield/theme.conf",
+          "description": "Arknights: Endfield Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-enfield/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-enfield/Main.qml",
+          "description": "Arknights: Endfield SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-enfield/metadata.desktop",
+          "description": "Arknights: Endfield SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/enfield"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/enfield"
+  },
+  "media": {
+    "poster": "assets/lockscreens/enfield-poster.jpg",
+    "preview_video": "assets/lockscreens/enfield-preview.mp4",
+    "preview_animated": "assets/lockscreens/enfield.gif"
+  }
+}

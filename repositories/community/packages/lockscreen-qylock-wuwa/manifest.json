@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-wuwa",
+  "name": "Wuthering Waves",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Rover cinematic lockscreen with animated resonance wave effects and dark sci-fi HUD.",
+  "tags": [
+    "cinematic",
+    "quickshell",
+    "qylock",
+    "sci-fi",
+    "sddm",
+    "wuthering-waves",
+    "wuwa"
+  ],
+  "color_palette": [
+    "#06b6d4",
+    "#0f172a",
+    "#14b8a6",
+    "#94a3b8"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/theme.conf",
+      "description": "Wuthering Waves configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/wuwa/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/theme.conf",
+          "description": "Wuthering Waves Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-wuwa/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-wuwa/Main.qml",
+          "description": "Wuthering Waves SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-wuwa/metadata.desktop",
+          "description": "Wuthering Waves SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/wuwa"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/wuwa"
+  },
+  "media": {
+    "poster": "assets/lockscreens/wuwa-poster.jpg",
+    "preview_video": "assets/lockscreens/wuwa-preview.mp4",
+    "preview_animated": "assets/lockscreens/wuwa.gif"
+  }
+}

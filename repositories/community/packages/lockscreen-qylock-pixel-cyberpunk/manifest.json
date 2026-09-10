@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-pixel-cyberpunk",
+  "name": "Pixel Cyberpunk",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Rain-slicked neon alley with holograms and retro 16-bit cyber aesthetics.",
+  "tags": [
+    "cyberpunk",
+    "neon",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "retro",
+    "sddm"
+  ],
+  "color_palette": [
+    "#ec4899",
+    "#0f0f1a",
+    "#06b6d4",
+    "#f43f5e"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/theme.conf",
+      "description": "Pixel Cyberpunk configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/theme.conf",
+          "description": "Pixel Cyberpunk Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/Main.qml",
+          "description": "Pixel Cyberpunk SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/metadata.desktop",
+          "description": "Pixel Cyberpunk SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/pixel-cyberpunk"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/pixel-cyberpunk"
+  },
+  "media": {
+    "poster": "assets/lockscreens/pixel-cyberpunk-poster.jpg",
+    "preview_video": "assets/lockscreens/pixel-cyberpunk-preview.mp4",
+    "preview_animated": "assets/lockscreens/pixel-cyberpunk.gif"
+  }
+}

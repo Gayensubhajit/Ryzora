@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-pixel-emerald",
+  "name": "Pixel Emerald Valley",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Serene emerald mountain valley with flying airships and vibrant 16-bit pixel panorama.",
+  "tags": [
+    "emerald",
+    "nature",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "retro",
+    "sddm"
+  ],
+  "color_palette": [
+    "#10b981",
+    "#064e3b",
+    "#34d399",
+    "#ecfdf5"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-emerald/theme.conf",
+      "description": "Pixel Emerald Valley configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-emerald/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-emerald/theme.conf",
+          "description": "Pixel Emerald Valley Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-emerald/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-emerald/Main.qml",
+          "description": "Pixel Emerald Valley SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-emerald/metadata.desktop",
+          "description": "Pixel Emerald Valley SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/pixel-emerald"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/pixel-emerald"
+  },
+  "media": {
+    "poster": "assets/lockscreens/pixel-emerald-poster.jpg",
+    "preview_video": "assets/lockscreens/pixel-emerald-preview.mp4",
+    "preview_animated": "assets/lockscreens/pixel-emerald.gif"
+  }
+}

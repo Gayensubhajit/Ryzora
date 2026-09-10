@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-pixel-waterfall",
+  "name": "Pixel Mountain Waterfall",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Towering cascade falling into crystal mountain pools with shimmering pixel water shaders.",
+  "tags": [
+    "mountain",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "relaxing",
+    "sddm",
+    "waterfall"
+  ],
+  "color_palette": [
+    "#0284c7",
+    "#082f49",
+    "#38bdf8",
+    "#e0f2fe"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/theme.conf",
+      "description": "Pixel Mountain Waterfall configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/theme.conf",
+          "description": "Pixel Mountain Waterfall Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-waterfall/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/Main.qml",
+          "description": "Pixel Mountain Waterfall SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/metadata.desktop",
+          "description": "Pixel Mountain Waterfall SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/pixel-waterfall"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/pixel-waterfall"
+  },
+  "media": {
+    "poster": "assets/lockscreens/pixel-waterfall-poster.jpg",
+    "preview_video": "assets/lockscreens/pixel-waterfall-preview.mp4",
+    "preview_animated": "assets/lockscreens/pixel-waterfall.gif"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-terraria",
+  "name": "Terraria Overworld",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Iconic Terraria surface biome with floating day slime, floating islands, and retro pixel font.",
+  "tags": [
+    "gaming",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "sandbox",
+    "sddm",
+    "terraria"
+  ],
+  "color_palette": [
+    "#22c55e",
+    "#14532d",
+    "#854d0e",
+    "#fef08a"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/theme.conf",
+      "description": "Terraria Overworld configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/terraria/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/theme.conf",
+          "description": "Terraria Overworld Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-terraria/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/Main.qml",
+          "description": "Terraria Overworld SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/metadata.desktop",
+          "description": "Terraria Overworld SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/terraria"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/terraria"
+  },
+  "media": {
+    "poster": "assets/lockscreens/terraria-poster.jpg",
+    "preview_video": "assets/lockscreens/terraria-preview.mp4",
+    "preview_animated": "assets/lockscreens/terraria.gif"
+  }
+}

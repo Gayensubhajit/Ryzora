@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-sword",
+  "name": "Sword in the Stone",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Atmospheric pixel fantasy lockscreen of a legendary blade resting in an enchanted glade.",
+  "tags": [
+    "animated",
+    "fantasy",
+    "pixel",
+    "quickshell",
+    "qylock",
+    "sddm",
+    "sword"
+  ],
+  "color_palette": [
+    "#a855f7",
+    "#1e1b4b",
+    "#6366f1",
+    "#f1f5f9"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/sword/theme.conf",
+      "description": "Sword in the Stone configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/sword/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/sword/theme.conf",
+          "description": "Sword in the Stone Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-sword/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-sword/Main.qml",
+          "description": "Sword in the Stone SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-sword/metadata.desktop",
+          "description": "Sword in the Stone SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/sword"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/sword"
+  },
+  "media": {
+    "poster": "assets/lockscreens/sword-poster.jpg",
+    "preview_video": "assets/lockscreens/sword-preview.mp4",
+    "preview_animated": "assets/lockscreens/sword.gif"
+  }
+}

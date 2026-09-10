@@ -623,7 +623,7 @@ test("21. Authoritative Repository Root & Derived Index Invariant", () => {
   );
 
   const qylockRepoItems = repoLockScreens.filter((p: any) => p.provider === "qylock");
-  assert.equal(qylockRepoItems.length, 5, "Must have 5 Qylock lockscreens with declared provider");
+  assert.equal(qylockRepoItems.length, 25, "Must have 25 Qylock lockscreens with declared provider");
 
   for (const item of qylockRepoItems) {
     assert.deepEqual(item.targets, ["quickshell", "sddm"]);
@@ -728,14 +728,14 @@ test("27. Target Selection Survives Frontend to Tauri Invocation Payload", () =>
   }
 });
 
-test("28. Target Capability Data: Audit all 5 community Qylock package manifests", () => {
-  const themes = [
-    "lockscreen-qylock-dog-samurai",
-    "lockscreen-qylock-clockwork-tape",
-    "lockscreen-qylock-nier-automata",
-    "lockscreen-qylock-forest",
-    "lockscreen-qylock-material-you",
-  ];
+test("28. Target Capability Data: Audit all community Qylock package manifests", () => {
+  const repoJsonPath = path.resolve("repositories/community/repository.json");
+  const repo = JSON.parse(fs.readFileSync(repoJsonPath, "utf8"));
+  const themes = repo.packages
+    .filter((p: any) => p.package_type === "lockscreen" && p.provider === "qylock")
+    .map((p: any) => p.id);
+  
+  assert.equal(themes.length, 25, "Must audit all 25 Qylock theme manifests");
 
   for (const themeId of themes) {
     const manifestPath = path.resolve(`repositories/community/packages/${themeId}/manifest.json`);

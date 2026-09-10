@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-minecraft",
+  "name": "Minecraft Panoramas",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Slowly revolving classic Minecraft landscape with voxel skies and blocky typography.",
+  "tags": [
+    "classic",
+    "gaming",
+    "minecraft",
+    "quickshell",
+    "qylock",
+    "sddm",
+    "voxel"
+  ],
+  "color_palette": [
+    "#65a30d",
+    "#1c1917",
+    "#eab308",
+    "#f5f5f4"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/theme.conf",
+      "description": "Minecraft Panoramas configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/minecraft/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/theme.conf",
+          "description": "Minecraft Panoramas Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-minecraft/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-minecraft/Main.qml",
+          "description": "Minecraft Panoramas SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-minecraft/metadata.desktop",
+          "description": "Minecraft Panoramas SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/minecraft"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/minecraft"
+  },
+  "media": {
+    "poster": "assets/lockscreens/minecraft-poster.jpg",
+    "preview_video": "assets/lockscreens/minecraft-preview.mp4",
+    "preview_animated": "assets/lockscreens/minecraft.gif"
+  }
+}

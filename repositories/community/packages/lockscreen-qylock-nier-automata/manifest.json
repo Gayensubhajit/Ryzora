@@ -7,12 +7,12 @@
   "package_type": "lockscreen",
   "description": "Minimal monochrome YoRHa interface with tactical HUD styling, glitch micro-interactions, and high contrast typography.",
   "tags": [
-    "nier",
     "minimal",
-    "yorha",
-    "qylock",
+    "nier",
     "quickshell",
-    "sddm"
+    "qylock",
+    "sddm",
+    "yorha"
   ],
   "color_palette": [
     "#dcd8cd",

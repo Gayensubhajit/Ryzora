@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-ninja-gaiden",
+  "name": "Ninja Gaiden Moon",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Dark silhouette of Ryu Hayabusa against an ominous blood-red full moon.",
+  "tags": [
+    "action",
+    "blood-moon",
+    "ninja",
+    "quickshell",
+    "qylock",
+    "retro",
+    "sddm"
+  ],
+  "color_palette": [
+    "#ef4444",
+    "#18181b",
+    "#b91c1c",
+    "#fca5a5"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
+      "description": "Ninja Gaiden Moon configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
+          "description": "Ninja Gaiden Moon Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-ninja-gaiden/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/Main.qml",
+          "description": "Ninja Gaiden Moon SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/metadata.desktop",
+          "description": "Ninja Gaiden Moon SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/ninja_gaiden"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/ninja_gaiden"
+  },
+  "media": {
+    "poster": "assets/lockscreens/ninja-gaiden-poster.jpg",
+    "preview_video": "assets/lockscreens/ninja-gaiden-preview.mp4",
+    "preview_animated": "assets/lockscreens/ninja-gaiden.gif"
+  }
+}

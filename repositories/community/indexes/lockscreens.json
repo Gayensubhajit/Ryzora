@@ -1,8 +1,8 @@
 {
   "repository_id": "community",
   "repository_name": "Ryzora Community Repository",
-  "generated_at": 1789000000,
-  "total_lockscreens": 7,
+  "generated_at": "2026-09-10T06:50:00Z",
+  "total_lockscreens": 27,
   "packages": [
     {
       "id": "lockscreen-hyprlock-aurora",
@@ -47,13 +47,13 @@
       "manifest": "packages/lockscreen-qylock-dog-samurai/manifest.json",
       "category": "lockscreens",
       "tags": [
-        "samurai",
-        "cinematic",
-        "video",
         "animated",
-        "qylock",
+        "cinematic",
         "quickshell",
-        "sddm"
+        "qylock",
+        "samurai",
+        "sddm",
+        "video"
       ],
       "color_palette": [
         "#945a46",
@@ -103,13 +103,13 @@
       "manifest": "packages/lockscreen-qylock-clockwork-tape/manifest.json",
       "category": "lockscreens",
       "tags": [
-        "clockwork",
-        "retro",
-        "warm",
         "animated",
-        "qylock",
+        "clockwork",
         "quickshell",
-        "sddm"
+        "qylock",
+        "retro",
+        "sddm",
+        "warm"
       ],
       "color_palette": [
         "#d7a45f",
@@ -159,12 +159,12 @@
       "manifest": "packages/lockscreen-qylock-nier-automata/manifest.json",
       "category": "lockscreens",
       "tags": [
-        "nier",
         "minimal",
-        "yorha",
-        "qylock",
+        "nier",
         "quickshell",
-        "sddm"
+        "qylock",
+        "sddm",
+        "yorha"
       ],
       "color_palette": [
         "#dcd8cd",
@@ -214,12 +214,12 @@
       "manifest": "packages/lockscreen-qylock-forest/manifest.json",
       "category": "lockscreens",
       "tags": [
-        "forest",
-        "nature",
         "ambient",
         "animated",
-        "qylock",
+        "forest",
+        "nature",
         "quickshell",
+        "qylock",
         "sddm"
       ],
       "color_palette": [
@@ -273,8 +273,8 @@
         "material-you",
         "minimal",
         "modern",
-        "qylock",
         "quickshell",
+        "qylock",
         "sddm"
       ],
       "color_palette": [
@@ -350,6 +350,1046 @@
       "trending": false,
       "rating": 4.72,
       "downloads": 5400
+    },
+    {
+      "id": "lockscreen-qylock-genshin",
+      "name": "Genshin Impact",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Dynamic time-of-day Teyvat lockscreen with dawn, day, dusk, and night animated cycles.",
+      "manifest": "packages/lockscreen-qylock-genshin/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "anime",
+        "day-night",
+        "dynamic",
+        "genshin",
+        "quickshell",
+        "qylock",
+        "sddm"
+      ],
+      "color_palette": [
+        "#d4af37",
+        "#1e293b",
+        "#38bdf8",
+        "#f8fafc"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/genshin-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/genshin-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/genshin-preview.mp4",
+      "preview_animated": "/assets/lockscreens/genshin.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/Genshin"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/Genshin"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-star-rail",
+      "name": "Honkai: Star Rail",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Astral Express cosmic voyage video lockscreen with futuristic rail clock and starry atmosphere.",
+      "manifest": "packages/lockscreen-qylock-star-rail/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "cosmic",
+        "honkai",
+        "quickshell",
+        "qylock",
+        "sddm",
+        "space",
+        "star-rail"
+      ],
+      "color_palette": [
+        "#818cf8",
+        "#0f172a",
+        "#c084fc",
+        "#e2e8f0"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/star-rail-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/star-rail-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/star-rail-preview.mp4",
+      "preview_animated": "/assets/lockscreens/star-rail.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/star-rail"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/star-rail"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-wuwa",
+      "name": "Wuthering Waves",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Rover cinematic lockscreen with animated resonance wave effects and dark sci-fi HUD.",
+      "manifest": "packages/lockscreen-qylock-wuwa/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "cinematic",
+        "quickshell",
+        "qylock",
+        "sci-fi",
+        "sddm",
+        "wuthering-waves",
+        "wuwa"
+      ],
+      "color_palette": [
+        "#06b6d4",
+        "#0f172a",
+        "#14b8a6",
+        "#94a3b8"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/wuwa-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/wuwa-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/wuwa-preview.mp4",
+      "preview_animated": "/assets/lockscreens/wuwa.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/wuwa"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/wuwa"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-sword",
+      "name": "Sword in the Stone",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Atmospheric pixel fantasy lockscreen of a legendary blade resting in an enchanted glade.",
+      "manifest": "packages/lockscreen-qylock-sword/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "animated",
+        "fantasy",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "sddm",
+        "sword"
+      ],
+      "color_palette": [
+        "#a855f7",
+        "#1e1b4b",
+        "#6366f1",
+        "#f1f5f9"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/sword-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/sword-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/sword-preview.mp4",
+      "preview_animated": "/assets/lockscreens/sword.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/sword"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/sword"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-winter",
+      "name": "Winter Snowfall",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Cozy silent winter snowfall with frosty pine silhouettes and ambient digital clock.",
+      "manifest": "packages/lockscreen-qylock-winter/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "ambient",
+        "cozy",
+        "quickshell",
+        "qylock",
+        "sddm",
+        "snow",
+        "winter"
+      ],
+      "color_palette": [
+        "#38bdf8",
+        "#0f172a",
+        "#93c5fd",
+        "#f8fafc"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/winter-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/winter-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/winter-preview.mp4",
+      "preview_animated": "/assets/lockscreens/winter.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/winter"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/winter"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-enfield",
+      "name": "Arknights: Endfield",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Talos-II planetary frontier tactical lockscreen with industrial telemetry and HUD overlays.",
+      "manifest": "packages/lockscreen-qylock-enfield/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "arknights",
+        "enfield",
+        "industrial",
+        "quickshell",
+        "qylock",
+        "sddm",
+        "tactical"
+      ],
+      "color_palette": [
+        "#f59e0b",
+        "#18181b",
+        "#fbbf24",
+        "#e4e4e7"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/enfield-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/enfield-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/enfield-preview.mp4",
+      "preview_animated": "/assets/lockscreens/enfield.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/enfield"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/enfield"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-last-of-us",
+      "name": "The Last of Us",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Post-apocalyptic overgrown city ruins with drifting spores and acoustic guitar motif.",
+      "manifest": "packages/lockscreen-qylock-last-of-us/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "atmospheric",
+        "cinematic",
+        "last-of-us",
+        "overgrown",
+        "quickshell",
+        "qylock",
+        "sddm"
+      ],
+      "color_palette": [
+        "#84cc16",
+        "#141a10",
+        "#4d7c0f",
+        "#d97706"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/last-of-us-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/last-of-us-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/last-of-us-preview.mp4",
+      "preview_animated": "/assets/lockscreens/last-of-us.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/last-of-us"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/last-of-us"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-pixel-cyberpunk",
+      "name": "Pixel Cyberpunk",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Rain-slicked neon alley with holograms and retro 16-bit cyber aesthetics.",
+      "manifest": "packages/lockscreen-qylock-pixel-cyberpunk/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "cyberpunk",
+        "neon",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "retro",
+        "sddm"
+      ],
+      "color_palette": [
+        "#ec4899",
+        "#0f0f1a",
+        "#06b6d4",
+        "#f43f5e"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/pixel-cyberpunk-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/pixel-cyberpunk-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/pixel-cyberpunk-preview.mp4",
+      "preview_animated": "/assets/lockscreens/pixel-cyberpunk.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/pixel-cyberpunk"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/pixel-cyberpunk"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-pixel-emerald",
+      "name": "Pixel Emerald Valley",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Serene emerald mountain valley with flying airships and vibrant 16-bit pixel panorama.",
+      "manifest": "packages/lockscreen-qylock-pixel-emerald/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "emerald",
+        "nature",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "retro",
+        "sddm"
+      ],
+      "color_palette": [
+        "#10b981",
+        "#064e3b",
+        "#34d399",
+        "#ecfdf5"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/pixel-emerald-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/pixel-emerald-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/pixel-emerald-preview.mp4",
+      "preview_animated": "/assets/lockscreens/pixel-emerald.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/pixel-emerald"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/pixel-emerald"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-pixel-sakura",
+      "name": "Pixel Sakura Blossom",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Gentle cherry blossom petals drifting over a quiet twilight village shrine.",
+      "manifest": "packages/lockscreen-qylock-pixel-sakura/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "cherry-blossom",
+        "japan",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "sakura",
+        "sddm"
+      ],
+      "color_palette": [
+        "#f472b6",
+        "#1e1024",
+        "#fb7185",
+        "#fff1f2"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/pixel-sakura-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/pixel-sakura-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/pixel-sakura-preview.mp4",
+      "preview_animated": "/assets/lockscreens/pixel-sakura.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/pixel-sakura"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/pixel-sakura"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-pixel-waterfall",
+      "name": "Pixel Mountain Waterfall",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Towering cascade falling into crystal mountain pools with shimmering pixel water shaders.",
+      "manifest": "packages/lockscreen-qylock-pixel-waterfall/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "mountain",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "relaxing",
+        "sddm",
+        "waterfall"
+      ],
+      "color_palette": [
+        "#0284c7",
+        "#082f49",
+        "#38bdf8",
+        "#e0f2fe"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/pixel-waterfall-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/pixel-waterfall-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/pixel-waterfall-preview.mp4",
+      "preview_animated": "/assets/lockscreens/pixel-waterfall.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/pixel-waterfall"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/pixel-waterfall"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-terraria",
+      "name": "Terraria Overworld",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Iconic Terraria surface biome with floating day slime, floating islands, and retro pixel font.",
+      "manifest": "packages/lockscreen-qylock-terraria/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "gaming",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "sandbox",
+        "sddm",
+        "terraria"
+      ],
+      "color_palette": [
+        "#22c55e",
+        "#14532d",
+        "#854d0e",
+        "#fef08a"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/terraria-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/terraria-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/terraria-preview.mp4",
+      "preview_animated": "/assets/lockscreens/terraria.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/terraria"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/terraria"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-minecraft",
+      "name": "Minecraft Panoramas",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Slowly revolving classic Minecraft landscape with voxel skies and blocky typography.",
+      "manifest": "packages/lockscreen-qylock-minecraft/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "classic",
+        "gaming",
+        "minecraft",
+        "quickshell",
+        "qylock",
+        "sddm",
+        "voxel"
+      ],
+      "color_palette": [
+        "#65a30d",
+        "#1c1917",
+        "#eab308",
+        "#f5f5f4"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/minecraft-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/minecraft-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/minecraft-preview.mp4",
+      "preview_animated": "/assets/lockscreens/minecraft.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/minecraft"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/minecraft"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-pixel-coffee",
+      "name": "Pixel Coffee Shop",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Lo-fi pixel cafe window looking out at gentle autumn drizzle with steamy warm mugs.",
+      "manifest": "packages/lockscreen-qylock-pixel-coffee/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "coffee",
+        "lofi",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "relaxing",
+        "sddm"
+      ],
+      "color_palette": [
+        "#b45309",
+        "#29180c",
+        "#d97706",
+        "#fef3c7"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/pixel-coffee-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/pixel-coffee-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/pixel-coffee-preview.mp4",
+      "preview_animated": "/assets/lockscreens/pixel-coffee.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/pixel-coffee"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/pixel-coffee"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-pixel-rainyroom",
+      "name": "Pixel Rainy Room",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Midnight room lit by neon monitors as soothing rain taps on the glass panes.",
+      "manifest": "packages/lockscreen-qylock-pixel-rainyroom/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "cozy",
+        "lofi",
+        "pixel",
+        "quickshell",
+        "qylock",
+        "rain",
+        "sddm"
+      ],
+      "color_palette": [
+        "#6366f1",
+        "#0b0f19",
+        "#818cf8",
+        "#e0e7ff"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/pixel-rainyroom-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/pixel-rainyroom-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/pixel-rainyroom-preview.mp4",
+      "preview_animated": "/assets/lockscreens/pixel-rainyroom.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/pixel-rainyroom"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/pixel-rainyroom"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-windows-7",
+      "name": "Windows 7 Aero Bliss",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Nostalgic translucent Aero Glass logon screen with authentic Orb button and blue aurora.",
+      "manifest": "packages/lockscreen-qylock-windows-7/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "aero",
+        "glass",
+        "quickshell",
+        "qylock",
+        "retro",
+        "sddm",
+        "windows-7"
+      ],
+      "color_palette": [
+        "#0284c7",
+        "#0c4a6e",
+        "#38bdf8",
+        "#f0f9ff"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/windows-7-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/windows-7-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/windows-7-preview.mp4",
+      "preview_animated": "/assets/lockscreens/windows-7.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/windows_7"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/windows_7"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-field",
+      "name": "Sunlit Field",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Golden sunlight streaming across an open grassland hill under summer cumulus clouds.",
+      "manifest": "packages/lockscreen-qylock-field/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "field",
+        "minimal",
+        "nature",
+        "quickshell",
+        "qylock",
+        "sddm",
+        "summer"
+      ],
+      "color_palette": [
+        "#eab308",
+        "#1c1917",
+        "#ca8a04",
+        "#fef9c3"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/field-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/field-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/field-preview.mp4",
+      "preview_animated": "/assets/lockscreens/field.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/field"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/field"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-girl-coffee",
+      "name": "Morning Coffee",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Peaceful early morning coffee break overlooking a sleepy sunlit city.",
+      "manifest": "packages/lockscreen-qylock-girl-coffee/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "anime",
+        "coffee",
+        "morning",
+        "peaceful",
+        "quickshell",
+        "qylock",
+        "sddm"
+      ],
+      "color_palette": [
+        "#f97316",
+        "#1c1917",
+        "#ea580c",
+        "#ffedd5"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/girl-coffee-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/girl-coffee-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/girl-coffee-preview.mp4",
+      "preview_animated": "/assets/lockscreens/girl-coffee.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/girl-coffee"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/girl-coffee"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-ninja-gaiden",
+      "name": "Ninja Gaiden Moon",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Dark silhouette of Ryu Hayabusa against an ominous blood-red full moon.",
+      "manifest": "packages/lockscreen-qylock-ninja-gaiden/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "action",
+        "blood-moon",
+        "ninja",
+        "quickshell",
+        "qylock",
+        "retro",
+        "sddm"
+      ],
+      "color_palette": [
+        "#ef4444",
+        "#18181b",
+        "#b91c1c",
+        "#fca5a5"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/ninja-gaiden-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/ninja-gaiden-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/ninja-gaiden-preview.mp4",
+      "preview_animated": "/assets/lockscreens/ninja-gaiden.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/ninja_gaiden"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/ninja_gaiden"
+      }
+    },
+    {
+      "id": "lockscreen-qylock-osu",
+      "name": "osu! Beatmap Lock",
+      "version": "1.0.0",
+      "package_type": "lockscreen",
+      "description": "Dynamic rhythm game themed lockscreen with pink accent glows and combo counter aesthetic.",
+      "manifest": "packages/lockscreen-qylock-osu/manifest.json",
+      "category": "lockscreens",
+      "tags": [
+        "anime",
+        "gaming",
+        "osu",
+        "quickshell",
+        "qylock",
+        "rhythm",
+        "sddm"
+      ],
+      "color_palette": [
+        "#f43f5e",
+        "#1e1b4b",
+        "#fb7185",
+        "#ffe4e6"
+      ],
+      "author": "Darkkal44",
+      "hero_image": "/assets/lockscreens/osu-poster.jpg",
+      "screenshots": [
+        "/assets/lockscreens/osu-poster.jpg"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.8,
+      "downloads": 5000,
+      "provider": "qylock",
+      "targets": [
+        "quickshell",
+        "sddm"
+      ],
+      "preview_video": "/assets/lockscreens/osu-preview.mp4",
+      "preview_animated": "/assets/lockscreens/osu.gif",
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "path": "themes/osu"
+      },
+      "provenance": {
+        "upstream": "https://github.com/Darkkal44/qylock",
+        "revision": "main",
+        "license": "GPL-3.0",
+        "path": "themes/osu"
+      }
     }
   ]
 }

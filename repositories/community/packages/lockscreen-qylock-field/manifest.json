@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-field",
+  "name": "Sunlit Field",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Golden sunlight streaming across an open grassland hill under summer cumulus clouds.",
+  "tags": [
+    "field",
+    "minimal",
+    "nature",
+    "quickshell",
+    "qylock",
+    "sddm",
+    "summer"
+  ],
+  "color_palette": [
+    "#eab308",
+    "#1c1917",
+    "#ca8a04",
+    "#fef9c3"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/field/theme.conf",
+      "description": "Sunlit Field configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/field/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/field/theme.conf",
+          "description": "Sunlit Field Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-field/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-field/Main.qml",
+          "description": "Sunlit Field SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-field/metadata.desktop",
+          "description": "Sunlit Field SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/field"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/field"
+  },
+  "media": {
+    "poster": "assets/lockscreens/field-poster.jpg",
+    "preview_video": "assets/lockscreens/field-preview.mp4",
+    "preview_animated": "assets/lockscreens/field.gif"
+  }
+}

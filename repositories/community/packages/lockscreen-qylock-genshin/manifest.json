@@ -1,0 +1,101 @@
+{
+  "id": "lockscreen-qylock-genshin",
+  "name": "Genshin Impact",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Dynamic time-of-day Teyvat lockscreen with dawn, day, dusk, and night animated cycles.",
+  "tags": [
+    "anime",
+    "day-night",
+    "dynamic",
+    "genshin",
+    "quickshell",
+    "qylock",
+    "sddm"
+  ],
+  "color_palette": [
+    "#d4af37",
+    "#1e293b",
+    "#38bdf8",
+    "#f8fafc"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/config",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/theme.conf",
+      "description": "Genshin Impact configuration file."
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/genshin/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/theme.conf",
+          "description": "Genshin Impact Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-genshin/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-genshin/Main.qml",
+          "description": "Genshin Impact SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-genshin/metadata.desktop",
+          "description": "Genshin Impact SDDM theme metadata."
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/Genshin"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "license": "GPL-3.0",
+    "path": "themes/Genshin"
+  },
+  "media": {
+    "poster": "assets/lockscreens/genshin-poster.jpg",
+    "preview_video": "assets/lockscreens/genshin-preview.mp4",
+    "preview_animated": "assets/lockscreens/genshin.gif"
+  }
+}

@@ -7,13 +7,13 @@
   "package_type": "lockscreen",
   "description": "A cinematic video lock: a straw-hatted samurai dog with a sheathed katana as crimson petals fall, paired with a bold digital clock and minimal login field.",
   "tags": [
-    "samurai",
-    "cinematic",
-    "video",
     "animated",
-    "qylock",
+    "cinematic",
     "quickshell",
-    "sddm"
+    "qylock",
+    "samurai",
+    "sddm",
+    "video"
   ],
   "color_palette": [
     "#945a46",
