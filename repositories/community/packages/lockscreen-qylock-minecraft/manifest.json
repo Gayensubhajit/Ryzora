@@ -38,9 +38,29 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/Main.qml",
+      "description": "minecraft Main.qml"
+    },
+    {
+      "source": "files/background.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/background.png",
+      "description": "minecraft background.png"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/metadata.desktop",
+      "description": "minecraft metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/theme.conf",
-      "description": "Minecraft Panoramas configuration file."
+      "description": "minecraft theme.conf"
+    },
+    {
+      "source": "files/title.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/title.png",
+      "description": "minecraft title.png"
     }
   ],
   "provider": "qylock",
@@ -51,12 +71,32 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/minecraft/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/minecraft/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/Main.qml",
+          "description": "minecraft Main.qml (quickshell)"
+        },
+        {
+          "source": "files/background.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/background.png",
+          "description": "minecraft background.png (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/metadata.desktop",
+          "description": "minecraft metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/theme.conf",
-          "description": "Minecraft Panoramas Quickshell session lock configuration."
+          "description": "minecraft theme.conf (quickshell)"
+        },
+        {
+          "source": "files/title.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/title.png",
+          "description": "minecraft title.png (quickshell)"
         }
       ]
     },
@@ -69,14 +109,29 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-minecraft/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-minecraft/Main.qml",
-          "description": "Minecraft Panoramas SDDM greeter QML entrypoint."
+          "description": "minecraft Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/background.png",
+          "target": "/usr/share/sddm/themes/ryzora-minecraft/background.png",
+          "description": "minecraft background.png (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-minecraft/metadata.desktop",
-          "description": "Minecraft Panoramas SDDM theme metadata."
+          "description": "minecraft metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-minecraft/theme.conf",
+          "description": "minecraft theme.conf (sddm)"
+        },
+        {
+          "source": "files/title.png",
+          "target": "/usr/share/sddm/themes/ryzora-minecraft/title.png",
+          "description": "minecraft title.png (sddm)"
         }
       ]
     }

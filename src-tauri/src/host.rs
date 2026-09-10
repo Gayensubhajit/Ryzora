@@ -48,6 +48,22 @@ pub struct HostCapabilities {
     pub supported_adapters: Vec<LockscreenTargetCapability>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SystemIntegrationReport {
+    pub desktop: String,
+    pub display_server: String,
+    pub session_lock_provider: String,
+    pub session_lock_entrypoint: Option<String>,
+    pub idle_provider: String,
+    pub idle_config: Option<String>,
+    pub login_manager: String,
+    pub login_theme: Option<String>,
+    pub login_config: Option<String>,
+    pub confidence: String,
+    pub evidence: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
 fn parse_os_release_field(key: &str) -> Option<String> {
     let paths = ["/etc/os-release", "/usr/lib/os-release"];
     for p in &paths {
@@ -276,7 +292,7 @@ pub fn detect_host_capabilities_in(home: &Path) -> HostCapabilities {
         "gdm",
         "lightdm",
         "greetd",
-        "pkexec",
+        "pkexec", // probe
         "hyprctl",
         "loginctl",
     ];
@@ -402,6 +418,198 @@ pub fn get_host_capabilities() -> HostCapabilities {
     detect_host_capabilities_in(&home)
 }
 
+pub fn detect_system_integration_report_in(home: &Path) -> SystemIntegrationReport {
+    let mut evidence = Vec::new();
+    let mut warnings = Vec::new();
+
+    // 1. Desktop & Compositor Detection
+    let xdg_current = env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    let desktop_session = env::var("DESKTOP_SESSION").unwrap_or_default();
+    let hypr_sig = env::var("HYPRLAND_INSTANCE_SIGNATURE").ok();
+    let sway_sock = env::var("SWAYSOCK").ok();
+
+    let desktop = if let Some(sig) = hypr_sig {
+        evidence.push(format!("env:HYPRLAND_INSTANCE_SIGNATURE={}", sig));
+        "Hyprland".to_string()
+    } else if xdg_current.to_lowercase().contains("hyprland") || desktop_session.to_lowercase().contains("hyprland") {
+        evidence.push(format!("env:XDG_CURRENT_DESKTOP={}", xdg_current));
+        "Hyprland".to_string()
+    } else if let Some(sock) = sway_sock {
+        evidence.push(format!("env:SWAYSOCK={}", sock));
+        "Sway".to_string()
+    } else if xdg_current.to_lowercase().contains("kde") || xdg_current.to_lowercase().contains("plasma") {
+        evidence.push(format!("env:XDG_CURRENT_DESKTOP={}", xdg_current));
+        "KDE Plasma".to_string()
+    } else if xdg_current.to_lowercase().contains("gnome") {
+        evidence.push(format!("env:XDG_CURRENT_DESKTOP={}", xdg_current));
+        "GNOME".to_string()
+    } else if xdg_current.to_lowercase().contains("cosmic") {
+        evidence.push(format!("env:XDG_CURRENT_DESKTOP={}", xdg_current));
+        "COSMIC".to_string()
+    } else if !xdg_current.is_empty() {
+        evidence.push(format!("env:XDG_CURRENT_DESKTOP={}", xdg_current));
+        xdg_current.clone()
+    } else {
+        "Standalone WM".to_string()
+    };
+
+    // 2. Display Server Detection
+    let wayland_display = env::var("WAYLAND_DISPLAY").ok();
+    let x11_display = env::var("DISPLAY").ok();
+    let display_server = if let Some(ref wd) = wayland_display {
+        evidence.push(format!("env:WAYLAND_DISPLAY={}", wd));
+        "Wayland".to_string()
+    } else if let Some(ref d) = x11_display {
+        evidence.push(format!("env:DISPLAY={}", d));
+        "X11".to_string()
+    } else {
+        "TTY".to_string()
+    };
+
+    // 3. Idle Provider Detection
+    let hypridle_conf = home.join(".config/hypr/hypridle.conf");
+    let sway_conf = home.join(".config/sway/config");
+    let (has_hypridle, _) = check_binary("hypridle");
+    let (has_swayidle, _) = check_binary("swayidle");
+
+    let (idle_provider, idle_config) = if hypridle_conf.exists() {
+        evidence.push(format!("file:{} exists", hypridle_conf.display()));
+        if has_hypridle {
+            evidence.push("binary:hypridle found in PATH".to_string());
+        }
+        ("hypridle".to_string(), Some(hypridle_conf.to_string_lossy().to_string()))
+    } else if has_hypridle {
+        evidence.push("binary:hypridle found in PATH".to_string());
+        ("hypridle".to_string(), None)
+    } else if sway_conf.exists() || has_swayidle {
+        if sway_conf.exists() {
+            evidence.push(format!("file:{} exists", sway_conf.display()));
+        }
+        ("swayidle".to_string(), if sway_conf.exists() { Some(sway_conf.to_string_lossy().to_string()) } else { None })
+    } else if desktop == "KDE Plasma" {
+        evidence.push("desktop:native KDE powerdevil idle management".to_string());
+        ("KDE Powerdevil".to_string(), None)
+    } else if desktop == "GNOME" {
+        evidence.push("desktop:native GNOME mutter idle management".to_string());
+        ("GNOME Session".to_string(), None)
+    } else {
+        ("None".to_string(), None)
+    };
+
+    // 4. Session Lock Provider Detection
+    let ryzora_active_file = home.join(".local/share/ryzora/active_lockscreen.json");
+    let (has_quickshell, _) = check_binary("quickshell");
+    let (has_hyprlock, _) = check_binary("hyprlock");
+    let (has_swaylock, _) = check_binary("swaylock");
+
+    let (mut session_lock_provider, mut session_lock_entrypoint) = ("None".to_string(), None);
+
+    if ryzora_active_file.exists() {
+        if let Ok(raw) = fs::read_to_string(&ryzora_active_file) {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(qs_pkg) = val.get("quickshell").and_then(|v| v.as_str()) {
+                    session_lock_provider = "Quickshell".to_string();
+                    session_lock_entrypoint = val.get("quickshell_theme_path").and_then(|v| v.as_str()).map(String::from);
+                    evidence.push(format!("ryzora:active_lockscreen:quickshell={}", qs_pkg));
+                }
+            }
+        }
+    }
+
+    if session_lock_provider == "None" && hypridle_conf.exists() {
+        if let Ok(content) = fs::read_to_string(&hypridle_conf) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("lock_cmd") {
+                    evidence.push(format!("hypridle:{}", trimmed));
+                    if trimmed.contains("quickshell") || trimmed.contains("lock.sh") {
+                        session_lock_provider = "Quickshell".to_string();
+                        if let Some(pos) = trimmed.find('=') {
+                            session_lock_entrypoint = Some(trimmed[pos+1..].trim().to_string());
+                        }
+                    } else if trimmed.contains("hyprlock") {
+                        session_lock_provider = "Hyprlock".to_string();
+                    } else if trimmed.contains("swaylock") {
+                        session_lock_provider = "Swaylock".to_string();
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if session_lock_provider == "None" {
+        if has_quickshell && (desktop == "Hyprland" || desktop == "Sway" || desktop == "COSMIC") {
+            session_lock_provider = "Quickshell".to_string();
+            evidence.push("binary:quickshell installed, compatible compositor detected".to_string());
+        } else if has_hyprlock && desktop == "Hyprland" {
+            session_lock_provider = "Hyprlock".to_string();
+            evidence.push("binary:hyprlock installed, Hyprland compositor detected".to_string());
+        } else if has_swaylock {
+            session_lock_provider = "Swaylock".to_string();
+            evidence.push("binary:swaylock installed".to_string());
+        }
+    }
+
+    // 5. Login Screen Detection (SDDM / GDM / LightDM)
+    let (dm_detected, dm_service, _) = detect_display_manager();
+    let sddm_resolution = crate::sddm_helper::resolve_effective_sddm_theme_in(None);
+
+    let (login_manager, login_theme, login_config) = if dm_detected == "sddm" || sddm_resolution.effective_theme.is_some() {
+        let theme = sddm_resolution.effective_theme.clone();
+        let config_file = sddm_resolution.effective_file.as_ref().map(|p| p.to_string_lossy().to_string());
+        evidence.push(format!("login_manager:sddm active, effective_theme={:?}", theme));
+        for entry in &sddm_resolution.entries {
+            evidence.push(format!("sddm_dropin:{}:Current={}", entry.path, entry.theme));
+        }
+        if sddm_resolution.is_overridden {
+            warnings.push(format!(
+                "Ryzora SDDM configuration is overridden by '{}'",
+                sddm_resolution.overridden_by.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
+            ));
+        }
+        ("SDDM".to_string(), theme, config_file)
+    } else if dm_detected != "none" {
+        evidence.push(format!("login_manager:{} service={:?}", dm_detected, dm_service));
+        (dm_detected.to_uppercase(), None, dm_service)
+    } else {
+        ("None".to_string(), None, None)
+    };
+
+    if display_server == "Wayland" && (desktop == "KDE Plasma" || desktop == "GNOME") {
+        warnings.push(format!("Desktop '{}' uses native session locking and does not implement ext-session-lock-v1 protocol for third-party lockscreens.", desktop));
+    }
+
+    let confidence = if desktop != "Standalone WM" && display_server != "TTY" && idle_provider != "None" && login_manager != "None" {
+        "high".to_string()
+    } else if display_server != "TTY" {
+        "medium".to_string()
+    } else {
+        "low".to_string()
+    };
+
+    SystemIntegrationReport {
+        desktop,
+        display_server,
+        session_lock_provider,
+        session_lock_entrypoint,
+        idle_provider,
+        idle_config,
+        login_manager,
+        login_theme,
+        login_config,
+        confidence,
+        evidence,
+        warnings,
+    }
+}
+
+#[tauri::command]
+pub fn get_system_integration_report() -> SystemIntegrationReport {
+    let home = crate::snapshot::get_home_dir();
+    detect_system_integration_report_in(&home)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,6 +634,26 @@ mod tests {
     }
 
     #[test]
+    fn test_detect_system_integration_report_valid() {
+        let home = make_test_home();
+        let hypr_dir = home.join(".config/hypr");
+        fs::create_dir_all(&hypr_dir).unwrap();
+        fs::write(
+            hypr_dir.join("hypridle.conf"),
+            "general { lock_cmd = pidof quickshell || quickshell -p ~/.local/share/ryzora/lock.sh }
+",
+        ).unwrap();
+
+        let report = detect_system_integration_report_in(&home);
+        assert!(!report.desktop.is_empty());
+        assert!(!report.display_server.is_empty());
+        assert_eq!(report.idle_provider, "hypridle");
+        assert_eq!(report.session_lock_provider, "Quickshell");
+        assert!(!report.evidence.is_empty());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
     fn test_detect_active_session_lock_hypridle() {
         let home = make_test_home();
         let hypr_dir = home.join(".config/hypr");
@@ -442,5 +670,35 @@ general {
         assert_eq!(lock_type, "hyprlock");
         assert_eq!(managed_by, Some("Dusky".to_string()));
         let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn test_detect_system_integration_report_live() {
+        if let Ok(home) = std::env::var("HOME") {
+        let home = std::path::PathBuf::from(home);
+            let report = detect_system_integration_report_in(&home);
+            println!("LIVE SYSTEM INTEGRATION REPORT:");
+            println!("  Desktop: {}", report.desktop);
+            println!("  Display Server: {}", report.display_server);
+            println!("  Session Lock Provider: {}", report.session_lock_provider);
+            println!("  Session Lock Entrypoint: {:?}", report.session_lock_entrypoint);
+            println!("  Idle Provider: {}", report.idle_provider);
+            println!("  Idle Config: {:?}", report.idle_config);
+            println!("  Login Manager: {}", report.login_manager);
+            println!("  Login Theme: {:?}", report.login_theme);
+            println!("  Login Config: {:?}", report.login_config);
+            println!("  Evidence ({} items):", report.evidence.len());
+            for ev in &report.evidence {
+                println!("    - {}", ev);
+            }
+            if !report.warnings.is_empty() {
+                println!("  Warnings ({} items):", report.warnings.len());
+                for w in &report.warnings {
+                    println!("    - {}", w);
+                }
+            }
+            assert!(!report.desktop.is_empty());
+            assert!(!report.display_server.is_empty());
+        }
     }
 }

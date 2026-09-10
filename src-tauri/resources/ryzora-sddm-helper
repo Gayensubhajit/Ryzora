@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# =============================================================================
+# ryzora-sddm-helper — Ryzora Restricted Privileged SDDM Helper
+# =============================================================================
+# Invoked via pkexec, authorized by Polkit io.ryzora.sddm.policy
+# Exposes ONLY these named operations with strict path validation:
+#
+#   install_theme   <staging_dir> <theme_slug>
+#   remove_theme    <theme_slug>
+#   activate_theme  <theme_slug>
+#   restore_theme   <previous_theme_name>
+#   deactivate_theme
+#
+# Security invariants:
+#  - Destination paths are constructed internally, never from raw user input
+#  - Theme slugs validated against [a-zA-Z0-9_-]{1,64}
+#  - Source must be under /tmp/ryzora-staging-*/
+#  - Destinations always /usr/share/sddm/themes/ryzora-<slug>/ or /etc/sddm.conf.d/
+#  - No shell evaluation of package content
+#  - No chmod +x on copied files
+#  - No symlink following in source (cp --no-dereference)
+# =============================================================================
+
+set -euo pipefail
+
+SYS_ROOT="${RYZORA_SYSTEM_ROOT:-}"
+SDDM_THEMES_DIR="${SYS_ROOT}/usr/share/sddm/themes"
+SDDM_CONF_DIR="${SYS_ROOT}/etc/sddm.conf.d"
+RYZORA_CONF_FILE="${SDDM_CONF_DIR}/zz-ryzora-theme.conf"
+LEGACY_CONF_FILE="${SDDM_CONF_DIR}/ryzora-theme.conf"
+
+die() {
+    echo "ryzora-sddm-helper: ERROR: $*" >&2
+    exit 1
+}
+
+log() {
+    echo "ryzora-sddm-helper: $*" >&2
+}
+
+validate_slug() {
+    local slug="$1"
+    if [[ ! "$slug" =~ ^[a-zA-Z0-9_-]{1,64}$ ]]; then
+        die "Invalid theme slug '${slug}': must match [a-zA-Z0-9_-]{1,64}"
+    fi
+}
+
+validate_staging_dir() {
+    local dir="$1"
+    # Must be under /tmp/ryzora-staging-*/
+    if [[ ! "$dir" =~ ^/tmp/ryzora-staging-[a-zA-Z0-9_-]+(/[a-zA-Z0-9_./-]+)?$ ]]; then
+        die "Invalid staging directory '${dir}': must be under /tmp/ryzora-staging-*/"
+    fi
+    if [ ! -d "$dir" ]; then
+        die "Staging directory '${dir}' does not exist"
+    fi
+    # Reject symlinks pointing outside /tmp
+    while IFS= read -r -d '' symlink; do
+        target=$(readlink -f "$symlink" 2>/dev/null || true)
+        if [[ -n "$target" && ! "$target" =~ ^/tmp/ ]]; then
+            die "Staging directory contains symlink outside /tmp: $symlink -> $target"
+        fi
+    done < <(find "$dir" -type l -print0)
+}
+
+op_install_theme() {
+    local staging_dir="$1"
+    local slug="$2"
+
+    validate_slug "$slug"
+    validate_staging_dir "$staging_dir"
+
+    local dest="${SDDM_THEMES_DIR}/ryzora-${slug}"
+
+    if [ -e "$dest" ]; then
+        die "Theme destination '${dest}' already exists. Run remove_theme first."
+    fi
+
+    mkdir -p "${SDDM_THEMES_DIR}"
+    cp -r --no-dereference "$staging_dir" "$dest"
+
+    # Remove exec bits, ensure readable
+    find "$dest" -type f -exec chmod a-x,a+r {} +
+    find "$dest" -type d -exec chmod 755 {} +
+
+    # Verify mandatory files
+    if [ ! -f "${dest}/Main.qml" ]; then
+        rm -rf "$dest"
+        die "Theme missing required Main.qml. Installation rolled back."
+    fi
+    if [ ! -f "${dest}/metadata.desktop" ] && [ ! -f "${dest}/theme.conf" ]; then
+        rm -rf "$dest"
+        die "Theme missing metadata (theme.conf or metadata.desktop). Installation rolled back."
+    fi
+
+    log "Installed theme: ${dest}"
+    echo "OK:installed:${dest}"
+}
+
+op_remove_theme() {
+    local slug="$1"
+    validate_slug "$slug"
+    local dest="${SDDM_THEMES_DIR}/ryzora-${slug}"
+    if [ ! -d "$dest" ]; then
+        log "Theme '${dest}' does not exist, nothing to remove."
+        echo "OK:not_found:${dest}"
+        return 0
+    fi
+    rm -rf "$dest"
+    log "Removed theme: ${dest}"
+    echo "OK:removed:${dest}"
+}
+
+op_activate_theme() {
+    local slug="$1"
+    validate_slug "$slug"
+    local theme_dir="${SDDM_THEMES_DIR}/ryzora-${slug}"
+    if [ ! -d "$theme_dir" ]; then
+        die "Theme '${theme_dir}' is not installed. Install it first."
+    fi
+    mkdir -p "${SDDM_CONF_DIR}"
+    # Remove un-prefixed legacy conf file if present
+    rm -f "${LEGACY_CONF_FILE}"
+
+    # Write zz-ryzora-theme.conf for explicit lexicographical precedence
+    printf '[Theme]\nCurrent=ryzora-%s\n' "${slug}" > "${RYZORA_CONF_FILE}"
+    chmod 644 "${RYZORA_CONF_FILE}"
+    local written
+    written=$(cat "${RYZORA_CONF_FILE}")
+    if [[ "$written" != *"Current=ryzora-${slug}"* ]]; then
+        rm -f "${RYZORA_CONF_FILE}"
+        die "Config verification failed after writing '${RYZORA_CONF_FILE}'"
+    fi
+    log "Activated theme: ryzora-${slug}"
+    echo "OK:activated:ryzora-${slug}"
+}
+
+op_restore_theme() {
+    local theme_name="$1"
+    # Always remove Ryzora-owned drop-in configurations
+    rm -f "${RYZORA_CONF_FILE}" "${LEGACY_CONF_FILE}"
+
+    if [ -z "$theme_name" ] || [ "$theme_name" = "default" ] || [ "$theme_name" = "none" ]; then
+        log "Deactivated Ryzora SDDM theme, restored system defaults."
+        echo "OK:restored:default"
+        return 0
+    fi
+
+    validate_slug "$theme_name"
+
+    # If the theme is already set by another file in /etc/sddm.conf.d/, do not write redundant drop-in
+    if grep -RqsE "^[[:space:]]*Current[[:space:]]*=[[:space:]]*${theme_name}[[:space:]]*$" "${SDDM_CONF_DIR}"/*.conf 2>/dev/null; then
+        log "Theme '${theme_name}' is already provided by underlying configuration."
+        echo "OK:restored:${theme_name}"
+        return 0
+    fi
+
+    mkdir -p "${SDDM_CONF_DIR}"
+    printf '[Theme]\nCurrent=%s\n' "${theme_name}" > "${RYZORA_CONF_FILE}"
+    chmod 644 "${RYZORA_CONF_FILE}"
+    local written
+    written=$(cat "${RYZORA_CONF_FILE}")
+    if [[ "$written" != *"Current=${theme_name}"* ]]; then
+        die "Config verification failed after restoring '${RYZORA_CONF_FILE}'"
+    fi
+    log "Restored theme: ${theme_name}"
+    echo "OK:restored:${theme_name}"
+}
+
+op_deactivate_theme() {
+    rm -f "${RYZORA_CONF_FILE}" "${LEGACY_CONF_FILE}"
+    log "Deactivated Ryzora SDDM theme, removed Ryzora configuration files."
+    echo "OK:deactivated"
+}
+
+# Entry point
+if [ $# -lt 1 ]; then
+    die "Usage: ryzora-sddm-helper <operation> [args...]"
+fi
+
+OPERATION="$1"
+shift
+
+case "$OPERATION" in
+    install_theme)
+        [ $# -eq 2 ] || die "install_theme requires exactly 2 arguments: <staging_dir> <theme_slug>"
+        op_install_theme "$1" "$2"
+        ;;
+    remove_theme)
+        [ $# -eq 1 ] || die "remove_theme requires exactly 1 argument: <theme_slug>"
+        op_remove_theme "$1"
+        ;;
+    activate_theme)
+        [ $# -eq 1 ] || die "activate_theme requires exactly 1 argument: <theme_slug>"
+        op_activate_theme "$1"
+        ;;
+    restore_theme)
+        [ $# -eq 1 ] || die "restore_theme requires exactly 1 argument: <previous_theme_name>"
+        op_restore_theme "$1"
+        ;;
+    deactivate_theme)
+        op_deactivate_theme
+        ;;
+    *)
+        die "Unknown operation '${OPERATION}'. Allowed: install_theme, remove_theme, activate_theme, restore_theme, deactivate_theme"
+        ;;
+esac

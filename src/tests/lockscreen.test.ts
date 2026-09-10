@@ -254,7 +254,7 @@ test("13. Catalogue Data Flow: Provider normalized entries reach the catalogue a
     "Swaylock Effects Blur",
   ];
 
-  assert.equal(catalogueLockScreens.length, 7, "Catalogue must have 7 canonical lockscreens");
+  assert.equal(catalogueLockScreens.length, 27, "Catalogue must have 27 canonical lockscreens");
   for (const title of expectedTitles) {
     const found = catalogueLockScreens.find((p) => p.title === title);
     assert.ok(found, `Expected lockscreen title "${title}" must exist in canonical catalogue`);
@@ -313,7 +313,7 @@ test("13. Catalogue Data Flow: Provider normalized entries reach the catalogue a
   }
 
   // Merged result must contain 7 items, with Aurora enriched
-  assert.equal(merged.length, 7, "Merged packages must contain exactly 7 lockscreen items");
+  assert.equal(merged.length, 27, "Merged packages must contain exactly 27 lockscreen items");
   const auroraEnriched = merged.find((p) => p.title === "Aurora Glass Hyprlock")!;
   assert.ok(auroraEnriched.lockscreen, "Aurora Glass Hyprlock must have lockscreen manifest enriched");
 
@@ -327,7 +327,7 @@ test("13. Catalogue Data Flow: Provider normalized entries reach the catalogue a
         pkg.tags.some((t) => t.toLowerCase().includes("lockscreen")))
     );
   });
-  assert.equal(filtered.length, 7, "DiscoverView lockscreen category filter must include all 7 items");
+  assert.equal(filtered.length, 27, "DiscoverView lockscreen category filter must include all 27 items");
 });
 
 test("14. Subfilter isolation across All, Hyprlock, Quickshell, Swaylock, and SDDM", () => {
@@ -366,18 +366,18 @@ test("14. Subfilter isolation across All, Hyprlock, Quickshell, Swaylock, and SD
   };
 
   const allItems = filterBySub("All");
-  assert.equal(allItems.length, 7, "All subfilter must return 7 items");
+  assert.equal(allItems.length, 27, "All subfilter must return 27 items");
 
   const hyprlockItems = filterBySub("Hyprlock");
   assert.equal(hyprlockItems.length, 1, "Hyprlock subfilter must isolate Aurora Glass Hyprlock");
   assert.equal(hyprlockItems[0].title, "Aurora Glass Hyprlock");
 
   const quickshellItems = filterBySub("Quickshell");
-  assert.equal(quickshellItems.length, 5, "Quickshell subfilter must isolate the 5 Qylock themes");
+  assert.equal(quickshellItems.length, 25, "Quickshell subfilter must isolate the 25 Qylock themes");
   assert.ok(quickshellItems.every((i) => i.supports_session_lock), "All Quickshell items must support session lock");
 
   const sddmItems = filterBySub("SDDM");
-  assert.equal(sddmItems.length, 5, "SDDM subfilter must isolate the 5 Qylock login greeter themes");
+  assert.equal(sddmItems.length, 25, "SDDM subfilter must isolate the 25 Qylock login greeter themes");
   assert.ok(sddmItems.every((i) => i.supports_login_screen), "All SDDM items must support login screen");
 
   const swaylockItems = filterBySub("Swaylock");
@@ -432,7 +432,7 @@ test("16. Unique Media Identity: Every Qylock theme has a unique poster and prev
   const catalogueLockScreens = getCatalogueLockScreens();
   const qylockThemes = catalogueLockScreens.filter((p) => p.lockscreen?.provider === "qylock");
 
-  assert.equal(qylockThemes.length, 5, "Must have exactly 5 Qylock themes");
+  assert.equal(qylockThemes.length, 25, "Must have 25 Qylock themes");
 
   const posters = new Set<string>();
   const previewVideos = new Set<string>();
@@ -466,8 +466,8 @@ test("16. Unique Media Identity: Every Qylock theme has a unique poster and prev
     }
   }
 
-  assert.equal(posters.size, 5, "All 5 Qylock themes must have 5 distinct posters");
-  assert.equal(previewVideos.size, 5, "All 5 Qylock themes must have distinct preview videos");
+  assert.equal(posters.size, 25, "All 25 Qylock themes must have 25 distinct posters");
+  assert.equal(previewVideos.size, 19, "All 19 video/animated Qylock themes must have distinct preview videos");
 });
 
 test("17. Media Asset Resolution & Verification: Preview videos and posters exist on disk and upstream", () => {
@@ -477,19 +477,19 @@ test("17. Media Asset Resolution & Verification: Preview videos and posters exis
   const publicDir = path.resolve(process.cwd(), "public");
 
   for (const theme of qylockThemes) {
-    const poster = theme.preview_poster_url!;
-    const video = theme.preview_video_url!;
-    const animated = theme.lockscreen?.media.preview_animated!;
+    const poster = theme.preview_poster_url || theme.hero_image;
+    const video = theme.preview_video_url;
+    const animated = theme.lockscreen?.media.preview_animated;
 
     // Verify local files exist in public/
-    if (poster.startsWith("/")) {
+    if (poster && poster.startsWith("/")) {
       const localPoster = path.join(publicDir, poster);
       assert.ok(fs.existsSync(localPoster), `Local poster file must exist on disk: ${localPoster}`);
       const stats = fs.statSync(localPoster);
       assert.ok(stats.size > 1000, `Poster ${localPoster} must be a valid image file (> 1KB)`);
     }
 
-    if (video.startsWith("/")) {
+    if (video && video.startsWith("/")) {
       const localVideo = path.join(publicDir, video);
       assert.ok(fs.existsSync(localVideo), `Local video file must exist on disk: ${localVideo}`);
       const stats = fs.statSync(localVideo);
@@ -586,7 +586,7 @@ test("20. Clean Machine Guarantee: Zero runtime dependencies on /home/silentbyte
   delete fakeCleanEnv.QYLOCK_DIR;
 
   const catalogue = getCatalogueLockScreens();
-  assert.equal(catalogue.length, 7, "Clean machine catalogue must load all 7 lockscreens");
+  assert.equal(catalogue.length, 27, "Clean machine catalogue must load all 27 lockscreens");
 
   for (const pkg of catalogue) {
     const rawStr = JSON.stringify(pkg);

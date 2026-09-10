@@ -38,9 +38,29 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/Main.qml",
+      "description": "ninja-gaiden Main.qml"
+    },
+    {
+      "source": "files/bg.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/bg.png",
+      "description": "ninja-gaiden bg.png"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/metadata.desktop",
+      "description": "ninja-gaiden metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
-      "description": "Ninja Gaiden Moon configuration file."
+      "description": "ninja-gaiden theme.conf"
+    },
+    {
+      "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
+      "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +71,32 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/Main.qml",
+          "description": "ninja-gaiden Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/bg.png",
+          "description": "ninja-gaiden bg.png (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/metadata.desktop",
+          "description": "ninja-gaiden metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
-          "description": "Ninja Gaiden Moon Quickshell session lock configuration."
+          "description": "ninja-gaiden theme.conf (quickshell)"
+        },
+        {
+          "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
+          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (quickshell)"
         }
       ]
     },
@@ -69,14 +109,29 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-ninja-gaiden/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/Main.qml",
-          "description": "Ninja Gaiden Moon SDDM greeter QML entrypoint."
+          "description": "ninja-gaiden Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/bg.png",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/bg.png",
+          "description": "ninja-gaiden bg.png (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/metadata.desktop",
-          "description": "Ninja Gaiden Moon SDDM theme metadata."
+          "description": "ninja-gaiden metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/theme.conf",
+          "description": "ninja-gaiden theme.conf (sddm)"
+        },
+        {
+          "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
+          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (sddm)"
         }
       ]
     }

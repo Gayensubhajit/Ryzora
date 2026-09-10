@@ -1132,6 +1132,7 @@ pub fn ingest_submission_into_repository(
         targets: None,
         preview_video: None,
         preview_animated: None,
+        media_type: None,
         source: None,
         provenance: None,
         signature: sig_meta,
@@ -1924,6 +1925,8 @@ fake
                 targets: None,
                 preview_video: None,
                 preview_animated: None,
+
+                media_type: None,
                 source: None,
                 provenance: None,
             }],

@@ -45,6 +45,29 @@ ln -sf "io.ryzora.Ryzora.desktop" "$PKG_DIR/usr/share/applications/ryzora.deskto
 cp "$ROOT_DIR/dist-assets/io.ryzora.Ryzora.metainfo.xml" "$PKG_DIR/usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml"
 cp -r "$ROOT_DIR/dist-assets/icons/hicolor" "$PKG_DIR/usr/share/icons/"
 
+# 3b. Privileged SDDM helper & Polkit policy
+mkdir -p "$PKG_DIR/usr/lib/ryzora"
+cp "$ROOT_DIR/src-tauri/resources/ryzora-sddm-helper" "$PKG_DIR/usr/lib/ryzora/ryzora-sddm-helper"
+chmod 755 "$PKG_DIR/usr/lib/ryzora/ryzora-sddm-helper"
+
+mkdir -p "$PKG_DIR/usr/share/polkit-1/actions"
+cp "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.policy" "$PKG_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+chmod 644 "$PKG_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+
+# Generate DEBIAN/postrm cleanup
+cat << 'POSTRM' > "$PKG_DIR/DEBIAN/postrm"
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    rm -f /usr/lib/ryzora/ryzora-sddm-helper
+    rmdir /usr/lib/ryzora 2>/dev/null || true
+    rm -f /usr/share/polkit-1/actions/io.ryzora.sddm.policy
+    rm -f /etc/sddm.conf.d/zz-ryzora-theme.conf /etc/sddm.conf.d/ryzora-theme.conf
+fi
+exit 0
+POSTRM
+chmod 755 "$PKG_DIR/DEBIAN/postrm" 
+
 # 4. Doc & License
 cp "$ROOT_DIR/LICENSE" "$PKG_DIR/usr/share/doc/$PKG_NAME/copyright"
 cp "$ROOT_DIR/README.md" "$PKG_DIR/usr/share/doc/$PKG_NAME/README.md"

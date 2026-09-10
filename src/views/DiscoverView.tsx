@@ -334,15 +334,27 @@ export const DiscoverView: React.FC = () => {
   const subFilters = TAB_SUB_FILTERS[activeTab];
 
   return (
-    <div className="space-y-0 pb-12">
-      {/* ── Top-level content tabs ── */}
-      <div className="sticky top-0 z-20 bg-[var(--rz-bg)] -mx-4 sm:-mx-6 px-4 sm:px-6 mb-3 border-b border-[var(--rz-border-subtle)] shadow-xs">
+    <div className="space-y-0 min-h-screen">
+      {/* ── Sticky Catalogue Navigation Bar: Docked Flush Under TopBar ── */}
+      <div className="sticky top-0 z-30 bg-[var(--rz-bg)] px-4 sm:px-6 py-2.5 border-b border-[var(--rz-border-subtle)] shadow-xs">
         <ContentTabBar
           activeTab={activeTab}
           onTabChange={handleTabChange}
           tabs={STORE_CONTENT_TABS}
         />
       </div>
+
+      {/* ── Discover Content Container ── */}
+      <div className="px-4 sm:px-6 pt-4 pb-16">
+        {/* ── Discover Header ── */}
+        <div className="mb-5">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--rz-text)]">
+            Discover
+          </h1>
+          <p className="text-xs sm:text-sm text-[var(--rz-text-secondary)] mt-0.5">
+            Explore themes, wallpapers, lock screens and more
+          </p>
+        </div>
 
       {/* ── "All" Tab Editorial Home View ── */}
       {isAllTab && !searchQuery && (
@@ -487,6 +499,7 @@ export const DiscoverView: React.FC = () => {
           )}
         </>
       )}
+      </div>
     </div>
   );
 };

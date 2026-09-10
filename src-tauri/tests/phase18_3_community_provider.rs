@@ -88,6 +88,7 @@ fn setup_sample_community_repo(
         description: "A clean community rice.\nLicense: MIT".to_string(),
         tags: vec!["hyprland".to_string(), "waybar".to_string()],
         color_palette: vec!["#1e1e2e".to_string()],
+        targets: std::collections::HashMap::new(),
         compatibility: ManifestCompatibility {
             desktops: vec!["Hyprland".to_string()],
             sessions: vec!["Wayland".to_string()],

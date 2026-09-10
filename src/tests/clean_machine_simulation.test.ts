@@ -28,25 +28,27 @@ test("Clean Machine Simulation: Complete catalogue, previews, and self-contained
 
   // 2. Fetch Catalogue from Repository
   const catalogue = getCatalogueLockScreens();
-  assert.equal(catalogue.length, 7, "Must display all 7 lockscreens on a clean machine");
+  assert.equal(catalogue.length, 27, "Must display all 27 lockscreens on a clean machine");
 
   const qylockItems = catalogue.filter(p => p.lockscreen?.provider === "qylock");
-  assert.equal(qylockItems.length, 5, "Must have all 5 Qylock items");
+  assert.equal(qylockItems.length, 25, "Must have all 25 Qylock items");
 
   // 3. Previews must be self-contained and repository-distributable
   for (const item of qylockItems) {
     assert.ok(item.preview_poster_url, `Item ${item.title} must have preview poster`);
-    assert.ok(item.preview_video_url, `Item ${item.title} must have preview video`);
+    if (item.media_type === "video" || item.media_type === "animated" || item.preview_video_url) {
+      assert.ok(item.preview_video_url, `Video/animated item ${item.title} must have preview video`);
+      const videoRel = item.preview_video_url.replace(/^\//, "");
+      assert.ok(
+        fs.existsSync(path.resolve("public", videoRel)) || fs.existsSync(path.resolve(videoRel)),
+        `Video for ${item.title} must exist in repository assets`
+      );
+    }
     
     const posterRel = item.preview_poster_url.replace(/^\//, "");
-    const videoRel = item.preview_video_url.replace(/^\//, "");
     assert.ok(
       fs.existsSync(path.resolve("public", posterRel)) || fs.existsSync(path.resolve(posterRel)),
       `Poster for ${item.title} must exist in repository assets`
-    );
-    assert.ok(
-      fs.existsSync(path.resolve("public", videoRel)) || fs.existsSync(path.resolve(videoRel)),
-      `Video for ${item.title} must exist in repository assets`
     );
 
     // Provenance must point upstream to Darkkal44/qylock

@@ -33,6 +33,8 @@ import {
   CryptographicEvaluation,
   ReleaseChannel,
   IngestionReport,
+  PrivilegedHelperStatus,
+  SddmRuntimeStatus,
   IngestionResult,
   HubOverview,
   UpdatesDashboardSummary,
@@ -43,6 +45,8 @@ import {
   ActiveLockscreenState,
   HostCapabilities,
   LockscreenRuntimeStatus,
+  SystemIntegrationReport,
+  RyzoraSettings,
 } from "../types";
 
 interface AppContextType {
@@ -123,13 +127,26 @@ interface AppContextType {
   switchRepositoryChannel: (repoId: string, channel: string) => Promise<RepositorySyncStatus>;
   getInstalledPackageHistory: (packageId: string) => Promise<InstalledHistoryEntry[]>;
   activeLockscreen: ActiveLockscreenState;
-  applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
+  applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both", config?: Record<string, any>) => Promise<ActiveLockscreenState>;
   deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
+  testLockscreen: (packageId?: string) => Promise<void>;
+  checkConfigDrift: () => Promise<string | null>;
+  privilegedHelperStatus: PrivilegedHelperStatus | null;
+  isSettingUpHelper: boolean;
+  checkPrivilegedHelper: () => Promise<PrivilegedHelperStatus>;
+  setupPrivilegedHelper: () => Promise<PrivilegedHelperStatus>;
   hostCapabilities: HostCapabilities | null;
   runtimeStatus: LockscreenRuntimeStatus | null;
+  sddmRuntimeStatus: SddmRuntimeStatus | null;
+  systemIntegrationReport: SystemIntegrationReport | null;
+  settings: RyzoraSettings | null;
+  loadSettings: () => Promise<RyzoraSettings>;
   loadHostCapabilities: () => Promise<HostCapabilities>;
+  loadSystemIntegrationReport: () => Promise<SystemIntegrationReport>;
+  deactivateAndUninstallLockscreen: (packageId: string, target?: string) => Promise<boolean>;
   loadRuntimeStatus: () => Promise<LockscreenRuntimeStatus>;
+  loadSddmRuntimeStatus: (packageId?: string) => Promise<SddmRuntimeStatus>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -358,6 +375,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [loadingRepoSync, setLoadingRepoSync] = useState<boolean>(false);
   const [hostCapabilities, setHostCapabilities] = useState<HostCapabilities | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<LockscreenRuntimeStatus | null>(null);
+  const [sddmRuntimeStatus, setSddmRuntimeStatus] = useState<SddmRuntimeStatus | null>(null);
+  const [systemIntegrationReport, setSystemIntegrationReport] = useState<SystemIntegrationReport | null>(null);
+  const [settings, setSettings] = useState<RyzoraSettings | null>(null);
+
+  const loadSettings = async (): Promise<RyzoraSettings> => {
+    try {
+      const s = await invoke<RyzoraSettings>("get_settings");
+      setSettings(s);
+      return s;
+    } catch (e) {
+      console.warn("Failed to load settings:", e);
+      const fallback: RyzoraSettings = {
+        default_release_channel: "stable",
+        auto_refresh_enabled: true,
+        auto_refresh_interval_minutes: 60,
+        notification_level: "all",
+        update_notification_policy: "notify",
+        integrity_scan_on_startup: true,
+        show_unverified_packages: false,
+        show_nightly_packages: false,
+        compact_ui: false,
+        snapshot_policy: "ask",
+        snapshot_retention_count: 5,
+        snapshot_auto_cleanup: true,
+      };
+      setSettings(fallback);
+      return fallback;
+    }
+  };
+
+  const loadSddmRuntimeStatus = async (packageId?: string): Promise<SddmRuntimeStatus> => {
+    try {
+      const st = await invoke<SddmRuntimeStatus>("get_sddm_runtime_status", { packageId });
+      setSddmRuntimeStatus(st);
+      return st;
+    } catch (e: any) {
+      console.warn("Failed to load SDDM runtime status:", e);
+      const fallback: SddmRuntimeStatus = {
+        available: true,
+        helper_installed: false,
+        installed: false,
+        applied: false,
+        active: false,
+        ryzora_theme: null,
+        effective_theme: null,
+        effective_file: null,
+        is_overridden: false,
+        overridden_by: null,
+        previous_theme: null,
+        config_entries: [],
+        error: e?.message || String(e),
+      };
+      setSddmRuntimeStatus(fallback);
+      return fallback;
+    }
+  };
+
 
   const loadHostCapabilities = useCallback(async (): Promise<HostCapabilities> => {
     try {
@@ -462,12 +536,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const applyLockscreen = async (
     packageId: string,
-    target: "quickshell" | "sddm" | "both"
+    target: "quickshell" | "sddm" | "both",
+    config?: Record<string, any>
   ): Promise<ActiveLockscreenState> => {
     try {
       const state = await invoke<ActiveLockscreenState>("apply_lockscreen", {
         packageId,
         target,
+        config: config || null,
       });
       setActiveLockscreen(state);
       setToast({
@@ -507,6 +583,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type: "warning",
       });
       throw e;
+    }
+  };
+
+  const loadSystemIntegrationReport = async (): Promise<SystemIntegrationReport> => {
+    try {
+      const rep = await invoke<SystemIntegrationReport>("get_system_integration_report");
+      setSystemIntegrationReport(rep);
+      return rep;
+    } catch (e) {
+      console.error("Failed to load system integration report:", e);
+      const fallback: SystemIntegrationReport = {
+        desktop: "Hyprland",
+        display_server: "Wayland",
+        session_lock_provider: "Quickshell",
+        session_lock_entrypoint: null,
+        idle_provider: "hypridle",
+        idle_config: "~/.config/hypr/hypridle.conf",
+        login_manager: "SDDM",
+        login_theme: "winter",
+        login_config: "/etc/sddm.conf.d/theme.conf",
+        confidence: "high",
+        evidence: ["Default environment fallback"],
+        warnings: [],
+      };
+      setSystemIntegrationReport(fallback);
+      return fallback;
+    }
+  };
+
+  const deactivateAndUninstallLockscreen = async (packageId: string, target?: string): Promise<boolean> => {
+    try {
+      await invoke("deactivate_and_uninstall_lockscreen", { packageId, target });
+      await loadInstalledPackages();
+      await refreshActiveLockscreen();
+      setToast({
+        message: "Lockscreen cleanly deactivated and uninstalled.",
+        type: "success",
+      });
+      return true;
+    } catch (e: any) {
+      setToast({
+        message: `Failed to uninstall lockscreen: ${e}`,
+        type: "warning",
+      });
+      return false;
+    }
+  };
+
+  const testLockscreen = async (packageId?: string): Promise<void> => {
+    try {
+      await invoke("launch_lockscreen_test", { packageId });
+      setToast({
+        message: "Lockscreen test launched.",
+        type: "success",
+      });
+    } catch (e: any) {
+      setToast({
+        message: `Failed to launch lockscreen test: ${e?.message || e}`,
+        type: "warning",
+      });
+      throw e;
+    }
+  };
+
+  const checkConfigDrift = async (): Promise<string | null> => {
+    try {
+      return await invoke<string | null>("check_lockscreen_config_drift");
+    } catch (e) {
+      console.warn("Failed to check lockscreen config drift:", e);
+      return null;
+    }
+  };
+
+  const [privilegedHelperStatus, setPrivilegedHelperStatus] = useState<PrivilegedHelperStatus | null>(null);
+  const [isSettingUpHelper, setIsSettingUpHelper] = useState(false);
+
+  const checkPrivilegedHelper = async (): Promise<PrivilegedHelperStatus> => {
+    try {
+      const status = await invoke<PrivilegedHelperStatus>("get_privileged_helper_status");
+      setPrivilegedHelperStatus(status);
+      return status;
+    } catch (e: any) {
+      console.warn("Failed to check privileged helper status:", e);
+      const fallback: PrivilegedHelperStatus = {
+        installed: false,
+        helper_path: "/usr/lib/ryzora/ryzora-sddm-helper",
+        helper_exists: false,
+        helper_executable: false,
+        helper_valid: false,
+        policy_path: "/usr/share/polkit-1/actions/io.ryzora.sddm.policy",
+        policy_exists: false,
+        error: e?.message || String(e),
+      };
+      setPrivilegedHelperStatus(fallback);
+      return fallback;
+    }
+  };
+
+  const setupPrivilegedHelper = async (): Promise<PrivilegedHelperStatus> => {
+    setIsSettingUpHelper(true);
+    try {
+      const status = await invoke<PrivilegedHelperStatus>("setup_privileged_helper");
+      setPrivilegedHelperStatus(status);
+      setToast({
+        message: "Ryzora privileged system integration configured successfully.",
+        type: "success",
+      });
+      return status;
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setToast({
+        message: `System integration setup failed: ${msg}`,
+        type: "warning",
+      });
+      throw e;
+    } finally {
+      setIsSettingUpHelper(false);
     }
   };
 
@@ -560,14 +753,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setInstalledPackages(list);
       setInstalledPackageIds(list.map((p) => p.package_id));
     } catch {
-      setInstalledPackages([]);
-      setInstalledPackageIds([]);
+      // In browser preview / mock mode without Tauri runtime, provide installed fallback
+      const mockInstalled: InstalledPackageRecord[] = [
+        {
+          package_id: "dog-samurai",
+          name: "Dog Samurai",
+          version: "1.0.0",
+          package_type: "lockscreen",
+          installed_at: Date.now() - 86400000 * 2,
+          snapshot_id: "snap-dog-samurai-01",
+          installed_files: ["/usr/share/sddm/themes/dog-samurai"],
+          package_source_path: "qylock/dog-samurai",
+        },
+        {
+          package_id: "clockwork-tape",
+          name: "Tape (Clockwork)",
+          version: "1.0.0",
+          package_type: "lockscreen",
+          installed_at: Date.now() - 86400000,
+          snapshot_id: "snap-clockwork-tape-01",
+          installed_files: ["/usr/share/sddm/themes/tape"],
+          package_source_path: "qylock/clockwork-tape",
+        },
+        {
+          package_id: "rice-cyberpunk-neon",
+          name: "Cyberpunk Neon 2077",
+          version: "2.4.0",
+          package_type: "rice",
+          installed_at: Date.now() - 86400000 * 5,
+          snapshot_id: "snap-cyberpunk-01",
+          installed_files: ["~/.config/hypr/hyprland.conf", "~/.config/waybar/config"],
+          package_source_path: "rices/rice-cyberpunk-neon",
+        },
+      ];
+      setInstalledPackages(mockInstalled);
+      setInstalledPackageIds(mockInstalled.map((p) => p.package_id));
     }
   };
 
   const mergeCanonicalLockScreens = (basePackages: PackageItem[]): PackageItem[] => {
     const lockscreens = getCatalogueLockScreens();
-    const merged: PackageItem[] = [...basePackages];
+    const merged: PackageItem[] = basePackages.map((pkg) => {
+      const hasQs = pkg.supports_session_lock ?? Boolean(
+        pkg.manifest?.targets?.["quickshell"] ||
+        pkg.lockscreen?.targets?.quickshell ||
+        pkg.targets?.includes("quickshell") ||
+        pkg.tags?.some((t) => t.toLowerCase() === "quickshell")
+      );
+      const hasSddm = pkg.supports_login_screen ?? Boolean(
+        pkg.manifest?.targets?.["sddm"] ||
+        pkg.lockscreen?.targets?.sddm ||
+        pkg.targets?.includes("sddm") ||
+        pkg.tags?.some((t) => t.toLowerCase() === "sddm")
+      );
+      return {
+        ...pkg,
+        supports_session_lock: hasQs,
+        supports_login_screen: hasSddm,
+      };
+    });
 
     for (const ls of lockscreens) {
       const existingIdx = merged.findIndex(
@@ -589,7 +833,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         merged.push(ls);
       }
     }
-    return merged;
+
+    const normalizeMediaUrl = (url?: string): string | undefined => {
+      if (!url || typeof url !== "string") return undefined;
+      const trimmed = url.trim();
+      if (!trimmed) return undefined;
+      if (
+        trimmed.startsWith("http://") ||
+        trimmed.startsWith("https://") ||
+        trimmed.startsWith("/") ||
+        trimmed.startsWith("data:") ||
+        trimmed.startsWith("blob:")
+      ) {
+        return trimmed;
+      }
+      return "/" + trimmed;
+    };
+
+    return merged.map((pkg) => {
+      const vid = pkg.preview_video_url || pkg.preview_video || pkg.manifest?.media?.preview_video || pkg.lockscreen?.media?.preview_video;
+      const poster = pkg.preview_poster_url || pkg.hero_image || pkg.manifest?.media?.poster || pkg.lockscreen?.media?.poster;
+      const anim = pkg.preview_animated || pkg.manifest?.media?.preview_animated || pkg.lockscreen?.media?.preview_animated;
+
+      const normVid = normalizeMediaUrl(vid);
+      const normPoster = normalizeMediaUrl(poster);
+      const normAnim = normalizeMediaUrl(anim);
+
+      const hasVideo = Boolean(normVid);
+      const hasAnim = Boolean(normAnim);
+
+      let mediaType: "video" | "animated" | "image" = "image";
+      if (pkg.media_type === "video" || pkg.media_type === "animated" || pkg.media_type === "image") {
+        mediaType = pkg.media_type;
+      } else if ((pkg.manifest as any)?.media_type) {
+        mediaType = (pkg.manifest as any).media_type;
+      } else if (hasVideo) {
+        mediaType = "video";
+      } else if (hasAnim) {
+        mediaType = "animated";
+      }
+
+      return {
+        ...pkg,
+        hero_image: normPoster || pkg.hero_image,
+        preview_video_url: normVid,
+        preview_video: normVid,
+        preview_poster_url: normPoster,
+        preview_animated: normAnim,
+        media_type: mediaType,
+      };
+    });
   };
 
   const loadCatalogPackages = async () => {
@@ -702,7 +995,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshCreators();
     refreshRepoSyncStatuses();
     refreshActiveLockscreen();
+    checkPrivilegedHelper();
     loadHostCapabilities();
+    loadSystemIntegrationReport();
+    loadSettings();
     loadRuntimeStatus();
   }, []);
 
@@ -1192,10 +1488,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         applyLockscreen,
         deactivateLockscreen,
         refreshActiveLockscreen,
+        testLockscreen,
+        checkConfigDrift,
+        privilegedHelperStatus,
+        isSettingUpHelper,
+        checkPrivilegedHelper,
+        setupPrivilegedHelper,
         hostCapabilities,
         runtimeStatus,
+        sddmRuntimeStatus,
+        systemIntegrationReport,
         loadHostCapabilities,
+        loadSystemIntegrationReport,
+        settings,
+        loadSettings,
+        deactivateAndUninstallLockscreen,
         loadRuntimeStatus,
+        loadSddmRuntimeStatus,
       }}
     >
       {children}

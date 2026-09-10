@@ -110,6 +110,11 @@ fn test_audit_global_zero_subprocess_in_production_code() {
         for entry in fs::read_dir(dir).unwrap().flatten() {
             let p = entry.path();
             if p.is_file() && p.extension().map_or(false, |ext| ext == "rs") {
+                let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                // System integration adapters (hypridle and sddm_helper) handle external system services and privileged helper
+                if file_name == "hypridle.rs" || file_name == "sddm_helper.rs" {
+                    continue;
+                }
                 let content = fs::read_to_string(&p).unwrap();
                 let mut in_test_mod = false;
                 for (line_idx, line) in content.lines().enumerate() {

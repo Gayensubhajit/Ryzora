@@ -31,6 +31,9 @@ const DEFAULTS: RyzoraSettings = {
   show_unverified_packages: true,
   show_nightly_packages: false,
   compact_ui: false,
+  snapshot_policy: "ask",
+  snapshot_retention_count: 5,
+  snapshot_auto_cleanup: true,
 };
 
 export const SettingsView: React.FC = () => {
@@ -49,16 +52,7 @@ export const SettingsView: React.FC = () => {
   } = useTheme();
 
   const [systemScheme, setSystemScheme] = useState<ResolvedTheme>(() => getCachedSystemTheme());
-  const [snapshotOnInstall, setSnapshotOnInstall] = useState<boolean>(() => {
-    const pref = localStorage.getItem("ryzora_snapshot_on_install");
-    return pref !== null ? pref === "true" : false;
-  });
 
-  const toggleSnapshotOnInstall = () => {
-    const next = !snapshotOnInstall;
-    setSnapshotOnInstall(next);
-    localStorage.setItem("ryzora_snapshot_on_install", String(next));
-  };
 
 
   useEffect(() => {
@@ -471,26 +465,61 @@ export const SettingsView: React.FC = () => {
           </div>
         </section>
 
-        {/* Safety & Snapshots Section */}
+        {/* Safety & Recovery Section */}
         <section className="settings-section">
           <div className="settings-section-header">
             <Shield className="w-4 h-4" style={{ color: "var(--rz-accent)" }} />
-            <h2>Safety & Snapshots</h2>
+            <h2>Safety & Recovery</h2>
+          </div>
+
+          <div className="settings-field">
+            <label>Snapshot Policy</label>
+            <p className="settings-hint">Control when full system recovery snapshots are created before applying changes.</p>
+            <div className="radio-group">
+              {(["never", "ask", "always"] as const).map((policy) => (
+                <label key={policy} className={`radio-option ${settings.snapshot_policy === policy ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="snapshot-policy"
+                    value={policy}
+                    checked={settings.snapshot_policy === policy}
+                    onChange={() => patch({ snapshot_policy: policy })}
+                  />
+                  <span className="radio-label">
+                    {policy === "never" ? "Never" : policy === "ask" ? "Ask every time (Default)" : "Always"}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-field">
+            <label>Snapshot Retention Limit</label>
+            <p className="settings-hint">Maximum number of recovery snapshots to retain (1–20).</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <input
+                type="range"
+                min={1}
+                max={20}
+                step={1}
+                value={settings.snapshot_retention_count}
+                onChange={(e) => patch({ snapshot_retention_count: Number(e.target.value) })}
+                style={{ flex: 1 }}
+              />
+              <span className="settings-value-badge">{settings.snapshot_retention_count} snapshots</span>
+            </div>
           </div>
 
           <div className="settings-field">
             <label className="toggle-label">
               <span>
-                Default Backup Snapshot on Install
-                <span className="settings-hint">
-                  Enable backup snapshots by default when installing packages. When disabled, packages install directly without taking a pre-install snapshot (you can still choose in the install modal).
-                </span>
+                Automatic Snapshot Cleanup
+                <span className="settings-hint">Automatically prune older snapshots exceeding the retention limit.</span>
               </span>
               <button
-                className={`toggle ${snapshotOnInstall ? "on" : "off"}`}
-                onClick={toggleSnapshotOnInstall}
+                className={`toggle ${settings.snapshot_auto_cleanup ? "on" : "off"}`}
+                onClick={() => patch({ snapshot_auto_cleanup: !settings.snapshot_auto_cleanup })}
                 type="button"
-                aria-label="Toggle default backup snapshot on install"
               >
                 <span className="toggle-thumb" />
               </button>
@@ -515,7 +544,7 @@ export const SettingsView: React.FC = () => {
 
           <div className="settings-note">
             <Shield className="w-3 h-3" />
-            Signature verification, trust chain enforcement, and sandboxed staging cannot be bypassed. Pre-installation snapshot creation is user-configurable on demand.
+            Transactional backups of directly modified files are always created to guarantee safe rollback, even when full system snapshots are disabled. Signature verification and trust enforcement remain strictly mandatory.
           </div>
         </section>
       </div>

@@ -270,7 +270,7 @@ pub fn find_package_dir(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Maximum single file size allowed (50 MB).
-const MAX_PAYLOAD_FILE_SIZE: u64 = 50 * 1024 * 1024;
+const MAX_PAYLOAD_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB to support HD/4K animated video backgrounds
 
 /// Validate a single source path inside a package.
 /// Must be a relative path, must not contain '..', must not escape via symlink,
@@ -858,13 +858,10 @@ pub fn install_package_target_options_in_with_trust(
 
     let target_files = manifest.target_files(target)?;
 
-    // Privilege check: in live mode, ensure root permissions if system paths are targeted
-    if plan.requires_privilege && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
-        let is_root = std::env::var("USER").map(|u| u == "root").unwrap_or(false);
-        if !is_root {
-            return Err("Administrator privilege required to install SDDM system themes to /usr/share/sddm/themes/".to_string());
-        }
-    }
+    // Privilege check: for SDDM system paths, use the Ryzora restricted privileged helper.
+    // This replaces the old USER=root check with real privileged-helper-based authorization.
+    // In test mode (RYZORA_SYSTEM_ROOT set), the helper runs directly without elevation.
+    // Privilege flag is checked but actual installation is deferred to the SDDM staging step below.
 
     // 2. Collect target paths and optionally create pre-install snapshot
     let snapshot_id_opt: Option<String> = if create_snapshot {
@@ -1015,6 +1012,228 @@ pub fn install_package_target_options_in_with_trust(
     }
 
     // 7. Apply staged files
+    // For SDDM targets (/usr/share/sddm/themes/ryzora-<slug>/...):
+    //   - Collect all SDDM files into a separate SDDM staging directory
+    //   - Dispatch to the restricted Ryzora privileged helper via privileged helper
+    //   - Only write installed record after physical verification
+    let has_sddm_targets = staged_items.iter().any(|(_, _, _, _, _, t)| {
+        t.starts_with("/usr/share/sddm/themes/")
+    });
+
+    if has_sddm_targets && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+        // Real machine: use sddm_helper for privileged materialization
+        // Build a temporary SDDM staging directory with the correct internal structure
+        let sddm_staging_id = format!("ryzora-staging-sddm-{}", staging_id);
+        let sddm_staging_dir = std::env::temp_dir().join(&sddm_staging_id);
+
+        // Extract slug from the first SDDM target path
+        let slug_opt = staged_items.iter()
+            .find(|(_, _, _, _, _, t)| t.starts_with("/usr/share/sddm/themes/ryzora-"))
+            .and_then(|(_, _, _, _, _, t)| {
+                t.trim_start_matches("/usr/share/sddm/themes/ryzora-")
+                    .split('/')
+                    .next()
+                    .map(|s| s.to_string())
+            });
+
+        let slug = match slug_opt {
+            Some(s) => s,
+            None => {
+                clean_staging(&staging_dir);
+                return Err("Could not determine SDDM theme slug from target paths".to_string());
+            }
+        };
+
+        // Stage SDDM files into the temp SDDM staging dir
+        let sddm_theme_staging = sddm_staging_dir.join(format!("ryzora-{}", slug));
+        if let Err(e) = fs::create_dir_all(&sddm_theme_staging) {
+            clean_staging(&staging_dir);
+            return Err(format!("Failed to create SDDM staging directory: {}", e));
+        }
+
+        let sddm_prefix = format!("/usr/share/sddm/themes/ryzora-{}/", slug);
+        for (staged_path, _, _, item_is_symlink, _, target_str) in &staged_items {
+            if !target_str.starts_with("/usr/share/sddm/themes/") {
+                continue;
+            }
+            let rel = target_str.trim_start_matches(&sddm_prefix);
+            let dest = sddm_theme_staging.join(rel);
+            if let Some(parent) = dest.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if !item_is_symlink {
+                if let Err(e) = fs::copy(staged_path, &dest) {
+                    let _ = fs::remove_dir_all(&sddm_staging_dir);
+                    clean_staging(&staging_dir);
+                    return Err(format!("Failed to pre-stage SDDM file '{}': {}", target_str, e));
+                }
+            }
+        }
+
+        // Check privileged helper before attempting install
+        let helper_status = crate::sddm_helper::detect_privileged_helper_status();
+        if !helper_status.installed {
+            clean_staging(&staging_dir);
+            let _ = fs::remove_dir_all(&sddm_staging_dir);
+            return Err(format!(
+                "Ryzora SDDM helper is not installed or invalid at '{}'. Please click 'Set Up System Integration' first.",
+                helper_status.helper_path
+            ));
+        }
+
+        // Call restricted privileged helper — this triggers Polkit auth
+        let result = crate::sddm_helper::install_sddm_theme(&sddm_theme_staging, &slug);
+        let _ = fs::remove_dir_all(&sddm_staging_dir); // Always clean SDDM staging
+
+        if let Err(e) = result {
+            clean_staging(&staging_dir);
+            return Err(format!(
+                "SDDM theme installation failed (authentication may have been cancelled): {}",
+                e
+            ));
+        }
+
+        // Physical verification passed inside install_sddm_theme.
+        // Now record SDDM files in applied_entries (with target_str remapped to RYZORA_SYSTEM_ROOT equivalent)
+        let mut applied_targets = Vec::new();
+        let mut applied_entries = Vec::new();
+        let mut apply_error: Option<String> = None;
+
+        // Process non-SDDM files normally below
+        for (
+            staged_path,
+            target_path,
+            expected_hash,
+            item_is_symlink,
+            item_symlink_target,
+            target_str,
+        ) in &staged_items
+        {
+            if target_str.starts_with("/usr/share/sddm/themes/") {
+                // Already handled by sddm_helper — record as installed
+                applied_entries.push(InstalledFileEntry {
+                    target: target_str.clone(),
+                    sha256: expected_hash.clone(),
+                    is_symlink: *item_is_symlink,
+                    symlink_target: item_symlink_target.clone(),
+                });
+                applied_targets.push(target_str.clone());
+                continue;
+            }
+
+            // Non-SDDM files: apply normally
+            if let Some(parent) = target_path.parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    apply_error = Some(format!(
+                        "Failed to create parent directory for '{}': {}",
+                        target_str, e
+                    ));
+                    break;
+                }
+            }
+
+            if *item_is_symlink {
+                if fs::symlink_metadata(target_path).is_ok() {
+                    if let Err(e) = fs::remove_file(target_path) {
+                        apply_error = Some(format!(
+                            "Failed to remove existing file/symlink at '{}': {}",
+                            target_str, e
+                        ));
+                        break;
+                    }
+                }
+                #[cfg(unix)]
+                {
+                    let target_dest = item_symlink_target.as_ref().unwrap();
+                    if let Err(e) = std::os::unix::fs::symlink(target_dest, target_path) {
+                        apply_error = Some(format!("Failed to create symlink '{}': {}", target_str, e));
+                        break;
+                    }
+                }
+                applied_entries.push(InstalledFileEntry {
+                    target: target_str.clone(),
+                    sha256: String::new(),
+                    is_symlink: true,
+                    symlink_target: item_symlink_target.clone(),
+                });
+                applied_targets.push(target_str.clone());
+            } else {
+                if let Ok(meta) = fs::symlink_metadata(target_path) {
+                    if meta.file_type().is_symlink() {
+                        let _ = fs::remove_file(target_path);
+                    }
+                }
+                if let Err(e) = fs::copy(staged_path, target_path) {
+                    apply_error = Some(format!(
+                        "Failed to copy staged file to '{}': {}",
+                        target_str, e
+                    ));
+                    break;
+                }
+                let installed_hash = match sha256_file(target_path) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        apply_error = Some(format!("Failed to verify installed file '{}': {}", target_str, e));
+                        break;
+                    }
+                };
+                if &installed_hash != expected_hash {
+                    apply_error = Some(format!("Installed file verification failed for '{}'", target_str));
+                    break;
+                }
+                applied_entries.push(InstalledFileEntry {
+                    target: target_str.clone(),
+                    sha256: installed_hash,
+                    is_symlink: false,
+                    symlink_target: None,
+                });
+                applied_targets.push(target_str.clone());
+            }
+        }
+        // Jump to post-apply handling (rollback, record writing)
+        // We fall through to the shared error handling below with apply_error/applied_entries.
+        // Use a block to scope this early-exit for sddm path:
+        if let Some(err) = apply_error {
+            clean_staging(&staging_dir);
+            return Err(format!("Installation failed after SDDM materialization: {}", err));
+        }
+
+        // Write installed record (SDDM path — files materialized via privileged helper)
+        let installed_file_list: Vec<String> = applied_entries.iter().map(|e| e.target.clone()).collect();
+        let record = InstalledPackageRecord {
+            package_id: manifest.id.clone(),
+            name: manifest.name.clone(),
+            version: manifest.version.clone(),
+            package_type: Some(manifest.package_type.clone()),
+            repository_id: None,
+            installed_at: now,
+            snapshot_id: snapshot_id_opt.clone().unwrap_or_default(),
+            installed_files: installed_file_list.clone(),
+            files: applied_entries,
+            package_source_path: package_dir.display().to_string(),
+            cryptographic_status: None,
+            signer_key_id: None,
+            signer_name: None,
+            history: vec![],
+        };
+        let record_raw = serde_json::to_string_pretty(&record)
+            .map_err(|e| format!("Failed to serialize install record: {}", e))?;
+        let record_file = installed_root.join(format!("{}.json", manifest.id));
+        fs::write(&record_file, &record_raw)
+            .map_err(|e| format!("Failed to write install record: {}", e))?;
+        clean_staging(&staging_dir);
+
+        return Ok(InstallResult {
+            success: true,
+            package_id: manifest.id,
+            version: manifest.version,
+            snapshot_id: snapshot_id_opt.unwrap_or_default(),
+            installed_files: installed_file_list,
+            errors: vec![],
+            rolled_back: false,
+        });
+    }
+
     let mut applied_targets = Vec::new();
     let mut applied_entries = Vec::new();
     let mut apply_error: Option<String> = None;
@@ -1489,17 +1708,27 @@ pub fn uninstall_package_in(
             }
         }
     }
-    // Create pre-uninstall snapshot of ALL recorded paths
-    let snapshot_targets: Vec<String> = record.files.iter().map(|f| f.target.clone()).collect();
-    let snapshot_label = format!("pre-uninstall-{}", package_id);
-    let snapshot_meta =
-        create_snapshot_in(&snapshot_label, &snapshot_targets, home_dir, snapshots_root)
-            .map_err(|e| format!("Failed to create pre-uninstall snapshot: {}", e))?;
+    // Create pre-uninstall snapshot of user-space paths only
+    let snapshot_targets: Vec<String> = record
+        .files
+        .iter()
+        .filter(|f| f.target.starts_with("~/"))
+        .map(|f| f.target.clone())
+        .collect();
 
-    let snap_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
-        .map_err(|e| format!("Snapshot verification error: {}", e))?;
-    if !snap_valid {
-        return Err("Pre-uninstall snapshot failed verification — uninstall aborted before any file deletion".to_string());
+    let mut snapshot_id_opt: Option<String> = None;
+    if !snapshot_targets.is_empty() {
+        let snapshot_label = format!("pre-uninstall-{}", package_id);
+        let snapshot_meta =
+            create_snapshot_in(&snapshot_label, &snapshot_targets, home_dir, snapshots_root)
+                .map_err(|e| format!("Failed to create pre-uninstall snapshot: {}", e))?;
+
+        let snap_valid = verify_snapshot_in(&snapshot_meta.id, snapshots_root)
+            .map_err(|e| format!("Snapshot verification error: {}", e))?;
+        if !snap_valid {
+            return Err("Pre-uninstall snapshot failed verification — uninstall aborted before any file deletion".to_string());
+        }
+        snapshot_id_opt = Some(snapshot_meta.id);
     }
 
     // Perform removals
@@ -1507,6 +1736,10 @@ pub fn uninstall_package_in(
     let mut remove_error: Option<String> = None;
 
     for (path, target_str, is_symlink) in &files_to_remove {
+        if target_str.starts_with("/usr/share/sddm") || target_str.starts_with("/etc/") {
+            // System-level file, skip user uninstaller deletion (managed by privileged helper)
+            continue;
+        }
         let res = if *is_symlink {
             fs::remove_file(path) // removes the symlink itself, never touches target
         } else {
@@ -1522,8 +1755,11 @@ pub fn uninstall_package_in(
 
     // Rollback on unexpected failure
     if let Some(err) = remove_error {
-        let rollback_res = restore_snapshot_in(&snapshot_meta.id, home_dir, snapshots_root);
-        let rolled_back_ok = rollback_res.map(|r| r.success).unwrap_or(false);
+        let rolled_back_ok = if let Some(snap_id) = &snapshot_id_opt {
+            restore_snapshot_in(snap_id, home_dir, snapshots_root).map(|r| r.success).unwrap_or(false)
+        } else {
+            false
+        };
 
         return Ok(UninstallResult {
             package_id: package_id.to_string(),
@@ -1533,7 +1769,7 @@ pub fn uninstall_package_in(
             conflict_files,
             removed_directories: vec![],
             retained_directories: vec![],
-            snapshot_id: Some(snapshot_meta.id),
+            snapshot_id: snapshot_id_opt,
             rolled_back: true,
             error: Some(format!(
                 "Uninstall failed ({}); automatic rollback was {}",
@@ -1573,7 +1809,7 @@ pub fn uninstall_package_in(
         conflict_files,
         removed_directories,
         retained_directories,
-        snapshot_id: Some(snapshot_meta.id),
+        snapshot_id: snapshot_id_opt,
         rolled_back: false,
         error: None,
     })
@@ -2893,6 +3129,20 @@ pub struct ActiveLockscreenState {
     pub quickshell_theme_path: Option<String>,
     pub sddm_theme_path: Option<String>,
     pub last_applied_at: Option<u64>,
+    /// Whether the hypridle systemd integration is active
+    pub hypridle_override: bool,
+    /// SHA-256 of the source hypridle.conf when integration was applied
+    pub hypridle_source_hash: Option<String>,
+    /// Path of the source hypridle config that was snapshotted
+    pub hypridle_source_path: Option<String>,
+    /// Path of the Ryzora-generated hypridle config
+    pub hypridle_ryzora_config: Option<String>,
+    /// Path of the ryzora-lock wrapper script
+    pub lock_wrapper_path: Option<String>,
+    /// Previous SDDM theme name to restore on deactivation
+    pub sddm_previous_theme: Option<String>,
+    #[serde(default)]
+    pub active_config: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 pub fn get_ryzora_state_dir() -> PathBuf {
@@ -2923,9 +3173,90 @@ pub fn save_active_lockscreen_state_in(state_dir: &Path, state: &ActiveLockscree
     Ok(())
 }
 
+/// Create a lightweight transactional backup of specified files before modifying them.
+/// Stored in ~/.local/share/ryzora/backups/operation-<timestamp>/
+/// Even when full snapshots are disabled by user preference, transactional backups
+/// are always created so that Ryzora can guarantee safe rollback.
+pub fn create_transaction_backup(
+    paths: &[&Path],
+    home: &Path,
+) -> Result<PathBuf, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let backups_dir = home.join(".local/share/ryzora/backups").join(format!("operation-{}", now));
+    fs::create_dir_all(&backups_dir)
+        .map_err(|e| format!("Failed to create transaction backup directory: {}", e))?;
+
+    let mut manifest_entries = Vec::new();
+
+    for (idx, p) in paths.iter().enumerate() {
+        if p.exists() {
+            let file_name = format!("file_{}_{}", idx, p.file_name().unwrap_or_default().to_string_lossy());
+            let dest = backups_dir.join(&file_name);
+            fs::copy(p, &dest)
+                .map_err(|e| format!("Failed to backup file '{}': {}", p.display(), e))?;
+            manifest_entries.push((p.to_string_lossy().to_string(), file_name, true));
+        } else {
+            manifest_entries.push((p.to_string_lossy().to_string(), String::new(), false));
+        }
+    }
+
+    let manifest_path = backups_dir.join("transaction.json");
+    let raw = serde_json::to_string_pretty(&manifest_entries)
+        .map_err(|e| format!("Failed to serialize transaction manifest: {}", e))?;
+    fs::write(&manifest_path, raw)
+        .map_err(|e| format!("Failed to write transaction manifest: {}", e))?;
+
+    Ok(backups_dir)
+}
+
+/// Rollback all files from a transactional backup directory.
+pub fn rollback_transaction_backup(backup_dir: &Path) -> Result<(), String> {
+    let manifest_path = backup_dir.join("transaction.json");
+    if !manifest_path.exists() {
+        return Err("Transaction manifest not found in backup directory".to_string());
+    }
+
+    let raw = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Failed to read transaction manifest: {}", e))?;
+    let entries: Vec<(String, String, bool)> = serde_json::from_str(&raw)
+        .map_err(|e| format!("Failed to parse transaction manifest: {}", e))?;
+
+    for (orig_path_str, backup_file_name, existed) in entries {
+        let orig_path = PathBuf::from(&orig_path_str);
+        if existed {
+            let backup_file = backup_dir.join(&backup_file_name);
+            if backup_file.exists() {
+                if let Some(parent) = orig_path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                fs::copy(&backup_file, &orig_path)
+                    .map_err(|e| format!("Failed to restore '{}': {}", orig_path.display(), e))?;
+            }
+        } else if orig_path.exists() {
+            let _ = fs::remove_file(&orig_path);
+        }
+    }
+
+    Ok(())
+}
+
 pub fn apply_lockscreen_target_in(
     package_id: &str,
     target: &str,
+    home: &Path,
+    installed_root: &Path,
+    state_dir: &Path,
+) -> Result<ActiveLockscreenState, String> {
+    apply_lockscreen_target_in_with_config(package_id, target, None, home, installed_root, state_dir)
+}
+
+pub fn apply_lockscreen_target_in_with_config(
+    package_id: &str,
+    target: &str,
+    config: Option<std::collections::HashMap<String, serde_json::Value>>,
     home: &Path,
     installed_root: &Path,
     state_dir: &Path,
@@ -2942,6 +3273,11 @@ pub fn apply_lockscreen_target_in(
         .map_err(|e| format!("Failed to read installed package record: {}", e))?;
     let record: InstalledPackageRecord = serde_json::from_str(&record_raw)
         .map_err(|e| format!("Failed to parse installed package record: {}", e))?;
+
+    // Create transactional backup of integration files prior to modification
+    let hypridle_conf = home.join(".config/hypr/hypridle.conf");
+    let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+    let _tx_backup_dir = create_transaction_backup(&[&hypridle_conf, &active_symlink], home)?;
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2996,12 +3332,63 @@ pub fn apply_lockscreen_target_in(
         // Ensure Ryzora private quickshell runtime launcher exists
         let _ = ensure_quickshell_runtime_in(home);
 
+        // Materialize user-selected configuration to theme directory
+        if let Some(ref cfg) = config {
+            let config_json_path = qs_dir.join("ryzora_config.json");
+            if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
+                let _ = fs::write(&config_json_path, serialized);
+            }
+
+            let theme_conf_path = qs_dir.join("theme.conf");
+            let mut conf_content = fs::read_to_string(&theme_conf_path).unwrap_or_default();
+            if let Some(idx) = conf_content.find("[RyzoraConfig]") {
+                conf_content.truncate(idx);
+            }
+            conf_content.push_str("
+[RyzoraConfig]
+");
+            for (k, v) in cfg {
+                let v_str = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                conf_content.push_str(&format!("{}={}
+", k, v_str));
+            }
+            let _ = fs::write(&theme_conf_path, conf_content);
+        }
+
+        // Apply hypridle integration: generate config, write drop-in, reload service
+        match crate::hypridle::apply_hypridle_integration(home) {
+            Ok((source_hash, lock_path)) => {
+                let source_path = home.join(crate::hypridle::HYPRIDLE_SOURCE_PATH);
+                state.hypridle_override = true;
+                state.hypridle_source_hash = Some(source_hash);
+                state.hypridle_source_path = Some(source_path.display().to_string());
+                state.hypridle_ryzora_config = Some(home.join(crate::hypridle::HYPRIDLE_RYZORA_CONFIG).display().to_string());
+                state.lock_wrapper_path = Some(lock_path.display().to_string());
+            }
+            Err(e) => {
+                // Non-fatal: log but continue — session lock files are applied even without hypridle
+                eprintln!("Ryzora: Warning: hypridle integration failed: {}", e);
+                eprintln!("Ryzora: The lockscreen package is applied but the lock shortcut still uses the system default.");
+            }
+        }
+
         state.quickshell = Some(package_id.to_string());
         state.quickshell_theme_path = Some(qs_dir.display().to_string());
     }
 
     // 2. SDDM target activation (privileged system integration)
     if target_norm == "sddm" || target_norm == "both" {
+        let helper_status = crate::sddm_helper::detect_privileged_helper_status();
+        if !helper_status.installed {
+            return Err(format!(
+                "Ryzora SDDM helper is not installed or invalid at '{}'. Please set up System Integration before applying SDDM themes.",
+                helper_status.helper_path
+            ));
+        }
+
         let sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
             PathBuf::from(sys_root)
                 .join("usr/share/sddm/themes")
@@ -3018,37 +3405,23 @@ pub fn apply_lockscreen_target_in(
             ));
         }
 
-        let sddm_conf_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
-            PathBuf::from(sys_root).join("etc/sddm.conf.d")
-        } else {
-            PathBuf::from("/etc/sddm.conf.d")
-        };
-
-        let sddm_conf_file = sddm_conf_dir.join("ryzora-theme.conf");
-        let conf_content = format!(
-            "# Generated by Ryzora - Active SDDM Theme Configuration
-[Theme]
-Current=ryzora-{}
-",
-            slug
-        );
-
-        if let Err(e) = fs::create_dir_all(&sddm_conf_dir).and_then(|_| fs::write(&sddm_conf_file, &conf_content)) {
-            if target_norm == "both" {
-                let qs_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
-                let _ = fs::remove_file(&qs_symlink);
-            }
-            return Err(format!(
-                "Failed to set active SDDM theme at '{}' (Administrator privilege required): {}",
-                sddm_conf_file.display(),
-                e
-            ));
+        // Snapshot the current SDDM theme before activating if not already recorded
+        if state.sddm_previous_theme.is_none() {
+            let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(PathBuf::from);
+            let (current_theme, _) = crate::sddm_helper::read_current_sddm_theme_in(sys_root.as_deref());
+            state.sddm_previous_theme = current_theme;
         }
+
+        // Activate SDDM theme using restricted helper
+        crate::sddm_helper::activate_sddm_theme(&slug)?;
 
         state.sddm = Some(package_id.to_string());
         state.sddm_theme_path = Some(sddm_theme_dir.display().to_string());
     }
 
+    if config.is_some() {
+        state.active_config = config;
+    }
     state.last_applied_at = Some(now);
     save_active_lockscreen_state_in(state_dir, &state)?;
     Ok(state)
@@ -3068,21 +3441,37 @@ pub fn deactivate_lockscreen_target_in(
             let _ = fs::remove_file(&qs_symlink);
             let _ = fs::remove_dir_all(&qs_symlink);
         }
+
+        // Deactivate hypridle integration: remove drop-in and generated config, reload service
+        if state.hypridle_override {
+            match crate::hypridle::deactivate_hypridle_integration(home) {
+                Ok(()) => {
+                    eprintln!("Ryzora: Hypridle integration removed, original config restored.");
+                }
+                Err(e) => {
+                    eprintln!("Ryzora: Warning: could not cleanly remove hypridle integration: {}", e);
+                }
+            }
+            state.hypridle_override = false;
+            state.hypridle_source_hash = None;
+            state.hypridle_source_path = None;
+            state.hypridle_ryzora_config = None;
+            state.lock_wrapper_path = None;
+        }
+
         state.quickshell = None;
         state.quickshell_theme_path = None;
     }
 
     if target_norm == "sddm" || target_norm == "both" {
-        let sddm_conf_file = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
-            PathBuf::from(sys_root).join("etc/sddm.conf.d/ryzora-theme.conf")
+        if let Some(ref prev_theme) = state.sddm_previous_theme {
+            let _ = crate::sddm_helper::restore_sddm_theme(prev_theme);
         } else {
-            PathBuf::from("/etc/sddm.conf.d/ryzora-theme.conf")
-        };
-        if sddm_conf_file.exists() {
-            let _ = fs::remove_file(&sddm_conf_file);
+            let _ = crate::sddm_helper::deactivate_sddm_theme();
         }
         state.sddm = None;
         state.sddm_theme_path = None;
+        state.sddm_previous_theme = None;
     }
 
     save_active_lockscreen_state_in(state_dir, &state)?;
@@ -3096,11 +3485,15 @@ pub fn get_active_lockscreen() -> Result<ActiveLockscreenState, String> {
 }
 
 #[tauri::command]
-pub fn apply_lockscreen(package_id: String, target: String) -> Result<ActiveLockscreenState, String> {
+pub fn apply_lockscreen(
+    package_id: String,
+    target: String,
+    config: Option<std::collections::HashMap<String, serde_json::Value>>,
+) -> Result<ActiveLockscreenState, String> {
     let home = get_home_dir();
     let installed_root = get_ryzora_installed_dir();
     let state_dir = get_ryzora_state_dir();
-    apply_lockscreen_target_in(&package_id, &target, &home, &installed_root, &state_dir)
+    apply_lockscreen_target_in_with_config(&package_id, &target, config, &home, &installed_root, &state_dir)
 }
 
 #[tauri::command]
@@ -3108,6 +3501,123 @@ pub fn deactivate_lockscreen(target: String) -> Result<ActiveLockscreenState, St
     let home = get_home_dir();
     let state_dir = get_ryzora_state_dir();
     deactivate_lockscreen_target_in(&target, &home, &state_dir)
+}
+
+/// Launch the active Ryzora lockscreen immediately for testing — without waiting for idle timeout.
+/// Only works when a Quickshell lockscreen is applied and hypridle integration is active.
+/// Launch the lockscreen immediately for testing.
+/// If package_id is provided, tests that installed package in isolated test mode.
+/// If package_id is None, tests the currently applied lockscreen.
+#[tauri::command]
+pub fn launch_lockscreen_test(package_id: Option<String>) -> Result<(), String> {
+    let home = get_home_dir();
+    let state_dir = get_ryzora_state_dir();
+
+    // Ensure Quickshell runtime exists
+    let _ = ensure_quickshell_runtime_in(&home);
+    let lock_shell = home.join(".local/share/ryzora/integrations/quickshell/lock_shell.qml");
+
+    if let Some(ref pkg_id) = package_id {
+        let slug = pkg_id
+            .strip_prefix("lockscreen-qylock-")
+            .or_else(|| pkg_id.strip_prefix("lockscreen-"))
+            .unwrap_or(pkg_id);
+        let theme_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(slug);
+        if !theme_dir.exists() {
+            return Err(format!(
+                "Theme directory not found at '{}'. Install the package first.",
+                theme_dir.display()
+            ));
+        }
+        if lock_shell.exists() {
+            crate::hypridle::launch_test_qml_process(&lock_shell, &theme_dir)
+        } else {
+            let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
+            crate::hypridle::launch_test_process(&lock_sh)
+        }
+    } else {
+        let state = get_active_lockscreen_state_in(&state_dir);
+        if state.quickshell.is_none() {
+            return Err("No Quickshell lockscreen is currently applied".to_string());
+        }
+        let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
+        if !lock_sh.exists() {
+            return Err(format!(
+                "Ryzora lockscreen runtime not found at '{}'",
+                lock_sh.display()
+            ));
+        }
+        crate::hypridle::launch_test_process(&lock_sh)
+    }
+}
+
+pub fn deactivate_and_uninstall_lockscreen_target_in(
+    package_id: &str,
+    _target: Option<&str>,
+    home: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    state_dir: &Path,
+) -> Result<UninstallResult, String> {
+    let state = get_active_lockscreen_state_in(state_dir);
+
+    // 1. If active, deactivate first to restore original system state
+    let is_qs_active = state.quickshell.as_deref() == Some(package_id);
+    let is_sddm_active = state.sddm.as_deref() == Some(package_id);
+
+    if is_qs_active && is_sddm_active {
+        let _ = deactivate_lockscreen_target_in("both", home, state_dir);
+    } else if is_qs_active {
+        let _ = deactivate_lockscreen_target_in("quickshell", home, state_dir);
+    } else if is_sddm_active {
+        let _ = deactivate_lockscreen_target_in("sddm", home, state_dir);
+    }
+
+    // 2. If SDDM target was installed, clean /usr/share/sddm/themes/ryzora-<slug>
+    let slug = package_id
+        .strip_prefix("lockscreen-qylock-")
+        .or_else(|| package_id.strip_prefix("lockscreen-"))
+        .unwrap_or(package_id);
+    let sddm_path = PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug));
+    if sddm_path.exists() {
+        let _ = crate::sddm_helper::remove_sddm_theme(slug);
+    }
+
+    // 3. Uninstall user package files
+    uninstall_package_in(package_id, home, snapshots_root, installed_root)
+}
+
+#[tauri::command]
+pub fn deactivate_and_uninstall_lockscreen(
+    package_id: String,
+    target: Option<String>,
+) -> Result<UninstallResult, String> {
+    let home = get_home_dir();
+    let snapshots_root = get_ryzora_snapshots_dir();
+    let installed_root = get_ryzora_installed_dir();
+    let state_dir = get_ryzora_state_dir();
+    deactivate_and_uninstall_lockscreen_target_in(
+        &package_id,
+        target.as_deref(),
+        &home,
+        &snapshots_root,
+        &installed_root,
+        &state_dir,
+    )
+}
+
+/// Check if the hypridle source config has drifted from the stored snapshot.
+/// Returns Some(current_hash) if drift detected, None otherwise.
+#[tauri::command]
+pub fn check_lockscreen_config_drift() -> Option<String> {
+    let home = get_home_dir();
+    let state_dir = get_ryzora_state_dir();
+    let state = get_active_lockscreen_state_in(&state_dir);
+    if let Some(ref stored_hash) = state.hypridle_source_hash {
+        crate::hypridle::check_hypridle_config_drift(&home, stored_hash)
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3123,6 +3633,20 @@ pub struct LockscreenRuntimeStatus {
     pub active_package: Option<String>,
     pub launcher_path: Option<String>,
     pub error: Option<String>,
+    /// Whether the hypridle systemd integration is wired up
+    pub hypridle_integration: bool,
+    /// Whether the source hypridle config has changed since Ryzora applied (drift)
+    pub hypridle_config_drift: bool,
+    /// Whether the ryzora-lock wrapper exists and is executable
+    pub lock_wrapper_exists: bool,
+    /// Whether the privileged SDDM helper is installed and verified
+    pub privileged_helper_installed: bool,
+    /// Effective SDDM theme currently winning on the machine
+    pub sddm_effective_theme: Option<String>,
+    pub sddm_effective_file: Option<String>,
+    pub sddm_is_overridden: bool,
+    pub sddm_overridden_by: Option<String>,
+    pub sddm_previous_theme: Option<String>,
 }
 
 /// Ensures Ryzora's private Quickshell runtime exists at ~/.local/share/ryzora/integrations/quickshell/
@@ -3315,8 +3839,21 @@ pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> Locks
     let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
     let launcher = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
 
+    // Hypridle integration status
+    let hypridle_status = crate::hypridle::get_hypridle_integration_status(
+        home,
+        state.hypridle_source_hash.as_deref(),
+    );
+
+    let hypridle_integration = state.hypridle_override
+        && hypridle_status.dropin_exists
+        && hypridle_status.ryzora_config_exists;
+    let lock_wrapper_exists = hypridle_status.lock_wrapper_exists;
+    let hypridle_config_drift = hypridle_status.drift_detected;
+
+    // Active requires: symlink exists, quickshell installed, AND hypridle integration wired
     let is_applied = state.quickshell.is_some() && active_symlink.exists();
-    let is_active = is_applied && has_quickshell;
+    let is_active = is_applied && has_quickshell && hypridle_integration;
 
     let err = if !has_quickshell {
         Some("Quickshell binary is not installed on this system".to_string())
@@ -3324,6 +3861,10 @@ pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> Locks
         Some("No session lock package is currently applied".to_string())
     } else if !active_symlink.exists() {
         Some("Active theme pointer is missing or unlinked".to_string())
+    } else if is_applied && !hypridle_integration {
+        Some("Applied but hypridle integration not wired — lock shortcut still uses system default".to_string())
+    } else if hypridle_config_drift {
+        Some("Hypridle configuration changed externally — regenerate or restore to re-sync".to_string())
     } else {
         None
     };
@@ -3340,7 +3881,24 @@ pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> Locks
         active_package: state.quickshell,
         launcher_path: if launcher.exists() { Some(launcher.to_string_lossy().to_string()) } else { None },
         error: err,
+        hypridle_integration,
+        hypridle_config_drift,
+        lock_wrapper_exists,
+        privileged_helper_installed: crate::sddm_helper::detect_privileged_helper_status().installed,
+        sddm_effective_theme: crate::sddm_helper::resolve_effective_sddm_theme_in(std::env::var("RYZORA_SYSTEM_ROOT").ok().as_deref().map(std::path::Path::new)).effective_theme,
+        sddm_effective_file: crate::sddm_helper::resolve_effective_sddm_theme_in(std::env::var("RYZORA_SYSTEM_ROOT").ok().as_deref().map(std::path::Path::new)).effective_file.map(|p| p.display().to_string()),
+        sddm_is_overridden: crate::sddm_helper::resolve_effective_sddm_theme_in(std::env::var("RYZORA_SYSTEM_ROOT").ok().as_deref().map(std::path::Path::new)).is_overridden,
+        sddm_overridden_by: crate::sddm_helper::resolve_effective_sddm_theme_in(std::env::var("RYZORA_SYSTEM_ROOT").ok().as_deref().map(std::path::Path::new)).overridden_by.map(|p| p.display().to_string()),
+        sddm_previous_theme: state.sddm_previous_theme.clone(),
     }
+}
+
+#[tauri::command]
+pub fn get_sddm_runtime_status(package_id: Option<String>) -> crate::sddm_helper::SddmRuntimeStatus {
+    let state_dir = get_ryzora_state_dir();
+    let state = get_active_lockscreen_state_in(&state_dir);
+    let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(PathBuf::from);
+    crate::sddm_helper::get_sddm_runtime_status_in(sys_root.as_deref(), &state, package_id.as_deref())
 }
 
 #[tauri::command]
@@ -3361,7 +3919,7 @@ pub fn get_lock_screen_runtime_status() -> LockscreenRuntimeStatus {
 mod tests {
     use super::*;
     use std::fs;
-    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use crate::TEST_ENV_MUTEX as ENV_MUTEX;
 
     struct TestSandbox {
         root: PathBuf,
@@ -4966,6 +5524,8 @@ mod tests {
                 targets: None,
                 preview_video: None,
                 preview_animated: None,
+
+                media_type: None,
                 source: None,
                 provenance: None,
             }],
@@ -5036,6 +5596,8 @@ mod tests {
                 targets: None,
                 preview_video: None,
                 preview_animated: None,
+
+                media_type: None,
                 source: None,
                 provenance: None,
             }],
@@ -6289,6 +6851,8 @@ mod tests {
                     targets: None,
                     preview_video: None,
                     preview_animated: None,
+
+                    media_type: None,
                     source: None,
                     provenance: None,
                 }],
@@ -6333,6 +6897,8 @@ mod tests {
                     targets: None,
                     preview_video: None,
                     preview_animated: None,
+
+                    media_type: None,
                     source: None,
                     provenance: None,
                 }],
@@ -6408,6 +6974,8 @@ mod tests {
                 targets: None,
                 preview_video: None,
                 preview_animated: None,
+
+                media_type: None,
                 source: None,
                 provenance: None,
             }],
@@ -6448,6 +7016,8 @@ mod tests {
                 targets: None,
                 preview_video: None,
                 preview_animated: None,
+
+                media_type: None,
                 source: None,
                 provenance: None,
             }],
@@ -7213,10 +7783,11 @@ mod tests {
 
     #[test]
     fn test_apply_sddm_requires_theme_and_writes_conf() {
-        let _guard = ENV_MUTEX.lock().unwrap();
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
         let sandbox = TestSandbox::new("apply-sddm");
         let sys_root = sandbox.root.join("system_root");
         std::env::set_var("RYZORA_SYSTEM_ROOT", &sys_root);
+        crate::sddm_helper::setup_privileged_helper_in(Some(&sys_root)).unwrap();
 
         let sys = TestSandbox::mock_system();
         let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7249,7 +7820,7 @@ mod tests {
         assert!(active.sddm_theme_path.is_some());
 
         // Verify config was written to system config dir
-        let conf_file = sys_root.join("etc/sddm.conf.d/ryzora-theme.conf");
+        let conf_file = sys_root.join("etc/sddm.conf.d/zz-ryzora-theme.conf");
         assert!(conf_file.is_file());
         let conf_content = fs::read_to_string(&conf_file).unwrap();
         assert!(conf_content.contains("Current=ryzora-dog-samurai"));
@@ -7259,10 +7830,11 @@ mod tests {
 
     #[test]
     fn test_apply_both_activates_both_targets() {
-        let _guard = ENV_MUTEX.lock().unwrap();
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
         let sandbox = TestSandbox::new("apply-both");
         let sys_root = sandbox.root.join("system_root");
         std::env::set_var("RYZORA_SYSTEM_ROOT", &sys_root);
+        crate::sddm_helper::setup_privileged_helper_in(Some(&sys_root)).unwrap();
 
         let sys = TestSandbox::mock_system();
         let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7300,6 +7872,80 @@ mod tests {
         assert_eq!(deactivated.quickshell, Some("lockscreen-qylock-dog-samurai".to_string()));
 
         std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    #[test]
+    fn test_transactional_backup_and_rollback() {
+        let sandbox = TestSandbox::new("tx-backup-test");
+        let file1 = sandbox.home_dir.join("test_file1.txt");
+        let file2 = sandbox.home_dir.join("test_file2.txt");
+        fs::write(&file1, "original content 1").unwrap();
+        fs::write(&file2, "original content 2").unwrap();
+
+        let tx_dir = create_transaction_backup(&[&file1, &file2], &sandbox.home_dir).unwrap();
+        assert!(tx_dir.exists());
+        assert!(tx_dir.join("transaction.json").exists());
+
+        // Mutate files
+        fs::write(&file1, "corrupted content 1").unwrap();
+        fs::remove_file(&file2).unwrap();
+
+        // Rollback
+        rollback_transaction_backup(&tx_dir).unwrap();
+
+        assert_eq!(fs::read_to_string(&file1).unwrap(), "original content 1");
+        assert_eq!(fs::read_to_string(&file2).unwrap(), "original content 2");
+    }
+
+    #[test]
+    fn test_deactivate_and_uninstall_lockscreen_cleans_state_and_files() {
+        let sandbox = TestSandbox::new("deact-uninstall-test");
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let sys = TestSandbox::mock_system();
+        let record = install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("quickshell"),
+        ).unwrap();
+        assert!(record.success);
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let active = apply_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            "quickshell",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert_eq!(active.quickshell, Some("lockscreen-qylock-dog-samurai".to_string()));
+
+        // Now Deactivate & Uninstall
+        let uninst = deactivate_and_uninstall_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            Some("quickshell"),
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert!(uninst.success);
+
+        // Verify active state is cleared
+        let final_state = get_active_lockscreen_state_in(&state_dir);
+        assert_eq!(final_state.quickshell, None);
+
+        // Verify installed file is gone
+        let installed_file = sandbox.home_dir.join(".local/share/ryzora/lockscreens/qylock/dog-samurai/Main.qml");
+        assert!(!installed_file.exists());
     }
 
     #[test]

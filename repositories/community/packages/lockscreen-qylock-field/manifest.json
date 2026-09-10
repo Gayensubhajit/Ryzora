@@ -38,9 +38,29 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/field/Main.qml",
+      "description": "field Main.qml"
+    },
+    {
+      "source": "files/bg.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/field/bg.png",
+      "description": "field bg.png"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/field/metadata.desktop",
+      "description": "field metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/field/theme.conf",
-      "description": "Sunlit Field configuration file."
+      "description": "field theme.conf"
+    },
+    {
+      "source": "files/font/Orbitron-VariableFont_wght.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/field/font/Orbitron-VariableFont_wght.ttf",
+      "description": "field font/Orbitron-VariableFont_wght.ttf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +71,32 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/field/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/field/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/field/Main.qml",
+          "description": "field Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/field/bg.png",
+          "description": "field bg.png (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/field/metadata.desktop",
+          "description": "field metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/field/theme.conf",
-          "description": "Sunlit Field Quickshell session lock configuration."
+          "description": "field theme.conf (quickshell)"
+        },
+        {
+          "source": "files/font/Orbitron-VariableFont_wght.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/field/font/Orbitron-VariableFont_wght.ttf",
+          "description": "field font/Orbitron-VariableFont_wght.ttf (quickshell)"
         }
       ]
     },
@@ -69,14 +109,29 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-field/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-field/Main.qml",
-          "description": "Sunlit Field SDDM greeter QML entrypoint."
+          "description": "field Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/bg.png",
+          "target": "/usr/share/sddm/themes/ryzora-field/bg.png",
+          "description": "field bg.png (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-field/metadata.desktop",
-          "description": "Sunlit Field SDDM theme metadata."
+          "description": "field metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-field/theme.conf",
+          "description": "field theme.conf (sddm)"
+        },
+        {
+          "source": "files/font/Orbitron-VariableFont_wght.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-field/font/Orbitron-VariableFont_wght.ttf",
+          "description": "field font/Orbitron-VariableFont_wght.ttf (sddm)"
         }
       ]
     }

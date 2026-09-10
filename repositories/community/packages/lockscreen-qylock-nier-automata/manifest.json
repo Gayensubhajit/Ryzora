@@ -37,9 +37,29 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/Main.qml",
+      "description": "nier-automata Main.qml"
+    },
+    {
+      "source": "files/NierButton.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/NierButton.qml",
+      "description": "nier-automata NierButton.qml"
+    },
+    {
+      "source": "files/bg.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/bg.png",
+      "description": "nier-automata bg.png"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/metadata.desktop",
+      "description": "nier-automata metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
-      "description": "NieR: Automata configuration file."
+      "description": "nier-automata theme.conf"
     }
   ],
   "provider": "qylock",
@@ -50,12 +70,32 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/Main.qml",
+          "description": "nier-automata Main.qml (quickshell)"
+        },
+        {
+          "source": "files/NierButton.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/NierButton.qml",
+          "description": "nier-automata NierButton.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/bg.png",
+          "description": "nier-automata bg.png (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/metadata.desktop",
+          "description": "nier-automata metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
-          "description": "NieR: Automata Quickshell session lock configuration."
+          "description": "nier-automata theme.conf (quickshell)"
         }
       ]
     },
@@ -68,14 +108,29 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-nier-automata/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-nier-automata/Main.qml",
-          "description": "NieR: Automata SDDM greeter QML entrypoint."
+          "description": "nier-automata Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/NierButton.qml",
+          "target": "/usr/share/sddm/themes/ryzora-nier-automata/NierButton.qml",
+          "description": "nier-automata NierButton.qml (sddm)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "/usr/share/sddm/themes/ryzora-nier-automata/bg.png",
+          "description": "nier-automata bg.png (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-nier-automata/metadata.desktop",
-          "description": "NieR: Automata SDDM metadata."
+          "description": "nier-automata metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-nier-automata/theme.conf",
+          "description": "nier-automata theme.conf (sddm)"
         }
       ]
     }

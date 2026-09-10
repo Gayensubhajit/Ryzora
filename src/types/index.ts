@@ -325,12 +325,49 @@ export interface LockscreenProvenance {
   license: string;
 }
 
+export interface LockscreenVariant {
+  id: string;
+  name: string;
+  description?: string;
+  preview_image?: string;
+  preview_video?: string;
+  config_overrides?: Record<string, any>;
+}
+
+export type LockscreenOptionType = "select" | "boolean" | "number" | "color";
+
+export interface LockscreenOptionChoice {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface LockscreenOptionSpec {
+  id: string;
+  label: string;
+  type: LockscreenOptionType;
+  description?: string;
+  default: string | boolean | number;
+  options?: LockscreenOptionChoice[];
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+}
+
+export interface LockscreenConfigSchema {
+  variants?: LockscreenVariant[];
+  options?: Record<string, LockscreenOptionSpec>;
+}
+
 export interface LockscreenManifest {
   provider: "qylock" | "hyprlock" | "swaylock" | "custom";
   targets: Partial<Record<LockscreenTargetType, LockscreenTargetSpec>>;
   media: LockscreenMediaSpec;
   runtime: LockscreenRuntimeSpec;
   provenance: LockscreenProvenance;
+  config_schema?: LockscreenConfigSchema;
+  selected_config?: Record<string, any>;
 }
 
 export interface PackageItem {
@@ -388,11 +425,15 @@ export interface PackageItem {
   signature?: PackageSignatureMetadata;
   cryptographic_status?: CryptographicStatus;
   media_type?: "video" | "image" | "animated";
+  preview_video?: string;
+  preview_animated?: string;
   preview_video_url?: string;
   preview_poster_url?: string;
   supports_session_lock?: boolean;
   supports_login_screen?: boolean;
+  targets?: string[];
   lockscreen?: LockscreenManifest;
+  customizable?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -926,6 +967,9 @@ export interface RyzoraSettings {
   show_unverified_packages: boolean;
   show_nightly_packages: boolean;
   compact_ui: boolean;
+  snapshot_policy: "never" | "ask" | "always";
+  snapshot_retention_count: number;
+  snapshot_auto_cleanup: boolean;
 }
 
 // 15.2 — Notifications & Activity
@@ -1034,6 +1078,13 @@ export interface ActiveLockscreenState {
   quickshell_theme_path?: string | null;
   sddm_theme_path?: string | null;
   last_applied_at?: number | null;
+  hypridle_override?: boolean;
+  hypridle_source_hash?: string | null;
+  hypridle_source_path?: string | null;
+  hypridle_ryzora_config?: string | null;
+  lock_wrapper_path?: string | null;
+  sddm_previous_theme?: string | null;
+  active_config?: Record<string, any> | null;
 }
 
 export interface LockscreenTargetCapability {
@@ -1058,6 +1109,21 @@ export interface ActiveLockscreenInfo {
   managed_by: string | null;
 }
 
+export interface SystemIntegrationReport {
+  desktop: string;
+  display_server: string;
+  session_lock_provider: string;
+  session_lock_entrypoint: string | null;
+  idle_provider: string;
+  idle_config: string | null;
+  login_manager: string;
+  login_theme: string | null;
+  login_config: string | null;
+  confidence: "high" | "medium" | "low" | string;
+  evidence: string[];
+  warnings: string[];
+}
+
 export interface HostCapabilities {
   os: string;
   distro_id: string;
@@ -1075,6 +1141,27 @@ export interface HostCapabilities {
   supported_adapters: LockscreenTargetCapability[];
 }
 
+export interface SddmConfigEntrySummary {
+  path: string;
+  theme: string;
+}
+
+export interface SddmRuntimeStatus {
+  available: boolean;
+  helper_installed: boolean;
+  installed: boolean;
+  applied: boolean;
+  active: boolean;
+  ryzora_theme: string | null;
+  effective_theme: string | null;
+  effective_file: string | null;
+  is_overridden: boolean;
+  overridden_by: string | null;
+  previous_theme: string | null;
+  config_entries: SddmConfigEntrySummary[];
+  error: string | null;
+}
+
 export interface LockscreenRuntimeStatus {
   target: string;
   adapter: string;
@@ -1086,5 +1173,27 @@ export interface LockscreenRuntimeStatus {
   protocol: string;
   active_package?: string | null;
   launcher_path?: string | null;
+  error?: string | null;
+  hypridle_integration?: boolean;
+  hypridle_config_drift?: boolean;
+  lock_wrapper_exists?: boolean;
+  privileged_helper_installed?: boolean;
+  sddm_effective_theme?: string | null;
+  sddm_effective_file?: string | null;
+  sddm_is_overridden?: boolean;
+  sddm_overridden_by?: string | null;
+  sddm_previous_theme?: string | null;
+}
+
+export interface PrivilegedHelperStatus {
+  installed: boolean;
+  helper_path: string;
+  helper_exists: boolean;
+  helper_executable: boolean;
+  helper_valid: boolean;
+  policy_path: string;
+  policy_exists: boolean;
+  version?: string | null;
+  sha256?: string | null;
   error?: string | null;
 }

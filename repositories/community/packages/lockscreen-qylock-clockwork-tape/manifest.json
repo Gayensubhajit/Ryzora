@@ -38,9 +38,24 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/Main.qml",
+      "description": "clockwork-tape Main.qml"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/metadata.desktop",
+      "description": "clockwork-tape metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
-      "description": "Tape (Clockwork) configuration file."
+      "description": "clockwork-tape theme.conf"
+    },
+    {
+      "source": "files/font/Outfit-Black.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/font/Outfit-Black.ttf",
+      "description": "clockwork-tape font/Outfit-Black.ttf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +66,27 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/Main.qml",
+          "description": "clockwork-tape Main.qml (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/metadata.desktop",
+          "description": "clockwork-tape metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
-          "description": "Tape (Clockwork) Quickshell session lock configuration."
+          "description": "clockwork-tape theme.conf (quickshell)"
+        },
+        {
+          "source": "files/font/Outfit-Black.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/font/Outfit-Black.ttf",
+          "description": "clockwork-tape font/Outfit-Black.ttf (quickshell)"
         }
       ]
     },
@@ -69,14 +99,24 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-clockwork-tape/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-clockwork-tape/Main.qml",
-          "description": "Tape (Clockwork) SDDM greeter QML entrypoint."
+          "description": "clockwork-tape Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-clockwork-tape/metadata.desktop",
-          "description": "Tape (Clockwork) SDDM metadata."
+          "description": "clockwork-tape metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-tape/theme.conf",
+          "description": "clockwork-tape theme.conf (sddm)"
+        },
+        {
+          "source": "files/font/Outfit-Black.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-tape/font/Outfit-Black.ttf",
+          "description": "clockwork-tape font/Outfit-Black.ttf (sddm)"
         }
       ]
     }

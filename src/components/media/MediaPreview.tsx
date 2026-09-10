@@ -1,24 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX, AlertCircle } from "lucide-react";
-
-// Global limiter for concurrent active video decoders in cards to prevent GPU strain
-const activeVideoElements = new Set<HTMLVideoElement>();
-const MAX_CONCURRENT_VIDEOS = 2;
-
-function registerActiveVideo(video: HTMLVideoElement) {
-  if (activeVideoElements.size >= MAX_CONCURRENT_VIDEOS) {
-    const oldest = activeVideoElements.values().next().value;
-    if (oldest && oldest !== video) {
-      oldest.pause();
-      activeVideoElements.delete(oldest);
-    }
-  }
-  activeVideoElements.add(video);
-}
-
-function unregisterActiveVideo(video: HTMLVideoElement) {
-  activeVideoElements.delete(video);
-}
+import { determineMediaDisplayState } from "./mediaUtils.ts";
 
 export interface MediaPreviewProps {
   poster: string;
@@ -41,7 +23,6 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
   mediaType = "image",
   alt,
   mode = "card",
-  isHovered = false,
   aspectRatio = "16/9",
   className = "",
   showBadge = false,
@@ -49,8 +30,11 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isMountedRef = useRef(true);
+  const retryTimeoutRef = useRef<number | null>(null);
+  const retryCountRef = useRef(0);
+  const isIntentionalPauseRef = useRef(false);
 
-  const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [videoError, setVideoError] = useState(false);
@@ -68,110 +52,137 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
     }
   }, []);
 
-  // IntersectionObserver to observe visibility in viewport
+  // Track component mount status
   useEffect(() => {
-    const element = containerRef.current;
-    if (!element || typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        setIsVisible(entry.isIntersecting);
-      },
-      { threshold: 0.25 }
-    );
-
-    observer.observe(element);
-    return () => observer.disconnect();
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (retryTimeoutRef.current !== null) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
   }, []);
 
-  const normalizeUrl = (url?: string) => {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/") || url.startsWith("data:") || url.startsWith("blob:")) {
-      return url;
+  const displayState = determineMediaDisplayState({
+    poster,
+    videoSrc,
+    animatedSrc,
+    mediaType,
+    prefersReducedMotion,
+    videoError,
+  });
+
+  const { hasVideo, hasAnimatedImage, finalPoster, finalVideo, finalAnimated } = displayState;
+
+  // Resilient autoplay function with exponential backoff retry
+  const attemptPlay = useCallback(() => {
+    if (!isMountedRef.current || prefersReducedMotion || videoError) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused && !isIntentionalPauseRef.current) {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            if (isMountedRef.current) {
+              setIsPlaying(true);
+              retryCountRef.current = 0;
+            }
+          })
+          .catch((_err) => {
+            if (!isMountedRef.current) return;
+            setIsPlaying(false);
+            // Intelligent backoff retry: 300ms, 600ms, 1200ms, up to 3000ms max (capped at 6 tries)
+            if (retryCountRef.current < 6) {
+              const delay = Math.min(300 * Math.pow(1.5, retryCountRef.current), 3000);
+              retryCountRef.current += 1;
+              if (retryTimeoutRef.current !== null) {
+                clearTimeout(retryTimeoutRef.current);
+              }
+              retryTimeoutRef.current = window.setTimeout(attemptPlay, delay);
+            }
+          });
+      }
     }
-    return "/" + url;
+  }, [prefersReducedMotion, videoError]);
+
+  // Initial playback launch when hasVideo or finalVideo updates
+  useEffect(() => {
+    if (!hasVideo || prefersReducedMotion || videoError) return;
+    isIntentionalPauseRef.current = false;
+    attemptPlay();
+  }, [hasVideo, finalVideo, prefersReducedMotion, videoError, attemptPlay]);
+
+  // Event handlers for resilient media playback
+  const handleLoadedData = () => {
+    setVideoLoaded(true);
+    attemptPlay();
   };
 
-  const finalPoster = normalizeUrl(poster);
-  const finalVideo = normalizeUrl(videoSrc);
-  const finalAnimated = normalizeUrl(animatedSrc);
+  const handleCanPlay = () => {
+    if (videoRef.current?.paused && !isIntentionalPauseRef.current) {
+      attemptPlay();
+    }
+  };
 
-  // Video is active if a video source is available, it is marked video or animated, and reduced motion is not requested
-  const hasVideo = Boolean(
-    finalVideo &&
-    (mediaType === "video" || mediaType === "animated") &&
-    !prefersReducedMotion &&
-    !videoError
-  );
-
-  const hasAnimatedImage = Boolean(
-    !hasVideo &&
-    animatedSrc &&
-    mediaType === "animated" &&
-    !prefersReducedMotion
-  );
-
-  // Playback control for Card Mode (muted loop when visible, limited to MAX_CONCURRENT_VIDEOS = 2)
-  useEffect(() => {
-    if (mode !== "card" || !hasVideo) return;
+  const handleEnded = () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (video) {
+      video.currentTime = 0;
+      attemptPlay();
+    }
+  };
 
-    if (isVisible && !prefersReducedMotion) {
-      registerActiveVideo(video);
-      video.play().then(() => setIsPlaying(true)).catch(() => {
-        setIsPlaying(false);
-      });
-    } else {
-      video.pause();
+  const handlePause = () => {
+    if (!isMountedRef.current) return;
+    // If pause occurred without user pressing pause, schedule automatic recovery
+    if (!isIntentionalPauseRef.current && hasVideo && !prefersReducedMotion && !videoError) {
       setIsPlaying(false);
-      unregisterActiveVideo(video);
-    }
-
-    return () => {
-      unregisterActiveVideo(video);
-    };
-  }, [mode, hasVideo, isVisible, prefersReducedMotion]);
-
-  // Hover prioritization: hovering immediately claims playback priority
-  useEffect(() => {
-    if (mode !== "card" || !hasVideo) return;
-    const video = videoRef.current;
-    if (!video || !isVisible || prefersReducedMotion) return;
-
-    if (isHovered) {
-      registerActiveVideo(video);
-      video.play().then(() => setIsPlaying(true)).catch(() => {});
-    }
-  }, [mode, hasVideo, isVisible, isHovered, prefersReducedMotion]);
-
-  // Hero Mode: Autoplays muted loop when visible
-  useEffect(() => {
-    if (mode !== "hero" || !hasVideo) return;
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (isVisible) {
-      video.play().then(() => setIsPlaying(true)).catch(() => {
-        setIsPlaying(false);
-      });
+      if (retryTimeoutRef.current !== null) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      retryTimeoutRef.current = window.setTimeout(attemptPlay, 250);
     } else {
-      video.pause();
       setIsPlaying(false);
     }
-  }, [mode, hasVideo, isVisible]);
+  };
+
+  const handlePlay = () => {
+    setIsPlaying(true);
+    retryCountRef.current = 0;
+  };
+
+  const handleWaiting = () => {
+    // Normal chunk buffering — do NOT treat as an error or pause
+  };
+
+  const handleStalled = () => {
+    // Normal network pipeline stall — do NOT treat as an error
+  };
+
+  const handleVideoError = (err: any) => {
+    // Only permanently fall back on genuine fatal video errors
+    const video = videoRef.current;
+    if (video?.error) {
+      setVideoError(true);
+      setIsPlaying(false);
+      if (onVideoError) {
+        onVideoError(err);
+      }
+    }
+  };
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      video.play().then(() => setIsPlaying(true)).catch(() => {});
+      isIntentionalPauseRef.current = false;
+      attemptPlay();
     } else {
+      isIntentionalPauseRef.current = true;
       video.pause();
       setIsPlaying(false);
     }
@@ -183,16 +194,6 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
     if (!video) return;
     video.muted = !video.muted;
     setIsMuted(video.muted);
-  };
-
-  const handleVideoError = (err: any) => {
-    setVideoError(true);
-    if (videoRef.current) {
-      unregisterActiveVideo(videoRef.current);
-    }
-    if (onVideoError) {
-      onVideoError(err);
-    }
   };
 
   const aspectClass =
@@ -207,38 +208,47 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
       ref={containerRef}
       className={`relative w-full overflow-hidden select-none bg-[var(--surface-base,#141417)] ${aspectClass} ${className}`}
     >
-      {/* Fallback & Poster Image (or Animated GIF fallback) */}
+      {/* 
+        1. Base Layer: Poster Image (always mounted underneath)
+        Ensures zero black/empty flashes while video is buffering or if decode fails.
+      */}
       <img
-        src={hasAnimatedImage && isVisible ? finalAnimated : finalPoster}
+        src={hasAnimatedImage ? finalAnimated : finalPoster}
         alt={alt}
-        className={`w-full h-full object-cover transition-opacity duration-500 ${
-          hasVideo && videoLoaded && isPlaying ? "opacity-0" : "opacity-100"
-        }`}
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         loading="lazy"
       />
 
-      {/* Video Player */}
+      {/* 
+        2. Video Player: Mounted on top of poster.
+        Autoplays muted in loop with zero scroll-pause eviction.
+      */}
       {hasVideo && (
         <video
           ref={videoRef}
           src={finalVideo}
-          poster={finalPoster}
           muted={isMuted}
           loop
           playsInline
           autoPlay
           preload="auto"
-          onLoadedData={() => setVideoLoaded(true)}
+          onLoadedData={handleLoadedData}
+          onCanPlay={handleCanPlay}
+          onEnded={handleEnded}
+          onPause={handlePause}
+          onPlay={handlePlay}
+          onWaiting={handleWaiting}
+          onStalled={handleStalled}
           onError={handleVideoError}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-            videoLoaded && isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 pointer-events-none ${
+            videoLoaded && isPlaying ? "opacity-100" : "opacity-0"
           }`}
         />
       )}
 
       {/* Media Type Badge */}
       {showBadge && (
-        <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/55 text-white/90 border border-white/10">
+        <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/60 text-white/90 border border-white/10">
           {mediaType === "video" && (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
@@ -255,9 +265,9 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
         </div>
       )}
 
-      {/* Video decode failure notice (quiet pill) */}
+      {/* Video decode failure notice */}
       {videoError && (
-        <div className="absolute bottom-2.5 right-2.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-black/60 text-white/70 border border-white/10 backdrop-blur-sm">
+        <div className="absolute bottom-2.5 right-2.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-black/70 text-white/80 border border-white/10 backdrop-blur-sm">
           <AlertCircle size={11} className="text-amber-400" />
           <span>Poster Fallback</span>
         </div>
@@ -265,10 +275,10 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
 
       {/* Hero Mode Controls Overlay */}
       {mode === "hero" && hasVideo && (
-        <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">
+        <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 pointer-events-auto">
           <button
             onClick={togglePlay}
-            className="p-2 rounded-full backdrop-blur-md bg-black/60 hover:bg-black/80 text-white/90 border border-white/15 transition-all shadow-lg hover:scale-105 active:scale-95"
+            className="p-2 rounded-full backdrop-blur-md bg-black/60 hover:bg-black/80 text-white/90 border border-white/15 transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
             title={isPlaying ? "Pause preview" : "Play preview"}
             type="button"
           >
@@ -276,7 +286,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
           </button>
           <button
             onClick={toggleMute}
-            className="p-2 rounded-full backdrop-blur-md bg-black/60 hover:bg-black/80 text-white/90 border border-white/15 transition-all shadow-lg hover:scale-105 active:scale-95"
+            className="p-2 rounded-full backdrop-blur-md bg-black/60 hover:bg-black/80 text-white/90 border border-white/15 transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
             title={isMuted ? "Unmute" : "Mute"}
             type="button"
           >

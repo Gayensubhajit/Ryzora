@@ -71,13 +71,21 @@ const MainLayout: React.FC = () => {
         <TopBar onOpenAbout={() => setAboutOpen(true)} />
 
         {/* Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 min-w-0">
+        <main className="flex-1 overflow-y-auto min-w-0 relative">
           <div>
             {/* Dismissible First-Run Onboarding Banner */}
-            <FirstRunBanner />
+            <div className="px-4 sm:px-6 pt-2">
+              <FirstRunBanner />
+            </div>
 
             {/* Active Content View */}
-            {renderActiveView()}
+            {activeCategory === "discover" ? (
+              renderActiveView()
+            ) : (
+              <div className="px-4 sm:px-6 py-4 sm:py-6">
+                {renderActiveView()}
+              </div>
+            )}
           </div>
         </main>
       </div>

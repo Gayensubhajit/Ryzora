@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import {
   Sparkles,
   ShieldCheck,
+  Sliders,
   Star,
   Download,
-  Eye,
   Layers,
   Terminal,
   Palette,
@@ -19,10 +19,8 @@ import {
   getPackageSubtype,
   formatDownloads,
   isLoginScreen,
-  getConciseCompatibility,
 } from "./catalogue/catalogueUtils";
 import { InstalledBadge } from "./catalogue/InstalledBadge";
-import { CompatibilityBadge } from "./catalogue/CompatibilityBadge";
 import { MediaPreview } from "./media/MediaPreview";
 
 interface StoreCardProps {
@@ -56,7 +54,7 @@ function getCategoryIcon(cat: string) {
 }
 
 export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
-  const { setSelectedPackage, installedPackages, systemInfo } = useApp();
+  const { setSelectedPackage, installedPackages } = useApp();
   const [imgError, setImgError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -75,51 +73,70 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
 
   const subtype = getPackageSubtype(packageItem);
   const authorName = packageItem.author?.name || "Community";
-  const isSddmLogin = isLoginScreen(packageItem);
-  const currentWm = systemInfo?.window_manager?.toLowerCase();
-  const compatibility = getConciseCompatibility(packageItem, currentWm);
-
-  const hasImage = Boolean(
-    packageItem.hero_image && packageItem.hero_image.trim().length > 0 && !imgError
+  const isCustomizable = Boolean(
+    packageItem.customizable ||
+    (packageItem.lockscreen?.config_schema?.variants && packageItem.lockscreen.config_schema.variants.length > 0) ||
+    (packageItem.lockscreen?.config_schema?.options && Object.keys(packageItem.lockscreen.config_schema.options).length > 0)
   );
+
+  const isSddmLogin = isLoginScreen(packageItem);
+
+  const posterSrc =
+    packageItem.preview_poster_url ||
+    packageItem.hero_image ||
+    packageItem.lockscreen?.media.poster ||
+    "";
+  const videoSrc =
+    packageItem.preview_video_url ||
+    packageItem.preview_video ||
+    packageItem.lockscreen?.media.preview_video;
+  const animatedSrc =
+    packageItem.preview_animated ||
+    packageItem.lockscreen?.media.preview_animated;
+  const mediaType =
+    packageItem.media_type ||
+    (videoSrc ? "video" : animatedSrc ? "animated" : "image");
+
+  const hasImage = !imgError && (posterSrc || videoSrc || animatedSrc);
 
   return (
     <div
-      onClick={handleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseOver={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocus={() => setIsHovered(true)}
-      onBlur={() => setIsHovered(false)}
-      className="store-card group relative overflow-hidden rounded-xl cursor-pointer select-none border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] hover:border-[var(--rz-border-strong)] transition-all duration-200 shadow-xs hover:shadow-md flex flex-col"
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && handleClick()}
-      aria-label={`${packageItem.title} — ${subtype} by ${authorName}`}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="group relative flex flex-col h-full rounded-2xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] overflow-hidden cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-black/25 hover:border-[var(--rz-accent)]/50 select-none"
     >
-      {/* ── Artwork Container (Hero) ── */}
-      <div className="aspect-video w-full relative overflow-hidden bg-[var(--rz-surface-elevated)]">
+      {/* ── 1. Media Preview Section (16:9) ── */}
+      <div className="aspect-video w-full relative overflow-hidden bg-[var(--surface-base,#141417)]">
         {hasImage ? (
           <MediaPreview
-            poster={packageItem.preview_poster_url || packageItem.hero_image}
-            videoSrc={packageItem.preview_video_url}
-            animatedSrc={packageItem.lockscreen?.media.preview_animated}
-            mediaType={packageItem.media_type || "image"}
+            poster={posterSrc}
+            videoSrc={videoSrc}
+            animatedSrc={animatedSrc}
+            mediaType={mediaType}
             alt={packageItem.title}
             mode="card"
             isHovered={isHovered}
             aspectRatio="16/9"
             showBadge={false}
-            className="transition-transform duration-500 ease-out group-hover:scale-105"
+            onVideoError={() => {}}
+            className="transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
         ) : (
           /* Sleek Generative Tech Artwork Fallback */
           <div
-            className={`w-full h-full flex flex-col justify-between p-3 relative overflow-hidden bg-gradient-to-br ${getGenerativeGradient(
+            className={`w-full h-full flex flex-col justify-between p-4 relative overflow-hidden bg-gradient-to-br ${getGenerativeGradient(
               packageItem.id
-            )} transition-transform duration-500 ease-out group-hover:scale-105`}
+            )} transition-transform duration-500 ease-out group-hover:scale-[1.03]`}
           >
-            {/* Tech grid texture */}
             <div
               className="absolute inset-0 opacity-15 pointer-events-none"
               style={{
@@ -128,23 +145,19 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
                 backgroundSize: "12px 12px",
               }}
             />
-
-            {/* Top row: category icon and subtle type */}
             <div className="flex items-center justify-between z-10">
-              <div className="p-1 rounded-md bg-black/40 border border-white/10 backdrop-blur-xs">
+              <div className="p-1.5 rounded-lg bg-black/40 border border-white/10 backdrop-blur-xs">
                 {getCategoryIcon(packageItem.category || packageItem.package_type)}
               </div>
-              <span className="text-[10px] font-mono text-white/60 tracking-wider">
+              <span className="text-[11px] font-mono text-white/70 tracking-wider font-semibold">
                 {subtype}
               </span>
             </div>
-
-            {/* Bottom visual: preview title and command snippet */}
             <div className="z-10 mt-auto">
-              <div className="text-[9px] font-mono text-white/50 truncate">
+              <div className="text-[10px] font-mono text-white/50 truncate">
                 ~/.config/{packageItem.title.toLowerCase().replace(/\s+/g, "-")}
               </div>
-              <div className="text-xs font-semibold text-white/90 truncate tracking-tight mt-0.5">
+              <div className="text-sm font-semibold text-white/90 truncate tracking-tight mt-0.5">
                 {packageItem.title}
               </div>
             </div>
@@ -152,114 +165,103 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
         )}
 
         {/* Subtle gradient vignette at the bottom of artwork */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
 
-        {/* Top-Left Trust & Login badges (Normal state) */}
-        <div className="absolute top-2 left-2 flex items-center gap-1.5 z-10">
-          {isSddmLogin && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500/90 text-black shadow-xs">
-              SDDM
-            </span>
-          )}
-          {packageItem.media_type === "video" && (
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/60 text-white/95 border border-white/10 flex items-center gap-1">
+        {/* Top-Left Media Badges */}
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+          {mediaType === "video" && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/65 text-white/95 border border-white/15 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
               Video
             </span>
           )}
-          {packageItem.media_type === "animated" && (
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/60 text-white/95 border border-white/10 flex items-center gap-1">
+          {mediaType === "animated" && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/65 text-white/95 border border-white/15 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               Animated
             </span>
           )}
+          {isSddmLogin && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500 text-black shadow-xs">
+              SDDM
+            </span>
+          )}
+          {isCustomizable && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-purple-500/30 text-purple-200 border border-purple-400/40 backdrop-blur-xs flex items-center gap-1 shadow-xs">
+              <Sliders className="w-2.5 h-2.5" />
+              Customizable
+            </span>
+          )}
           {packageItem.trust_tier === "official" && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-500/25 text-amber-200 border border-amber-400/35 backdrop-blur-xs flex items-center gap-0.5">
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-500/30 text-amber-200 border border-amber-400/40 backdrop-blur-xs flex items-center gap-0.5 shadow-xs">
               <Sparkles className="w-2.5 h-2.5" />
               Official
             </span>
           )}
           {packageItem.trust_tier === "verified" && !isSddmLogin && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-sky-500/25 text-sky-200 border border-sky-400/35 backdrop-blur-xs flex items-center gap-0.5">
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-sky-500/30 text-sky-200 border border-sky-400/40 backdrop-blur-xs flex items-center gap-0.5 shadow-xs">
               <ShieldCheck className="w-2.5 h-2.5" />
               Verified
             </span>
           )}
         </div>
 
-        {/* Top-Right Installation State Badge (Normal state) */}
-        <div className="absolute top-1.5 right-1.5 z-10">
+        {/* Top-Right Installation State Badge */}
+        <div className="absolute top-2.5 right-2.5 z-10">
           <InstalledBadge
             isInstalled={isInstalled}
             isUpdateAvailable={isUpdateAvailable}
           />
         </div>
+      </div>
 
-        {/* ── Hover Overlay: Revealing Secondary Information ── */}
-        <div
-          className={[
-            "absolute inset-0 bg-black/55 backdrop-blur-xs flex flex-col justify-between p-2.5 z-20 pointer-events-none transition-opacity duration-200",
-            isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-          ].join(" ")}
-        >
-          {/* Top row of hover overlay: compatibility */}
-          <div className="flex items-center justify-between gap-1">
-            <CompatibilityBadge
-              label={compatibility.label}
-              isWarning={compatibility.isWarning}
-            />
+      {/* ── 2. Card Body: Marketplace Metadata & Metrics ── */}
+      <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between bg-[var(--rz-surface)]">
+        {/* Title & Description */}
+        <div>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-[15px] sm:text-[16px] font-bold text-[var(--rz-text)] group-hover:text-[var(--rz-accent)] transition-colors leading-snug tracking-tight truncate">
+              {packageItem.title}
+            </h3>
+            {packageItem.color_palette && packageItem.color_palette.length > 0 && (
+              <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                {packageItem.color_palette.slice(0, 3).map((c, i) => (
+                  <span
+                    key={i}
+                    className="w-2 h-2 rounded-full border border-black/30"
+                    style={{ backgroundColor: c }}
+                    title={c}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Center action button */}
-          <div className="flex items-center justify-center">
-            <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/90 text-black shadow-lg flex items-center gap-1.5 font-sans">
-              <Eye className="w-3.5 h-3.5 text-black" />
-              Details
-            </span>
+          <p className="text-[12px] sm:text-[13px] text-[var(--rz-text-secondary)] line-clamp-2 mt-1 leading-relaxed">
+            {packageItem.description || `${subtype} configuration for your Linux desktop.`}
+          </p>
+        </div>
+
+        {/* Bottom Row: Author + Rating & Downloads */}
+        <div className="mt-3.5 pt-2.5 border-t border-[var(--rz-border-subtle)]/70 flex items-center justify-between text-xs text-[var(--rz-text-muted)]">
+          <div className="flex items-center gap-1.5 truncate max-w-[55%]">
+            <span className="font-semibold text-[var(--rz-text)] truncate">{authorName}</span>
+            <span>·</span>
+            <span className="text-[var(--rz-text-secondary)] truncate">{subtype}</span>
           </div>
 
-          {/* Bottom row of hover overlay: metrics & rating */}
-          <div className="flex items-center justify-between text-[11px] font-medium text-white/90 pt-1">
-            <span className="flex items-center gap-1 font-mono">
-              <Download className="w-3 h-3 text-white/70" />
-              {formatDownloads(packageItem.downloads)}
-            </span>
+          <div className="flex items-center gap-3 shrink-0 font-mono text-[11px] sm:text-xs">
             {packageItem.rating > 0 && (
-              <span className="flex items-center gap-1 font-mono">
-                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+              <span className="flex items-center gap-1 text-[var(--rz-text)] font-semibold">
+                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 {packageItem.rating.toFixed(1)}
               </span>
             )}
+            <span className="flex items-center gap-1 text-[var(--rz-text-secondary)]">
+              <Download className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
+              {formatDownloads(packageItem.downloads)}
+            </span>
           </div>
-        </div>
-      </div>
-
-      {/* ── Card Footer: Art-First Title & Subtitle (Always Visible) ── */}
-      <div className="p-2.5 bg-[var(--rz-surface)] border-t border-[var(--rz-border-subtle)]/70 flex-1 flex flex-col justify-center">
-        {/* Primary Title */}
-        <div className="text-xs sm:text-[13px] font-bold text-[var(--rz-text)] truncate leading-tight tracking-tight">
-          {packageItem.title}
-        </div>
-
-        {/* Secondary Subtitle: Type · Author */}
-        <div className="flex items-center justify-between gap-1.5 mt-1 text-[11px] text-[var(--rz-text-secondary)]">
-          <span className="truncate">
-            <strong className="font-semibold text-[var(--rz-text)]">{subtype}</strong>
-            <span className="mx-1 text-[var(--rz-text-muted)]">·</span>
-            <span>{authorName}</span>
-          </span>
-          {packageItem.color_palette && packageItem.color_palette.length > 0 && (
-            <div className="flex items-center gap-0.5 shrink-0">
-              {packageItem.color_palette.slice(0, 3).map((c, i) => (
-                <span
-                  key={i}
-                  className="w-1.5 h-1.5 rounded-full border border-black/20"
-                  style={{ backgroundColor: c }}
-                  title={c}
-                />
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

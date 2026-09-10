@@ -38,9 +38,29 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/Main.qml",
+      "description": "windows-7 Main.qml"
+    },
+    {
+      "source": "files/background.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/background.png",
+      "description": "windows-7 background.png"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/metadata.desktop",
+      "description": "windows-7 metadata.desktop"
+    },
+    {
+      "source": "files/pfp.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/pfp.png",
+      "description": "windows-7 pfp.png"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/theme.conf",
-      "description": "Windows 7 Aero Bliss configuration file."
+      "description": "windows-7 theme.conf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +71,32 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/windows-7/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/windows-7/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/Main.qml",
+          "description": "windows-7 Main.qml (quickshell)"
+        },
+        {
+          "source": "files/background.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/background.png",
+          "description": "windows-7 background.png (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/metadata.desktop",
+          "description": "windows-7 metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/pfp.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/pfp.png",
+          "description": "windows-7 pfp.png (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/theme.conf",
-          "description": "Windows 7 Aero Bliss Quickshell session lock configuration."
+          "description": "windows-7 theme.conf (quickshell)"
         }
       ]
     },
@@ -69,14 +109,29 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-windows-7/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-windows-7/Main.qml",
-          "description": "Windows 7 Aero Bliss SDDM greeter QML entrypoint."
+          "description": "windows-7 Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/background.png",
+          "target": "/usr/share/sddm/themes/ryzora-windows-7/background.png",
+          "description": "windows-7 background.png (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-windows-7/metadata.desktop",
-          "description": "Windows 7 Aero Bliss SDDM theme metadata."
+          "description": "windows-7 metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/pfp.png",
+          "target": "/usr/share/sddm/themes/ryzora-windows-7/pfp.png",
+          "description": "windows-7 pfp.png (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-windows-7/theme.conf",
+          "description": "windows-7 theme.conf (sddm)"
         }
       ]
     }

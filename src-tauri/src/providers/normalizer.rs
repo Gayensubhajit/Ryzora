@@ -94,5 +94,8 @@ pub fn normalize_provider_item(item: ProviderItem) -> FrontendPackageItem {
         preview_animated: None,
         source: None,
         provenance: None,
+        media_type: None,
+        preview_video_url: None,
+        preview_poster_url: None,
     }
 }

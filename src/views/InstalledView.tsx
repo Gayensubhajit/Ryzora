@@ -162,7 +162,7 @@ export const InstalledView: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
             {installedPackages.map((pkg) => (
               <div key={pkg.id} className="flex flex-col">
                 <PackageCard packageItem={pkg} />

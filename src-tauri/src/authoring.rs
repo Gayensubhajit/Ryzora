@@ -1021,6 +1021,7 @@ pub fn export_to_repository(
         targets: None,
         preview_video: None,
         preview_animated: None,
+        media_type: None,
         source: None,
         provenance: None,
     };

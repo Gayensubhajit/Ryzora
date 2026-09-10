@@ -64,7 +64,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   };
 
   return (
-    <div className="mb-2.5">
+    <div className="mb-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="p-1 rounded-md bg-[var(--rz-accent)]/10 text-[var(--rz-accent-text)] border border-[var(--rz-accent)]/20">
@@ -83,23 +83,6 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
       <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5 max-w-2xl leading-normal">
         {getSubtitle()}
       </p>
-
-      {/* Compressed & Quieter Session Lock / Login Screen Banner */}
-      {isLockScreens && (
-        <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span className="font-semibold text-[var(--rz-text)]">Session Lock:</span>
-            <span className="text-[var(--rz-text-muted)] text-[10.5px]">Hyprlock · Quickshell · Swaylock (User session)</span>
-          </div>
-
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--rz-surface)] border border-amber-500/25 text-[var(--rz-text-secondary)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-            <span className="font-semibold text-[var(--rz-text)]">Login Screen:</span>
-            <span className="text-[var(--rz-text-muted)] text-[10.5px]">SDDM (System display manager)</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

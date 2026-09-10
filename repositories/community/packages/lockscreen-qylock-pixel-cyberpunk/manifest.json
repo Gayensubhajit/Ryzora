@@ -38,9 +38,34 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/BackgroundVideo.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/BackgroundVideo.qml",
+      "description": "pixel-cyberpunk BackgroundVideo.qml"
+    },
+    {
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/Main.qml",
+      "description": "pixel-cyberpunk Main.qml"
+    },
+    {
+      "source": "files/bg.mp4",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/bg.mp4",
+      "description": "pixel-cyberpunk bg.mp4"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/metadata.desktop",
+      "description": "pixel-cyberpunk metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/theme.conf",
-      "description": "Pixel Cyberpunk configuration file."
+      "description": "pixel-cyberpunk theme.conf"
+    },
+    {
+      "source": "files/font/PixelifySans-Bold.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/font/PixelifySans-Bold.ttf",
+      "description": "pixel-cyberpunk font/PixelifySans-Bold.ttf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +76,37 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/BackgroundVideo.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/BackgroundVideo.qml",
+          "description": "pixel-cyberpunk BackgroundVideo.qml (quickshell)"
+        },
+        {
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/Main.qml",
+          "description": "pixel-cyberpunk Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.mp4",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/bg.mp4",
+          "description": "pixel-cyberpunk bg.mp4 (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/metadata.desktop",
+          "description": "pixel-cyberpunk metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/theme.conf",
-          "description": "Pixel Cyberpunk Quickshell session lock configuration."
+          "description": "pixel-cyberpunk theme.conf (quickshell)"
+        },
+        {
+          "source": "files/font/PixelifySans-Bold.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-cyberpunk/font/PixelifySans-Bold.ttf",
+          "description": "pixel-cyberpunk font/PixelifySans-Bold.ttf (quickshell)"
         }
       ]
     },
@@ -69,14 +119,34 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/Main.qml",
       "files": [
         {
-          "source": "files/config",
-          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/Main.qml",
-          "description": "Pixel Cyberpunk SDDM greeter QML entrypoint."
+          "source": "files/BackgroundVideo.qml",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/BackgroundVideo.qml",
+          "description": "pixel-cyberpunk BackgroundVideo.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/Main.qml",
+          "description": "pixel-cyberpunk Main.qml (sddm)"
+        },
+        {
+          "source": "files/bg.mp4",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/bg.mp4",
+          "description": "pixel-cyberpunk bg.mp4 (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/metadata.desktop",
-          "description": "Pixel Cyberpunk SDDM theme metadata."
+          "description": "pixel-cyberpunk metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/theme.conf",
+          "description": "pixel-cyberpunk theme.conf (sddm)"
+        },
+        {
+          "source": "files/font/PixelifySans-Bold.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-cyberpunk/font/PixelifySans-Bold.ttf",
+          "description": "pixel-cyberpunk font/PixelifySans-Bold.ttf (sddm)"
         }
       ]
     }

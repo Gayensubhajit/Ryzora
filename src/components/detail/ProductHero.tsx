@@ -4,7 +4,6 @@ import {
   Loader2,
   Check,
   AlertTriangle,
-  Eye,
   Sparkles,
   ShieldCheck,
   Download,
@@ -14,7 +13,7 @@ import {
   Monitor,
   Layers,
   Maximize2,
-  ShieldAlert,
+  Trash2,
 } from "lucide-react";
 import { PackageItem } from "../../types";
 import { formatDownloads } from "../catalogue/catalogueUtils";
@@ -26,7 +25,6 @@ interface ProductHeroProps {
   packageItem: PackageItem;
   activeScreenshotIndex: number;
   onSelectScreenshot: (index: number) => void;
-  onPreview: () => void;
   onInstall: () => void;
   onOpenLightbox: () => void;
   isInstalling: boolean;
@@ -37,18 +35,22 @@ interface ProductHeroProps {
   selectedTarget?: "quickshell" | "sddm" | "both";
   onSelectTarget?: (target: "quickshell" | "sddm" | "both") => void;
   isSessionLockSupported?: boolean;
+  isLoginScreenSupported?: boolean;
   isActive?: boolean;
   activeTargets?: { quickshell: boolean; sddm: boolean };
   onApply?: () => void;
   onDeactivate?: () => void;
+  onTest?: () => void;
+  onUninstall?: () => void;
   isApplying?: boolean;
+  isOverridden?: boolean;
+  overriddenBy?: string | null;
 }
 
 export const ProductHero: React.FC<ProductHeroProps> = ({
   packageItem,
   activeScreenshotIndex,
   onSelectScreenshot,
-  onPreview,
   onInstall,
   onOpenLightbox,
   isInstalling,
@@ -59,20 +61,26 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   selectedTarget = "quickshell",
   onSelectTarget,
   isSessionLockSupported = true,
+  isLoginScreenSupported = true,
   isActive = false,
   activeTargets = { quickshell: false, sddm: false },
   onApply,
   onDeactivate,
+  onTest,
+  onUninstall,
   isApplying = false,
+  isOverridden = false,
+  overriddenBy = null,
 }) => {
-  const [showAllTags, setShowAllTags] = useState(false);
+  const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
 
   const pkgSlug = packageItem.id
     .replace(/^lockscreen-qylock-/, "")
     .replace(/^lockscreen-/, "");
 
-  const isDualTarget =
-    Boolean(packageItem.supports_session_lock && packageItem.supports_login_screen);
+  const canTargetQs = Boolean(packageItem.supports_session_lock && isSessionLockSupported);
+  const canTargetSddm = Boolean(packageItem.supports_login_screen && isLoginScreenSupported);
+  const isDualTarget = canTargetQs && canTargetSddm;
 
   const subtype = packageItem.tags?.find((t) =>
     ["hyprlock", "quickshell", "swaylock", "sddm"].includes(t.toLowerCase())
@@ -84,9 +92,6 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
       : [packageItem.hero_image];
 
   const activeImage = screenshots[activeScreenshotIndex] || packageItem.hero_image;
-
-  const visibleTags = showAllTags ? packageItem.tags : packageItem.tags?.slice(0, 4) || [];
-  const hiddenTagsCount = (packageItem.tags?.length || 0) - visibleTags.length;
 
   const getActionLabel = () => {
     if (isInstalling) return "Installing...";
@@ -107,10 +112,10 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
         <div className="relative rounded-xl overflow-hidden border border-[var(--rz-border-subtle)] group">
           {/* Main Media Viewer */}
           <MediaPreview
-            poster={activeScreenshotIndex === 0 && packageItem.preview_poster_url ? packageItem.preview_poster_url : activeImage}
-            videoSrc={activeScreenshotIndex === 0 ? packageItem.preview_video_url : undefined}
-            animatedSrc={activeScreenshotIndex === 0 ? packageItem.lockscreen?.media.preview_animated : undefined}
-            mediaType={activeScreenshotIndex === 0 ? (packageItem.media_type || "image") : "image"}
+            poster={activeScreenshotIndex === 0 && (packageItem.preview_poster_url || packageItem.hero_image) ? (packageItem.preview_poster_url || packageItem.hero_image) : activeImage}
+            videoSrc={activeScreenshotIndex === 0 ? (packageItem.preview_video_url || packageItem.preview_video || packageItem.lockscreen?.media.preview_video) : undefined}
+            animatedSrc={activeScreenshotIndex === 0 ? (packageItem.preview_animated || packageItem.lockscreen?.media.preview_animated) : undefined}
+            mediaType={activeScreenshotIndex === 0 ? (packageItem.media_type || (packageItem.preview_video_url || packageItem.preview_video ? "video" : (packageItem.preview_animated ? "animated" : "image"))) : "image"}
             alt={packageItem.title}
             mode="hero"
             aspectRatio="16/9"
@@ -210,7 +215,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             </div>
           </div>
 
-          {/* ── Capability-Driven Target Selector (When Dual-Target) ── */}
+          {/* ── Capability-Driven Target Selector (When Dual-Target and System Supports Both) ── */}
           {isDualTarget && onSelectTarget && (
             <div className="p-3 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] mb-3">
               <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--rz-text-muted)] font-bold block mb-2">
@@ -223,7 +228,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                     selectedTarget === "quickshell"
                       ? "bg-[var(--rz-accent)]/15 border-[var(--rz-accent)] text-[var(--rz-text)] font-semibold"
                       : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:bg-[var(--rz-surface)]/80"
-                  } ${!isSessionLockSupported ? "opacity-50 cursor-not-allowed" : ""}`}
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     <input
@@ -231,7 +236,6 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                       name="lock_target"
                       value="quickshell"
                       checked={selectedTarget === "quickshell"}
-                      disabled={!isSessionLockSupported}
                       onChange={() => onSelectTarget("quickshell")}
                       className="accent-[var(--rz-accent)]"
                     />
@@ -242,15 +246,15 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                     </div>
                   </div>
                   <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-800 dark:text-emerald-300">
-                    User Space
+                    User Privileges
                   </span>
                 </label>
 
-                {/* Login Screen (SDDM) Option */}
+                {/* SDDM Login Screen Option */}
                 <label
                   className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-all ${
                     selectedTarget === "sddm"
-                      ? "bg-amber-500/15 border-amber-500/50 text-[var(--rz-text)] font-semibold"
+                      ? "bg-amber-500/15 border-amber-500 text-[var(--rz-text)] font-semibold"
                       : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:bg-[var(--rz-surface)]/80"
                   }`}
                 >
@@ -266,21 +270,21 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                     <Monitor className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <div>
                       <span className="block text-[11px] font-medium">Login Screen (SDDM)</span>
-                      <span className="block text-[9px] text-[var(--rz-text-muted)]">Display Manager Greeter</span>
+                      <span className="block text-[9px] text-[var(--rz-text-muted)]">Display manager · Root</span>
                     </div>
                   </div>
                   <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/20 text-amber-800 dark:text-amber-300">
-                    Admin / Root
+                    Polkit Auth
                   </span>
                 </label>
 
-                {/* Both Dual Option */}
+                {/* Both Option */}
                 <label
                   className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-all ${
                     selectedTarget === "both"
-                      ? "bg-[var(--rz-accent)]/15 border-[var(--rz-accent)] text-[var(--rz-text)] font-semibold"
+                      ? "bg-purple-500/15 border-purple-500 text-[var(--rz-text)] font-semibold"
                       : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:bg-[var(--rz-surface)]/80"
-                  } ${!isSessionLockSupported ? "opacity-50 cursor-not-allowed" : ""}`}
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     <input
@@ -288,73 +292,30 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                       name="lock_target"
                       value="both"
                       checked={selectedTarget === "both"}
-                      disabled={!isSessionLockSupported}
                       onChange={() => onSelectTarget("both")}
-                      className="accent-[var(--rz-accent)]"
+                      className="accent-purple-500"
                     />
-                    <Layers className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <div>
-                      <span className="block text-[11px] font-medium">Both (Session Lock + Login Screen)</span>
-                      <span className="block text-[9px] text-[var(--rz-text-muted)]">Unified appearance at boot & lock</span>
+                      <span className="block text-[11px] font-medium">Both Targets</span>
+                      <span className="block text-[9px] text-[var(--rz-text-muted)]">Unified Session + Login</span>
                     </div>
                   </div>
                   <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-purple-500/20 text-purple-800 dark:text-purple-300">
-                    Dual
+                    Recommended
                   </span>
                 </label>
               </div>
-
-              {/* Privilege boundary notice if SDDM or Both is active */}
-              {(selectedTarget === "sddm" || selectedTarget === "both") && (
-                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-400 font-medium">
-                  <ShieldAlert className="w-3 h-3 shrink-0" />
-                  <span>Requires elevated administrator privileges (pkexec)</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Concise Subtitle / Description */}
-          <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed mt-2 mb-3">
-            {packageItem.subtitle || packageItem.description}
-          </p>
-
-          {/* Expandable Tags */}
-          {packageItem.tags && packageItem.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {visibleTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)]"
-                >
-                  {tag}
-                </span>
-              ))}
-              {!showAllTags && hiddenTagsCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllTags(true)}
-                  className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-[var(--rz-accent-text)] hover:underline cursor-pointer"
-                >
-                  +{hiddenTagsCount} more
-                </button>
-              )}
             </div>
           )}
         </div>
 
-        {/* Installed Destination & Status (Install ≠ Apply Lifecycle) */}
+        {/* ── Installation & Active Status Preview ── */}
         {isInstalled && (
-          <div className="p-2.5 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[11px] mb-3">
-            <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-[var(--rz-border-subtle)]">
-              <span className="text-[10px] font-mono text-[var(--rz-text-muted)] uppercase tracking-wider">
-                Target Status & Destination
-              </span>
-              <span className="flex items-center gap-1.5 font-mono text-[10px]">
-                <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                  <Check className="w-2.5 h-2.5" /> Installed
-                </span>
-                <span className="text-[var(--rz-text-muted)]">·</span>
+          <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] mb-3 text-xs">
+            <div className="flex items-center justify-between text-[11px] mb-1">
+              <span className="text-[var(--rz-text-muted)]">Lifecycle State:</span>
+              <span className="font-semibold">
                 {selectedTarget === "both" ? (
                   <span>
                     QS: {activeTargets?.quickshell ? <span className="text-emerald-400 font-bold">✓ Active</span> : <span className="text-amber-400">○ Inactive</span>} · SDDM: {activeTargets?.sddm ? <span className="text-emerald-400 font-bold">✓ Active</span> : <span className="text-amber-400">○ Inactive</span>}
@@ -390,24 +351,16 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
           </div>
         )}
 
-        {/* ── Primary Action Buttons (Install vs Apply Lifecycle) ── */}
-        <div className="flex items-center gap-2.5 pt-2 border-t border-[var(--rz-border-subtle)]">
-          <button
-            type="button"
-            onClick={onPreview}
-            className="flex-1 py-2 rounded-xl text-xs font-semibold border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer select-none flex items-center justify-center gap-1.5"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Dry Run Preview</span>
-          </button>
-
+        {/* ── Primary Action Buttons (Install → Test → Apply → Deactivate/Uninstall Lifecycle) ── */}
+        <div className="flex items-center gap-2 pt-2 border-t border-[var(--rz-border-subtle)]">
           {!isInstalled ? (
+            /* 1. NOT INSTALLED: Show Install action */
             <button
               type="button"
               disabled={isBlocked || isInstalling}
               onClick={onInstall}
               className={[
-                "flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-md",
+                "w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-md",
                 isBlocked
                   ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
                   : (selectedTarget === "sddm" || selectedTarget === "both")
@@ -417,59 +370,155 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             >
               {isInstalling ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Installing...</span>
                 </>
               ) : isUpdateAvailable ? (
                 <>
-                  <DownloadCloud className="w-3.5 h-3.5" />
-                  <span>Update</span>
+                  <DownloadCloud className="w-4 h-4" />
+                  <span>Update Package</span>
                 </>
               ) : (
                 <>
-                  <DownloadCloud className="w-3.5 h-3.5" />
+                  <DownloadCloud className="w-4 h-4" />
                   <span>{getActionLabel()}</span>
                 </>
               )}
             </button>
           ) : !isActive ? (
-            <button
-              type="button"
-              disabled={isApplying}
-              onClick={onApply}
-              className="flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-md bg-emerald-600 hover:bg-emerald-500 text-white"
-            >
-              {isApplying ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Activating...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>{selectedTarget === "both" ? "Apply Both Targets" : selectedTarget === "sddm" ? "Apply Login Screen" : "Apply Session Lock"}</span>
-                </>
+            /* 2. INSTALLED (INACTIVE): [ Test ] [ Apply ] [ Uninstall ] */
+            <>
+              {onTest && (
+                <button
+                  type="button"
+                  onClick={onTest}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 transition-all cursor-pointer select-none flex items-center gap-1.5"
+                  title="Launch isolated lockscreen test"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Test</span>
+                </button>
               )}
-            </button>
-          ) : (
-            <div className="flex-1 flex items-center gap-1.5">
-              <div className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 cursor-default select-none border border-emerald-400/30">
-                <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                <span>✓ Active</span>
+
+              <button
+                type="button"
+                disabled={isApplying}
+                onClick={onApply}
+                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-md bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                {isApplying ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Activating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{selectedTarget === "both" ? "Apply Both" : selectedTarget === "sddm" ? "Apply Login Screen" : "Apply Session Lock"}</span>
+                  </>
+                )}
+              </button>
+
+              {onUninstall && (
+                <button
+                  type="button"
+                  onClick={() => setShowUninstallConfirm(true)}
+                  className="px-3 py-2 rounded-xl text-xs font-medium border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] text-[var(--rz-text-muted)] hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition-all cursor-pointer select-none flex items-center gap-1.5"
+                  title="Uninstall package"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Uninstall</span>
+                </button>
+              )}
+            </>
+          ) : isOverridden ? (
+            /* 3. OVERRIDDEN: [ Test ] [ ⚠ Overridden ] [ Deactivate ] */
+            <>
+              {onTest && (
+                <button
+                  type="button"
+                  onClick={onTest}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 transition-all cursor-pointer select-none flex items-center gap-1.5"
+                  title="Launch isolated lockscreen test"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Test</span>
+                </button>
+              )}
+
+              <div
+                className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-amber-600/90 text-white shadow-md flex items-center justify-center gap-1.5 cursor-default select-none border border-amber-400/40"
+                title={overriddenBy ? `Overridden by ${overriddenBy}` : "Configuration overridden"}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-200 stroke-[2.5]" />
+                <span>⚠ Overridden</span>
               </div>
+
               {onDeactivate && (
                 <button
                   type="button"
                   disabled={isApplying}
                   onClick={onDeactivate}
-                  className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 transition-all cursor-pointer select-none"
+                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 transition-all cursor-pointer select-none"
                 >
                   Deactivate
                 </button>
               )}
-            </div>
+            </>
+          ) : (
+            /* 4. ACTIVE: [ Test ] [ ✓ Active ] [ Deactivate ] [ Uninstall ] */
+            <>
+              {onTest && (
+                <button
+                  type="button"
+                  onClick={onTest}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 transition-all cursor-pointer select-none flex items-center gap-1.5"
+                  title="Launch isolated lockscreen test"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Test</span>
+                </button>
+              )}
+
+              <div className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 cursor-default select-none border border-emerald-400/30">
+                <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                <span>✓ Active</span>
+              </div>
+
+              {onDeactivate && (
+                <button
+                  type="button"
+                  disabled={isApplying}
+                  onClick={onDeactivate}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 transition-all cursor-pointer select-none"
+                  title="Deactivate lockscreen"
+                >
+                  Deactivate
+                </button>
+              )}
+
+              {onUninstall && (
+                <button
+                  type="button"
+                  onClick={() => setShowUninstallConfirm(true)}
+                  className="px-3 py-2 rounded-xl text-xs font-medium border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition-all cursor-pointer select-none flex items-center gap-1.5"
+                  title="Deactivate and cleanly uninstall"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Uninstall</span>
+                </button>
+              )}
+            </>
           )}
         </div>
+
+        {/* Warning if configuration is overridden */}
+        {isOverridden && overriddenBy && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            <span>Applied by Ryzora, but overridden by <code className="bg-black/30 px-1 py-0.5 rounded text-amber-200 font-mono text-[10px]">{overriddenBy}</code></span>
+          </div>
+        )}
 
         {/* Warning if installation is blocked */}
         {isBlocked && (
@@ -479,6 +528,57 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
           </div>
         )}
       </div>
+
+      {/* ── Uninstall Confirmation Modal ── */}
+      {showUninstallConfirm && onUninstall && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setShowUninstallConfirm(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-[var(--rz-bg)] border border-rose-500/30 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2.5 text-rose-400 font-bold text-sm">
+              <Trash2 className="w-4 h-4" />
+              <span>{isActive ? "Deactivate & Uninstall Package?" : "Uninstall Package?"}</span>
+            </div>
+
+            <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
+              {isActive ? (
+                <>
+                  <strong>{packageItem.title}</strong> is currently active. Uninstalling will first safely restore your previous configuration (e.g. Dusky/winter), restore transactional backups, and then remove the theme files.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to uninstall <strong>{packageItem.title}</strong>? All downloaded theme assets and configurations will be removed.
+                </>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--rz-border-subtle)]">
+              <button
+                type="button"
+                onClick={() => setShowUninstallConfirm(false)}
+                className="px-3 py-1.5 rounded-lg border border-[var(--rz-border-subtle)] text-xs text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUninstallConfirm(false);
+                  onUninstall();
+                }}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Confirm Uninstall</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

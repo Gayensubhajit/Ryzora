@@ -38,9 +38,34 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/BackgroundVideo.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/BackgroundVideo.qml",
+      "description": "pixel-rainyroom BackgroundVideo.qml"
+    },
+    {
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/Main.qml",
+      "description": "pixel-rainyroom Main.qml"
+    },
+    {
+      "source": "files/bg.mp4",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/bg.mp4",
+      "description": "pixel-rainyroom bg.mp4"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/metadata.desktop",
+      "description": "pixel-rainyroom metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/theme.conf",
-      "description": "Pixel Rainy Room configuration file."
+      "description": "pixel-rainyroom theme.conf"
+    },
+    {
+      "source": "files/font/PixelifySans-Bold.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/font/PixelifySans-Bold.ttf",
+      "description": "pixel-rainyroom font/PixelifySans-Bold.ttf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +76,37 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/BackgroundVideo.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/BackgroundVideo.qml",
+          "description": "pixel-rainyroom BackgroundVideo.qml (quickshell)"
+        },
+        {
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/Main.qml",
+          "description": "pixel-rainyroom Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.mp4",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/bg.mp4",
+          "description": "pixel-rainyroom bg.mp4 (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/metadata.desktop",
+          "description": "pixel-rainyroom metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/theme.conf",
-          "description": "Pixel Rainy Room Quickshell session lock configuration."
+          "description": "pixel-rainyroom theme.conf (quickshell)"
+        },
+        {
+          "source": "files/font/PixelifySans-Bold.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/font/PixelifySans-Bold.ttf",
+          "description": "pixel-rainyroom font/PixelifySans-Bold.ttf (quickshell)"
         }
       ]
     },
@@ -69,14 +119,34 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/Main.qml",
       "files": [
         {
-          "source": "files/config",
-          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/Main.qml",
-          "description": "Pixel Rainy Room SDDM greeter QML entrypoint."
+          "source": "files/BackgroundVideo.qml",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/BackgroundVideo.qml",
+          "description": "pixel-rainyroom BackgroundVideo.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/Main.qml",
+          "description": "pixel-rainyroom Main.qml (sddm)"
+        },
+        {
+          "source": "files/bg.mp4",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/bg.mp4",
+          "description": "pixel-rainyroom bg.mp4 (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/metadata.desktop",
-          "description": "Pixel Rainy Room SDDM theme metadata."
+          "description": "pixel-rainyroom metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/theme.conf",
+          "description": "pixel-rainyroom theme.conf (sddm)"
+        },
+        {
+          "source": "files/font/PixelifySans-Bold.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/font/PixelifySans-Bold.ttf",
+          "description": "pixel-rainyroom font/PixelifySans-Bold.ttf (sddm)"
         }
       ]
     }

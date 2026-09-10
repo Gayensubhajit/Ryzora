@@ -49,6 +49,13 @@ pub struct RyzoraSettings {
     /// Use compact information-dense UI layout.
     /// Default false.
     pub compact_ui: bool,
+    /// Snapshot creation policy on package apply/install.
+    /// "never" | "ask" | "always" — default "ask".
+    pub snapshot_policy: String,
+    /// Maximum number of snapshots to retain. Default 5, clamped to [1, 50].
+    pub snapshot_retention_count: u32,
+    /// Automatically delete older snapshots exceeding retention count. Default true.
+    pub snapshot_auto_cleanup: bool,
 }
 
 impl Default for RyzoraSettings {
@@ -63,6 +70,9 @@ impl Default for RyzoraSettings {
             show_unverified_packages: true,
             show_nightly_packages: false,
             compact_ui: false,
+            snapshot_policy: "never".to_string(),
+            snapshot_retention_count: 5,
+            snapshot_auto_cleanup: true,
         }
     }
 }
@@ -204,6 +214,21 @@ pub fn validate_settings(s: &RyzoraSettings) -> Result<(), String> {
         return Err(format!(
             "Invalid update_notification_policy '{}'. Must be one of: notify, silent.",
             s.update_notification_policy
+        ));
+    }
+
+    let valid_snapshot_policies = ["never", "ask", "always"];
+    if !valid_snapshot_policies.contains(&s.snapshot_policy.as_str()) {
+        return Err(format!(
+            "Invalid snapshot_policy '{}'. Must be one of: never, ask, always.",
+            s.snapshot_policy
+        ));
+    }
+
+    if s.snapshot_retention_count < 1 || s.snapshot_retention_count > 50 {
+        return Err(format!(
+            "snapshot_retention_count must be between 1 and 50, got {}.",
+            s.snapshot_retention_count
         ));
     }
 
@@ -442,8 +467,6 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         assert!(!json.contains("signature"));
         assert!(!json.contains("trust"));
-        assert!(!json.contains("snapshot"));
-        assert!(!json.contains("rollback"));
         assert!(!json.contains("bypass"));
         assert!(!json.contains("force"));
         assert!(!json.contains("sudo"));

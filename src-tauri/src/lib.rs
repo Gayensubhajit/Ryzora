@@ -20,6 +20,8 @@ pub mod settings;
 pub mod snapshot;
 pub mod system;
 pub mod updates;
+pub mod sddm_helper;
+pub mod hypridle;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -63,8 +65,15 @@ pub fn run() {
             installer::get_active_lockscreen,
             installer::apply_lockscreen,
             installer::deactivate_lockscreen,
+            installer::deactivate_and_uninstall_lockscreen,
             installer::get_lock_screen_runtime_status,
+            installer::get_sddm_runtime_status,
+            installer::launch_lockscreen_test,
+            installer::check_lockscreen_config_drift,
+            sddm_helper::get_privileged_helper_status,
+            sddm_helper::setup_privileged_helper,
             host::get_host_capabilities,
+            host::get_system_integration_report,
             // Repository & Catalog System (Phase 5 & 6)
             repository::get_catalog_packages,
             repository::refresh_catalog,
@@ -138,3 +147,6 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");
 }
+
+#[cfg(test)]
+pub static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());

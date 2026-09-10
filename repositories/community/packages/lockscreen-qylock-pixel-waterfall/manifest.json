@@ -38,9 +38,34 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/BackgroundVideo.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/BackgroundVideo.qml",
+      "description": "pixel-waterfall BackgroundVideo.qml"
+    },
+    {
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/Main.qml",
+      "description": "pixel-waterfall Main.qml"
+    },
+    {
+      "source": "files/bg.mp4",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/bg.mp4",
+      "description": "pixel-waterfall bg.mp4"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/metadata.desktop",
+      "description": "pixel-waterfall metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/theme.conf",
-      "description": "Pixel Mountain Waterfall configuration file."
+      "description": "pixel-waterfall theme.conf"
+    },
+    {
+      "source": "files/font/PixelifySans-Bold.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/font/PixelifySans-Bold.ttf",
+      "description": "pixel-waterfall font/PixelifySans-Bold.ttf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +76,37 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/BackgroundVideo.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/BackgroundVideo.qml",
+          "description": "pixel-waterfall BackgroundVideo.qml (quickshell)"
+        },
+        {
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/Main.qml",
+          "description": "pixel-waterfall Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.mp4",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/bg.mp4",
+          "description": "pixel-waterfall bg.mp4 (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/metadata.desktop",
+          "description": "pixel-waterfall metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/theme.conf",
-          "description": "Pixel Mountain Waterfall Quickshell session lock configuration."
+          "description": "pixel-waterfall theme.conf (quickshell)"
+        },
+        {
+          "source": "files/font/PixelifySans-Bold.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-waterfall/font/PixelifySans-Bold.ttf",
+          "description": "pixel-waterfall font/PixelifySans-Bold.ttf (quickshell)"
         }
       ]
     },
@@ -69,14 +119,34 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-pixel-waterfall/Main.qml",
       "files": [
         {
-          "source": "files/config",
-          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/Main.qml",
-          "description": "Pixel Mountain Waterfall SDDM greeter QML entrypoint."
+          "source": "files/BackgroundVideo.qml",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/BackgroundVideo.qml",
+          "description": "pixel-waterfall BackgroundVideo.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/Main.qml",
+          "description": "pixel-waterfall Main.qml (sddm)"
+        },
+        {
+          "source": "files/bg.mp4",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/bg.mp4",
+          "description": "pixel-waterfall bg.mp4 (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/metadata.desktop",
-          "description": "Pixel Mountain Waterfall SDDM theme metadata."
+          "description": "pixel-waterfall metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/theme.conf",
+          "description": "pixel-waterfall theme.conf (sddm)"
+        },
+        {
+          "source": "files/font/PixelifySans-Bold.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-pixel-waterfall/font/PixelifySans-Bold.ttf",
+          "description": "pixel-waterfall font/PixelifySans-Bold.ttf (sddm)"
         }
       ]
     }

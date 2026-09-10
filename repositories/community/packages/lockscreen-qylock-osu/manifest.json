@@ -38,9 +38,74 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/Main.qml",
+      "description": "osu Main.qml"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/metadata.desktop",
+      "description": "osu metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
-      "description": "osu! Beatmap Lock configuration file."
+      "description": "osu theme.conf"
+    },
+    {
+      "source": "files/avatars/achlys.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/achlys.png",
+      "description": "osu avatars/achlys.png"
+    },
+    {
+      "source": "files/avatars/darkkal.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/darkkal.png",
+      "description": "osu avatars/darkkal.png"
+    },
+    {
+      "source": "files/avatars/kaizky.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/kaizky.png",
+      "description": "osu avatars/kaizky.png"
+    },
+    {
+      "source": "files/background/A Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/A Glow.jpg",
+      "description": "osu background/A Glow.jpg"
+    },
+    {
+      "source": "files/background/B Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/B Glow.jpg",
+      "description": "osu background/B Glow.jpg"
+    },
+    {
+      "source": "files/background/C Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/C Glow.jpg",
+      "description": "osu background/C Glow.jpg"
+    },
+    {
+      "source": "files/background/D Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/D Glow.jpg",
+      "description": "osu background/D Glow.jpg"
+    },
+    {
+      "source": "files/background/E Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/E Glow.jpg",
+      "description": "osu background/E Glow.jpg"
+    },
+    {
+      "source": "files/background/F Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/F Glow.jpg",
+      "description": "osu background/F Glow.jpg"
+    },
+    {
+      "source": "files/background/G Glow.jpg",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/G Glow.jpg",
+      "description": "osu background/G Glow.jpg"
+    },
+    {
+      "source": "files/font/Torus Regular.otf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/font/Torus Regular.otf",
+      "description": "osu font/Torus Regular.otf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +116,77 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/osu/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/Main.qml",
+          "description": "osu Main.qml (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/metadata.desktop",
+          "description": "osu metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
-          "description": "osu! Beatmap Lock Quickshell session lock configuration."
+          "description": "osu theme.conf (quickshell)"
+        },
+        {
+          "source": "files/avatars/achlys.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/achlys.png",
+          "description": "osu avatars/achlys.png (quickshell)"
+        },
+        {
+          "source": "files/avatars/darkkal.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/darkkal.png",
+          "description": "osu avatars/darkkal.png (quickshell)"
+        },
+        {
+          "source": "files/avatars/kaizky.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/kaizky.png",
+          "description": "osu avatars/kaizky.png (quickshell)"
+        },
+        {
+          "source": "files/background/A Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/A Glow.jpg",
+          "description": "osu background/A Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/background/B Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/B Glow.jpg",
+          "description": "osu background/B Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/background/C Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/C Glow.jpg",
+          "description": "osu background/C Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/background/D Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/D Glow.jpg",
+          "description": "osu background/D Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/background/E Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/E Glow.jpg",
+          "description": "osu background/E Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/background/F Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/F Glow.jpg",
+          "description": "osu background/F Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/background/G Glow.jpg",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/G Glow.jpg",
+          "description": "osu background/G Glow.jpg (quickshell)"
+        },
+        {
+          "source": "files/font/Torus Regular.otf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/font/Torus Regular.otf",
+          "description": "osu font/Torus Regular.otf (quickshell)"
         }
       ]
     },
@@ -69,14 +199,74 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-osu/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-osu/Main.qml",
-          "description": "osu! Beatmap Lock SDDM greeter QML entrypoint."
+          "description": "osu Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-osu/metadata.desktop",
-          "description": "osu! Beatmap Lock SDDM theme metadata."
+          "description": "osu metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-osu/theme.conf",
+          "description": "osu theme.conf (sddm)"
+        },
+        {
+          "source": "files/avatars/achlys.png",
+          "target": "/usr/share/sddm/themes/ryzora-osu/avatars/achlys.png",
+          "description": "osu avatars/achlys.png (sddm)"
+        },
+        {
+          "source": "files/avatars/darkkal.png",
+          "target": "/usr/share/sddm/themes/ryzora-osu/avatars/darkkal.png",
+          "description": "osu avatars/darkkal.png (sddm)"
+        },
+        {
+          "source": "files/avatars/kaizky.png",
+          "target": "/usr/share/sddm/themes/ryzora-osu/avatars/kaizky.png",
+          "description": "osu avatars/kaizky.png (sddm)"
+        },
+        {
+          "source": "files/background/A Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/A Glow.jpg",
+          "description": "osu background/A Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/background/B Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/B Glow.jpg",
+          "description": "osu background/B Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/background/C Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/C Glow.jpg",
+          "description": "osu background/C Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/background/D Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/D Glow.jpg",
+          "description": "osu background/D Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/background/E Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/E Glow.jpg",
+          "description": "osu background/E Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/background/F Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/F Glow.jpg",
+          "description": "osu background/F Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/background/G Glow.jpg",
+          "target": "/usr/share/sddm/themes/ryzora-osu/background/G Glow.jpg",
+          "description": "osu background/G Glow.jpg (sddm)"
+        },
+        {
+          "source": "files/font/Torus Regular.otf",
+          "target": "/usr/share/sddm/themes/ryzora-osu/font/Torus Regular.otf",
+          "description": "osu font/Torus Regular.otf (sddm)"
         }
       ]
     }

@@ -17,8 +17,8 @@ use crate::snapshot::get_home_dir;
 
 pub const MAX_INDEX_SIZE: usize = 5 * 1024 * 1024; // 5 MB
 pub const MAX_MANIFEST_SIZE: usize = 2 * 1024 * 1024; // 2 MB
-pub const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50 MB
-pub const MAX_PACKAGE_SIZE: u64 = 100 * 1024 * 1024; // 100 MB
+pub const MAX_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB (supports HD video assets)
+pub const MAX_PACKAGE_SIZE: u64 = 1024 * 1024 * 1024; // 1 GB (supports rich multimedia bundles)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Repository Data Types (Schema v1)
@@ -113,6 +113,8 @@ pub struct RepositoryPackageEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview_animated: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<PackageSourceSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<PackageProvenanceSpec>,
@@ -154,6 +156,7 @@ impl Default for RepositoryPackageEntry {
             targets: None,
             preview_video: None,
             preview_animated: None,
+            media_type: None,
             source: None,
             provenance: None,
         }
@@ -290,6 +293,12 @@ pub struct FrontendPackageItem {
     pub preview_video: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview_animated: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_video_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_poster_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<PackageSourceSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2263,6 +2272,29 @@ impl RepositoryManager {
                     preview_animated: entry.preview_animated.clone(),
                     source: entry.source.clone(),
                     provenance: entry.provenance.clone(),
+                    media_type: entry.media_type.clone().or_else(|| {
+                        if entry.preview_video.is_some() {
+                            Some("video".to_string())
+                        } else if entry.preview_animated.is_some() {
+                            Some("animated".to_string())
+                        } else {
+                            Some("image".to_string())
+                        }
+                    }),
+                    preview_video_url: entry.preview_video.as_ref().map(|v| {
+                        if !v.starts_with('/') && !v.starts_with("http://") && !v.starts_with("https://") {
+                            format!("/{}", v)
+                        } else {
+                            v.clone()
+                        }
+                    }),
+                    preview_poster_url: entry.hero_image.as_ref().map(|p| {
+                        if !p.starts_with('/') && !p.starts_with("http://") && !p.starts_with("https://") {
+                            format!("/{}", p)
+                        } else {
+                            p.clone()
+                        }
+                    }),
                 };
 
                 all_packages.push(item);
@@ -4209,6 +4241,8 @@ mod tests {
             targets: None,
             preview_video: None,
             preview_animated: None,
+
+            media_type: None,
             source: None,
             provenance: None,
         };
@@ -4258,6 +4292,8 @@ mod tests {
             targets: None,
             preview_video: None,
             preview_animated: None,
+
+            media_type: None,
             source: None,
             provenance: None,
         };
@@ -4303,6 +4339,8 @@ mod tests {
             targets: None,
             preview_video: None,
             preview_animated: None,
+
+            media_type: None,
             source: None,
             provenance: None,
         };
@@ -4887,6 +4925,8 @@ mod tests {
             targets: None,
             preview_video: None,
             preview_animated: None,
+
+            media_type: None,
             source: None,
             provenance: None,
         };

@@ -38,9 +38,59 @@
   },
   "files": [
     {
-      "source": "files/config",
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/Main.qml",
+      "description": "terraria Main.qml"
+    },
+    {
+      "source": "files/TerraButton.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/TerraButton.qml",
+      "description": "terraria TerraButton.qml"
+    },
+    {
+      "source": "files/avatar.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/avatar.png",
+      "description": "terraria avatar.png"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/metadata.desktop",
+      "description": "terraria metadata.desktop"
+    },
+    {
+      "source": "files/ter1.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter1.png",
+      "description": "terraria ter1.png"
+    },
+    {
+      "source": "files/ter2.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter2.png",
+      "description": "terraria ter2.png"
+    },
+    {
+      "source": "files/ter3.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter3.png",
+      "description": "terraria ter3.png"
+    },
+    {
+      "source": "files/ter4.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter4.png",
+      "description": "terraria ter4.png"
+    },
+    {
+      "source": "files/ter5.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter5.png",
+      "description": "terraria ter5.png"
+    },
+    {
+      "source": "files/terraria_logo.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/terraria_logo.png",
+      "description": "terraria terraria_logo.png"
+    },
+    {
+      "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/theme.conf",
-      "description": "Terraria Overworld configuration file."
+      "description": "terraria theme.conf"
     }
   ],
   "provider": "qylock",
@@ -51,12 +101,62 @@
         "quickshell"
       ],
       "scope": "user",
-      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/terraria/theme.conf",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/terraria/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/Main.qml",
+          "description": "terraria Main.qml (quickshell)"
+        },
+        {
+          "source": "files/TerraButton.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/TerraButton.qml",
+          "description": "terraria TerraButton.qml (quickshell)"
+        },
+        {
+          "source": "files/avatar.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/avatar.png",
+          "description": "terraria avatar.png (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/metadata.desktop",
+          "description": "terraria metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/ter1.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter1.png",
+          "description": "terraria ter1.png (quickshell)"
+        },
+        {
+          "source": "files/ter2.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter2.png",
+          "description": "terraria ter2.png (quickshell)"
+        },
+        {
+          "source": "files/ter3.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter3.png",
+          "description": "terraria ter3.png (quickshell)"
+        },
+        {
+          "source": "files/ter4.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter4.png",
+          "description": "terraria ter4.png (quickshell)"
+        },
+        {
+          "source": "files/ter5.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter5.png",
+          "description": "terraria ter5.png (quickshell)"
+        },
+        {
+          "source": "files/terraria_logo.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/terraria_logo.png",
+          "description": "terraria terraria_logo.png (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/theme.conf",
-          "description": "Terraria Overworld Quickshell session lock configuration."
+          "description": "terraria theme.conf (quickshell)"
         }
       ]
     },
@@ -69,14 +169,59 @@
       "entrypoint": "/usr/share/sddm/themes/ryzora-terraria/Main.qml",
       "files": [
         {
-          "source": "files/config",
+          "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-terraria/Main.qml",
-          "description": "Terraria Overworld SDDM greeter QML entrypoint."
+          "description": "terraria Main.qml (sddm)"
         },
         {
-          "source": "files/config",
+          "source": "files/TerraButton.qml",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/TerraButton.qml",
+          "description": "terraria TerraButton.qml (sddm)"
+        },
+        {
+          "source": "files/avatar.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/avatar.png",
+          "description": "terraria avatar.png (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-terraria/metadata.desktop",
-          "description": "Terraria Overworld SDDM theme metadata."
+          "description": "terraria metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/ter1.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/ter1.png",
+          "description": "terraria ter1.png (sddm)"
+        },
+        {
+          "source": "files/ter2.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/ter2.png",
+          "description": "terraria ter2.png (sddm)"
+        },
+        {
+          "source": "files/ter3.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/ter3.png",
+          "description": "terraria ter3.png (sddm)"
+        },
+        {
+          "source": "files/ter4.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/ter4.png",
+          "description": "terraria ter4.png (sddm)"
+        },
+        {
+          "source": "files/ter5.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/ter5.png",
+          "description": "terraria ter5.png (sddm)"
+        },
+        {
+          "source": "files/terraria_logo.png",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/terraria_logo.png",
+          "description": "terraria terraria_logo.png (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-terraria/theme.conf",
+          "description": "terraria theme.conf (sddm)"
         }
       ]
     }

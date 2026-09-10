@@ -55,6 +55,15 @@ cp "$ROOT_DIR/dist-assets/icons/hicolor/512x512/apps/ryzora.png" "$APP_DIR/ryzor
 cp "$ROOT_DIR/dist-assets/icons/hicolor/512x512/apps/ryzora.png" "$APP_DIR/.DirIcon"
 cp -r "$ROOT_DIR/dist-assets/icons/hicolor" "$APP_DIR/usr/share/icons/"
 
+# 3b. Privileged SDDM helper & Polkit policy resources in AppDir
+mkdir -p "$APP_DIR/usr/lib/ryzora"
+cp "$ROOT_DIR/src-tauri/resources/ryzora-sddm-helper" "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
+chmod 755 "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
+
+mkdir -p "$APP_DIR/usr/share/polkit-1/actions"
+cp "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+chmod 644 "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy" 
+
 # 4. Create standard AppRun launcher
 echo "[4/5] Writing AppRun launcher..."
 cat << 'APPRUN' > "$APP_DIR/AppRun"
