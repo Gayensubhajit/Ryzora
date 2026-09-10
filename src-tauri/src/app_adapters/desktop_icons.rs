@@ -122,39 +122,24 @@ fn get_icon_theme_dirs() -> Vec<PathBuf> {
         }
     };
 
-    if let Ok(home) = std::env::var("HOME") {
-        let h = PathBuf::from(&home);
-        add(h.join(".icons"));
-        add(h.join(".local/share/icons"));
-    }
-
     let data_dirs = get_xdg_data_dirs();
 
-    // Preferred themes first for best icon quality
-    for theme in &["BeautyLine", "candy-icons", "breeze", "Papirus", "hicolor"] {
+    // 1. Freedesktop Canonical: hicolor theme in all XDG data dirs.
+    // Applications install their canonical, authentic icons into hicolor.
+    for base in &data_dirs {
+        add(PathBuf::from(base).join("icons").join("hicolor"));
+    }
+
+    // 2. Standard application pixmaps location (/usr/share/pixmaps).
+    add(PathBuf::from("/usr/share/pixmaps"));
+
+    // 3. Fallback standard system themes (locolor, Adwaita, breeze)
+    // EXPLICITLY EXCLUDE user decorative/custom icon themes like BeautyLine, candy-icons, Sweet, etc.
+    for theme in &["locolor", "Adwaita", "breeze"] {
         for base in &data_dirs {
             add(PathBuf::from(base).join("icons").join(theme));
         }
     }
-
-    // All remaining icon themes
-    let icons_base = PathBuf::from("/usr/share/icons");
-    if icons_base.exists() {
-        if let Ok(entries) = fs::read_dir(&icons_base) {
-            let mut themes: Vec<PathBuf> = entries
-                .flatten()
-                .filter(|e| e.path().is_dir())
-                .map(|e| e.path())
-                .collect();
-            themes.sort();
-            for t in themes {
-                add(t);
-            }
-        }
-    }
-
-    // Pixmaps as final resort
-    add(PathBuf::from("/usr/share/pixmaps"));
 
     dirs
 }

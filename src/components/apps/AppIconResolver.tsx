@@ -171,8 +171,26 @@ export const AppIcon: React.FC<AppIconProps> = ({
     );
   }
 
-  // Tier 3: Distinct geometric category fallback
+  // Tier 2.5: Trusted application metadata icon (authentic bundled icon for catalog apps)
   const meta = resolveAppMetadata(targetId);
+  if (meta.iconUrl) {
+    return (
+      <div
+        className={`aspect-square shrink-0 flex items-center justify-center overflow-hidden select-none ${className}`}
+        style={containerStyle}
+      >
+        <img
+          src={meta.iconUrl}
+          alt={targetId}
+          width={px}
+          height={px}
+          className="w-full h-full object-contain pointer-events-none"
+        />
+      </div>
+    );
+  }
+
+  // Tier 3: Distinct geometric category fallback
   const FallbackIcon = getFallbackIcon(targetId, meta.category);
 
   return (
