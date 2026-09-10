@@ -37,6 +37,8 @@ pub const USER_LOCK_SCRIPT_PATH: &str = "user_scripts/hyprlock/lock.sh";
 /// Ryzora snapshot backup path for host user lock script
 pub const USER_LOCK_SCRIPT_SNAPSHOT: &str =
     ".local/share/ryzora/snapshots/user_scripts_hyprlock_lock.sh";
+/// Ryzora hyprlock dispatcher shim path
+pub const HYPRLOCK_SHIM_PATH: &str = ".local/bin/hyprlock";
 
 #[derive(Debug, Clone)]
 pub struct HypridleIntegrationStatus {
@@ -193,8 +195,8 @@ pub fn write_ryzora_lock_wrapper(home: &Path) -> Result<PathBuf, String> {
 RYZORA_ACTIVE="{active_symlink}"
 RYZORA_LOCK="{ryzora_lock_sh}"
 
-# Prevent duplicate instances
-if pgrep -x quickshell > /dev/null 2>&1; then
+# Prevent duplicate instances of lockscreen
+if pgrep -f "quickshell.*lock_shell.qml" > /dev/null 2>&1; then
     exit 0
 fi
 
@@ -208,11 +210,13 @@ if [ -L "$RYZORA_ACTIVE" ] && [ -d "$RYZORA_ACTIVE" ] && command -v quickshell >
     fi
 fi
 
-# Graceful fallback to system locker
-if command -v hyprlock > /dev/null 2>&1; then
-    exec hyprlock
+# Graceful fallback to system locker (avoid recursive loop with ~/.local/bin/hyprlock shim)
+if [ -x /usr/bin/hyprlock ]; then
+    exec /usr/bin/hyprlock "$@"
+elif command -v hyprlock > /dev/null 2>&1; then
+    exec hyprlock "$@"
 elif command -v swaylock > /dev/null 2>&1; then
-    exec swaylock
+    exec swaylock "$@"
 else
     echo "ryzora-lock: ERROR: No session locker available" >&2
     exit 1
@@ -555,6 +559,141 @@ fi
     }
 
     Ok(Some((target, snapshot)))
+}
+
+/// Write the hyprlock dispatcher shim to ~/.local/bin/hyprlock.
+/// Since ~/.local/bin is ahead of /usr/bin in the user's PATH, this intercepts
+/// any direct invocations of `hyprlock` (such as Waybar power button right-click,
+/// rofi powermenu, or scripts calling `hyprlock`).
+/// When Ryzora is active, it delegates to ryzora-lock (Qylock Quickshell).
+/// When Ryzora is inactive, it delegates to /usr/bin/hyprlock.
+pub fn write_hyprlock_shim(home: &Path) -> Result<PathBuf, String> {
+    let bin_dir = home.join(".local/bin");
+    fs::create_dir_all(&bin_dir)
+        .map_err(|e| format!("Failed to create ~/.local/bin: {}", e))?;
+
+    let shim_path = home.join(HYPRLOCK_SHIM_PATH);
+    let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+    let ryzora_lock = home.join(RYZORA_LOCK_PATH);
+
+    let script = format!(
+        r#"#!/usr/bin/env bash
+# Ryzora hyprlock dispatcher shim — managed, do not edit
+RYZORA_ACTIVE="{active_symlink}"
+RYZORA_LOCK="{ryzora_lock}"
+
+if [ -L "$RYZORA_ACTIVE" ] && [ -d "$RYZORA_ACTIVE" ] && [ -x "$RYZORA_LOCK" ]; then
+    exec "$RYZORA_LOCK"
+fi
+
+# Fallback to system hyprlock
+if [ -x /usr/bin/hyprlock ]; then
+    exec /usr/bin/hyprlock "$@"
+elif [ -x /bin/hyprlock ]; then
+    exec /bin/hyprlock "$@"
+else
+    echo "hyprlock: no system locker found" >&2
+    exit 1
+fi
+"#,
+        active_symlink = active_symlink.display(),
+        ryzora_lock = ryzora_lock.display(),
+    );
+
+    fs::write(&shim_path, &script)
+        .map_err(|e| format!("Failed to write hyprlock shim: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&shim_path, fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set hyprlock shim executable: {}", e))?;
+    }
+
+    Ok(shim_path)
+}
+
+/// Remove the hyprlock dispatcher shim from ~/.local/bin/hyprlock on deactivation.
+pub fn remove_hyprlock_shim(home: &Path) -> Result<(), String> {
+    let shim_path = home.join(HYPRLOCK_SHIM_PATH);
+    if shim_path.exists() {
+        let _ = fs::remove_file(&shim_path);
+    }
+    Ok(())
+}
+
+/// Hook Waybar configuration files that execute "hyprlock" on mouse right-click,
+/// replacing it with the canonical "$HOME/user_scripts/hyprlock/lock.sh" entrypoint.
+/// Original files are snapshotted to ~/.local/share/ryzora/snapshots/ before modification.
+pub fn hook_waybar_lock_trigger(home: &Path) -> Result<Vec<PathBuf>, String> {
+    let snapshot_dir = home.join(".local/share/ryzora/snapshots");
+    fs::create_dir_all(&snapshot_dir)
+        .map_err(|e| format!("Failed to create snapshot directory: {}", e))?;
+
+    let mut modified = Vec::new();
+    let candidates = [
+        home.join(".config/waybar/15_nerdy_compact_h/config.jsonc"),
+        home.join(".config/waybar/06_nerdy_modern_h/config.jsonc"),
+    ];
+
+    for path in &candidates {
+        if path.exists() && !path.is_symlink() {
+            if let Ok(content) = fs::read_to_string(path) {
+                if content.contains("\"on-click-right\": \"hyprlock\"") {
+                    let file_name = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("theme");
+                    let snap_path = snapshot_dir.join(format!("waybar_{}_config.jsonc.bak", file_name));
+                    if !snap_path.exists() {
+                        let _ = fs::write(&snap_path, &content);
+                    }
+                    let updated = content.replace(
+                        "\"on-click-right\": \"hyprlock\"",
+                        "\"on-click-right\": \"$HOME/user_scripts/hyprlock/lock.sh\"",
+                    );
+                    if fs::write(path, updated).is_ok() {
+                        modified.push(path.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    if !modified.is_empty() && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+        let _ = Command::new("pkill").args(["-SIGUSR2", "waybar"]).status();
+    }
+
+    Ok(modified)
+}
+
+/// Restore original Waybar configurations verbatim from snapshots and reload Waybar.
+pub fn unhook_waybar_lock_trigger(home: &Path) -> Result<(), String> {
+    let snapshot_dir = home.join(".local/share/ryzora/snapshots");
+    let candidates = [
+        (
+            home.join(".config/waybar/15_nerdy_compact_h/config.jsonc"),
+            snapshot_dir.join("waybar_15_nerdy_compact_h_config.jsonc.bak"),
+        ),
+        (
+            home.join(".config/waybar/06_nerdy_modern_h/config.jsonc"),
+            snapshot_dir.join("waybar_06_nerdy_modern_h_config.jsonc.bak"),
+        ),
+    ];
+
+    let mut restored = false;
+    for (target, snap) in &candidates {
+        if snap.exists() {
+            if let Ok(orig) = fs::read_to_string(snap) {
+                let _ = fs::write(target, orig);
+                let _ = fs::remove_file(snap);
+                restored = true;
+            }
+        }
+    }
+
+    if restored && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+        let _ = Command::new("pkill").args(["-SIGUSR2", "waybar"]).status();
+    }
+
+    Ok(())
 }
 
 /// Unhook the user lock script and restore the original script verbatim from the snapshot.
@@ -909,6 +1048,49 @@ listener {
         let source_path = home.join(HYPRIDLE_SOURCE_PATH);
         let original_hash = sha256_file(&source_path).unwrap();
         assert_eq!(source_hash, original_hash, "Stored hash must match source (source was not modified)");
+
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_write_and_remove_hyprlock_shim() {
+        let home = test_home("shim-test");
+        write_hyprlock_shim(&home).unwrap();
+
+        let shim = home.join(HYPRLOCK_SHIM_PATH);
+        assert!(shim.exists(), "hyprlock shim must exist");
+        let content = fs::read_to_string(&shim).unwrap();
+        assert!(content.contains("RYZORA_ACTIVE"));
+        assert!(content.contains("RYZORA_LOCK"));
+        assert!(content.contains("/usr/bin/hyprlock"));
+
+        remove_hyprlock_shim(&home).unwrap();
+        assert!(!shim.exists(), "hyprlock shim must be removed");
+
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_hook_and_unhook_waybar_lock_trigger() {
+        let home = test_home("waybar-hook");
+        std::env::set_var("RYZORA_SYSTEM_ROOT", &home);
+
+        let waybar_dir = home.join(".config/waybar/15_nerdy_compact_h");
+        fs::create_dir_all(&waybar_dir).unwrap();
+        let config_file = waybar_dir.join("config.jsonc");
+        let original_waybar = r#"{"custom/power": {"on-click-right": "hyprlock"}}"#;
+        fs::write(&config_file, original_waybar).unwrap();
+
+        let hooked = hook_waybar_lock_trigger(&home).unwrap();
+        assert_eq!(hooked.len(), 1);
+
+        let updated = fs::read_to_string(&config_file).unwrap();
+        assert!(updated.contains("\"on-click-right\": \"$HOME/user_scripts/hyprlock/lock.sh\""));
+
+        unhook_waybar_lock_trigger(&home).unwrap();
+        let restored = fs::read_to_string(&config_file).unwrap();
+        assert_eq!(restored, original_waybar, "Waybar config must be restored verbatim");
 
         std::env::remove_var("RYZORA_SYSTEM_ROOT");
         cleanup(&home);

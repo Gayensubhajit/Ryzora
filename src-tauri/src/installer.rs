@@ -3508,6 +3508,12 @@ pub fn apply_lockscreen_target_in_with_config(
             }
         }
 
+        // Write hyprlock dispatcher shim (intercepts direct hyprlock calls from Waybar/rofi)
+        let _ = crate::hypridle::write_hyprlock_shim(home);
+
+        // Hook Waybar mouse right-click lock triggers so they use the canonical entrypoint
+        let _ = crate::hypridle::hook_waybar_lock_trigger(home);
+
         state.quickshell = Some(package_id.to_string());
         state.quickshell_theme_path = Some(qs_dir.display().to_string());
     }
@@ -3614,6 +3620,9 @@ pub fn deactivate_lockscreen_target_in(
             state.user_lock_hook_path = None;
             state.user_lock_hook_backup = None;
         }
+
+        let _ = crate::hypridle::remove_hyprlock_shim(home);
+        let _ = crate::hypridle::unhook_waybar_lock_trigger(home);
 
         state.quickshell = None;
         state.quickshell_theme_path = None;
@@ -3999,8 +4008,7 @@ pub fn ensure_quickshell_runtime_in(home: &Path) -> Result<PathBuf, String> {
     let lock_shell_qml = runtime_dir.join("lock_shell.qml");
     let shim_qml = shim_dir.join("SddmShim.qml");
 
-    if !lock_sh.exists() {
-        let lock_script = r#"#!/usr/bin/env bash
+    let lock_script = r#"#!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ACTIVE_SYMLINK="$HOME/.local/share/ryzora/active/lockscreen/quickshell"
 
@@ -4013,19 +4021,26 @@ export QS_THEME_PATH="$ACTIVE_SYMLINK"
 export QML_XHR_ALLOW_FILE_READ=1
 export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}"
 
-# Kill any conflicting legacy lockers safely
-killall -9 hyprlock swaylock 2>/dev/null || true
+# Hyprland crash safety: prevent compositor abort if lock client terminates unexpectedly
+if [ "$XDG_CURRENT_DESKTOP" = "Hyprland" ] || [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    hyprctl keyword misc:allow_session_lock_restore 1 2>/dev/null || true
+fi
+
+# Do NOT kill existing lockers with kill -9! Wayland ext_session_lock_v1 treats killed clients as security breach.
+# If quickshell lockscreen is already running, avoid launching a duplicate.
+if pgrep -f "quickshell.*lock_shell.qml" > /dev/null 2>&1; then
+    exit 0
+fi
 
 exec quickshell -p "$DIR/lock_shell.qml"
 "#;
-        fs::write(&lock_sh, lock_script)
-            .map_err(|e| format!("Failed to write Ryzora quickshell lock.sh: {}", e))?;
+    fs::write(&lock_sh, lock_script)
+        .map_err(|e| format!("Failed to write Ryzora quickshell lock.sh: {}", e))?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&lock_sh, fs::Permissions::from_mode(0o755));
-        }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&lock_sh, fs::Permissions::from_mode(0o755));
     }
 
     let qml_content = r#"import QtQuick
@@ -4055,20 +4070,20 @@ ShellRoot {
         target: sddmShim.sddm
         function onLoginSucceeded() {
             shellRoot.authenticated = true
-            if (Quickshell.env("XDG_CURRENT_DESKTOP") === "Hyprland" || Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== "") {
-                Quickshell.execDetached(["hyprctl", "keyword", "misc:allow_session_lock_restore", "1"]);
-            }
             Quickshell.execDetached(["loginctl", "unlock-session"]);
-            quitTimer.start()
+            shellRoot.sessionLocked = false;
+            if (waylandLoader.item && typeof waylandLoader.item.unlock === "function") {
+                waylandLoader.item.unlock();
+            }
+            safeExitTimer.start();
         }
     }
 
     Timer {
-        id: quitTimer
-        interval: 250
+        id: safeExitTimer
+        interval: 350
         onTriggered: {
-            shellRoot.sessionLocked = false
-            Qt.quit()
+            Quickshell.execDetached(["quickshell", "kill", "--pid", String(Quickshell.processId)]);
         }
     }
 
@@ -4091,6 +4106,13 @@ ShellRoot {
             WlSessionLock {
                 id: lock
                 locked: shellRoot.sessionLocked
+
+                onSecureChanged: {
+                    if (!secure && shellRoot.authenticated) {
+                        Quickshell.execDetached(["quickshell", "kill", "--pid", String(Quickshell.processId)]);
+                    }
+                }
+
                 surface: Component {
                     WlSessionLockSurface {
                         color: "black"
@@ -4176,13 +4198,19 @@ Item {
     onThemePathChanged: reloadConfig()
     Component.onCompleted: reloadConfig()
 
+    readonly property string currentUsername: Quickshell.env("USER") || "silentbyte"
+
     property var userModel: ListModel {
+        property string lastUser: shim.currentUsername
+        property int lastIndex: 0
         Component.onCompleted: {
             append({
-                name: Quickshell.env("USER") || "user",
-                realName: Quickshell.env("USER") || "User",
+                name: shim.currentUsername,
+                realName: shim.currentUsername,
+                uLogin: shim.currentUsername,
+                uName: shim.currentUsername,
                 icon: "",
-                homeDir: "/home/" + (Quickshell.env("USER") || "user")
+                homeDir: "/home/" + shim.currentUsername
             })
         }
     }
@@ -4196,14 +4224,28 @@ Item {
         signal loginSucceeded()
 
         function login(user, password, sessionIndex) {
-            pam.user = user;
+            var targetUser = (user && user !== "user") ? user : shim.currentUsername;
+            pam.user = targetUser;
             pam.pendingPassword = password;
             pam.start();
+        }
+
+        function reboot() {
+            Quickshell.execDetached(["systemctl", "reboot"]);
+        }
+
+        function powerOff() {
+            Quickshell.execDetached(["systemctl", "poweroff"]);
+        }
+
+        function suspend() {
+            Quickshell.execDetached(["systemctl", "suspend"]);
         }
     }
 
     PamContext {
         id: pam
+        config: "hyprlock"
         property string pendingPassword: ""
         onResponseRequiredChanged: {
             if (responseRequired && pendingPassword !== "") {
@@ -4217,6 +4259,10 @@ Item {
             } else {
                 shim.sddm.loginFailed();
             }
+        }
+        onError: (err) => {
+            console.warn("Ryzora Pam error:", PamError.toString(err));
+            shim.sddm.loginFailed();
         }
     }
 }
