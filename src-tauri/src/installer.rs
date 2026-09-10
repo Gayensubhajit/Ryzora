@@ -2883,6 +2883,231 @@ pub fn apply_package_update(package_id: String) -> Result<UpdateResult, String> 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Lockscreen Activation Engine (Install ≠ Apply Lifecycle)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ActiveLockscreenState {
+    pub quickshell: Option<String>,
+    pub sddm: Option<String>,
+    pub quickshell_theme_path: Option<String>,
+    pub sddm_theme_path: Option<String>,
+    pub last_applied_at: Option<u64>,
+}
+
+pub fn get_ryzora_state_dir() -> PathBuf {
+    get_ryzora_base_dir().join("state")
+}
+
+pub fn get_active_lockscreen_state_in(state_dir: &Path) -> ActiveLockscreenState {
+    let state_file = state_dir.join("active_lockscreen.json");
+    if !state_file.exists() {
+        return ActiveLockscreenState::default();
+    }
+    match fs::read_to_string(&state_file) {
+        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+        Err(_) => ActiveLockscreenState::default(),
+    }
+}
+
+pub fn save_active_lockscreen_state_in(state_dir: &Path, state: &ActiveLockscreenState) -> Result<(), String> {
+    if !state_dir.exists() {
+        fs::create_dir_all(state_dir)
+            .map_err(|e| format!("Failed to create state directory: {}", e))?;
+    }
+    let state_file = state_dir.join("active_lockscreen.json");
+    let json = serde_json::to_string_pretty(state)
+        .map_err(|e| format!("Failed to serialize active lockscreen state: {}", e))?;
+    fs::write(&state_file, json)
+        .map_err(|e| format!("Failed to write active lockscreen state: {}", e))?;
+    Ok(())
+}
+
+pub fn apply_lockscreen_target_in(
+    package_id: &str,
+    target: &str,
+    home: &Path,
+    installed_root: &Path,
+    state_dir: &Path,
+) -> Result<ActiveLockscreenState, String> {
+    let record_file = installed_root.join(format!("{}.json", package_id));
+    if !record_file.exists() {
+        return Err(format!(
+            "Package '{}' is not installed. Materialize/install it before applying.",
+            package_id
+        ));
+    }
+
+    let record_raw = fs::read_to_string(&record_file)
+        .map_err(|e| format!("Failed to read installed package record: {}", e))?;
+    let record: InstalledPackageRecord = serde_json::from_str(&record_raw)
+        .map_err(|e| format!("Failed to parse installed package record: {}", e))?;
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let mut state = get_active_lockscreen_state_in(state_dir);
+    let target_norm = target.to_lowercase();
+
+    let slug = package_id
+        .strip_prefix("lockscreen-qylock-")
+        .or_else(|| package_id.strip_prefix("lockscreen-"))
+        .unwrap_or(package_id);
+
+    // 1. Quickshell target activation (unprivileged user-space)
+    if target_norm == "quickshell" || target_norm == "both" {
+        let mut qs_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(slug);
+        if !qs_dir.exists() {
+            for f in &record.installed_files {
+                let p = PathBuf::from(f);
+                if p.starts_with(home.join(".local/share/ryzora/lockscreens")) {
+                    if let Some(parent) = p.parent() {
+                        qs_dir = parent.to_path_buf();
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !qs_dir.exists() {
+            return Err(format!(
+                "Quickshell theme directory not found for package '{}' at '{}'. Ensure Quickshell target was installed.",
+                package_id,
+                qs_dir.display()
+            ));
+        }
+
+        let active_dir = home.join(".local/share/ryzora/active/lockscreen");
+        fs::create_dir_all(&active_dir)
+            .map_err(|e| format!("Failed to create active lockscreen directory: {}", e))?;
+
+        let qs_symlink = active_dir.join("quickshell");
+        if qs_symlink.exists() || qs_symlink.is_symlink() {
+            let _ = fs::remove_file(&qs_symlink);
+            let _ = fs::remove_dir_all(&qs_symlink);
+        }
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&qs_dir, &qs_symlink)
+            .map_err(|e| format!("Failed to create quickshell active symlink: {}", e))?;
+
+        state.quickshell = Some(package_id.to_string());
+        state.quickshell_theme_path = Some(qs_dir.display().to_string());
+    }
+
+    // 2. SDDM target activation (privileged system integration)
+    if target_norm == "sddm" || target_norm == "both" {
+        let sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+            PathBuf::from(sys_root)
+                .join("usr/share/sddm/themes")
+                .join(format!("ryzora-{}", slug))
+        } else {
+            PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug))
+        };
+
+        if !sddm_theme_dir.exists() {
+            return Err(format!(
+                "SDDM theme directory not found for package '{}' at '{}'. Ensure SDDM target was installed.",
+                package_id,
+                sddm_theme_dir.display()
+            ));
+        }
+
+        let sddm_conf_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+            PathBuf::from(sys_root).join("etc/sddm.conf.d")
+        } else {
+            PathBuf::from("/etc/sddm.conf.d")
+        };
+
+        let sddm_conf_file = sddm_conf_dir.join("ryzora-theme.conf");
+        let conf_content = format!(
+            "# Generated by Ryzora - Active SDDM Theme Configuration
+[Theme]
+Current=ryzora-{}
+",
+            slug
+        );
+
+        if let Err(e) = fs::create_dir_all(&sddm_conf_dir).and_then(|_| fs::write(&sddm_conf_file, &conf_content)) {
+            if target_norm == "both" {
+                let qs_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+                let _ = fs::remove_file(&qs_symlink);
+            }
+            return Err(format!(
+                "Failed to set active SDDM theme at '{}' (Administrator privilege required): {}",
+                sddm_conf_file.display(),
+                e
+            ));
+        }
+
+        state.sddm = Some(package_id.to_string());
+        state.sddm_theme_path = Some(sddm_theme_dir.display().to_string());
+    }
+
+    state.last_applied_at = Some(now);
+    save_active_lockscreen_state_in(state_dir, &state)?;
+    Ok(state)
+}
+
+pub fn deactivate_lockscreen_target_in(
+    target: &str,
+    home: &Path,
+    state_dir: &Path,
+) -> Result<ActiveLockscreenState, String> {
+    let mut state = get_active_lockscreen_state_in(state_dir);
+    let target_norm = target.to_lowercase();
+
+    if target_norm == "quickshell" || target_norm == "both" {
+        let qs_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+        if qs_symlink.exists() || qs_symlink.is_symlink() {
+            let _ = fs::remove_file(&qs_symlink);
+            let _ = fs::remove_dir_all(&qs_symlink);
+        }
+        state.quickshell = None;
+        state.quickshell_theme_path = None;
+    }
+
+    if target_norm == "sddm" || target_norm == "both" {
+        let sddm_conf_file = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+            PathBuf::from(sys_root).join("etc/sddm.conf.d/ryzora-theme.conf")
+        } else {
+            PathBuf::from("/etc/sddm.conf.d/ryzora-theme.conf")
+        };
+        if sddm_conf_file.exists() {
+            let _ = fs::remove_file(&sddm_conf_file);
+        }
+        state.sddm = None;
+        state.sddm_theme_path = None;
+    }
+
+    save_active_lockscreen_state_in(state_dir, &state)?;
+    Ok(state)
+}
+
+#[tauri::command]
+pub fn get_active_lockscreen() -> Result<ActiveLockscreenState, String> {
+    let state_dir = get_ryzora_state_dir();
+    Ok(get_active_lockscreen_state_in(&state_dir))
+}
+
+#[tauri::command]
+pub fn apply_lockscreen(package_id: String, target: String) -> Result<ActiveLockscreenState, String> {
+    let home = get_home_dir();
+    let installed_root = get_ryzora_installed_dir();
+    let state_dir = get_ryzora_state_dir();
+    apply_lockscreen_target_in(&package_id, &target, &home, &installed_root, &state_dir)
+}
+
+#[tauri::command]
+pub fn deactivate_lockscreen(target: String) -> Result<ActiveLockscreenState, String> {
+    let home = get_home_dir();
+    let state_dir = get_ryzora_state_dir();
+    deactivate_lockscreen_target_in(&target, &home, &state_dir)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Comprehensive Unit & Integration Tests
 // Zero tests touch ~/.config or real user files. Everything uses /tmp sandbox.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2891,6 +3116,7 @@ pub fn apply_package_update(package_id: String) -> Result<UpdateResult, String> 
 mod tests {
     use super::*;
     use std::fs;
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     struct TestSandbox {
         root: PathBuf,
@@ -6669,5 +6895,181 @@ mod tests {
             assert!(f.starts_with("/usr/share/sddm/themes/ryzora-"));
         }
     }
-}
+    #[test]
+    fn test_install_does_not_imply_active() {
+        let sandbox = TestSandbox::new("install-not-active");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
 
+        let res = install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("quickshell"),
+        ).unwrap();
+
+        assert!(res.success);
+
+        // State directory check: install must NOT have set active state
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let active = get_active_lockscreen_state_in(&state_dir);
+        assert_eq!(active.quickshell, None, "Installation must NOT imply active Quickshell");
+        assert_eq!(active.sddm, None, "Installation must NOT imply active SDDM");
+    }
+
+    #[test]
+    fn test_apply_quickshell_activates_target_without_root() {
+        let sandbox = TestSandbox::new("apply-quickshell");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        // Install first
+        install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("quickshell"),
+        ).unwrap();
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let active = apply_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            "quickshell",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+
+        assert_eq!(active.quickshell, Some("lockscreen-qylock-dog-samurai".to_string()));
+        assert!(active.quickshell_theme_path.is_some());
+
+        // Symlink must exist under ~/.local/share/ryzora/active/lockscreen/quickshell
+        let qs_symlink = sandbox.home_dir.join(".local/share/ryzora/active/lockscreen/quickshell");
+        assert!(qs_symlink.exists() || qs_symlink.is_symlink());
+
+        // Invariant: no hyprland.conf or hypridle.conf touched
+        assert!(!sandbox.home_dir.join(".config/hypr/hyprland.conf").exists());
+        assert!(!sandbox.home_dir.join(".config/hypr/hypridle.conf").exists());
+    }
+
+    #[test]
+    fn test_apply_sddm_requires_theme_and_writes_conf() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let sandbox = TestSandbox::new("apply-sddm");
+        let sys_root = sandbox.root.join("system_root");
+        std::env::set_var("RYZORA_SYSTEM_ROOT", &sys_root);
+
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        // Install SDDM target
+        install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("sddm"),
+        ).unwrap();
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let active = apply_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            "sddm",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+
+        assert_eq!(active.sddm, Some("lockscreen-qylock-dog-samurai".to_string()));
+        assert!(active.sddm_theme_path.is_some());
+
+        // Verify config was written to system config dir
+        let conf_file = sys_root.join("etc/sddm.conf.d/ryzora-theme.conf");
+        assert!(conf_file.is_file());
+        let conf_content = fs::read_to_string(&conf_file).unwrap();
+        assert!(conf_content.contains("Current=ryzora-dog-samurai"));
+
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    #[test]
+    fn test_apply_both_activates_both_targets() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let sandbox = TestSandbox::new("apply-both");
+        let sys_root = sandbox.root.join("system_root");
+        std::env::set_var("RYZORA_SYSTEM_ROOT", &sys_root);
+
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        // Install Both target
+        install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("both"),
+        ).unwrap();
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let active = apply_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            "both",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+
+        assert_eq!(active.quickshell, Some("lockscreen-qylock-dog-samurai".to_string()));
+        assert_eq!(active.sddm, Some("lockscreen-qylock-dog-samurai".to_string()));
+
+        // Deactivate SDDM only
+        let deactivated = deactivate_lockscreen_target_in("sddm", &sandbox.home_dir, &state_dir).unwrap();
+        assert_eq!(deactivated.sddm, None);
+        assert_eq!(deactivated.quickshell, Some("lockscreen-qylock-dog-samurai".to_string()));
+
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    #[test]
+    fn test_apply_uninstalled_package_rejected() {
+        let sandbox = TestSandbox::new("apply-uninstalled");
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let res = apply_lockscreen_target_in(
+            "non-existent-pkg",
+            "quickshell",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        );
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("not installed"));
+    }
+
+}

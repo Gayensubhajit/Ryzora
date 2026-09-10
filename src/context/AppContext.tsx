@@ -40,6 +40,7 @@ import {
   RepositorySyncStatus,
   RepositorySyncReport,
   InstalledHistoryEntry,
+  ActiveLockscreenState,
 } from "../types";
 
 interface AppContextType {
@@ -119,6 +120,10 @@ interface AppContextType {
   refreshAllRepositoriesSync: () => Promise<RepositorySyncReport[]>;
   switchRepositoryChannel: (repoId: string, channel: string) => Promise<RepositorySyncStatus>;
   getInstalledPackageHistory: (packageId: string) => Promise<InstalledHistoryEntry[]>;
+  activeLockscreen: ActiveLockscreenState;
+  applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
+  deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
+  refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -345,6 +350,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [loadingCreators, setLoadingCreators] = useState<boolean>(false);
   const [repositorySyncStatuses, setRepositorySyncStatuses] = useState<RepositorySyncStatus[]>([]);
   const [loadingRepoSync, setLoadingRepoSync] = useState<boolean>(false);
+  const [activeLockscreen, setActiveLockscreen] = useState<ActiveLockscreenState>({
+    quickshell: null,
+    sddm: null,
+  });
+
+  const refreshActiveLockscreen = async (): Promise<ActiveLockscreenState> => {
+    try {
+      const state = await invoke<ActiveLockscreenState>("get_active_lockscreen");
+      setActiveLockscreen(state || { quickshell: null, sddm: null });
+      return state || { quickshell: null, sddm: null };
+    } catch {
+      return { quickshell: null, sddm: null };
+    }
+  };
+
+  const applyLockscreen = async (
+    packageId: string,
+    target: "quickshell" | "sddm" | "both"
+  ): Promise<ActiveLockscreenState> => {
+    try {
+      const state = await invoke<ActiveLockscreenState>("apply_lockscreen", {
+        packageId,
+        target,
+      });
+      setActiveLockscreen(state);
+      setToast({
+        message: `Activated ${packageId} for ${
+          target === "both" ? "Session Lock & SDDM Login Screen" : target === "quickshell" ? "Session Lock" : "SDDM Login Screen"
+        }!`,
+        type: "success",
+      });
+      return state;
+    } catch (e: any) {
+      setToast({
+        message: `Failed to activate lockscreen: ${e?.message || e}`,
+        type: "warning",
+      });
+      throw e;
+    }
+  };
+
+  const deactivateLockscreen = async (
+    target: "quickshell" | "sddm" | "both"
+  ): Promise<ActiveLockscreenState> => {
+    try {
+      const state = await invoke<ActiveLockscreenState>("deactivate_lockscreen", {
+        target,
+      });
+      setActiveLockscreen(state);
+      setToast({
+        message: `Deactivated ${
+          target === "both" ? "Session Lock & SDDM" : target === "quickshell" ? "Session Lock" : "SDDM Login Screen"
+        }.`,
+        type: "info",
+      });
+      return state;
+    } catch (e: any) {
+      setToast({
+        message: `Failed to deactivate lockscreen: ${e?.message || e}`,
+        type: "warning",
+      });
+      throw e;
+    }
+  };
 
   const refreshSystem = async () => {
     setLoadingSystem(true);
@@ -537,6 +606,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshUpdates();
     refreshCreators();
     refreshRepoSyncStatuses();
+    refreshActiveLockscreen();
   }, []);
 
   useEffect(() => {
@@ -1021,6 +1091,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshAllRepositoriesSync,
         switchRepositoryChannel,
         getInstalledPackageHistory,
+        activeLockscreen,
+        applyLockscreen,
+        deactivateLockscreen,
+        refreshActiveLockscreen,
       }}
     >
       {children}

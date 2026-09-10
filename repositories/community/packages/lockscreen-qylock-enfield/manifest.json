@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/enfield-poster.jpg",
     "preview_video": "assets/lockscreens/enfield-preview.mp4",
-    "preview_animated": "assets/lockscreens/enfield.gif"
-  }
+    "preview_animated": "assets/lockscreens/enfield.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

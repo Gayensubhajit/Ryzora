@@ -95,6 +95,8 @@
   "media": {
     "poster": "assets/lockscreens/material-you-poster.jpg",
     "preview_video": "assets/lockscreens/material-you-preview.mp4",
-    "preview_animated": "assets/lockscreens/material-you.gif"
-  }
+    "preview_animated": "assets/lockscreens/material-you.gif",
+    "media_type": "animated"
+  },
+  "media_type": "animated"
 }

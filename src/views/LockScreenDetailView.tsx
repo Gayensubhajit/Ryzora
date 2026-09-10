@@ -20,6 +20,9 @@ export const LockScreenDetailView: React.FC = () => {
     isInstalling,
     installProgress,
     setToast,
+    activeLockscreen,
+    applyLockscreen,
+    deactivateLockscreen,
   } = useApp();
 
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
@@ -59,6 +62,54 @@ export const LockScreenDetailView: React.FC = () => {
     isInstalled && installedRecord
       ? parseFloat(selectedPackage.version) > parseFloat(installedRecord.version)
       : false;
+
+  const [isApplying, setIsApplying] = useState(false);
+
+  const pkgSlug = selectedPackage.id
+    .replace(/^lockscreen-qylock-/, "")
+    .replace(/^lockscreen-/, "");
+
+  const isQuickshellActive =
+    Boolean(activeLockscreen?.quickshell) &&
+    (activeLockscreen.quickshell === selectedPackage.id ||
+      activeLockscreen.quickshell === `lockscreen-qylock-${pkgSlug}` ||
+      activeLockscreen.quickshell === pkgSlug);
+
+  const isSddmActive =
+    Boolean(activeLockscreen?.sddm) &&
+    (activeLockscreen.sddm === selectedPackage.id ||
+      activeLockscreen.sddm === `lockscreen-qylock-${pkgSlug}` ||
+      activeLockscreen.sddm === pkgSlug ||
+      activeLockscreen.sddm === `ryzora-${pkgSlug}`);
+
+  const isActiveForTarget =
+    selectedTarget === "quickshell"
+      ? isQuickshellActive
+      : selectedTarget === "sddm"
+      ? isSddmActive
+      : isQuickshellActive && isSddmActive;
+
+  const handleApply = async () => {
+    setIsApplying(true);
+    try {
+      await applyLockscreen(selectedPackage.id, selectedTarget);
+    } catch {
+      // toast is handled in AppContext
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    setIsApplying(true);
+    try {
+      await deactivateLockscreen(selectedTarget);
+    } catch {
+      // toast is handled in AppContext
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   const handleClose = () => {
     setSelectedPackage(null);
@@ -138,6 +189,11 @@ export const LockScreenDetailView: React.FC = () => {
         selectedTarget={selectedTarget}
         onSelectTarget={setSelectedTarget}
         isSessionLockSupported={isSessionLockSupported}
+        isActive={isActiveForTarget}
+        activeTargets={{ quickshell: isQuickshellActive, sddm: isSddmActive }}
+        onApply={handleApply}
+        onDeactivate={handleDeactivate}
+        isApplying={isApplying}
       />
 
       {/* ── Prominent Compatibility / Safety Model Banner ── */}
@@ -167,6 +223,10 @@ export const LockScreenDetailView: React.FC = () => {
         selectedTarget={selectedTarget}
         onInstall={handleInstall}
         onPreview={handleOpenPreview}
+        isActive={isActiveForTarget}
+        onApply={handleApply}
+        onDeactivate={handleDeactivate}
+        isApplying={isApplying}
       />
 
       {/* ── Fullscreen Lightbox Image Viewer ── */}

@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/pixel-cyberpunk-poster.jpg",
     "preview_video": "assets/lockscreens/pixel-cyberpunk-preview.mp4",
-    "preview_animated": "assets/lockscreens/pixel-cyberpunk.gif"
-  }
+    "preview_animated": "assets/lockscreens/pixel-cyberpunk.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

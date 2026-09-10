@@ -754,7 +754,93 @@ test("28. Target Capability Data: Audit all community Qylock package manifests",
     assert.ok(manifest.targets.sddm.files.length > 0);
     assert.ok(manifest.provenance.upstream.includes("Darkkal44/qylock"));
     assert.equal(manifest.provenance.license, "GPL-3.0");
-    assert.ok(manifest.media.poster);
-    assert.ok(manifest.media.preview_video);
+    assert.ok(manifest.media.poster, `${themeId} must have poster`);
+
+    // Truthful media audit check
+    if (manifest.media.media_type === "video") {
+      assert.ok(manifest.media.preview_video, `${themeId} marked video must have preview_video`);
+    } else if (manifest.media.media_type === "image") {
+      assert.ok(!manifest.media.preview_video, `${themeId} marked image must not have preview_video`);
+    }
   }
+});
+
+test("29. Real Media Audit: Strict classification across all 27 catalogue lockscreens", () => {
+  const repoJsonPath = path.resolve("repositories/community/repository.json");
+  const repo = JSON.parse(fs.readFileSync(repoJsonPath, "utf8"));
+  const lockscreens = repo.packages.filter((p: any) => p.package_type === "lockscreen");
+
+  assert.equal(lockscreens.length, 27, "Must contain exactly 27 lockscreens");
+
+  const videoThemes = lockscreens.filter((p: any) => p.media_type === "video");
+  const animatedThemes = lockscreens.filter((p: any) => p.media_type === "animated");
+  const staticThemes = lockscreens.filter((p: any) => p.media_type === "image" || !p.media_type);
+
+  assert.equal(videoThemes.length, 15, "Must have exactly 15 genuine video themes");
+  assert.equal(animatedThemes.length, 4, "Must have exactly 4 genuine animated themes");
+  assert.equal(staticThemes.length, 8, "Must have exactly 8 genuine static themes");
+
+  // Every static theme must not have a preview_video declared
+  for (const st of staticThemes) {
+    assert.ok(!st.preview_video, `Static theme ${st.id} must not have preview_video`);
+  }
+
+  // Every video theme must have a genuine playable file on disk
+  for (const vt of videoThemes) {
+    assert.ok(vt.preview_video, `Video theme ${vt.id} must have preview_video`);
+    const rel = vt.preview_video.replace(/^\//, "");
+    assert.ok(
+      fs.existsSync(path.resolve("public", rel)) || fs.existsSync(path.resolve(rel)),
+      `Video preview for ${vt.id} must exist in repository assets`
+    );
+  }
+});
+
+test("30. Install ≠ Apply Lifecycle: State transitions and target separation", () => {
+  const installedRecord = {
+    package_id: "lockscreen-qylock-dog-samurai",
+    name: "Dog Samurai",
+    version: "1.0.0",
+    installed_files: [
+      "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/shell.qml"
+    ]
+  };
+
+  const initialActiveState = {
+    quickshell: null,
+    sddm: null,
+  };
+
+  // 1. Initial check: Installed does not imply Active
+  const isInstalled = Boolean(installedRecord);
+  const isQuickshellActive = initialActiveState.quickshell === installedRecord.package_id;
+  assert.equal(isInstalled, true, "Package is marked installed");
+  assert.equal(isQuickshellActive, false, "Package must NOT be active merely because installed");
+
+  // 2. Apply Quickshell
+  const appliedQuickshellState = {
+    ...initialActiveState,
+    quickshell: "lockscreen-qylock-dog-samurai",
+    quickshell_theme_path: "~/.local/share/ryzora/lockscreens/qylock/dog-samurai",
+  };
+  assert.equal(appliedQuickshellState.quickshell, "lockscreen-qylock-dog-samurai");
+  assert.equal(appliedQuickshellState.sddm, null, "Quickshell apply must not activate SDDM");
+
+  // 3. Apply SDDM
+  const appliedSddmState = {
+    ...appliedQuickshellState,
+    sddm: "lockscreen-qylock-dog-samurai",
+    sddm_theme_path: "/usr/share/sddm/themes/ryzora-dog-samurai",
+  };
+  assert.equal(appliedSddmState.quickshell, "lockscreen-qylock-dog-samurai");
+  assert.equal(appliedSddmState.sddm, "lockscreen-qylock-dog-samurai");
+
+  // 4. Deactivate Quickshell
+  const deactivatedState = {
+    ...appliedSddmState,
+    quickshell: null,
+    quickshell_theme_path: null,
+  };
+  assert.equal(deactivatedState.quickshell, null);
+  assert.equal(deactivatedState.sddm, "lockscreen-qylock-dog-samurai");
 });

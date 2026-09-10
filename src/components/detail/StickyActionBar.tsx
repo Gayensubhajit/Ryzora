@@ -12,6 +12,10 @@ interface StickyActionBarProps {
   selectedTarget?: "quickshell" | "sddm" | "both";
   onInstall: () => void;
   onPreview: () => void;
+  isActive?: boolean;
+  onApply?: () => void;
+  onDeactivate?: () => void;
+  isApplying?: boolean;
 }
 
 export const StickyActionBar: React.FC<StickyActionBarProps> = ({
@@ -23,6 +27,10 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
   selectedTarget = "quickshell",
   onInstall,
   onPreview,
+  isActive = false,
+  onApply,
+  onDeactivate,
+  isApplying = false,
 }) => {
   const isBlocked = missingDependencies.length > 0;
   const isSddm = selectedTarget === "sddm" || (!packageItem.supports_session_lock && packageItem.supports_login_screen);
@@ -75,43 +83,78 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
           <span>Dry Run</span>
         </button>
 
-        <button
-          type="button"
-          disabled={isBlocked || isInstalling}
-          onClick={onInstall}
-          className={[
-            "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-sm",
-            isBlocked
-              ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
-              : isInstalled && !isUpdateAvailable
-              ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-              : isSddm || isBoth
-              ? "bg-amber-600 hover:bg-amber-500 text-white"
-              : "bg-[var(--rz-accent)] hover:bg-[var(--rz-accent)]/90 text-white",
-          ].join(" ")}
-        >
-          {isInstalling ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Installing...</span>
-            </>
-          ) : isUpdateAvailable ? (
-            <>
-              <DownloadCloud className="w-3.5 h-3.5" />
-              <span>{getButtonLabel()}</span>
-            </>
-          ) : isInstalled ? (
-            <>
-              <Check className="w-3.5 h-3.5" />
-              <span>Installed</span>
-            </>
-          ) : (
-            <>
-              <DownloadCloud className="w-3.5 h-3.5" />
-              <span>{getButtonLabel()}</span>
-            </>
-          )}
-        </button>
+        {!isInstalled ? (
+          <button
+            type="button"
+            disabled={isBlocked || isInstalling}
+            onClick={onInstall}
+            className={[
+              "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-sm",
+              isBlocked
+                ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
+                : isSddm || isBoth
+                ? "bg-amber-600 hover:bg-amber-500 text-white"
+                : "bg-[var(--rz-accent)] hover:bg-[var(--rz-accent)]/90 text-white",
+            ].join(" ")}
+          >
+            {isInstalling ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Installing...</span>
+              </>
+            ) : isUpdateAvailable ? (
+              <>
+                <DownloadCloud className="w-3.5 h-3.5" />
+                <span>{getButtonLabel()}</span>
+              </>
+            ) : (
+              <>
+                <DownloadCloud className="w-3.5 h-3.5" />
+                <span>{getButtonLabel()}</span>
+              </>
+            )}
+          </button>
+        ) : !isActive ? (
+          <button
+            type="button"
+            disabled={isApplying}
+            onClick={onApply}
+            className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-sm bg-emerald-600 hover:bg-emerald-500 text-white"
+          >
+            {isApplying ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Activating...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>{isBoth ? "Apply Both" : isSddm ? "Apply Login Screen" : "Apply Session Lock"}</span>
+              </>
+            )}
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600/25 border border-emerald-500/40 text-emerald-300 flex items-center gap-1 cursor-default select-none"
+            >
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Active</span>
+            </button>
+            {onDeactivate && (
+              <button
+                type="button"
+                disabled={isApplying}
+                onClick={onDeactivate}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 transition-all cursor-pointer select-none"
+              >
+                Deactivate
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

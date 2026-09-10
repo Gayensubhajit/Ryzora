@@ -40,5 +40,6 @@
       "target": "~/.config/swaylock/config",
       "description": "Swaylock Effects Blur configuration file."
     }
-  ]
+  ],
+  "media_type": "image"
 }

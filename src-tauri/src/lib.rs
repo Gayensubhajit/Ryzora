@@ -59,6 +59,9 @@ pub fn run() {
             installer::check_all_updates,
             installer::preview_package_update,
             installer::apply_package_update,
+            installer::get_active_lockscreen,
+            installer::apply_lockscreen,
+            installer::deactivate_lockscreen,
             // Repository & Catalog System (Phase 5 & 6)
             repository::get_catalog_packages,
             repository::refresh_catalog,

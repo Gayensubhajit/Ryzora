@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/winter-poster.jpg",
     "preview_video": "assets/lockscreens/winter-preview.mp4",
-    "preview_animated": "assets/lockscreens/winter.gif"
-  }
+    "preview_animated": "assets/lockscreens/winter.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

@@ -95,7 +95,7 @@
   },
   "media": {
     "poster": "assets/lockscreens/osu-poster.jpg",
-    "preview_video": "assets/lockscreens/osu-preview.mp4",
-    "preview_animated": "assets/lockscreens/osu.gif"
-  }
+    "media_type": "image"
+  },
+  "media_type": "image"
 }

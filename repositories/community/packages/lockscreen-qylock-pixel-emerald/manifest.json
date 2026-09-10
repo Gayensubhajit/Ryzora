@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/pixel-emerald-poster.jpg",
     "preview_video": "assets/lockscreens/pixel-emerald-preview.mp4",
-    "preview_animated": "assets/lockscreens/pixel-emerald.gif"
-  }
+    "preview_animated": "assets/lockscreens/pixel-emerald.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

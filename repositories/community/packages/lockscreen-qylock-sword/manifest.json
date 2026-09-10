@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/sword-poster.jpg",
     "preview_video": "assets/lockscreens/sword-preview.mp4",
-    "preview_animated": "assets/lockscreens/sword.gif"
-  }
+    "preview_animated": "assets/lockscreens/sword.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

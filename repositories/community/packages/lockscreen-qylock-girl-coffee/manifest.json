@@ -95,7 +95,7 @@
   },
   "media": {
     "poster": "assets/lockscreens/girl-coffee-poster.jpg",
-    "preview_video": "assets/lockscreens/girl-coffee-preview.mp4",
-    "preview_animated": "assets/lockscreens/girl-coffee.gif"
-  }
+    "media_type": "image"
+  },
+  "media_type": "image"
 }

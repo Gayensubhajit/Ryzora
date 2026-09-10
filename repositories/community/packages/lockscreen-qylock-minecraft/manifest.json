@@ -95,7 +95,7 @@
   },
   "media": {
     "poster": "assets/lockscreens/minecraft-poster.jpg",
-    "preview_video": "assets/lockscreens/minecraft-preview.mp4",
-    "preview_animated": "assets/lockscreens/minecraft.gif"
-  }
+    "media_type": "image"
+  },
+  "media_type": "image"
 }

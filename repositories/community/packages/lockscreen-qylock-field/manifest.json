@@ -95,7 +95,7 @@
   },
   "media": {
     "poster": "assets/lockscreens/field-poster.jpg",
-    "preview_video": "assets/lockscreens/field-preview.mp4",
-    "preview_animated": "assets/lockscreens/field.gif"
-  }
+    "media_type": "image"
+  },
+  "media_type": "image"
 }

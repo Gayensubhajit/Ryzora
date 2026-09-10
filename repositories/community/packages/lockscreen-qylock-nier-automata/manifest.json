@@ -95,6 +95,8 @@
   "media": {
     "poster": "assets/lockscreens/nier-poster.jpg",
     "preview_video": "assets/lockscreens/nier-preview.mp4",
-    "preview_animated": "assets/lockscreens/nier-automata.gif"
-  }
+    "preview_animated": "assets/lockscreens/nier-automata.gif",
+    "media_type": "animated"
+  },
+  "media_type": "animated"
 }

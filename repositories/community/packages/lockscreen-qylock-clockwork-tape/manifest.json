@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/clockwork-poster.jpg",
     "preview_video": "assets/lockscreens/clockwork-preview.mp4",
-    "preview_animated": "assets/lockscreens/clockwork.gif"
-  }
+    "preview_animated": "assets/lockscreens/clockwork.gif",
+    "media_type": "animated"
+  },
+  "media_type": "animated"
 }

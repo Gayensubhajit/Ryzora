@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/last-of-us-poster.jpg",
     "preview_video": "assets/lockscreens/last-of-us-preview.mp4",
-    "preview_animated": "assets/lockscreens/last-of-us.gif"
-  }
+    "preview_animated": "assets/lockscreens/last-of-us.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

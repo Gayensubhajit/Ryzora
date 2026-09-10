@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/genshin-poster.jpg",
     "preview_video": "assets/lockscreens/genshin-preview.mp4",
-    "preview_animated": "assets/lockscreens/genshin.gif"
-  }
+    "preview_animated": "assets/lockscreens/genshin.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

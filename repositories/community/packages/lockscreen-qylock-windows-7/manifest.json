@@ -95,7 +95,7 @@
   },
   "media": {
     "poster": "assets/lockscreens/windows-7-poster.jpg",
-    "preview_video": "assets/lockscreens/windows-7-preview.mp4",
-    "preview_animated": "assets/lockscreens/windows-7.gif"
-  }
+    "media_type": "image"
+  },
+  "media_type": "image"
 }

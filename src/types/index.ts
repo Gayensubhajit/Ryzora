@@ -1027,3 +1027,11 @@ export type Phase15CategoryId =
   | "notifications"
   | "collections"
   | "integrity";
+
+export interface ActiveLockscreenState {
+  quickshell?: string | null;
+  sddm?: string | null;
+  quickshell_theme_path?: string | null;
+  sddm_theme_path?: string | null;
+  last_applied_at?: number | null;
+}

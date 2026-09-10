@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/star-rail-poster.jpg",
     "preview_video": "assets/lockscreens/star-rail-preview.mp4",
-    "preview_animated": "assets/lockscreens/star-rail.gif"
-  }
+    "preview_animated": "assets/lockscreens/star-rail.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

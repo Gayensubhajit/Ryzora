@@ -37,5 +37,6 @@
       "target": "~/.config/hypr/hyprlock.conf",
       "description": "Hyprlock frosted overlay configuration."
     }
-  ]
+  ],
+  "media_type": "image"
 }

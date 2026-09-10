@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/dog-samurai-poster.jpg",
     "preview_video": "assets/lockscreens/dog-samurai-preview.mp4",
-    "preview_animated": "assets/lockscreens/dog-samurai.gif"
-  }
+    "preview_animated": "assets/lockscreens/dog-samurai.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

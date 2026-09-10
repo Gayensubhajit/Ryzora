@@ -95,7 +95,7 @@
   },
   "media": {
     "poster": "assets/lockscreens/ninja-gaiden-poster.jpg",
-    "preview_video": "assets/lockscreens/ninja-gaiden-preview.mp4",
-    "preview_animated": "assets/lockscreens/ninja-gaiden.gif"
-  }
+    "media_type": "image"
+  },
+  "media_type": "image"
 }

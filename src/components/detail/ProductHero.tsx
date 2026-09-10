@@ -37,6 +37,11 @@ interface ProductHeroProps {
   selectedTarget?: "quickshell" | "sddm" | "both";
   onSelectTarget?: (target: "quickshell" | "sddm" | "both") => void;
   isSessionLockSupported?: boolean;
+  isActive?: boolean;
+  activeTargets?: { quickshell: boolean; sddm: boolean };
+  onApply?: () => void;
+  onDeactivate?: () => void;
+  isApplying?: boolean;
 }
 
 export const ProductHero: React.FC<ProductHeroProps> = ({
@@ -54,8 +59,17 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   selectedTarget = "quickshell",
   onSelectTarget,
   isSessionLockSupported = true,
+  isActive = false,
+  activeTargets = { quickshell: false, sddm: false },
+  onApply,
+  onDeactivate,
+  isApplying = false,
 }) => {
   const [showAllTags, setShowAllTags] = useState(false);
+
+  const pkgSlug = packageItem.id
+    .replace(/^lockscreen-qylock-/, "")
+    .replace(/^lockscreen-/, "");
 
   const isDualTarget =
     Boolean(packageItem.supports_session_lock && packageItem.supports_login_screen);
@@ -329,7 +343,54 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
           )}
         </div>
 
-        {/* ── Primary Action Buttons ── */}
+        {/* Installed Destination & Status (Install ≠ Apply Lifecycle) */}
+        {isInstalled && (
+          <div className="p-2.5 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[11px] mb-3">
+            <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-[var(--rz-border-subtle)]">
+              <span className="text-[10px] font-mono text-[var(--rz-text-muted)] uppercase tracking-wider">
+                Target Status & Destination
+              </span>
+              <span className="flex items-center gap-1.5 font-mono text-[10px]">
+                <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                  <Check className="w-2.5 h-2.5" /> Installed
+                </span>
+                <span className="text-[var(--rz-text-muted)]">·</span>
+                {selectedTarget === "both" ? (
+                  <span>
+                    QS: {activeTargets?.quickshell ? <span className="text-emerald-400 font-bold">✓ Active</span> : <span className="text-amber-400">○ Inactive</span>} · SDDM: {activeTargets?.sddm ? <span className="text-emerald-400 font-bold">✓ Active</span> : <span className="text-amber-400">○ Inactive</span>}
+                  </span>
+                ) : isActive ? (
+                  <span className="text-emerald-400 font-bold">✓ Active</span>
+                ) : (
+                  <span className="text-amber-400">○ Inactive</span>
+                )}
+              </span>
+            </div>
+
+            {selectedTarget === "quickshell" && (
+              <div className="font-mono text-emerald-400 text-[10px] truncate" title={`~/.local/share/ryzora/lockscreens/qylock/${pkgSlug}/`}>
+                ~/.local/share/ryzora/lockscreens/qylock/{pkgSlug}/
+              </div>
+            )}
+            {selectedTarget === "sddm" && (
+              <div className="font-mono text-amber-400 text-[10px] truncate" title={`/usr/share/sddm/themes/ryzora-${pkgSlug}/`}>
+                /usr/share/sddm/themes/ryzora-{pkgSlug}/
+              </div>
+            )}
+            {selectedTarget === "both" && (
+              <div className="space-y-0.5 text-[10px] font-mono">
+                <div className="text-emerald-400 truncate">
+                  User: ~/.local/share/ryzora/lockscreens/qylock/{pkgSlug}/
+                </div>
+                <div className="text-amber-400 truncate">
+                  System: /usr/share/sddm/themes/ryzora-{pkgSlug}/
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Primary Action Buttons (Install vs Apply Lifecycle) ── */}
         <div className="flex items-center gap-2.5 pt-2 border-t border-[var(--rz-border-subtle)]">
           <button
             type="button"
@@ -340,43 +401,78 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             <span>Dry Run Preview</span>
           </button>
 
-          <button
-            type="button"
-            disabled={isBlocked || isInstalling}
-            onClick={onInstall}
-            className={[
-              "flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-md",
-              isBlocked
-                ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
-                : isInstalled && !isUpdateAvailable
-                ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                : (selectedTarget === "sddm" || selectedTarget === "both")
-                ? "bg-amber-600 hover:bg-amber-500 text-white"
-                : "bg-[var(--rz-accent)] hover:bg-[var(--rz-accent)]/90 text-white",
-            ].join(" ")}
-          >
-            {isInstalling ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Installing...</span>
-              </>
-            ) : isUpdateAvailable ? (
-              <>
-                <DownloadCloud className="w-3.5 h-3.5" />
-                <span>Update</span>
-              </>
-            ) : isInstalled ? (
-              <>
-                <Check className="w-3.5 h-3.5" />
-                <span>Installed</span>
-              </>
-            ) : (
-              <>
-                <DownloadCloud className="w-3.5 h-3.5" />
-                <span>{getActionLabel()}</span>
-              </>
-            )}
-          </button>
+          {!isInstalled ? (
+            <button
+              type="button"
+              disabled={isBlocked || isInstalling}
+              onClick={onInstall}
+              className={[
+                "flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-md",
+                isBlocked
+                  ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
+                  : (selectedTarget === "sddm" || selectedTarget === "both")
+                  ? "bg-amber-600 hover:bg-amber-500 text-white"
+                  : "bg-[var(--rz-accent)] hover:bg-[var(--rz-accent)]/90 text-white",
+              ].join(" ")}
+            >
+              {isInstalling ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Installing...</span>
+                </>
+              ) : isUpdateAvailable ? (
+                <>
+                  <DownloadCloud className="w-3.5 h-3.5" />
+                  <span>Update</span>
+                </>
+              ) : (
+                <>
+                  <DownloadCloud className="w-3.5 h-3.5" />
+                  <span>{getActionLabel()}</span>
+                </>
+              )}
+            </button>
+          ) : !isActive ? (
+            <button
+              type="button"
+              disabled={isApplying}
+              onClick={onApply}
+              className="flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-md bg-emerald-600 hover:bg-emerald-500 text-white"
+            >
+              {isApplying ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Activating...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{selectedTarget === "both" ? "Apply Both Targets" : selectedTarget === "sddm" ? "Apply Login Screen" : "Apply Session Lock"}</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <div className="flex-1 flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled
+                className="flex-1 py-2 rounded-xl text-xs font-bold bg-emerald-600/25 border border-emerald-500/40 text-emerald-300 flex items-center justify-center gap-1.5 cursor-default select-none"
+              >
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Active</span>
+              </button>
+              {onDeactivate && (
+                <button
+                  type="button"
+                  disabled={isApplying}
+                  onClick={onDeactivate}
+                  className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 transition-all cursor-pointer select-none"
+                >
+                  Deactivate
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Warning if installation is blocked */}

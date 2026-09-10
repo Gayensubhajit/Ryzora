@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/pixel-coffee-poster.jpg",
     "preview_video": "assets/lockscreens/pixel-coffee-preview.mp4",
-    "preview_animated": "assets/lockscreens/pixel-coffee.gif"
-  }
+    "preview_animated": "assets/lockscreens/pixel-coffee.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

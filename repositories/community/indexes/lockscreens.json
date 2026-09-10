@@ -36,7 +36,8 @@
       "featured": false,
       "trending": false,
       "rating": 4.75,
-      "downloads": 2840
+      "downloads": 2840,
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-dog-samurai",
@@ -92,7 +93,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/dog-samurai"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-clockwork-tape",
@@ -148,7 +150,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/clockwork/tape"
-      }
+      },
+      "media_type": "animated"
     },
     {
       "id": "lockscreen-qylock-nier-automata",
@@ -203,7 +206,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/nier-automata"
-      }
+      },
+      "media_type": "animated"
     },
     {
       "id": "lockscreen-qylock-forest",
@@ -259,7 +263,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/forest"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-material-you",
@@ -314,7 +319,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/material-you"
-      }
+      },
+      "media_type": "animated"
     },
     {
       "id": "lockscreen-swaylock-blur",
@@ -349,7 +355,8 @@
       "featured": false,
       "trending": false,
       "rating": 4.72,
-      "downloads": 5400
+      "downloads": 5400,
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-genshin",
@@ -401,7 +408,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/Genshin"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-star-rail",
@@ -453,7 +461,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/star-rail"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-wuwa",
@@ -505,7 +514,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/wuwa"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-sword",
@@ -557,7 +567,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/sword"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-winter",
@@ -609,7 +620,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/winter"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-enfield",
@@ -661,7 +673,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/enfield"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-last-of-us",
@@ -713,7 +726,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/last-of-us"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-pixel-cyberpunk",
@@ -765,7 +779,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/pixel-cyberpunk"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-pixel-emerald",
@@ -817,7 +832,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/pixel-emerald"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-pixel-sakura",
@@ -869,7 +885,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/pixel-sakura"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-pixel-waterfall",
@@ -921,7 +938,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/pixel-waterfall"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-terraria",
@@ -973,7 +991,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/terraria"
-      }
+      },
+      "media_type": "animated"
     },
     {
       "id": "lockscreen-qylock-minecraft",
@@ -1012,7 +1031,6 @@
         "quickshell",
         "sddm"
       ],
-      "preview_video": "/assets/lockscreens/minecraft-preview.mp4",
       "preview_animated": "/assets/lockscreens/minecraft.gif",
       "source": {
         "type": "git",
@@ -1025,7 +1043,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/minecraft"
-      }
+      },
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-pixel-coffee",
@@ -1077,7 +1096,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/pixel-coffee"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-pixel-rainyroom",
@@ -1129,7 +1149,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/pixel-rainyroom"
-      }
+      },
+      "media_type": "video"
     },
     {
       "id": "lockscreen-qylock-windows-7",
@@ -1168,7 +1189,6 @@
         "quickshell",
         "sddm"
       ],
-      "preview_video": "/assets/lockscreens/windows-7-preview.mp4",
       "preview_animated": "/assets/lockscreens/windows-7.gif",
       "source": {
         "type": "git",
@@ -1181,7 +1201,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/windows_7"
-      }
+      },
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-field",
@@ -1220,7 +1241,6 @@
         "quickshell",
         "sddm"
       ],
-      "preview_video": "/assets/lockscreens/field-preview.mp4",
       "preview_animated": "/assets/lockscreens/field.gif",
       "source": {
         "type": "git",
@@ -1233,7 +1253,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/field"
-      }
+      },
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-girl-coffee",
@@ -1272,7 +1293,6 @@
         "quickshell",
         "sddm"
       ],
-      "preview_video": "/assets/lockscreens/girl-coffee-preview.mp4",
       "preview_animated": "/assets/lockscreens/girl-coffee.gif",
       "source": {
         "type": "git",
@@ -1285,7 +1305,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/girl-coffee"
-      }
+      },
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-ninja-gaiden",
@@ -1324,7 +1345,6 @@
         "quickshell",
         "sddm"
       ],
-      "preview_video": "/assets/lockscreens/ninja-gaiden-preview.mp4",
       "preview_animated": "/assets/lockscreens/ninja-gaiden.gif",
       "source": {
         "type": "git",
@@ -1337,7 +1357,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/ninja_gaiden"
-      }
+      },
+      "media_type": "image"
     },
     {
       "id": "lockscreen-qylock-osu",
@@ -1376,7 +1397,6 @@
         "quickshell",
         "sddm"
       ],
-      "preview_video": "/assets/lockscreens/osu-preview.mp4",
       "preview_animated": "/assets/lockscreens/osu.gif",
       "source": {
         "type": "git",
@@ -1389,7 +1409,8 @@
         "revision": "main",
         "license": "GPL-3.0",
         "path": "themes/osu"
-      }
+      },
+      "media_type": "image"
     }
   ]
 }

@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/wuwa-poster.jpg",
     "preview_video": "assets/lockscreens/wuwa-preview.mp4",
-    "preview_animated": "assets/lockscreens/wuwa.gif"
-  }
+    "preview_animated": "assets/lockscreens/wuwa.gif",
+    "media_type": "video"
+  },
+  "media_type": "video"
 }

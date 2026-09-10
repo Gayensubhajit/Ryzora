@@ -96,6 +96,8 @@
   "media": {
     "poster": "assets/lockscreens/terraria-poster.jpg",
     "preview_video": "assets/lockscreens/terraria-preview.mp4",
-    "preview_animated": "assets/lockscreens/terraria.gif"
-  }
+    "preview_animated": "assets/lockscreens/terraria.gif",
+    "media_type": "animated"
+  },
+  "media_type": "animated"
 }
