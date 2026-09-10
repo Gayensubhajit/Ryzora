@@ -1035,3 +1035,56 @@ export interface ActiveLockscreenState {
   sddm_theme_path?: string | null;
   last_applied_at?: number | null;
 }
+
+export interface LockscreenTargetCapability {
+  adapter: string;
+  name: string;
+  category: 'session_lock' | 'login_screen';
+  supported: boolean;
+  reason: string;
+  required_privilege: 'user' | 'administrator';
+  runtime_binary: string;
+  binary_installed: boolean;
+  protocol: string;
+}
+
+export interface ActiveLockscreenInfo {
+  session_lock_type: string;
+  session_lock_name: string | null;
+  session_lock_config: string | null;
+  login_screen_type: string;
+  login_screen_theme: string | null;
+  login_screen_config: string | null;
+  managed_by: string | null;
+}
+
+export interface HostCapabilities {
+  os: string;
+  distro_id: string;
+  distro_name: string;
+  desktop_environment: string;
+  compositor: string;
+  compositor_version?: string | null;
+  session_type: string;
+  session_lock_protocol: string;
+  display_manager: string;
+  display_manager_service?: string | null;
+  display_manager_theme?: string | null;
+  active_lockscreen: ActiveLockscreenInfo;
+  installed_commands: Record<string, boolean>;
+  supported_adapters: LockscreenTargetCapability[];
+}
+
+export interface LockscreenRuntimeStatus {
+  target: string;
+  adapter: string;
+  available: boolean;
+  installed: boolean;
+  applied: boolean;
+  active: boolean;
+  entrypoint?: string | null;
+  protocol: string;
+  active_package?: string | null;
+  launcher_path?: string | null;
+  error?: string | null;
+}

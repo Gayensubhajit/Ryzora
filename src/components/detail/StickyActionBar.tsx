@@ -135,14 +135,10 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600/25 border border-emerald-500/40 text-emerald-300 flex items-center gap-1 cursor-default select-none"
-            >
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Active</span>
-            </button>
+            <div className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm flex items-center gap-1 cursor-default select-none border border-emerald-400/30">
+              <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+              <span>✓ Active</span>
+            </div>
             {onDeactivate && (
               <button
                 type="button"

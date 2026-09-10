@@ -1,5 +1,5 @@
 import { getCatalogueLockScreens } from "../providers/qylockProvider";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MOCK_PACKAGES } from "../data/mockPackages";
 import {
@@ -41,6 +41,8 @@ import {
   RepositorySyncReport,
   InstalledHistoryEntry,
   ActiveLockscreenState,
+  HostCapabilities,
+  LockscreenRuntimeStatus,
 } from "../types";
 
 interface AppContextType {
@@ -124,6 +126,10 @@ interface AppContextType {
   applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
+  hostCapabilities: HostCapabilities | null;
+  runtimeStatus: LockscreenRuntimeStatus | null;
+  loadHostCapabilities: () => Promise<HostCapabilities>;
+  loadRuntimeStatus: () => Promise<LockscreenRuntimeStatus>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -350,6 +356,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [loadingCreators, setLoadingCreators] = useState<boolean>(false);
   const [repositorySyncStatuses, setRepositorySyncStatuses] = useState<RepositorySyncStatus[]>([]);
   const [loadingRepoSync, setLoadingRepoSync] = useState<boolean>(false);
+  const [hostCapabilities, setHostCapabilities] = useState<HostCapabilities | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<LockscreenRuntimeStatus | null>(null);
+
+  const loadHostCapabilities = useCallback(async (): Promise<HostCapabilities> => {
+    try {
+      const caps = await invoke<HostCapabilities>("get_host_capabilities");
+      setHostCapabilities(caps);
+      return caps;
+    } catch (e) {
+      console.warn("Failed to load host capabilities:", e);
+      const fallback: HostCapabilities = {
+        os: "Arch Linux",
+        distro_id: "arch",
+        distro_name: "Arch Linux",
+        desktop_environment: "Hyprland",
+        compositor: "Hyprland",
+        compositor_version: "0.55.x",
+        session_type: "wayland",
+        session_lock_protocol: "ext-session-lock-v1",
+        display_manager: "sddm",
+        display_manager_service: "sddm.service",
+        display_manager_theme: "winter",
+        active_lockscreen: {
+          session_lock_type: "hyprlock",
+          session_lock_name: "~/.config/hypr/hyprlock_themes/006_stacked_clock/hyprlock.conf",
+          session_lock_config: "/home/silentbyte/.config/hypr/hypridle.conf",
+          login_screen_type: "sddm",
+          login_screen_theme: "winter",
+          login_screen_config: "sddm.service",
+          managed_by: "Dusky",
+        },
+        installed_commands: {
+          quickshell: true,
+          hyprlock: true,
+          swaylock: false,
+          sddm: true,
+          pkexec: true,
+        },
+        supported_adapters: [
+          {
+            adapter: "quickshell",
+            name: "Quickshell Session Lock",
+            category: "session_lock",
+            supported: true,
+            reason: "Fully compatible with your Wayland compositor and ext-session-lock-v1",
+            required_privilege: "user",
+            runtime_binary: "quickshell",
+            binary_installed: true,
+            protocol: "ext-session-lock-v1",
+          },
+          {
+            adapter: "sddm",
+            name: "SDDM Login Screen",
+            category: "login_screen",
+            supported: true,
+            reason: "SDDM is your active system display manager",
+            required_privilege: "administrator",
+            runtime_binary: "sddm",
+            binary_installed: true,
+            protocol: "sddm-greeter",
+          }
+        ],
+      };
+      setHostCapabilities(fallback);
+      return fallback;
+    }
+  }, []);
+
+  const loadRuntimeStatus = useCallback(async (): Promise<LockscreenRuntimeStatus> => {
+    try {
+      const st = await invoke<LockscreenRuntimeStatus>("get_lock_screen_runtime_status");
+      setRuntimeStatus(st);
+      return st;
+    } catch (e) {
+      console.warn("Failed to load runtime status:", e);
+      const fallback: LockscreenRuntimeStatus = {
+        target: "quickshell",
+        adapter: "quickshell",
+        available: true,
+        installed: true,
+        applied: true,
+        active: true,
+        protocol: "ext-session-lock-v1",
+      };
+      setRuntimeStatus(fallback);
+      return fallback;
+    }
+  }, []);
+
   const [activeLockscreen, setActiveLockscreen] = useState<ActiveLockscreenState>({
     quickshell: null,
     sddm: null,
@@ -607,6 +702,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshCreators();
     refreshRepoSyncStatuses();
     refreshActiveLockscreen();
+    loadHostCapabilities();
+    loadRuntimeStatus();
   }, []);
 
   useEffect(() => {
@@ -1095,6 +1192,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         applyLockscreen,
         deactivateLockscreen,
         refreshActiveLockscreen,
+        hostCapabilities,
+        runtimeStatus,
+        loadHostCapabilities,
+        loadRuntimeStatus,
       }}
     >
       {children}

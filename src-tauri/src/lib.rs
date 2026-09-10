@@ -8,6 +8,7 @@ pub mod dependency;
 pub mod distribution;
 pub mod hub;
 pub mod ingestion;
+pub mod host;
 pub mod installer;
 pub mod integrity;
 pub mod manifest;
@@ -62,6 +63,8 @@ pub fn run() {
             installer::get_active_lockscreen,
             installer::apply_lockscreen,
             installer::deactivate_lockscreen,
+            installer::get_lock_screen_runtime_status,
+            host::get_host_capabilities,
             // Repository & Catalog System (Phase 5 & 6)
             repository::get_catalog_packages,
             repository::refresh_catalog,

@@ -23,6 +23,7 @@ export const LockScreenDetailView: React.FC = () => {
     activeLockscreen,
     applyLockscreen,
     deactivateLockscreen,
+    hostCapabilities,
   } = useApp();
 
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
@@ -45,7 +46,8 @@ export const LockScreenDetailView: React.FC = () => {
     systemInfo?.desktop_environment?.toLowerCase().includes("kde") ||
     systemInfo?.desktop_environment?.toLowerCase().includes("plasma");
   const isWayland = systemInfo?.session_type?.toLowerCase() === "wayland";
-  const isSessionLockSupported = isWayland && !isKde;
+  const qsAdapter = hostCapabilities?.supported_adapters?.find(a => a.adapter === "quickshell");
+  const isSessionLockSupported = qsAdapter ? qsAdapter.supported : (isWayland && !isKde);
 
   const [selectedTarget, setSelectedTarget] = useState<"quickshell" | "sddm" | "both">(() => {
     if (!isSessionLockSupported && selectedPackage.supports_login_screen) return "sddm";

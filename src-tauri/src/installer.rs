@@ -862,7 +862,7 @@ pub fn install_package_target_options_in_with_trust(
     if plan.requires_privilege && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
         let is_root = std::env::var("USER").map(|u| u == "root").unwrap_or(false);
         if !is_root {
-            return Err("Administrator privilege (pkexec) required to install SDDM system themes to /usr/share/sddm/themes/".to_string());
+            return Err("Administrator privilege required to install SDDM system themes to /usr/share/sddm/themes/".to_string());
         }
     }
 
@@ -1103,10 +1103,10 @@ pub fn install_package_target_options_in_with_trust(
                 }
             }
 
-            // Copy staged file to destination
+            // Copy staged file to destination (pure filesystem operation)
             if let Err(e) = fs::copy(staged_path, target_path) {
                 apply_error = Some(format!(
-                    "Failed to copy staged file to '{}': {}",
+                    "Failed to copy staged file to '{}' (write permissions required): {}",
                     target_str, e
                 ));
                 break;
@@ -2993,6 +2993,9 @@ pub fn apply_lockscreen_target_in(
         std::os::unix::fs::symlink(&qs_dir, &qs_symlink)
             .map_err(|e| format!("Failed to create quickshell active symlink: {}", e))?;
 
+        // Ensure Ryzora private quickshell runtime launcher exists
+        let _ = ensure_quickshell_runtime_in(home);
+
         state.quickshell = Some(package_id.to_string());
         state.quickshell_theme_path = Some(qs_dir.display().to_string());
     }
@@ -3106,6 +3109,248 @@ pub fn deactivate_lockscreen(target: String) -> Result<ActiveLockscreenState, St
     let state_dir = get_ryzora_state_dir();
     deactivate_lockscreen_target_in(&target, &home, &state_dir)
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LockscreenRuntimeStatus {
+    pub target: String,
+    pub adapter: String,
+    pub available: bool,
+    pub installed: bool,
+    pub applied: bool,
+    pub active: bool,
+    pub entrypoint: Option<String>,
+    pub protocol: String,
+    pub active_package: Option<String>,
+    pub launcher_path: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Ensures Ryzora's private Quickshell runtime exists at ~/.local/share/ryzora/integrations/quickshell/
+pub fn ensure_quickshell_runtime_in(home: &Path) -> Result<PathBuf, String> {
+    let runtime_dir = home.join(".local/share/ryzora/integrations/quickshell");
+    let shim_dir = runtime_dir.join("shim");
+    fs::create_dir_all(&shim_dir)
+        .map_err(|e| format!("Failed to create Ryzora quickshell integration directory: {}", e))?;
+
+    let lock_sh = runtime_dir.join("lock.sh");
+    let lock_shell_qml = runtime_dir.join("lock_shell.qml");
+    let shim_qml = shim_dir.join("SddmShim.qml");
+
+    if !lock_sh.exists() {
+        let lock_script = r#"#!/usr/bin/env bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ACTIVE_SYMLINK="$HOME/.local/share/ryzora/active/lockscreen/quickshell"
+
+if [ ! -d "$ACTIVE_SYMLINK" ]; then
+    echo "Ryzora: No active Quickshell lockscreen theme linked at $ACTIVE_SYMLINK" >&2
+    exit 1
+fi
+
+export QS_THEME_PATH="$ACTIVE_SYMLINK"
+export QML_XHR_ALLOW_FILE_READ=1
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}"
+
+# Kill any conflicting legacy lockers safely
+killall -9 hyprlock swaylock 2>/dev/null || true
+
+exec quickshell -p "$DIR/lock_shell.qml"
+"#;
+        fs::write(&lock_sh, lock_script)
+            .map_err(|e| format!("Failed to write Ryzora quickshell lock.sh: {}", e))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&lock_sh, fs::Permissions::from_mode(0o755));
+        }
+    }
+
+    if !lock_shell_qml.exists() {
+        let qml_content = r#"import QtQuick
+import Quickshell
+import Quickshell.Wayland
+import QtMultimedia
+import "./shim"
+
+ShellRoot {
+    id: shellRoot
+
+    property string themePath: Quickshell.env("QS_THEME_PATH") || ""
+    readonly property var sddm: sddmShim.sddm
+    readonly property var config: sddmShim.config
+    readonly property var userModel: sddmShim.userModel
+    readonly property var sessionModel: sddmShim.sessionModel
+    readonly property bool isWayland: Quickshell.env("XDG_SESSION_TYPE") === "wayland"
+    property bool authenticated: false
+    property bool sessionLocked: true
+
+    SddmShim {
+        id: sddmShim
+        themePath: shellRoot.themePath
+    }
+
+    Connections {
+        target: sddmShim.sddm
+        function onLoginSucceeded() {
+            shellRoot.authenticated = true
+            if (Quickshell.env("XDG_CURRENT_DESKTOP") === "Hyprland" || Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== "") {
+                Quickshell.execDetached(["hyprctl", "keyword", "misc:allow_session_lock_restore", "1"]);
+            }
+            Quickshell.execDetached(["loginctl", "unlock-session"]);
+            quitTimer.start()
+        }
+    }
+
+    Timer {
+        id: quitTimer
+        interval: 250
+        onTriggered: {
+            shellRoot.sessionLocked = false
+            Qt.quit()
+        }
+    }
+
+    Component {
+        id: themeComponent
+        Loader {
+            anchors.fill: parent
+            source: shellRoot.themePath !== "" ? ("file://" + shellRoot.themePath + "/Main.qml") : ""
+            onLoaded: {
+                if (item) item.forceActiveFocus()
+            }
+        }
+    }
+
+    Loader {
+        id: waylandLoader
+        active: shellRoot.isWayland
+        sourceComponent: Component {
+            WlSessionLock {
+                id: lock
+                locked: shellRoot.sessionLocked
+                surface: Component {
+                    WlSessionLockSurface {
+                        color: "black"
+                        Loader {
+                            anchors.fill: parent
+                            sourceComponent: themeComponent
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+        fs::write(&lock_shell_qml, qml_content)
+            .map_err(|e| format!("Failed to write Ryzora lock_shell.qml: {}", e))?;
+    }
+
+    if !shim_qml.exists() {
+        let shim_content = r#"import QtQuick
+import Quickshell
+import Quickshell.Services.Pam
+
+Item {
+    id: shim
+    property string themePath: ""
+    property var config: ({})
+    property bool configReady: true
+
+    property var userModel: ListModel {
+        Component.onCompleted: {
+            append({
+                name: Quickshell.env("USER") || "user",
+                realName: Quickshell.env("USER") || "User",
+                icon: "",
+                homeDir: "/home/" + (Quickshell.env("USER") || "user")
+            })
+        }
+    }
+
+    property var sessionModel: ListModel {
+        Component.onCompleted: append({ name: "Wayland", file: "wayland.desktop" })
+    }
+
+    property var sddm: QtObject {
+        signal loginFailed()
+        signal loginSucceeded()
+
+        function login(user, password, sessionIndex) {
+            pam.user = user;
+            pam.pendingPassword = password;
+            pam.start();
+        }
+    }
+
+    PamContext {
+        id: pam
+        property string pendingPassword: ""
+        onResponseRequiredChanged: {
+            if (responseRequired && pendingPassword !== "") {
+                respond(pendingPassword);
+                pendingPassword = "";
+            }
+        }
+        onCompleted: (result) => {
+            if (result === PamResult.Success) {
+                shim.sddm.loginSucceeded();
+            } else {
+                shim.sddm.loginFailed();
+            }
+        }
+    }
+}
+"#;
+        fs::write(&shim_qml, shim_content)
+            .map_err(|e| format!("Failed to write Ryzora SddmShim.qml: {}", e))?;
+    }
+
+    Ok(lock_sh)
+}
+
+pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> LockscreenRuntimeStatus {
+    let state = get_active_lockscreen_state_in(state_dir);
+    let (has_quickshell, _) = crate::system::check_binary("quickshell");
+    let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+    let launcher = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
+
+    let is_applied = state.quickshell.is_some() && active_symlink.exists();
+    let is_active = is_applied && has_quickshell;
+
+    let err = if !has_quickshell {
+        Some("Quickshell binary is not installed on this system".to_string())
+    } else if state.quickshell.is_none() {
+        Some("No session lock package is currently applied".to_string())
+    } else if !active_symlink.exists() {
+        Some("Active theme pointer is missing or unlinked".to_string())
+    } else {
+        None
+    };
+
+    LockscreenRuntimeStatus {
+        target: "quickshell".to_string(),
+        adapter: "quickshell".to_string(),
+        available: has_quickshell,
+        installed: state.quickshell.is_some(),
+        applied: is_applied,
+        active: is_active,
+        entrypoint: state.quickshell_theme_path.clone(),
+        protocol: "ext-session-lock-v1".to_string(),
+        active_package: state.quickshell,
+        launcher_path: if launcher.exists() { Some(launcher.to_string_lossy().to_string()) } else { None },
+        error: err,
+    }
+}
+
+#[tauri::command]
+pub fn get_lock_screen_runtime_status() -> LockscreenRuntimeStatus {
+    let home = get_home_dir();
+    let state_dir = get_ryzora_state_dir();
+    get_lock_screen_runtime_status_in(&home, &state_dir)
+}
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Comprehensive Unit & Integration Tests

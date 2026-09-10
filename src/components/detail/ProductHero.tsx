@@ -453,14 +453,10 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             </button>
           ) : (
             <div className="flex-1 flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled
-                className="flex-1 py-2 rounded-xl text-xs font-bold bg-emerald-600/25 border border-emerald-500/40 text-emerald-300 flex items-center justify-center gap-1.5 cursor-default select-none"
-              >
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Active</span>
-              </button>
+              <div className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 cursor-default select-none border border-emerald-400/30">
+                <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                <span>✓ Active</span>
+              </div>
               {onDeactivate && (
                 <button
                   type="button"
