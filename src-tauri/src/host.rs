@@ -31,6 +31,15 @@ pub struct ActiveLockscreenInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostProfileFixture {
+    pub id: String,
+    pub name: String,
+    pub is_live: bool,
+    pub description: String,
+    pub capabilities: HostCapabilities,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HostCapabilities {
     pub os: String,
     pub distro_id: String,
@@ -443,6 +452,449 @@ pub fn detect_host_capabilities_in(home: &Path) -> HostCapabilities {
     }
 }
 
+
+pub fn get_compatibility_lab_profiles_in(home: &Path) -> Vec<HostProfileFixture> {
+    let live_caps = detect_host_capabilities_in(home);
+
+    let mut profiles = Vec::new();
+
+    // 1. Live Host Profile (Real System Detection)
+    profiles.push(HostProfileFixture {
+        id: "live".to_string(),
+        name: "Live Host System".to_string(),
+        is_live: true,
+        description: "Real-time capability detection from your current machine session".to_string(),
+        capabilities: live_caps,
+    });
+
+    // 2. Simulated Profile: Ubuntu 24.04 LTS (GNOME / Mutter / GDM)
+    let mut ubuntu_cmds = HashMap::new();
+    ubuntu_cmds.insert("quickshell".to_string(), true);
+    ubuntu_cmds.insert("hyprlock".to_string(), false);
+    ubuntu_cmds.insert("swaylock".to_string(), false);
+    ubuntu_cmds.insert("sddm".to_string(), false);
+    ubuntu_cmds.insert("gdm".to_string(), true);
+    ubuntu_cmds.insert("lightdm".to_string(), false);
+    ubuntu_cmds.insert("pkexec".to_string(), true);
+
+    profiles.push(HostProfileFixture {
+        id: "simulated_ubuntu_gnome".to_string(),
+        name: "Simulated: Ubuntu 24.04 (GNOME 46 / Mutter / GDM)".to_string(),
+        is_live: false,
+        description: "Reference Ubuntu desktop with Mutter Wayland compositor and GDM display manager".to_string(),
+        capabilities: HostCapabilities {
+            os: "Ubuntu 24.04 LTS".to_string(),
+            distro_id: "ubuntu".to_string(),
+            distro_name: "Ubuntu 24.04 LTS".to_string(),
+            desktop_environment: "GNOME".to_string(),
+            compositor: "Mutter".to_string(),
+            compositor_version: Some("46.0".to_string()),
+            session_type: "wayland".to_string(),
+            session_lock_protocol: "compositor-native".to_string(),
+            display_manager: "gdm".to_string(),
+            display_manager_service: Some("gdm.service".to_string()),
+            display_manager_theme: None,
+            active_lockscreen: ActiveLockscreenInfo {
+                session_lock_type: "gnome-shell".to_string(),
+                session_lock_name: Some("GNOME Screen Shield".to_string()),
+                session_lock_config: None,
+                login_screen_type: "gdm".to_string(),
+                login_screen_theme: None,
+                login_screen_config: Some("/etc/gdm3/custom.conf".to_string()),
+                managed_by: Some("System Default".to_string()),
+            },
+            installed_commands: ubuntu_cmds,
+            supported_adapters: vec![
+                LockscreenTargetCapability {
+                    adapter: "quickshell".to_string(),
+                    name: "Quickshell Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: false,
+                    reason: "Desktop compositor 'Mutter' does not support ext-session-lock-v1 with Quickshell (Mutter and KWin use compositor-native lockscreens)".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "quickshell".to_string(),
+                    binary_installed: true,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "hyprlock".to_string(),
+                    name: "Hyprlock Native Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: false,
+                    reason: "hyprlock requires the Hyprland compositor".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "hyprlock".to_string(),
+                    binary_installed: false,
+                    protocol: "compositor-native".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "swaylock".to_string(),
+                    name: "Swaylock Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: false,
+                    reason: "swaylock binary is not installed on this system".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "swaylock".to_string(),
+                    binary_installed: false,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "sddm".to_string(),
+                    name: "SDDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "Your system uses GDM as its active display manager. SDDM themes cannot be applied to GDM.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "sddm".to_string(),
+                    binary_installed: false,
+                    protocol: "sddm-greeter".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "gdm".to_string(),
+                    name: "GDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "GDM is your active display manager, but Qylock does not provide GDM packages (only SDDM login screens). Ryzora protects GDM configuration from being modified.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "gdm".to_string(),
+                    binary_installed: true,
+                    protocol: "gdm-shell".to_string(),
+                },
+            ],
+        },
+    });
+
+    // 3. Simulated Profile: Fedora 40 (KDE Plasma 6 / KWin / SDDM)
+    let mut fedora_cmds = HashMap::new();
+    fedora_cmds.insert("quickshell".to_string(), true);
+    fedora_cmds.insert("hyprlock".to_string(), false);
+    fedora_cmds.insert("swaylock".to_string(), false);
+    fedora_cmds.insert("sddm".to_string(), true);
+    fedora_cmds.insert("gdm".to_string(), false);
+    fedora_cmds.insert("lightdm".to_string(), false);
+    fedora_cmds.insert("pkexec".to_string(), true);
+
+    profiles.push(HostProfileFixture {
+        id: "simulated_fedora_kde".to_string(),
+        name: "Simulated: Fedora 40 (KDE Plasma 6 / KWin / SDDM)".to_string(),
+        is_live: false,
+        description: "Reference KDE Plasma desktop with KWin compositor and SDDM display manager".to_string(),
+        capabilities: HostCapabilities {
+            os: "Fedora Linux 40".to_string(),
+            distro_id: "fedora".to_string(),
+            distro_name: "Fedora Linux 40 (Workstation Edition)".to_string(),
+            desktop_environment: "KDE Plasma".to_string(),
+            compositor: "KWin".to_string(),
+            compositor_version: Some("6.1.0".to_string()),
+            session_type: "wayland".to_string(),
+            session_lock_protocol: "compositor-native".to_string(),
+            display_manager: "sddm".to_string(),
+            display_manager_service: Some("sddm.service".to_string()),
+            display_manager_theme: Some("breeze".to_string()),
+            active_lockscreen: ActiveLockscreenInfo {
+                session_lock_type: "kscreenlocker".to_string(),
+                session_lock_name: Some("Plasma Screen Locker".to_string()),
+                session_lock_config: None,
+                login_screen_type: "sddm".to_string(),
+                login_screen_theme: Some("breeze".to_string()),
+                login_screen_config: Some("/etc/sddm.conf".to_string()),
+                managed_by: Some("System Default".to_string()),
+            },
+            installed_commands: fedora_cmds,
+            supported_adapters: vec![
+                LockscreenTargetCapability {
+                    adapter: "quickshell".to_string(),
+                    name: "Quickshell Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: false,
+                    reason: "Desktop compositor 'KWin' does not support ext-session-lock-v1 with Quickshell (Mutter and KWin use compositor-native lockscreens)".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "quickshell".to_string(),
+                    binary_installed: true,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "sddm".to_string(),
+                    name: "SDDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: true,
+                    reason: "SDDM is your active system display manager (requires administrator elevation to install system theme)".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "sddm".to_string(),
+                    binary_installed: true,
+                    protocol: "sddm-greeter".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "gdm".to_string(),
+                    name: "GDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "GDM is not active as your system display manager.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "gdm".to_string(),
+                    binary_installed: false,
+                    protocol: "gdm-shell".to_string(),
+                },
+            ],
+        },
+    });
+
+    // 4. Simulated Profile: Arch Linux (Hyprland / SDDM)
+    let mut arch_cmds = HashMap::new();
+    arch_cmds.insert("quickshell".to_string(), true);
+    arch_cmds.insert("hyprlock".to_string(), true);
+    arch_cmds.insert("swaylock".to_string(), true);
+    arch_cmds.insert("sddm".to_string(), true);
+    arch_cmds.insert("gdm".to_string(), false);
+    arch_cmds.insert("lightdm".to_string(), false);
+    arch_cmds.insert("pkexec".to_string(), true);
+
+    profiles.push(HostProfileFixture {
+        id: "simulated_arch_hyprland".to_string(),
+        name: "Simulated: Arch Linux (Hyprland / SDDM)".to_string(),
+        is_live: false,
+        description: "Reference dynamic tiling desktop with Hyprland compositor, ext-session-lock-v1, and SDDM".to_string(),
+        capabilities: HostCapabilities {
+            os: "Arch Linux".to_string(),
+            distro_id: "arch".to_string(),
+            distro_name: "Arch Linux".to_string(),
+            desktop_environment: "Hyprland".to_string(),
+            compositor: "Hyprland".to_string(),
+            compositor_version: Some("0.55.x".to_string()),
+            session_type: "wayland".to_string(),
+            session_lock_protocol: "ext-session-lock-v1".to_string(),
+            display_manager: "sddm".to_string(),
+            display_manager_service: Some("sddm.service".to_string()),
+            display_manager_theme: Some("winter".to_string()),
+            active_lockscreen: ActiveLockscreenInfo {
+                session_lock_type: "hyprlock".to_string(),
+                session_lock_name: Some("hyprlock.conf".to_string()),
+                session_lock_config: Some("~/.config/hypr/hypridle.conf".to_string()),
+                login_screen_type: "sddm".to_string(),
+                login_screen_theme: Some("winter".to_string()),
+                login_screen_config: Some("/etc/sddm.conf.d/zz-ryzora-theme.conf".to_string()),
+                managed_by: Some("Dusky".to_string()),
+            },
+            installed_commands: arch_cmds,
+            supported_adapters: vec![
+                LockscreenTargetCapability {
+                    adapter: "quickshell".to_string(),
+                    name: "Quickshell Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: true,
+                    reason: "Fully compatible with your Wayland compositor, ext-session-lock-v1, and PAM authentication".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "quickshell".to_string(),
+                    binary_installed: true,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "hyprlock".to_string(),
+                    name: "Hyprlock Native Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: true,
+                    reason: "Native Hyprland lockscreen runtime available".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "hyprlock".to_string(),
+                    binary_installed: true,
+                    protocol: "compositor-native".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "swaylock".to_string(),
+                    name: "Swaylock Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: true,
+                    reason: "Wayland swaylock session lock runtime available".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "swaylock".to_string(),
+                    binary_installed: true,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "sddm".to_string(),
+                    name: "SDDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: true,
+                    reason: "SDDM is your active system display manager (requires administrator elevation to install system theme)".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "sddm".to_string(),
+                    binary_installed: true,
+                    protocol: "sddm-greeter".to_string(),
+                },
+            ],
+        },
+    });
+
+    // 5. Simulated Profile: Arch Linux (Sway / GDM)
+    let mut sway_cmds = HashMap::new();
+    sway_cmds.insert("quickshell".to_string(), true);
+    sway_cmds.insert("hyprlock".to_string(), false);
+    sway_cmds.insert("swaylock".to_string(), true);
+    sway_cmds.insert("sddm".to_string(), false);
+    sway_cmds.insert("gdm".to_string(), true);
+    sway_cmds.insert("lightdm".to_string(), false);
+    sway_cmds.insert("pkexec".to_string(), true);
+
+    profiles.push(HostProfileFixture {
+        id: "simulated_arch_sway".to_string(),
+        name: "Simulated: Arch Linux (Sway / GDM)".to_string(),
+        is_live: false,
+        description: "Reference Sway compositor desktop running with GDM display manager".to_string(),
+        capabilities: HostCapabilities {
+            os: "Arch Linux".to_string(),
+            distro_id: "arch".to_string(),
+            distro_name: "Arch Linux".to_string(),
+            desktop_environment: "Sway".to_string(),
+            compositor: "Sway".to_string(),
+            compositor_version: Some("1.9".to_string()),
+            session_type: "wayland".to_string(),
+            session_lock_protocol: "ext-session-lock-v1".to_string(),
+            display_manager: "gdm".to_string(),
+            display_manager_service: Some("gdm.service".to_string()),
+            display_manager_theme: None,
+            active_lockscreen: ActiveLockscreenInfo {
+                session_lock_type: "swaylock".to_string(),
+                session_lock_name: Some("swaylock".to_string()),
+                session_lock_config: None,
+                login_screen_type: "gdm".to_string(),
+                login_screen_theme: None,
+                login_screen_config: None,
+                managed_by: Some("System Default".to_string()),
+            },
+            installed_commands: sway_cmds,
+            supported_adapters: vec![
+                LockscreenTargetCapability {
+                    adapter: "quickshell".to_string(),
+                    name: "Quickshell Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: true,
+                    reason: "Fully compatible with your Wayland compositor, ext-session-lock-v1, and PAM authentication".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "quickshell".to_string(),
+                    binary_installed: true,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "swaylock".to_string(),
+                    name: "Swaylock Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: true,
+                    reason: "Wayland swaylock session lock runtime available".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "swaylock".to_string(),
+                    binary_installed: true,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "sddm".to_string(),
+                    name: "SDDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "Your system uses GDM as its active display manager. SDDM themes cannot be applied to GDM.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "sddm".to_string(),
+                    binary_installed: false,
+                    protocol: "sddm-greeter".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "gdm".to_string(),
+                    name: "GDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "GDM is your active display manager, but Qylock does not provide GDM packages (only SDDM login screens). Ryzora protects GDM configuration from being modified.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "gdm".to_string(),
+                    binary_installed: true,
+                    protocol: "gdm-shell".to_string(),
+                },
+            ],
+        },
+    });
+
+    // 6. Simulated Profile: Debian 12 (X11 / LightDM / XFCE)
+    let mut debian_cmds = HashMap::new();
+    debian_cmds.insert("quickshell".to_string(), false);
+    debian_cmds.insert("hyprlock".to_string(), false);
+    debian_cmds.insert("swaylock".to_string(), false);
+    debian_cmds.insert("sddm".to_string(), false);
+    debian_cmds.insert("gdm".to_string(), false);
+    debian_cmds.insert("lightdm".to_string(), true);
+    debian_cmds.insert("pkexec".to_string(), true);
+
+    profiles.push(HostProfileFixture {
+        id: "simulated_debian_x11".to_string(),
+        name: "Simulated: Debian 12 (X11 / LightDM / XFCE)".to_string(),
+        is_live: false,
+        description: "Reference legacy X11 desktop environment with LightDM display manager".to_string(),
+        capabilities: HostCapabilities {
+            os: "Debian GNU/Linux 12 (bookworm)".to_string(),
+            distro_id: "debian".to_string(),
+            distro_name: "Debian GNU/Linux 12 (bookworm)".to_string(),
+            desktop_environment: "XFCE".to_string(),
+            compositor: "xfwm4".to_string(),
+            compositor_version: None,
+            session_type: "x11".to_string(),
+            session_lock_protocol: "unavailable".to_string(),
+            display_manager: "lightdm".to_string(),
+            display_manager_service: Some("lightdm.service".to_string()),
+            display_manager_theme: None,
+            active_lockscreen: ActiveLockscreenInfo {
+                session_lock_type: "xflock4".to_string(),
+                session_lock_name: Some("xflock4".to_string()),
+                session_lock_config: None,
+                login_screen_type: "lightdm".to_string(),
+                login_screen_theme: None,
+                login_screen_config: Some("/etc/lightdm/lightdm.conf".to_string()),
+                managed_by: Some("System Default".to_string()),
+            },
+            installed_commands: debian_cmds,
+            supported_adapters: vec![
+                LockscreenTargetCapability {
+                    adapter: "quickshell".to_string(),
+                    name: "Quickshell Session Lock".to_string(),
+                    category: "session_lock".to_string(),
+                    supported: false,
+                    reason: "Quickshell lockscreen requires a Wayland session with ext-session-lock-v1 protocol".to_string(),
+                    required_privilege: "user".to_string(),
+                    runtime_binary: "quickshell".to_string(),
+                    binary_installed: false,
+                    protocol: "ext-session-lock-v1".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "sddm".to_string(),
+                    name: "SDDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "Your system uses LightDM as its active display manager. SDDM themes cannot be applied to LightDM.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "sddm".to_string(),
+                    binary_installed: false,
+                    protocol: "sddm-greeter".to_string(),
+                },
+                LockscreenTargetCapability {
+                    adapter: "lightdm".to_string(),
+                    name: "LightDM Login Screen".to_string(),
+                    category: "login_screen".to_string(),
+                    supported: false,
+                    reason: "LightDM is your active display manager, but Qylock does not provide LightDM greeter packages. Ryzora protects LightDM configuration from being modified.".to_string(),
+                    required_privilege: "administrator".to_string(),
+                    runtime_binary: "lightdm".to_string(),
+                    binary_installed: true,
+                    protocol: "lightdm-greeter".to_string(),
+                },
+            ],
+        },
+    });
+
+    profiles
+}
+
+#[tauri::command]
+pub fn get_compatibility_lab_profiles() -> Vec<HostProfileFixture> {
+    let home = crate::snapshot::get_home_dir();
+    get_compatibility_lab_profiles_in(&home)
+}
+
 #[tauri::command]
 pub fn get_host_capabilities() -> HostCapabilities {
     let home = crate::snapshot::get_home_dir();
@@ -823,5 +1275,72 @@ general {
             assert!(!report.desktop.is_empty());
             assert!(!report.display_server.is_empty());
         }
+    }
+
+    #[test]
+    fn test_get_compatibility_lab_profiles_returns_live_and_simulated_fixtures() {
+        let home = make_test_home();
+        let profiles = get_compatibility_lab_profiles_in(&home);
+        assert!(profiles.len() >= 6, "Expected at least 6 lab profiles");
+
+        // 1. Live profile
+        let live = profiles.iter().find(|p| p.id == "live").expect("Live profile must exist");
+        assert!(live.is_live, "Live profile must be marked is_live: true");
+        assert_eq!(live.name, "Live Host System");
+
+        // 2. Simulated profiles must all be marked is_live: false
+        for sim in profiles.iter().filter(|p| p.id != "live") {
+            assert!(!sim.is_live, "Simulated profile {} must not be marked live", sim.id);
+            assert!(sim.name.starts_with("Simulated:"));
+        }
+
+        // 3. Ubuntu profile: Mutter + GDM -> Quickshell unsupported, SDDM unsupported, GDM protected
+        let ubuntu = profiles.iter().find(|p| p.id == "simulated_ubuntu_gnome").expect("Ubuntu profile must exist");
+        assert_eq!(ubuntu.capabilities.desktop_environment, "GNOME");
+        assert_eq!(ubuntu.capabilities.compositor, "Mutter");
+        assert_eq!(ubuntu.capabilities.display_manager, "gdm");
+        let u_qs = ubuntu.capabilities.supported_adapters.iter().find(|a| a.adapter == "quickshell").unwrap();
+        assert!(!u_qs.supported, "Quickshell must be unsupported on Mutter");
+        assert!(u_qs.reason.contains("Mutter"));
+        let u_sddm = ubuntu.capabilities.supported_adapters.iter().find(|a| a.adapter == "sddm").unwrap();
+        assert!(!u_sddm.supported, "SDDM must be unsupported on GDM");
+        assert!(u_sddm.reason.contains("GDM"));
+
+        // 4. Fedora profile: KWin + SDDM -> Quickshell unsupported, SDDM supported
+        let fedora = profiles.iter().find(|p| p.id == "simulated_fedora_kde").expect("Fedora profile must exist");
+        assert_eq!(fedora.capabilities.desktop_environment, "KDE Plasma");
+        assert_eq!(fedora.capabilities.compositor, "KWin");
+        assert_eq!(fedora.capabilities.display_manager, "sddm");
+        let f_qs = fedora.capabilities.supported_adapters.iter().find(|a| a.adapter == "quickshell").unwrap();
+        assert!(!f_qs.supported, "Quickshell must be unsupported on KWin");
+        let f_sddm = fedora.capabilities.supported_adapters.iter().find(|a| a.adapter == "sddm").unwrap();
+        assert!(f_sddm.supported, "SDDM must be supported on SDDM");
+
+        // 5. Arch Hyprland profile: Hyprland + SDDM -> Quickshell supported, SDDM supported
+        let arch = profiles.iter().find(|p| p.id == "simulated_arch_hyprland").expect("Arch profile must exist");
+        assert_eq!(arch.capabilities.compositor, "Hyprland");
+        assert_eq!(arch.capabilities.display_manager, "sddm");
+        let a_qs = arch.capabilities.supported_adapters.iter().find(|a| a.adapter == "quickshell").unwrap();
+        assert!(a_qs.supported, "Quickshell must be supported on Hyprland");
+        let a_sddm = arch.capabilities.supported_adapters.iter().find(|a| a.adapter == "sddm").unwrap();
+        assert!(a_sddm.supported, "SDDM must be supported on SDDM");
+
+        // 6. Arch Sway profile: Sway + GDM -> Quickshell supported, SDDM unsupported
+        let sway = profiles.iter().find(|p| p.id == "simulated_arch_sway").expect("Sway profile must exist");
+        assert_eq!(sway.capabilities.compositor, "Sway");
+        let s_qs = sway.capabilities.supported_adapters.iter().find(|a| a.adapter == "quickshell").unwrap();
+        assert!(s_qs.supported, "Quickshell must be supported on Sway (ext-session-lock-v1)");
+        let s_sddm = sway.capabilities.supported_adapters.iter().find(|a| a.adapter == "sddm").unwrap();
+        assert!(!s_sddm.supported, "SDDM must be unsupported on GDM");
+
+        // 7. Debian profile: X11 + LightDM -> Quickshell unsupported, SDDM unsupported
+        let debian = profiles.iter().find(|p| p.id == "simulated_debian_x11").expect("Debian profile must exist");
+        assert_eq!(debian.capabilities.session_type, "x11");
+        let d_qs = debian.capabilities.supported_adapters.iter().find(|a| a.adapter == "quickshell").unwrap();
+        assert!(!d_qs.supported);
+        let d_sddm = debian.capabilities.supported_adapters.iter().find(|a| a.adapter == "sddm").unwrap();
+        assert!(!d_sddm.supported);
+
+        let _ = fs::remove_dir_all(home);
     }
 }

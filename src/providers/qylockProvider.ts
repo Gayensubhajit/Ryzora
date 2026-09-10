@@ -46,6 +46,31 @@ export interface RawQylockTheme {
   config_schema?: LockscreenConfigSchema;
 }
 
+export interface TargetCheckStatus {
+  passed: boolean;
+  required: string;
+  detected: string;
+  detail: string;
+}
+
+export interface DetailedAdapterEvaluation {
+  adapter: "quickshell" | "sddm";
+  target_name: string;
+  category: "session_lock" | "login_screen";
+  supported: boolean;
+  package_provided: boolean;
+  reason: string;
+  system_changes_made: boolean;
+  checks: {
+    package_capability: TargetCheckStatus;
+    compositor_protocol: TargetCheckStatus;
+    runtime_binary: TargetCheckStatus;
+    authentication: TargetCheckStatus;
+    display_manager?: TargetCheckStatus;
+    privilege_boundary: TargetCheckStatus;
+  };
+}
+
 export interface TargetResolutionResult {
   can_install: boolean;
   requires_root: boolean;
@@ -57,6 +82,10 @@ export interface TargetResolutionResult {
   warnings: string[];
   session_lock_supported: boolean;
   login_screen_supported: boolean;
+  evaluations?: {
+    quickshell?: DetailedAdapterEvaluation;
+    sddm?: DetailedAdapterEvaluation;
+  };
 }
 
 /**
@@ -250,11 +279,21 @@ export function resolveLockscreenCapabilities(
     result.warnings.push("Quickshell lockscreen requires a Wayland session.");
   }
 
-  // Display Manager Check: SDDM themes cannot be applied to GDM
+  // Display Manager Check: SDDM themes can only be applied to SDDM
   if (isGdm) {
     result.login_screen_supported = false;
     result.warnings.push(
       "Your system uses GDM (GNOME Display Manager). Qylock SDDM themes cannot be installed into GDM."
+    );
+  } else if (displayManager === "lightdm") {
+    result.login_screen_supported = false;
+    result.warnings.push(
+      "Your system uses LightDM. Qylock SDDM themes cannot be installed into LightDM."
+    );
+  } else if (displayManager && displayManager !== "sddm") {
+    result.login_screen_supported = false;
+    result.warnings.push(
+      `Your system uses ${displayManager}. Qylock SDDM themes cannot be installed into this display manager.`
     );
   }
 
@@ -329,6 +368,166 @@ export function resolveLockscreenCapabilities(
       is_system: true,
     });
   }
+
+  // ── Detailed Adapter Evaluations for Compatibility Lab & Diagnostics ──
+  const qsHasManifest = Boolean(quickshellTarget);
+  const qsCompositorProtocolPassed = isWayland && !isKdePlasma && !isGnome;
+  const installedCmds = (systemInfo as any).installed_commands || {};
+  const qsBinaryPassed = installedCmds.quickshell !== false;
+  const hostAdapters = (systemInfo as any).supported_adapters as any[] | undefined;
+  const hostQsAdapter = hostAdapters?.find((a) => a.adapter === "quickshell");
+  const qsAuthPassed = hostQsAdapter
+    ? hostQsAdapter.reason?.toLowerCase().includes("pam")
+      ? hostQsAdapter.supported
+      : true
+    : true;
+
+  const qsSupported = qsHasManifest && result.session_lock_supported && qsBinaryPassed && qsAuthPassed;
+  let qsReason = "";
+  if (!qsHasManifest) {
+    qsReason = "Package does not provide a Quickshell session lock target.";
+  } else if (!isWayland) {
+    qsReason = "Session type is not Wayland. Quickshell requires a Wayland session with ext-session-lock-v1 protocol.";
+  } else if (isGnome) {
+    qsReason = "Compositor is Mutter (GNOME). Mutter lacks ext-session-lock-v1 protocol support for external lockers. No system changes were made.";
+  } else if (isKdePlasma) {
+    qsReason = "Compositor is KWin (KDE Plasma). KWin lacks ext-session-lock-v1 protocol support for external lockers. No system changes were made.";
+  } else if (!qsBinaryPassed) {
+    qsReason = "Quickshell binary is not installed on the host system.";
+  } else if (!qsAuthPassed) {
+    qsReason = "Host lacks compatible PAM authentication service for Quickshell unlock.";
+  } else {
+    qsReason = "Fully compatible with your Wayland compositor, ext-session-lock-v1 protocol, and PAM authentication.";
+  }
+
+  const qsEval: DetailedAdapterEvaluation = {
+    adapter: "quickshell",
+    target_name: "Session Lock (Quickshell)",
+    category: "session_lock",
+    supported: qsSupported,
+    package_provided: qsHasManifest,
+    reason: qsReason,
+    system_changes_made: false,
+    checks: {
+      package_capability: {
+        passed: qsHasManifest,
+        required: "targets.quickshell",
+        detected: qsHasManifest ? "Provided in manifest" : "Not provided",
+        detail: qsHasManifest ? "Package provides Quickshell QML entrypoint" : "No Quickshell target in package",
+      },
+      compositor_protocol: {
+        passed: qsCompositorProtocolPassed,
+        required: "ext-session-lock-v1",
+        detected: isGnome
+          ? "compositor-native (Mutter)"
+          : isKdePlasma
+          ? "compositor-native (KWin)"
+          : !isWayland
+          ? "X11 / None"
+          : "ext-session-lock-v1",
+        detail: qsCompositorProtocolPassed ? "Protocol supported by active compositor" : "Protocol not supported by active desktop",
+      },
+      runtime_binary: {
+        passed: qsBinaryPassed,
+        required: "quickshell",
+        detected: qsBinaryPassed ? "Installed / available" : "Not installed",
+        detail: qsBinaryPassed ? "Binary found in system PATH" : "quickshell binary missing",
+      },
+      authentication: {
+        passed: qsAuthPassed,
+        required: "PAM authentication service",
+        detected: qsAuthPassed ? "Compatible PAM service verified" : "Incompatible PAM service",
+        detail: qsAuthPassed ? "Host PAM service available for unlock" : "No compatible PAM service found",
+      },
+      privilege_boundary: {
+        passed: true,
+        required: "user",
+        detected: "user",
+        detail: "Runs unprivileged in user session (~/.local/share/ryzora/)",
+      },
+    },
+  };
+
+  const sddmHasManifest = Boolean(sddmTarget);
+  const sddmDmPassed =
+    displayManager === "sddm" ||
+    (!isGdm && displayManager !== "lightdm" && (systemInfo as any).installed_commands?.sddm);
+  const sddmBinaryPassed = installedCmds.sddm !== false;
+  const sddmSupported = sddmHasManifest && result.login_screen_supported && sddmDmPassed;
+  let sddmReason = "";
+  if (!sddmHasManifest) {
+    sddmReason = "Package does not provide an SDDM login theme.";
+  } else if (isGdm) {
+    sddmReason =
+      "Package provides an SDDM login theme, but your system uses GDM (GNOME Display Manager). Qylock SDDM themes cannot be installed into GDM. No system changes were made.";
+  } else if (displayManager === "lightdm") {
+    sddmReason =
+      "Package provides an SDDM login theme, but your system uses LightDM. Qylock SDDM themes cannot be installed into LightDM. No system changes were made.";
+  } else if (!sddmDmPassed) {
+    sddmReason = `Active display manager is '${displayManager || "unknown"}', not SDDM. SDDM login themes cannot be applied. No system changes were made.`;
+  } else {
+    sddmReason =
+      "SDDM is your active system display manager. Theme installation requires administrator elevation (pkexec).";
+  }
+
+  const sddmEval: DetailedAdapterEvaluation = {
+    adapter: "sddm",
+    target_name: "Login Screen (SDDM)",
+    category: "login_screen",
+    supported: sddmSupported,
+    package_provided: sddmHasManifest,
+    reason: sddmReason,
+    system_changes_made: false,
+    checks: {
+      package_capability: {
+        passed: sddmHasManifest,
+        required: "targets.sddm",
+        detected: sddmHasManifest ? "Provided in manifest" : "Not provided",
+        detail: sddmHasManifest ? "Package provides SDDM theme files" : "No SDDM target in package",
+      },
+      compositor_protocol: {
+        passed: true,
+        required: "sddm-greeter",
+        detected: "sddm-greeter",
+        detail: "Display manager greeter protocol",
+      },
+      runtime_binary: {
+        passed: sddmBinaryPassed,
+        required: "sddm",
+        detected: sddmBinaryPassed ? "Installed" : "Not installed",
+        detail: sddmBinaryPassed ? "SDDM daemon/binary available" : "sddm binary missing",
+      },
+      authentication: {
+        passed: true,
+        required: "Display Manager Auth",
+        detected: "SDDM Greeter PAM",
+        detail: "Standard display manager greeter authentication",
+      },
+      display_manager: {
+        passed: sddmDmPassed,
+        required: "sddm",
+        detected: displayManager || "unknown",
+        detail: isGdm
+          ? "GDM active (incompatible with SDDM themes)"
+          : displayManager === "lightdm"
+          ? "LightDM active (incompatible)"
+          : sddmDmPassed
+          ? "SDDM is active"
+          : "SDDM is not active",
+      },
+      privilege_boundary: {
+        passed: true,
+        required: "administrator",
+        detected: "administrator (pkexec)",
+        detail: "Requires administrator elevation via Polkit to write /usr/share/sddm/ and /etc/sddm.conf.d/",
+      },
+    },
+  };
+
+  result.evaluations = {
+    quickshell: qsEval,
+    sddm: sddmEval,
+  };
 
   return result;
 }

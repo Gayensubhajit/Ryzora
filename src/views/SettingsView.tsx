@@ -17,7 +17,9 @@ import {
   Monitor,
   Sliders,
   Check,
+  FlaskConical,
 } from "lucide-react";
+import { useApp } from "../context/AppContext";
 import { useTheme, AppearanceMode, AccentColor, ACCENT_SWATCHES, ResolvedTheme } from "../theme";
 import { detectSystemTheme, getCachedSystemTheme } from "../theme/appearance";
 
@@ -41,6 +43,7 @@ export const SettingsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
+  const { setActiveCategory } = useApp();
 
   const {
     mode,
@@ -545,6 +548,33 @@ export const SettingsView: React.FC = () => {
           <div className="settings-note">
             <Shield className="w-3 h-3" />
             Transactional backups of directly modified files are always created to guarantee safe rollback, even when full system snapshots are disabled. Signature verification and trust enforcement remain strictly mandatory.
+          </div>
+        </section>
+        {/* ── Developer Tools ── */}
+        <section className="settings-section">
+          <h2>
+            <FlaskConical className="w-4 h-4 text-purple-400" />
+            Developer Diagnostics
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 ml-2">
+              DEV
+            </span>
+          </h2>
+
+          <div className="flex items-center justify-between gap-4 py-2">
+            <div>
+              <div className="text-xs font-semibold text-[var(--rz-text)]">Universal Linux Compatibility Lab</div>
+              <div className="text-[11px] text-[var(--rz-text-muted)] mt-0.5">
+                Inspect live hardware capabilities and simulate reference Linux environments (Ubuntu GNOME/GDM, Fedora KDE/SDDM, Arch, Debian) against concrete runtime adapters.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveCategory("compatibility-lab")}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[var(--rz-surface-elevated)] hover:bg-purple-500/20 border border-[var(--rz-border-subtle)] hover:border-purple-500/40 text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center gap-1.5 shrink-0"
+            >
+              <FlaskConical className="w-3.5 h-3.5 text-purple-400" />
+              <span>Launch Lab</span>
+            </button>
           </div>
         </section>
       </div>

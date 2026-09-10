@@ -15,6 +15,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
+  FlaskConical,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CategoryId } from "../types";
@@ -23,7 +24,7 @@ interface SidebarProps {
   onOpenAbout?: () => void;
 }
 
-type NavItem = { id: CategoryId; label: string; icon: React.ReactNode; badge?: number };
+type NavItem = { id: CategoryId; label: string; icon: React.ReactNode; badge?: number | string };
 
 export const Sidebar: React.FC<SidebarProps> = ({ onOpenAbout }) => {
   const {
@@ -62,6 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenAbout }) => {
     { id: "system",        label: "System",         icon: <Cpu className="w-4 h-4" /> },
     { id: "notifications", label: "Activity",       icon: <Bell className="w-4 h-4" /> },
     { id: "author",        label: "Pkg Creator",    icon: <PackagePlus className="w-4 h-4" /> },
+    { id: "compatibility-lab", label: "Compat Lab", icon: <FlaskConical className="w-4 h-4 text-purple-400" />, badge: "DEV" },
     { id: "settings",      label: "Settings",       icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -86,11 +88,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenAbout }) => {
           </span>
           {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
         </div>
-        {item.badge !== undefined && item.badge > 0 && (
+        {item.badge !== undefined && (
           sidebarCollapsed ? (
             <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[var(--rz-accent)] ring-2 ring-[var(--rz-sidebar-bg)]" />
           ) : (
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)] tabular-nums leading-none">
+            <span className={[
+              "px-1.5 py-0.5 rounded font-mono leading-none",
+              typeof item.badge === "string"
+                ? "text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase"
+                : "text-[10px] rounded-full bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)] tabular-nums"
+            ].join(" ")}>
               {item.badge}
             </span>
           )

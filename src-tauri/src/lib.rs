@@ -73,6 +73,7 @@ pub fn run() {
             sddm_helper::get_privileged_helper_status,
             sddm_helper::setup_privileged_helper,
             host::get_host_capabilities,
+            host::get_compatibility_lab_profiles,
             host::get_system_integration_report,
             // Repository & Catalog System (Phase 5 & 6)
             repository::get_catalog_packages,

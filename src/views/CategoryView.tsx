@@ -32,6 +32,7 @@ const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
   notifications: { title: "Activity", subtitle: "Persistent log of all Ryzora events" },
   collections: { title: "Collections", subtitle: "Saved package lists in .ryzlist format" },
   integrity: { title: "Integrity Health", subtitle: "Read-only verification of installed packages" },
+  "compatibility-lab": { title: "Compatibility Lab", subtitle: "Host capabilities and runtime adapter intersection visualizer" },
 };
 
 /** Categories that use the new art-forward dense store grid */

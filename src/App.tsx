@@ -17,6 +17,7 @@ import { SettingsView } from "./views/SettingsView";
 import { NotificationsView } from "./views/NotificationsView";
 import { CollectionsView } from "./views/CollectionsView";
 import { IntegrityView } from "./views/IntegrityView";
+import { CompatibilityLabView } from "./views/CompatibilityLabView";
 import { PackageDetailModal } from "./components/PackageDetailModal";
 import { LockScreenDetailView } from "./views/LockScreenDetailView";
 import { AboutModal } from "./components/AboutModal";
@@ -55,6 +56,8 @@ const MainLayout: React.FC = () => {
         return <CollectionsView />;
       case "integrity":
         return <IntegrityView />;
+      case "compatibility-lab":
+        return <CompatibilityLabView />;
       default:
         return <CategoryView />;
     }

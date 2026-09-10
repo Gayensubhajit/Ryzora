@@ -23,7 +23,8 @@ export type CategoryId =
   | "settings"
   | "notifications"
   | "collections"
-  | "integrity";
+  | "integrity"
+  | "compatibility-lab";
 
 export type DesktopEnvironment =
   | "hyprland"
@@ -1072,7 +1073,8 @@ export type Phase15CategoryId =
   | "settings"
   | "notifications"
   | "collections"
-  | "integrity";
+  | "integrity"
+  | "compatibility-lab";
 
 export interface ActiveLockscreenState {
   quickshell?: string | null;
@@ -1124,6 +1126,15 @@ export interface SystemIntegrationReport {
   confidence: "high" | "medium" | "low" | string;
   evidence: string[];
   warnings: string[];
+}
+
+
+export interface HostProfileFixture {
+  id: string;
+  name: string;
+  is_live: boolean;
+  description: string;
+  capabilities: HostCapabilities;
 }
 
 export interface HostCapabilities {

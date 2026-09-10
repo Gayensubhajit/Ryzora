@@ -553,8 +553,14 @@ pub fn generate_installation_plan_target_in_with_trust(
 
     // Display manager compatibility guard (Universal Linux Architecture)
     let (active_dm, _, _) = crate::host::detect_display_manager();
-    if (target == Some("sddm") || target == Some("both")) && active_dm == "gdm" && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
-        conflicts.push("Your system uses GDM as its active display manager. SDDM themes cannot be installed into GDM.".to_string());
+    if (target == Some("sddm") || target == Some("both")) && active_dm != "sddm" && !active_dm.is_empty() && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+        if active_dm == "gdm" {
+            conflicts.push("Your system uses GDM as its active display manager. SDDM themes cannot be installed into GDM.".to_string());
+        } else if active_dm == "lightdm" {
+            conflicts.push("Your system uses LightDM as its active display manager. SDDM themes cannot be installed into LightDM.".to_string());
+        } else {
+            conflicts.push(format!("Your system uses '{}' as its active display manager. SDDM themes cannot be installed into this display manager.", active_dm));
+        }
     }
 
     // Compatibility check (SDDM is a display manager greeter, not a user desktop session)
@@ -3527,8 +3533,8 @@ pub fn apply_lockscreen_target_in_with_config(
     // 2. SDDM target activation (privileged system integration)
     if target_norm == "sddm" || target_norm == "both" {
         let (active_dm, _, _) = crate::host::detect_display_manager();
-        if active_dm == "gdm" && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
-            return Err("Cannot apply SDDM theme: GDM is active as the system display manager. SDDM themes are not compatible with GDM.".to_string());
+        if active_dm != "sddm" && !active_dm.is_empty() && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+            return Err(format!("Cannot apply SDDM theme: '{}' is active as the system display manager. SDDM themes are only compatible with SDDM.", active_dm));
         }
         let helper_status = crate::sddm_helper::detect_privileged_helper_status();
         if !helper_status.installed {
