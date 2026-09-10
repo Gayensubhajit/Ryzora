@@ -5208,7 +5208,7 @@ mod tests {
         assert_eq!(prov.license, Some("GPL-3.0".to_string()));
     }
     #[test]
-    fn test_community_repository_catalogue_exposes_all_27_lockscreens() {
+    fn test_community_repository_catalogue_exposes_all_discovered_lockscreens() {
         let manager = create_default_manager();
         let packages = manager.list_all_packages().expect("list_all_packages failed");
         let lockscreens: Vec<_> = packages.into_iter().filter(|p| p.package_type == crate::manifest::PackageType::Lockscreen).collect();

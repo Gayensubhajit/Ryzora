@@ -93,7 +93,7 @@ test("Clean Machine Simulation: Complete catalogue, previews, and self-contained
   assert.ok(!allSerialized.includes("~/.config/qylock"));
 });
 
-test("Clean Machine Simulation: Community repository 27 lockscreens and activation lifecycle", () => {
+test("Clean Machine Simulation: Community repository discovered lockscreens and activation lifecycle", () => {
   const indexJsonPath = path.resolve("repositories/community/indexes/lockscreens.json");
   const index = JSON.parse(fs.readFileSync(indexJsonPath, "utf8"));
 

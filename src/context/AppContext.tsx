@@ -16,6 +16,7 @@ import {
   InstallResult,
   InstalledPackageRecord,
   ManifestValidationResult,
+  LockscreenTestResult,
   PackageItem,
   RepositorySourceConfig,
   RepositorySummary,
@@ -130,7 +131,7 @@ interface AppContextType {
   applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both", config?: Record<string, any>) => Promise<ActiveLockscreenState>;
   deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
-  testLockscreen: (packageId?: string, target?: string) => Promise<void>;
+  testLockscreen: (packageId?: string, target?: string, config?: Record<string, any>) => Promise<LockscreenTestResult>;
   checkConfigDrift: () => Promise<string | null>;
   privilegedHelperStatus: PrivilegedHelperStatus | null;
   isSettingUpHelper: boolean;
@@ -631,13 +632,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const testLockscreen = async (packageId?: string, target?: string): Promise<void> => {
+  const testLockscreen = async (packageId?: string, target?: string, config?: Record<string, any>): Promise<LockscreenTestResult> => {
     try {
-      await invoke("launch_lockscreen_test", { packageId, target });
+      const result = await invoke<LockscreenTestResult>("launch_lockscreen_test", { packageId, target, config });
+      const cfgEntries = config ? Object.entries(config) : [];
+      const configSummary = cfgEntries.length > 0
+        ? cfgEntries.map(([k, v]) => `${k}=${v}`).join(", ")
+        : "default config";
       setToast({
-        message: "Lockscreen test launched.",
+        message: `Test launched (${result?.target || target || "isolated"}) with [${configSummary}].`,
         type: "success",
       });
+      return result;
     } catch (e: any) {
       setToast({
         message: `Failed to launch lockscreen test: ${e?.message || e}`,

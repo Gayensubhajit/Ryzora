@@ -1199,3 +1199,11 @@ export interface PrivilegedHelperStatus {
   sha256?: string | null;
   error?: string | null;
 }
+
+export interface LockscreenTestResult {
+  success: boolean;
+  target: string;
+  test_runtime_dir: string;
+  tested_config: Record<string, any>;
+  message: string;
+}

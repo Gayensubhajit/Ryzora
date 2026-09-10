@@ -770,7 +770,7 @@ test("28. Target Capability Data: Audit all community Qylock package manifests",
   }
 });
 
-test("29. Real Media Audit: Strict classification across all 27 catalogue lockscreens", () => {
+test("29. Real Media Audit: Strict classification across all discovered catalogue lockscreens", () => {
   const repoJsonPath = path.resolve("repositories/community/repository.json");
   const repo = JSON.parse(fs.readFileSync(repoJsonPath, "utf8"));
   const lockscreens = repo.packages.filter((p: any) => p.package_type === "lockscreen");

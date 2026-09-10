@@ -3615,12 +3615,21 @@ pub fn deactivate_lockscreen(target: String) -> Result<ActiveLockscreenState, St
 /// Launch the lockscreen immediately for testing.
 /// If package_id is provided, tests that installed package in isolated test mode.
 /// If package_id is None, tests the currently applied lockscreen.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LockscreenTestResult {
+    pub success: bool,
+    pub target: String,
+    pub test_runtime_dir: String,
+    pub tested_config: std::collections::HashMap<String, serde_json::Value>,
+    pub message: String,
+}
+
 #[tauri::command]
 pub fn launch_lockscreen_test(
     package_id: Option<String>,
     target: Option<String>,
     config: Option<std::collections::HashMap<String, serde_json::Value>>,
-) -> Result<(), String> {
+) -> Result<LockscreenTestResult, String> {
     let home = get_home_dir();
     let state_dir = get_ryzora_state_dir();
     let installed_root = get_ryzora_installed_dir();
@@ -3694,90 +3703,102 @@ pub fn launch_lockscreen_test(
             }
         };
 
-        if is_sddm {
-            let sddm_dir = if sddm_theme_dir.exists() && sddm_theme_dir.join("Main.qml").exists() {
-                Some(sddm_theme_dir.clone())
+        let source_theme_dir = if is_sddm {
+            if sddm_theme_dir.exists() && sddm_theme_dir.join("Main.qml").exists() {
+                Some(sddm_theme_dir)
             } else {
-                record.as_ref().and_then(|r| {
-                    r.installed_files.iter().find_map(|f| {
-                        let p = PathBuf::from(f);
-                        if p.ends_with("Main.qml") && p.exists() && f.contains("sddm") {
-                            p.parent().map(|d| d.to_path_buf())
-                        } else {
-                            None
-                        }
-                    })
-                })
-            };
-
-            let theme_dir = match sddm_dir {
-                Some(d) => d,
-                None => {
-                    return Err(format!(
-                        "Package '{}' SDDM theme directory was not found at '{}'. Please install SDDM theme before testing.",
-                        pkg_id, sddm_theme_dir.display()
-                    ));
+                let repo_files = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .join("repositories/community/packages")
+                    .join(format!("lockscreen-qylock-{}", slug))
+                    .join("files");
+                if repo_files.exists() && repo_files.join("Main.qml").exists() {
+                    Some(repo_files)
+                } else {
+                    None
                 }
-            };
-
-            if let Some(ref cfg) = config {
-                let config_json_path = theme_dir.join("ryzora_config.json");
-                if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
-                    let _ = fs::write(&config_json_path, serialized);
-                }
-                let theme_conf_path = theme_dir.join("theme.conf");
-                let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
             }
-            crate::hypridle::launch_test_sddm_process(&theme_dir)
         } else {
-            // Session Lock (Quickshell)
-            let qs_dir = if qs_theme_dir.exists() && qs_theme_dir.join("Main.qml").exists() {
+            if qs_theme_dir.exists() && qs_theme_dir.join("Main.qml").exists() {
                 Some(qs_theme_dir)
             } else {
-                record.as_ref().and_then(|r| {
-                    r.installed_files.iter().find_map(|f| {
-                        let p = PathBuf::from(f);
-                        if p.ends_with("Main.qml") && p.exists() && !f.contains("sddm") {
-                            p.parent().map(|d| d.to_path_buf())
-                        } else {
-                            None
-                        }
-                    })
-                })
-            };
-
-            let theme_dir = match qs_dir {
-                Some(d) => d,
-                None => {
-                    // If SDDM theme exists, test SDDM rather than failing
-                    if sddm_theme_dir.exists() && sddm_theme_dir.join("Main.qml").exists() {
-                        return crate::hypridle::launch_test_sddm_process(&sddm_theme_dir);
-                    }
-                    return Err(format!(
-                        "Package '{}' is not installed for session lock. Please install the package before testing.",
-                        pkg_id
-                    ));
+                let repo_files = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .join("repositories/community/packages")
+                    .join(format!("lockscreen-qylock-{}", slug))
+                    .join("files");
+                if repo_files.exists() && repo_files.join("Main.qml").exists() {
+                    Some(repo_files)
+                } else {
+                    None
                 }
-            };
-
-            if let Some(ref cfg) = config {
-                let config_json_path = theme_dir.join("ryzora_config.json");
-                if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
-                    let _ = fs::write(&config_json_path, serialized);
-                }
-                let theme_conf_path = theme_dir.join("theme.conf");
-                let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
             }
+        };
 
-            let _ = ensure_quickshell_runtime_in(&home);
-            let lock_shell = home.join(".local/share/ryzora/integrations/quickshell/lock_shell.qml");
-            if lock_shell.exists() {
-                crate::hypridle::launch_test_qml_process(&lock_shell, &theme_dir)
-            } else {
-                let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
-                crate::hypridle::launch_test_process(&lock_sh)
+        let src_dir = match source_theme_dir {
+            Some(d) => d,
+            None => {
+                return Err(format!(
+                    "Theme runtime files for package \"{}\" were not found. Please install the package before testing.",
+                    pkg_id
+                ));
+            }
+        };
+
+        // Create isolated test runtime directory
+        let tmp_test_root = home.join(".local/share/ryzora/tmp/test");
+        let _ = fs::create_dir_all(&tmp_test_root);
+
+        // Prune test directories older than 1 hour
+        if let Ok(entries) = fs::read_dir(&tmp_test_root) {
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if let Ok(modified) = metadata.modified() {
+                        if let Ok(elapsed) = modified.elapsed() {
+                            if elapsed.as_secs() > 3600 {
+                                let _ = fs::remove_dir_all(entry.path());
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        let target_str = if is_sddm { "sddm" } else { "quickshell" };
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let isolated_test_dir = tmp_test_root.join(format!("{}-{}-{}", slug, target_str, timestamp));
+
+        crate::ingestion::copy_dir_all(&src_dir, &isolated_test_dir)?;
+
+        // Materialize the exact selected configuration into isolated test directory
+        if let Some(ref cfg) = config {
+            let config_json_path = isolated_test_dir.join("ryzora_config.json");
+            if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
+                let _ = fs::write(&config_json_path, serialized);
+            }
+            let theme_conf_path = isolated_test_dir.join("theme.conf");
+            let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
+        }
+
+        if is_sddm {
+            crate::hypridle::launch_test_sddm_process(&isolated_test_dir)?;
+        } else {
+            let lock_shell = ensure_quickshell_runtime_in(&home)?;
+            crate::hypridle::launch_test_qml_process(&lock_shell, &isolated_test_dir)?;
+        }
+
+        Ok(LockscreenTestResult {
+            success: true,
+            target: target_str.to_string(),
+            test_runtime_dir: isolated_test_dir.to_string_lossy().to_string(),
+            tested_config: config.clone().unwrap_or_default(),
+            message: format!("Test launched in isolated {} environment", if is_sddm { "SDDM" } else { "Quickshell" }),
+        })
     } else {
         let state = get_active_lockscreen_state_in(&state_dir);
         if let Some(ref sddm_pkg) = state.sddm {
@@ -3788,7 +3809,14 @@ pub fn launch_lockscreen_test(
                     .unwrap_or(sddm_pkg);
                 let sddm_theme_dir = PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug));
                 if sddm_theme_dir.exists() {
-                    return crate::hypridle::launch_test_sddm_process(&sddm_theme_dir);
+                    crate::hypridle::launch_test_sddm_process(&sddm_theme_dir)?;
+                    return Ok(LockscreenTestResult {
+                        success: true,
+                        target: "sddm".to_string(),
+                        test_runtime_dir: sddm_theme_dir.to_string_lossy().to_string(),
+                        tested_config: std::collections::HashMap::new(),
+                        message: "Active SDDM lockscreen test launched".to_string(),
+                    });
                 }
             }
         }
@@ -3798,12 +3826,16 @@ pub fn launch_lockscreen_test(
         }
         let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
         if !lock_sh.exists() {
-            return Err(format!(
-                "Ryzora lockscreen runtime not found at '{}'",
-                lock_sh.display()
-            ));
+            let _ = ensure_quickshell_runtime_in(&home);
         }
-        crate::hypridle::launch_test_process(&lock_sh)
+        crate::hypridle::launch_test_process(&lock_sh)?;
+        Ok(LockscreenTestResult {
+            success: true,
+            target: "quickshell".to_string(),
+            test_runtime_dir: lock_sh.to_string_lossy().to_string(),
+            tested_config: std::collections::HashMap::new(),
+            message: "Active Quickshell lockscreen test launched".to_string(),
+        })
     }
 }
 
@@ -3945,8 +3977,7 @@ exec quickshell -p "$DIR/lock_shell.qml"
         }
     }
 
-    if !lock_shell_qml.exists() {
-        let qml_content = r#"import QtQuick
+    let qml_content = r#"import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import QtMultimedia
@@ -3994,7 +4025,8 @@ ShellRoot {
         id: themeComponent
         Loader {
             anchors.fill: parent
-            source: shellRoot.themePath !== "" ? ("file://" + shellRoot.themePath + "/Main.qml") : ""
+            active: sddmShim.configReady
+            source: (sddmShim.configReady && shellRoot.themePath !== "") ? ("file://" + shellRoot.themePath + "/Main.qml") : ""
             onLoaded: {
                 if (item) item.forceActiveFocus()
             }
@@ -4022,12 +4054,9 @@ ShellRoot {
     }
 }
 "#;
-        fs::write(&lock_shell_qml, qml_content)
-            .map_err(|e| format!("Failed to write Ryzora lock_shell.qml: {}", e))?;
-    }
+    let _ = fs::write(&lock_shell_qml, qml_content);
 
-    if !shim_qml.exists() {
-        let shim_content = r#"import QtQuick
+    let shim_content = r##"import QtQuick
 import Quickshell
 import Quickshell.Services.Pam
 
@@ -4035,7 +4064,66 @@ Item {
     id: shim
     property string themePath: ""
     property var config: ({})
-    property bool configReady: true
+    property bool configReady: false
+
+    function reloadConfig() {
+        if (!themePath) {
+            configReady = true;
+            return;
+        }
+
+        var cleanPath = themePath.replace(/^file:\/\//, "");
+
+        // Try ryzora_config.json first
+        var xhrJson = new XMLHttpRequest();
+        xhrJson.open("GET", "file://" + cleanPath + "/ryzora_config.json");
+        xhrJson.onreadystatechange = function() {
+            if (xhrJson.readyState === XMLHttpRequest.DONE) {
+                if (xhrJson.status === 200 && xhrJson.responseText) {
+                    try {
+                        var parsed = JSON.parse(xhrJson.responseText);
+                        shim.config = parsed;
+                        shim.configReady = true;
+                        return;
+                    } catch(e) {}
+                }
+                loadThemeConf(cleanPath);
+            }
+        };
+        xhrJson.send();
+    }
+
+    function loadThemeConf(cleanPath) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "file://" + cleanPath + "/theme.conf");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var cfg = {};
+                if (xhr.status === 200 && xhr.responseText) {
+                    var lines = xhr.responseText.split("\n");
+                    for (var i = 0; i < lines.length; i++) {
+                        var l = lines[i].trim();
+                        if (l && !l.startsWith("#") && !l.startsWith("[")) {
+                            var eq = l.indexOf("=");
+                            if (eq > 0) {
+                                var k = l.substring(0, eq).trim();
+                                var v = l.substring(eq + 1).trim();
+                                if (v === "true") cfg[k] = true;
+                                else if (v === "false") cfg[k] = false;
+                                else cfg[k] = v;
+                            }
+                        }
+                    }
+                }
+                shim.config = cfg;
+                shim.configReady = true;
+            }
+        };
+        xhr.send();
+    }
+
+    onThemePathChanged: reloadConfig()
+    Component.onCompleted: reloadConfig()
 
     property var userModel: ListModel {
         Component.onCompleted: {
@@ -4081,10 +4169,8 @@ Item {
         }
     }
 }
-"#;
-        fs::write(&shim_qml, shim_content)
-            .map_err(|e| format!("Failed to write Ryzora SddmShim.qml: {}", e))?;
-    }
+"##;
+    let _ = fs::write(&shim_qml, shim_content);
 
     Ok(lock_sh)
 }

@@ -1,3 +1,39 @@
+
+function getOptionEffect(key: string, value: any, packageSlug: string): string {
+  if (key === "themeMode") {
+    return value === "light"
+      ? "Sets high-contrast #ffffff light surface in Main.qml"
+      : "Sets deep #000000 dark surface in Main.qml";
+  }
+  if (key === "enableWindup") {
+    return Boolean(value)
+      ? "Plays mechanical gear train windup animation on unlock"
+      : "Bypasses gear windup animation for instant session unlock";
+  }
+  if (key === "background_mode") {
+    if (value === "time") return "Transitions automatically with real-time day/night cycle";
+    if (value === "random") return "Picks a random biome/atmosphere on each lock sequence";
+    return "Locks background to the selected static wallpaper index";
+  }
+  if (key === "background_index") {
+    if (packageSlug.includes("terraria")) {
+      const biomes = ["", "Forest mountains (ter1.png)", "Tall mountains (ter2.png)", "Halloween lands (ter3.png)", "Midnight scary (ter4.png)", "Icy mountains (ter5.png)"];
+      return "Sets wallpaper to " + (biomes[Number(value)] || `Biome ${value}`);
+    }
+    if (packageSlug.includes("genshin")) {
+      const atmos = ["", "Dawn video (dawn.mp4)", "Day video (day.mp4)", "Dusk video (dusk.mp4)", "Night video (night.mp4)"];
+      return "Sets atmosphere to " + (atmos[Number(value)] || `Atmosphere ${value}`);
+    }
+    return `Selects static asset index ${value}`;
+  }
+  if (key === "gameMode") {
+    return value === "menu"
+      ? "Bypasses rhythm minigame; renders direct password input"
+      : "Requires completing rhythm hit-circle game before unlock";
+  }
+  return "Persists " + key + "=" + value + " in theme.conf under [General]";
+}
+
 import React from "react";
 import {
   Sliders,
@@ -222,6 +258,16 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       );
                     })}
                   </div>
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-400 font-bold">themeMode</span>
+                      <span>→</span>
+                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["themeMode"] ?? themeModeSpec.default)}</span>
+                    </span>
+                    <span className="text-[10px] text-purple-300/90 text-right">
+                      {getOptionEffect("themeMode", currentConfig["themeMode"] ?? themeModeSpec.default, packageItem.id)}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -261,6 +307,16 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       </div>
                     );
                   })()}
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-400 font-bold">enableWindup</span>
+                      <span>→</span>
+                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["enableWindup"] !== undefined ? currentConfig["enableWindup"] : enableWindupSpec.default)}</span>
+                    </span>
+                    <span className="text-[10px] text-purple-300/90 text-right">
+                      {getOptionEffect("enableWindup", currentConfig["enableWindup"] !== undefined ? currentConfig["enableWindup"] : enableWindupSpec.default, packageItem.id)}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -298,6 +354,16 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                         </button>
                       );
                     })}
+                  </div>
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-400 font-bold">background_mode</span>
+                      <span>→</span>
+                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentBgMode)}</span>
+                    </span>
+                    <span className="text-[10px] text-purple-300/90 text-right">
+                      {getOptionEffect("background_mode", currentBgMode, packageItem.id)}
+                    </span>
                   </div>
                 </div>
               )}
@@ -354,6 +420,16 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       );
                     })}
                   </div>
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-400 font-bold">background_index</span>
+                      <span>→</span>
+                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["background_index"] ?? bgIndexSpec?.default)}</span>
+                    </span>
+                    <span className="text-[10px] text-purple-300/90 text-right">
+                      {getOptionEffect("background_index", currentConfig["background_index"] ?? bgIndexSpec?.default, packageItem.id)}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -391,6 +467,16 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                         </button>
                       );
                     })}
+                  </div>
+                  <div className="pt-2 border-t border-[var(--rz-border-subtle,#242b38)] text-[10px] font-mono flex items-center justify-between text-[var(--rz-text-muted,#747d8f)] flex-wrap gap-1">
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-400 font-bold">gameMode</span>
+                      <span>→</span>
+                      <span className="text-[var(--rz-text,#f5f5f7)] font-semibold">{String(currentConfig["gameMode"] ?? gameModeSpec.default)}</span>
+                    </span>
+                    <span className="text-[10px] text-purple-300/90 text-right">
+                      {getOptionEffect("gameMode", currentConfig["gameMode"] ?? gameModeSpec.default, packageItem.id)}
+                    </span>
                   </div>
                 </div>
               )}

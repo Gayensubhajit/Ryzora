@@ -1,5 +1,6 @@
+import type { LockscreenTestResult } from "../types/index.ts";
 import React, { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { ProductDetailShell } from "../components/detail/ProductDetailShell";
 import { ProductHero } from "../components/detail/ProductHero";
@@ -85,6 +86,7 @@ export const LockScreenDetailView: React.FC = () => {
     }
   };
   const [showFullscreen, setShowFullscreen] = useState(false);
+  const [lastTestResult, setLastTestResult] = useState<LockscreenTestResult | null>(null);
 
   if (!selectedPackage) return null;
 
@@ -216,15 +218,15 @@ export const LockScreenDetailView: React.FC = () => {
   };
 
   const handleTest = async () => {
-    if (!isInstalled) {
-      setToast({
-        message: `Please install ${selectedPackage.title} before running a test.`,
-        type: "warning",
-      });
-      return;
-    }
     try {
-      await testLockscreen(selectedPackage.id, selectedTarget);
+      const fullConfig = {
+        ...customConfig,
+        variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
+      };
+      const res = await testLockscreen(selectedPackage.id, selectedTarget, fullConfig);
+      if (res) {
+        setLastTestResult(res);
+      }
     } catch (e: any) {
       // toast is handled in AppContext or error returned
     }
@@ -323,6 +325,29 @@ export const LockScreenDetailView: React.FC = () => {
           onChangeConfig={handleConfigChange}
           onSelectVariant={handleSelectVariant}
         />
+      )}
+
+      {/* ── Tested Configuration Readout Banner ── */}
+      {lastTestResult && (
+        <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/25 text-emerald-300 text-xs flex flex-col gap-2 shadow-lg my-3">
+          <div className="flex items-center justify-between">
+            <span className="font-bold flex items-center gap-1.5 text-emerald-400">
+              <Check size={16} strokeWidth={2.5} /> Isolated Test Environment Launched
+            </span>
+            <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase font-semibold">
+              {lastTestResult.target} MODE
+            </span>
+          </div>
+          <div className="text-[11px] text-[var(--rz-text-secondary,#a6aab3)] font-mono truncate">
+            Runtime Sandbox: {lastTestResult.test_runtime_dir}
+          </div>
+          {Object.keys(lastTestResult.tested_config).length > 0 && (
+            <div className="text-[11px] text-emerald-200/90 font-mono bg-emerald-900/30 p-2 rounded-lg border border-emerald-500/20">
+              <span className="font-bold text-emerald-300">Materialized Configuration:</span>{" "}
+              {Object.entries(lastTestResult.tested_config).map(([k, v]) => `${k}=${v}`).join(", ")}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Prominent Compatibility / Safety Model Banner ── */}
