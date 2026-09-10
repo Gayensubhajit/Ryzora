@@ -1185,6 +1185,8 @@ export interface LockscreenRuntimeStatus {
   sddm_is_overridden?: boolean;
   sddm_overridden_by?: string | null;
   sddm_previous_theme?: string | null;
+  user_lock_hook_active?: boolean;
+  user_lock_hook_path?: string | null;
 }
 
 export interface PrivilegedHelperStatus {

@@ -1646,6 +1646,15 @@ pub fn uninstall_package_in(
         return Err(format!("Invalid package ID '{}'", package_id));
     }
 
+    let state_dir = home_dir.join(".local/share/ryzora/state");
+    let active_state = get_active_lockscreen_state_in(&state_dir);
+    if active_state.quickshell.as_deref() == Some(package_id) || active_state.sddm.as_deref() == Some(package_id) {
+        return Err(format!(
+            "Cannot uninstall active package '{}'. Please deactivate it first to restore system defaults safely.",
+            package_id
+        ));
+    }
+
     let record_file = installed_root.join(format!("{}.json", package_id));
     if !record_file.is_file() {
         return Err(format!("Package '{}' is not installed", package_id));
@@ -3187,6 +3196,15 @@ pub struct ActiveLockscreenState {
     pub lock_wrapper_path: Option<String>,
     /// Previous SDDM theme name to restore on deactivation
     pub sddm_previous_theme: Option<String>,
+    /// Whether the host user lock script hook is active
+    #[serde(default)]
+    pub user_lock_hook_active: bool,
+    /// Path of the host user lock script that was hooked
+    #[serde(default)]
+    pub user_lock_hook_path: Option<String>,
+    /// Path of the snapshot backup of the original host user lock script
+    #[serde(default)]
+    pub user_lock_hook_backup: Option<String>,
     #[serde(default)]
     pub active_config: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
@@ -3473,6 +3491,23 @@ pub fn apply_lockscreen_target_in_with_config(
             }
         }
 
+        // Apply host user lock script hook (e.g. ~/user_scripts/hyprlock/lock.sh)
+        match crate::hypridle::hook_user_lock_script(home) {
+            Ok(Some((target, backup))) => {
+                state.user_lock_hook_active = true;
+                state.user_lock_hook_path = Some(target.display().to_string());
+                state.user_lock_hook_backup = Some(backup.display().to_string());
+            }
+            Ok(None) => {
+                state.user_lock_hook_active = false;
+                state.user_lock_hook_path = None;
+                state.user_lock_hook_backup = None;
+            }
+            Err(e) => {
+                eprintln!("Ryzora: Warning: user lock script hook failed: {}", e);
+            }
+        }
+
         state.quickshell = Some(package_id.to_string());
         state.quickshell_theme_path = Some(qs_dir.display().to_string());
     }
@@ -3564,6 +3599,20 @@ pub fn deactivate_lockscreen_target_in(
             state.hypridle_source_path = None;
             state.hypridle_ryzora_config = None;
             state.lock_wrapper_path = None;
+        }
+
+        if state.user_lock_hook_active || state.user_lock_hook_backup.is_some() {
+            match crate::hypridle::unhook_user_lock_script(home) {
+                Ok(()) => {
+                    eprintln!("Ryzora: Host lock script unhooked, original script restored verbatim.");
+                }
+                Err(e) => {
+                    eprintln!("Ryzora: Warning: could not cleanly unhook host lock script: {}", e);
+                }
+            }
+            state.user_lock_hook_active = false;
+            state.user_lock_hook_path = None;
+            state.user_lock_hook_backup = None;
         }
 
         state.quickshell = None;
@@ -3935,6 +3984,8 @@ pub struct LockscreenRuntimeStatus {
     pub sddm_is_overridden: bool,
     pub sddm_overridden_by: Option<String>,
     pub sddm_previous_theme: Option<String>,
+    pub user_lock_hook_active: bool,
+    pub user_lock_hook_path: Option<String>,
 }
 
 /// Ensures Ryzora's private Quickshell runtime exists at ~/.local/share/ryzora/integrations/quickshell/
@@ -4193,9 +4244,12 @@ pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> Locks
     let lock_wrapper_exists = hypridle_status.lock_wrapper_exists;
     let hypridle_config_drift = hypridle_status.drift_detected;
 
-    // Active requires: symlink exists, quickshell installed, AND hypridle integration wired
+    let user_script_hook_ok = crate::hypridle::verify_user_lock_script_hook(home);
+    let user_script_exists = home.join(crate::hypridle::USER_LOCK_SCRIPT_PATH).exists();
+
+    // Active requires: symlink exists, quickshell installed, hypridle integration wired, AND user lock script hooked (if present on host)
     let is_applied = state.quickshell.is_some() && active_symlink.exists();
-    let is_active = is_applied && has_quickshell && hypridle_integration;
+    let is_active = is_applied && has_quickshell && hypridle_integration && user_script_hook_ok;
 
     let err = if !has_quickshell {
         Some("Quickshell binary is not installed on this system".to_string())
@@ -4205,6 +4259,8 @@ pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> Locks
         Some("Active theme pointer is missing or unlinked".to_string())
     } else if is_applied && !hypridle_integration {
         Some("Applied but hypridle integration not wired — lock shortcut still uses system default".to_string())
+    } else if is_applied && user_script_exists && !user_script_hook_ok {
+        Some("Applied but host lock script not delegated to Ryzora launcher".to_string())
     } else if hypridle_config_drift {
         Some("Hypridle configuration changed externally — regenerate or restore to re-sync".to_string())
     } else {
@@ -4232,6 +4288,8 @@ pub fn get_lock_screen_runtime_status_in(home: &Path, state_dir: &Path) -> Locks
         sddm_is_overridden: crate::sddm_helper::resolve_effective_sddm_theme_in(std::env::var("RYZORA_SYSTEM_ROOT").ok().as_deref().map(std::path::Path::new)).is_overridden,
         sddm_overridden_by: crate::sddm_helper::resolve_effective_sddm_theme_in(std::env::var("RYZORA_SYSTEM_ROOT").ok().as_deref().map(std::path::Path::new)).overridden_by.map(|p| p.display().to_string()),
         sddm_previous_theme: state.sddm_previous_theme.clone(),
+        user_lock_hook_active: state.user_lock_hook_active,
+        user_lock_hook_path: state.user_lock_hook_path.clone(),
     }
 }
 
@@ -8309,6 +8367,121 @@ mod tests {
         // Verify installed file is gone
         let installed_file = sandbox.home_dir.join(".local/share/ryzora/lockscreens/qylock/dog-samurai/Main.qml");
         assert!(!installed_file.exists());
+    }
+
+    #[test]
+    fn test_apply_and_deactivate_lockscreen_hooks_and_restores_user_lock_script() {
+        let sandbox = TestSandbox::new("apply-hook-restore");
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let sys = TestSandbox::mock_system();
+        install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("quickshell"),
+        ).unwrap();
+
+        // Create host user lock script
+        let user_script_dir = sandbox.home_dir.join("user_scripts/hyprlock");
+        fs::create_dir_all(&user_script_dir).unwrap();
+        let target_lock = user_script_dir.join("lock.sh");
+        let original_script = "#!/bin/bash
+# Dusky Hyprlock original
+cp wallpaper /cache/wp
+hyprlock
+";
+        fs::write(&target_lock, original_script).unwrap();
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+
+        // Apply Quickshell
+        let active = apply_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            "quickshell",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+
+        assert_eq!(active.quickshell, Some("lockscreen-qylock-dog-samurai".to_string()));
+        assert!(active.user_lock_hook_active, "User lock hook must be marked active");
+
+        // Target script must now be hooked
+        let hooked = fs::read_to_string(&target_lock).unwrap();
+        assert!(hooked.contains("Ryzora session-lock hook"));
+        assert!(hooked.contains("RYZORA_ACTIVE"));
+        assert!(hooked.contains("RYZORA_LOCK"));
+        assert!(hooked.contains("hyprlock"), "Fallback preserved");
+
+        // Deactivate Quickshell
+        let deact = deactivate_lockscreen_target_in("quickshell", &sandbox.home_dir, &state_dir).unwrap();
+        assert_eq!(deact.quickshell, None);
+        assert!(!deact.user_lock_hook_active, "User lock hook must be deactivated");
+
+        // Target script must be restored verbatim
+        let restored = fs::read_to_string(&target_lock).unwrap();
+        assert_eq!(restored, original_script, "Must match original Dusky script verbatim");
+    }
+
+    #[test]
+    fn test_uninstall_package_refuses_when_active() {
+        let sandbox = TestSandbox::new("uninst-refuse-active");
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let sys = TestSandbox::mock_system();
+        install_package_target_options_in(
+            &dog_samurai_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("quickshell"),
+        ).unwrap();
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+
+        // Apply Quickshell
+        apply_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            "quickshell",
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+
+        // Direct uninstall must be refused
+        let res = uninstall_package_in(
+            "lockscreen-qylock-dog-samurai",
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+        );
+        assert!(res.is_err(), "Must refuse uninstall of active package");
+        assert!(res.unwrap_err().contains("deactivate it first"));
+
+        // deactivate_and_uninstall must succeed safely
+        let uninst = deactivate_and_uninstall_lockscreen_target_in(
+            "lockscreen-qylock-dog-samurai",
+            Some("quickshell"),
+            &sandbox.home_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert!(uninst.success);
     }
 
     #[test]

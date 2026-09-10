@@ -32,6 +32,11 @@ pub const HYPRIDLE_DROPIN_PATH: &str =
     ".config/systemd/user/hypridle.service.d/ryzora-override.conf";
 /// Ryzora's lock wrapper script path
 pub const RYZORA_LOCK_PATH: &str = ".local/bin/ryzora-lock";
+/// The host user lock script (used by Dusky Hyprland keybinds, Waybar, wlogout)
+pub const USER_LOCK_SCRIPT_PATH: &str = "user_scripts/hyprlock/lock.sh";
+/// Ryzora snapshot backup path for host user lock script
+pub const USER_LOCK_SCRIPT_SNAPSHOT: &str =
+    ".local/share/ryzora/snapshots/user_scripts_hyprlock_lock.sh";
 
 #[derive(Debug, Clone)]
 pub struct HypridleIntegrationStatus {
@@ -449,6 +454,147 @@ pub fn get_hypridle_integration_status(home: &Path, stored_hash: Option<&str>) -
     }
 }
 
+/// Check if the user lock script exists and verify whether it delegates to ryzora-lock.
+/// Returns true if no user lock script exists on the host (not required), or if it exists and delegates to ryzora-lock.
+pub fn verify_user_lock_script_hook(home: &Path) -> bool {
+    let target = home.join(USER_LOCK_SCRIPT_PATH);
+    if !target.exists() {
+        return true;
+    }
+    match fs::read_to_string(&target) {
+        Ok(content) => content.contains("ryzora-lock") && content.contains("RYZORA_ACTIVE"),
+        Err(_) => false,
+    }
+}
+
+/// Hook the host user lock script (e.g. ~/user_scripts/hyprlock/lock.sh) so that manual
+/// locking (SUPER + M, Waybar, wlogout) delegates to ryzora-lock when Ryzora is active.
+///
+/// If the script exists:
+/// 1. Snapshots the original script to ~/.local/share/ryzora/snapshots/user_scripts_hyprlock_lock.sh verbatim.
+/// 2. Writes a Ryzora dispatcher hook that executes ~/.local/bin/ryzora-lock when active,
+///    and falls back to the original script content when inactive.
+///
+/// Returns Ok(Some((target_path, snapshot_path))) if hooked, or Ok(None) if target does not exist.
+pub fn hook_user_lock_script(home: &Path) -> Result<Option<(PathBuf, PathBuf)>, String> {
+    let target = home.join(USER_LOCK_SCRIPT_PATH);
+    if !target.exists() {
+        return Ok(None);
+    }
+
+    let snapshot = home.join(USER_LOCK_SCRIPT_SNAPSHOT);
+    if let Some(parent) = snapshot.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create snapshot directory for user lock script: {}", e))?;
+    }
+
+    let current_content = fs::read_to_string(&target)
+        .map_err(|e| format!("Failed to read host lock script '{}': {}", target.display(), e))?;
+
+    // If the target is NOT already hooked, snapshot it verbatim
+    let original_content = if current_content.contains("# Ryzora session-lock hook") {
+        if snapshot.exists() {
+            fs::read_to_string(&snapshot)
+                .map_err(|e| format!("Failed to read existing snapshot '{}': {}", snapshot.display(), e))?
+        } else {
+            current_content.clone()
+        }
+    } else {
+        fs::write(&snapshot, &current_content)
+            .map_err(|e| format!("Failed to write snapshot '{}': {}", snapshot.display(), e))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&snapshot, fs::Permissions::from_mode(0o755));
+        }
+        current_content.clone()
+    };
+
+    // Strip shebang from original content if present for fallback body
+    let fallback_body = if original_content.starts_with("#!") {
+        if let Some(newline_pos) = original_content.find('\n') {
+            &original_content[newline_pos + 1..]
+        } else {
+            ""
+        }
+    } else {
+        &original_content
+    };
+
+    let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+    let ryzora_lock = home.join(RYZORA_LOCK_PATH);
+
+    let hooked_content = format!(
+        r#"#!/usr/bin/env bash
+# Ryzora session-lock hook — managed, do not edit
+# Original script backed up verbatim by Ryzora at:
+#   {snapshot_path}
+RYZORA_ACTIVE="{active_symlink}"
+RYZORA_LOCK="{ryzora_lock}"
+
+if [ -L "$RYZORA_ACTIVE" ] && [ -d "$RYZORA_ACTIVE" ] && [ -x "$RYZORA_LOCK" ]; then
+    exec "$RYZORA_LOCK"
+fi
+
+# --- Original Host Lock Script Fallback ---
+{fallback_body}
+"#,
+        snapshot_path = snapshot.display(),
+        active_symlink = active_symlink.display(),
+        ryzora_lock = ryzora_lock.display(),
+        fallback_body = fallback_body.trim_start(),
+    );
+
+    fs::write(&target, &hooked_content)
+        .map_err(|e| format!("Failed to write hooked host lock script '{}': {}", target.display(), e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o755));
+    }
+
+    Ok(Some((target, snapshot)))
+}
+
+/// Unhook the user lock script and restore the original script verbatim from the snapshot.
+pub fn unhook_user_lock_script(home: &Path) -> Result<(), String> {
+    let target = home.join(USER_LOCK_SCRIPT_PATH);
+    let snapshot = home.join(USER_LOCK_SCRIPT_SNAPSHOT);
+
+    if snapshot.exists() {
+        let original = fs::read_to_string(&snapshot)
+            .map_err(|e| format!("Failed to read user lock script snapshot: {}", e))?;
+
+        if let Some(parent) = target.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        fs::write(&target, &original)
+            .map_err(|e| format!("Failed to restore host lock script '{}': {}", target.display(), e))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o755));
+        }
+
+        let _ = fs::remove_file(&snapshot);
+    } else if target.exists() {
+        let content = fs::read_to_string(&target).unwrap_or_default();
+        if content.contains("# Ryzora session-lock hook") {
+            if let Some(pos) = content.find("# --- Original Host Lock Script Fallback ---") {
+                let fallback = &content[pos + "# --- Original Host Lock Script Fallback ---".len()..];
+                let restored = format!("#!/usr/bin/env bash
+{}", fallback.trim_start());
+                let _ = fs::write(&target, restored);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Launch the lockscreen test process detached.
 pub fn launch_test_process(lock_sh: &Path) -> Result<(), String> {
     std::process::Command::new("bash")
@@ -699,6 +845,43 @@ listener {
         assert!(home.join(RYZORA_LOCK_PATH).exists(), "ryzora-lock must remain after deactivate");
 
         std::env::remove_var("RYZORA_SYSTEM_ROOT");
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_hook_and_unhook_user_lock_script_verbatim_restore() {
+        let home = test_home("user-lock-hook");
+        let script_dir = home.join("user_scripts/hyprlock");
+        fs::create_dir_all(&script_dir).unwrap();
+        let target = script_dir.join("lock.sh");
+        let original_script = "#!/bin/bash\n# Sample Dusky hyprlock\nWALLPAPER=\"/tmp/bg.png\"\ncp \"$WALLPAPER\" ~/.cache/current_wallpaper\nhyprlock\n";
+        fs::write(&target, original_script).unwrap();
+
+        // 1. Hook
+        let res = hook_user_lock_script(&home).unwrap();
+        assert!(res.is_some());
+        let (hooked_target, snapshot) = res.unwrap();
+        assert_eq!(hooked_target, target);
+        assert!(snapshot.exists(), "Snapshot must be created");
+
+        // Verify hook content
+        let hooked_content = fs::read_to_string(&target).unwrap();
+        assert!(hooked_content.contains("Ryzora session-lock hook"));
+        assert!(hooked_content.contains("RYZORA_ACTIVE"));
+        assert!(hooked_content.contains("RYZORA_LOCK"));
+        assert!(hooked_content.contains("hyprlock"), "Fallback hyprlock command preserved");
+
+        // Verify helper
+        assert!(verify_user_lock_script_hook(&home));
+
+        // 2. Unhook
+        unhook_user_lock_script(&home).unwrap();
+        assert!(!snapshot.exists(), "Snapshot must be cleaned up on unhook");
+
+        // Verify verbatim restoration
+        let restored_content = fs::read_to_string(&target).unwrap();
+        assert_eq!(restored_content, original_script, "Restored content must match original verbatim");
+
         cleanup(&home);
     }
 

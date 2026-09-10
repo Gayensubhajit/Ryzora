@@ -497,21 +497,59 @@ pub fn detect_system_integration_report_in(home: &Path) -> SystemIntegrationRepo
     };
 
     // 4. Session Lock Provider Detection
-    let ryzora_active_file = home.join(".local/share/ryzora/active_lockscreen.json");
+    let state_file = home.join(".local/share/ryzora/state/active_lockscreen.json");
     let (has_quickshell, _) = check_binary("quickshell");
     let (has_hyprlock, _) = check_binary("hyprlock");
     let (has_swaylock, _) = check_binary("swaylock");
 
     let (mut session_lock_provider, mut session_lock_entrypoint) = ("None".to_string(), None);
 
-    if ryzora_active_file.exists() {
-        if let Ok(raw) = fs::read_to_string(&ryzora_active_file) {
+    let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+    let ryzora_lock = home.join(crate::hypridle::RYZORA_LOCK_PATH);
+    let user_lock_script = home.join(crate::hypridle::USER_LOCK_SCRIPT_PATH);
+    let hypridle_dropin = home.join(crate::hypridle::HYPRIDLE_DROPIN_PATH);
+    let hypridle_config = home.join(crate::hypridle::HYPRIDLE_RYZORA_CONFIG);
+
+    let mut ryzora_active_pkg = None;
+    let mut ryzora_theme_path = None;
+
+    if state_file.exists() {
+        if let Ok(raw) = fs::read_to_string(&state_file) {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
                 if let Some(qs_pkg) = val.get("quickshell").and_then(|v| v.as_str()) {
-                    session_lock_provider = "Quickshell".to_string();
-                    session_lock_entrypoint = val.get("quickshell_theme_path").and_then(|v| v.as_str()).map(String::from);
-                    evidence.push(format!("ryzora:active_lockscreen:quickshell={}", qs_pkg));
+                    ryzora_active_pkg = Some(qs_pkg.to_string());
+                    ryzora_theme_path = val.get("quickshell_theme_path").and_then(|v| v.as_str()).map(String::from);
                 }
+            }
+        }
+    }
+
+    let user_script_hooked = crate::hypridle::verify_user_lock_script_hook(home);
+    let hypridle_hooked = hypridle_dropin.exists() && hypridle_config.exists();
+
+    // Ryzora Quickshell session lock is ONLY active if the on-disk triggers actually point to Ryzora:
+    if ryzora_active_pkg.is_some()
+        && active_symlink.exists()
+        && ryzora_lock.exists()
+        && (hypridle_hooked || !hypridle_conf.exists())
+        && user_script_hooked
+    {
+        session_lock_provider = "Quickshell".to_string();
+        session_lock_entrypoint = ryzora_theme_path;
+        evidence.push(format!("ryzora:active_session_lock={}", ryzora_active_pkg.as_deref().unwrap_or_default()));
+        evidence.push(format!("ryzora:lock_launcher={}", ryzora_lock.display()));
+        if hypridle_hooked {
+            evidence.push("ryzora:hypridle_override=active".to_string());
+        }
+        if user_lock_script.exists() {
+            evidence.push(format!("ryzora:user_lock_hook={}", user_lock_script.display()));
+        }
+    } else if user_lock_script.exists() {
+        if let Ok(content) = fs::read_to_string(&user_lock_script) {
+            if content.contains("hyprlock") {
+                session_lock_provider = "Hyprlock".to_string();
+                session_lock_entrypoint = Some(user_lock_script.display().to_string());
+                evidence.push(format!("host:user_lock_script={}", user_lock_script.display()));
             }
         }
     }
@@ -650,6 +688,60 @@ mod tests {
         assert_eq!(report.idle_provider, "hypridle");
         assert_eq!(report.session_lock_provider, "Quickshell");
         assert!(!report.evidence.is_empty());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn test_detect_session_lock_dusky_user_lock_script_and_ryzora_hook() {
+        let home = make_test_home();
+        let user_script_dir = home.join("user_scripts/hyprlock");
+        fs::create_dir_all(&user_script_dir).unwrap();
+        let lock_sh = user_script_dir.join("lock.sh");
+        fs::write(&lock_sh, "#!/bin/bash
+cp wallpaper /tmp/bg
+hyprlock
+").unwrap();
+
+        // Initially Dusky Hyprlock is detected from user_scripts
+        let report = detect_system_integration_report_in(&home);
+        assert_eq!(report.session_lock_provider, "Hyprlock");
+
+        // Now simulate Ryzora Apply: write state, symlink, wrapper, hook
+        let state_dir = home.join(".local/share/ryzora/state");
+        fs::create_dir_all(&state_dir).unwrap();
+        fs::write(
+            state_dir.join("active_lockscreen.json"),
+            r#"{"quickshell": "lockscreen-qylock-dog-samurai", "quickshell_theme_path": "/path/theme"}"#,
+        ).unwrap();
+
+        let active_dir = home.join(".local/share/ryzora/active/lockscreen");
+        fs::create_dir_all(&active_dir).unwrap();
+        let theme_dir = home.join(".local/share/ryzora/lockscreens/qylock/dog-samurai");
+        fs::create_dir_all(&theme_dir).unwrap();
+        #[cfg(unix)]
+        let _ = std::os::unix::fs::symlink(&theme_dir, active_dir.join("quickshell"));
+
+        let bin_dir = home.join(".local/bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::write(bin_dir.join("ryzora-lock"), "#!/bin/bash
+exit 0
+").unwrap();
+
+        // Hook the script
+        crate::hypridle::hook_user_lock_script(&home).unwrap();
+
+        // Now Quickshell must be detected as the real active session locker
+        let report_active = detect_system_integration_report_in(&home);
+        assert_eq!(report_active.session_lock_provider, "Quickshell");
+
+        // Deactivate: unhook
+        crate::hypridle::unhook_user_lock_script(&home).unwrap();
+        let _ = fs::remove_file(state_dir.join("active_lockscreen.json"));
+
+        // Must revert back to Dusky Hyprlock
+        let report_deact = detect_system_integration_report_in(&home);
+        assert_eq!(report_deact.session_lock_provider, "Hyprlock");
+
         let _ = fs::remove_dir_all(home);
     }
 
