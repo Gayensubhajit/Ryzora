@@ -119,6 +119,7 @@ impl ManifestSynthesizer {
             compatibility,
             files: sanitized_files,
             dependencies: Vec::new(),
+            targets: std::collections::HashMap::new(),
         };
 
         // 5. Run manifest internal schema validation

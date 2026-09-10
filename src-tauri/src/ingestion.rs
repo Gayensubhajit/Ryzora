@@ -1685,6 +1685,7 @@ fake
                 target: "/etc/passwd".to_string(),
                 description: "Escape".to_string(),
             }],
+            targets: std::collections::HashMap::new(),
         };
 
         fs::write(

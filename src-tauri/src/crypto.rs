@@ -999,6 +999,7 @@ pub mod tests {
                 },
                 dependencies: vec![],
                 files: manifest_files,
+                targets: std::collections::HashMap::new(),
             };
 
             fs::write(

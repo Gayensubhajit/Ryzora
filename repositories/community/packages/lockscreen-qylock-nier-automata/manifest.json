@@ -30,9 +30,7 @@
       "wayland"
     ],
     "distros": [],
-    "required": [
-      "quickshell"
-    ],
+    "required": [],
     "optional": [
       "sddm"
     ]
@@ -46,8 +44,41 @@
   ],
   "provider": "qylock",
   "targets": {
-    "quickshell": true,
-    "sddm": true
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/theme.conf",
+          "description": "NieR: Automata Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-nier-automata/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-nier-automata/Main.qml",
+          "description": "NieR: Automata SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-nier-automata/metadata.desktop",
+          "description": "NieR: Automata SDDM metadata."
+        }
+      ]
+    }
   },
   "source": {
     "type": "git",

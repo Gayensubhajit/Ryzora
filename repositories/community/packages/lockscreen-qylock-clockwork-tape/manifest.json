@@ -31,9 +31,7 @@
       "wayland"
     ],
     "distros": [],
-    "required": [
-      "quickshell"
-    ],
+    "required": [],
     "optional": [
       "sddm"
     ]
@@ -47,8 +45,41 @@
   ],
   "provider": "qylock",
   "targets": {
-    "quickshell": true,
-    "sddm": true
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf",
+          "description": "Tape (Clockwork) Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-clockwork-tape/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-tape/Main.qml",
+          "description": "Tape (Clockwork) SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-tape/metadata.desktop",
+          "description": "Tape (Clockwork) SDDM metadata."
+        }
+      ]
+    }
   },
   "source": {
     "type": "git",

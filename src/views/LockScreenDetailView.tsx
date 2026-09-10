@@ -6,6 +6,7 @@ import { ProductDetailShell } from "../components/detail/ProductDetailShell";
 import { ProductHero } from "../components/detail/ProductHero";
 import { CompatibilityPanel } from "../components/detail/CompatibilityPanel";
 import { DetailTabs } from "../components/detail/DetailTabs";
+import { resolveLockscreenCapabilities } from "../providers/qylockProvider";
 import { StickyActionBar } from "../components/detail/StickyActionBar";
 
 export const LockScreenDetailView: React.FC = () => {
@@ -63,14 +64,17 @@ export const LockScreenDetailView: React.FC = () => {
     setSelectedPackage(null);
   };
 
-  const missingDependencies: string[] = [];
+  const targetCapabilities = selectedPackage.lockscreen && systemInfo
+    ? resolveLockscreenCapabilities(systemInfo, selectedPackage.lockscreen, selectedTarget)
+    : null;
+  const missingDependencies = targetCapabilities?.missing_dependencies || [];
 
   // Dry run preview handler
   const handleOpenPreview = async () => {
     setLoadingPlan(true);
     setShowDryRun(true);
     try {
-      const plan = await previewInstallation(selectedPackage.id);
+      const plan = await previewInstallation(selectedPackage.id, selectedTarget);
       setDryRunPlan(plan);
     } catch (e: any) {
       const msg = e?.message || String(e);
@@ -87,7 +91,7 @@ export const LockScreenDetailView: React.FC = () => {
   // Install handler
   const handleInstall = async () => {
     try {
-      const res = await installPackage(selectedPackage, createSnapshot);
+      const res = await installPackage(selectedPackage, createSnapshot, selectedTarget);
       if (res && res.success) {
         setToast({
           message: `${selectedPackage.title} installed successfully`,

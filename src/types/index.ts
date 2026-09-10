@@ -464,6 +464,8 @@ export interface InstallationPlan {
   required_dependencies: string[];
   missing_dependencies: string[];
   warnings: string[];
+  requires_privilege?: boolean;
+  selected_target?: string;
   dependency_report?: DependencyResolutionReport | null;
 }
 
@@ -475,6 +477,7 @@ export interface InstallResult {
   installed_files: string[];
   errors: string[];
   rolled_back: boolean;
+  selected_target?: string;
 }
 
 export interface InstalledFileEntry {

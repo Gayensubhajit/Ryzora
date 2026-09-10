@@ -665,6 +665,7 @@ pub fn create_package_bundle(
         compatibility: draft.compatibility.clone(),
         files: manifest_files,
         dependencies: draft.dependencies.clone(),
+        targets: std::collections::HashMap::new(),
     };
 
     let manifest_json = manifest.to_canonical_json()?;

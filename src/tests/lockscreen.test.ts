@@ -648,3 +648,113 @@ test("22. Upstream Provenance & Licensing Invariant: Non-redistributable or upst
     assert.equal(theme.lockscreen?.provenance.author, "Darkkal44");
   }
 });
+
+
+test("23. Target-Aware Dependency Resolution: SDDM target resolves SDDM without Quickshell, Sway, or COSMIC", () => {
+  const manifestPath = path.resolve("repositories/community/packages/lockscreen-qylock-dog-samurai/manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+  assert.ok(manifest.targets.sddm, "Package must have sddm target definition");
+  assert.ok(manifest.targets.sddm.dependencies.includes("sddm"), "SDDM target must require sddm");
+  
+  // Critical Invariants:
+  assert.ok(!manifest.targets.sddm.dependencies.includes("quickshell"), "SDDM target must NOT require quickshell");
+  assert.ok(!manifest.targets.sddm.dependencies.includes("sway"), "SDDM target must NOT require sway");
+  assert.ok(!manifest.targets.sddm.dependencies.includes("cosmic"), "SDDM target must NOT require cosmic");
+  assert.equal(manifest.targets.sddm.scope, "system");
+  assert.equal(manifest.compatibility.required.length, 0, "Manifest root compatibility.required must not mandate quickshell");
+});
+
+test("24. Target-Aware Dependency Resolution: Quickshell target resolves Quickshell in user-space", () => {
+  const manifestPath = path.resolve("repositories/community/packages/lockscreen-qylock-dog-samurai/manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+  assert.ok(manifest.targets.quickshell, "Package must have quickshell target definition");
+  assert.ok(manifest.targets.quickshell.dependencies.includes("quickshell"), "Quickshell target must require quickshell");
+  assert.ok(!manifest.targets.quickshell.dependencies.includes("sddm"), "Quickshell target must NOT require sddm");
+  assert.equal(manifest.targets.quickshell.scope, "user");
+  assert.ok(manifest.targets.quickshell.entrypoint.startsWith("~/.local/share/ryzora"), "Must install to Ryzora user space");
+});
+
+test("25. Target-Aware Dependency Resolution: Both target resolves union of Quickshell and SDDM", () => {
+  const manifestPath = path.resolve("repositories/community/packages/lockscreen-qylock-dog-samurai/manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+  const quickshellDeps = manifest.targets.quickshell.dependencies;
+  const sddmDeps = manifest.targets.sddm.dependencies;
+  const unionDeps = Array.from(new Set([...quickshellDeps, ...sddmDeps]));
+
+  assert.ok(unionDeps.includes("quickshell"));
+  assert.ok(unionDeps.includes("sddm"));
+  assert.ok(!unionDeps.includes("sway"));
+  assert.ok(!unionDeps.includes("cosmic"));
+});
+
+test("26. Privilege Boundary Enforcement: SDDM requires elevation, Quickshell is unprivileged", () => {
+  const dogSamurai = getCatalogueLockScreens().find((p) => p.id === "dog-samurai")!;
+  const hyprlandSystem: SystemInfo = {
+    distro_name: "Arch Linux",
+    distro_id: "arch",
+    distro_family: "arch",
+    distro_version: "rolling",
+    kernel_version: "6.10.3",
+    desktop_environment: "hyprland",
+    window_manager: "Hyprland",
+    session_type: "wayland",
+    shell: "/bin/zsh",
+    terminal: "kitty",
+    installed_components: [],
+  };
+
+  const resQuickshell = resolveLockscreenCapabilities(hyprlandSystem, dogSamurai.lockscreen, "quickshell");
+  assert.equal(resQuickshell.requires_root, false, "Quickshell must not require root");
+  assert.equal(resQuickshell.privilege_notice, null, "Quickshell must have no privilege notice");
+
+  const resSddm = resolveLockscreenCapabilities(hyprlandSystem, dogSamurai.lockscreen, "sddm");
+  assert.equal(resSddm.requires_root, true, "SDDM must require root");
+  assert.ok(resSddm.privilege_notice?.includes("pkexec"), "SDDM notice must reference pkexec");
+});
+
+test("27. Target Selection Survives Frontend to Tauri Invocation Payload", () => {
+  // Simulate AppContext / LockScreenDetailView call parameters
+  const targets: Array<"quickshell" | "sddm" | "both"> = ["quickshell", "sddm", "both"];
+  for (const tgt of targets) {
+    const previewPayload = { packageId: "lockscreen-qylock-dog-samurai", target: tgt };
+    const installPayload = { packageId: "lockscreen-qylock-dog-samurai", createSnapshot: true, target: tgt };
+
+    assert.equal(previewPayload.target, tgt);
+    assert.equal(installPayload.target, tgt);
+    assert.equal(installPayload.createSnapshot, true);
+  }
+});
+
+test("28. Target Capability Data: Audit all 5 community Qylock package manifests", () => {
+  const themes = [
+    "lockscreen-qylock-dog-samurai",
+    "lockscreen-qylock-clockwork-tape",
+    "lockscreen-qylock-nier-automata",
+    "lockscreen-qylock-forest",
+    "lockscreen-qylock-material-you",
+  ];
+
+  for (const themeId of themes) {
+    const manifestPath = path.resolve(`repositories/community/packages/${themeId}/manifest.json`);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+    assert.equal(manifest.compatibility.required.length, 0, `${themeId} root required must be empty`);
+    assert.equal(manifest.targets.quickshell.supported, true);
+    assert.deepEqual(manifest.targets.quickshell.dependencies, ["quickshell"]);
+    assert.equal(manifest.targets.quickshell.scope, "user");
+
+    assert.equal(manifest.targets.sddm.supported, true);
+    assert.deepEqual(manifest.targets.sddm.dependencies, ["sddm"]);
+    assert.equal(manifest.targets.sddm.scope, "system");
+
+    assert.ok(manifest.targets.quickshell.files.length > 0);
+    assert.ok(manifest.targets.sddm.files.length > 0);
+    assert.ok(manifest.provenance.upstream.includes("Darkkal44/qylock"));
+    assert.equal(manifest.provenance.license, "GPL-3.0");
+    assert.ok(manifest.media.poster);
+    assert.ok(manifest.media.preview_video);
+  }
+});

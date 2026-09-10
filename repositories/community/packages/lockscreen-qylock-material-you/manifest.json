@@ -30,9 +30,7 @@
       "wayland"
     ],
     "distros": [],
-    "required": [
-      "quickshell"
-    ],
+    "required": [],
     "optional": [
       "sddm"
     ]
@@ -46,8 +44,41 @@
   ],
   "provider": "qylock",
   "targets": {
-    "quickshell": true,
-    "sddm": true
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/material-you/theme.conf",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/material-you/theme.conf",
+          "description": "Material You Quickshell session lock configuration."
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-material-you/Main.qml",
+      "files": [
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-material-you/Main.qml",
+          "description": "Material You SDDM greeter QML entrypoint."
+        },
+        {
+          "source": "files/config",
+          "target": "/usr/share/sddm/themes/ryzora-material-you/metadata.desktop",
+          "description": "Material You SDDM metadata."
+        }
+      ]
+    }
   },
   "source": {
     "type": "git",

@@ -88,6 +88,7 @@ pub struct ResolvedCapabilityDependency {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DependencyResolutionReport {
+
     pub root_package_id: String,
     pub resolved: bool,
     pub root_package: Option<ResolvedPackageNode>,
@@ -100,6 +101,25 @@ pub struct DependencyResolutionReport {
     pub cycles: Vec<Vec<String>>,
     pub install_order: Vec<String>,
 }
+
+impl DependencyResolutionReport {
+    pub fn empty(root_package_id: &str) -> Self {
+        Self {
+            root_package_id: root_package_id.to_string(),
+            resolved: false,
+            root_package: None,
+            packages: Vec::new(),
+            system_dependencies: Vec::new(),
+            capability_dependencies: Vec::new(),
+            missing_required: Vec::new(),
+            missing_optional: Vec::new(),
+            conflicts: Vec::new(),
+            cycles: Vec::new(),
+            install_order: Vec::new(),
+        }
+    }
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Package Provider Interface
@@ -218,6 +238,15 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
 
     /// Resolve dependencies starting from an existing manifest.
     pub fn resolve_manifest(&self, root_manifest: &RyzoraManifest) -> DependencyResolutionReport {
+        self.resolve_manifest_for_target(root_manifest, None)
+    }
+
+    /// Resolve dependencies starting from an existing manifest for a specific installation target.
+    pub fn resolve_manifest_for_target(
+        &self,
+        root_manifest: &RyzoraManifest,
+        target: Option<&str>,
+    ) -> DependencyResolutionReport {
         let root_id = root_manifest.id.clone();
         let mut packages_map: HashMap<String, ResolvedPackageNode> = HashMap::new();
         let mut version_requirements: HashMap<String, Vec<(String, String)>> = HashMap::new();
@@ -237,6 +266,7 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
             root_repo_id,
             true, // root package is directly required
             true, // effective required
+            target,
             &mut call_stack,
             &mut packages_map,
             &mut version_requirements,
@@ -286,10 +316,44 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
             }
         }
 
+        let active_wm = self.system_info.window_manager.to_lowercase();
+        let active_de = self.system_info.desktop_environment.to_lowercase();
+        let has_matching_desktop = root_manifest.compatibility.desktops.is_empty()
+            || root_manifest.compatibility.desktops.iter().any(|d| {
+                let dl = d.to_lowercase();
+                dl == "universal"
+                    || dl == "all"
+                    || dl == "any"
+                    || dl == active_wm
+                    || dl == active_de
+                    || active_wm.contains(&dl)
+                    || active_de.contains(&dl)
+            });
+
         for cap_dep in capability_deps_map.values() {
             if cap_dep.status == DependencyStatus::Missing
                 || cap_dep.status == DependencyStatus::Incompatible
             {
+                // SDDM target is a display manager greeter outside session/desktop scope
+                if target == Some("sddm")
+                    && (cap_dep.kind == DependencyKind::DesktopCapability
+                        || cap_dep.kind == DependencyKind::RuntimeCapability)
+                {
+                    continue;
+                }
+
+                // If desktop alternatives exist and active desktop matches any of them, don't flag non-matching as missing
+                if cap_dep.kind == DependencyKind::DesktopCapability
+                    && has_matching_desktop
+                    && root_manifest
+                        .compatibility
+                        .desktops
+                        .iter()
+                        .any(|d| d.eq_ignore_ascii_case(&cap_dep.capability))
+                {
+                    continue;
+                }
+
                 if cap_dep.required {
                     missing_required.push(cap_dep.capability.clone());
                 } else {
@@ -358,6 +422,7 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
         repo_id: Option<String>,
         direct_required: bool,
         effective_required: bool,
+        target: Option<&str>,
         call_stack: &mut Vec<String>,
         packages: &mut HashMap<String, ResolvedPackageNode>,
         version_requirements: &mut HashMap<String, Vec<(String, String)>>,
@@ -393,6 +458,21 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
             cycle.push(pkg_id.clone());
             cycles.push(cycle);
             return;
+        }
+
+        // Check target support on root package
+        if call_stack.is_empty() {
+            if let Some(t) = target {
+                if t == "both" {
+                    if !manifest.supports_target("quickshell") && !manifest.supports_target("sddm") {
+                        conflicts.push(format!("Package '{}' does not support target 'both'", pkg_id));
+                        return;
+                    }
+                } else if !manifest.supports_target(t) {
+                    conflicts.push(format!("Package '{}' does not support target '{}'", pkg_id, t));
+                    return;
+                }
+            }
         }
 
         call_stack.push(pkg_id.clone());
@@ -452,7 +532,13 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
         }
 
         let repo_id = repo_id.or_else(|| self.provider.get_repository_id(&pkg_id));
-        let all_deps = manifest.all_dependencies();
+        let all_deps = if call_stack.len() == 1 && target.is_some() {
+            manifest
+                .target_dependencies(target)
+                .unwrap_or_else(|_| manifest.all_dependencies())
+        } else {
+            manifest.all_dependencies()
+        };
         let mut child_package_ids = Vec::new();
 
         // Process all dependencies declared by this package
@@ -581,6 +667,7 @@ impl<'a, P: PackageProvider> DependencyResolver<'a, P> {
                                 Some(best_repo_id),
                                 dep.required,
                                 child_effective_required,
+                                None,
                                 call_stack,
                                 packages,
                                 version_requirements,
@@ -963,6 +1050,7 @@ mod tests {
             },
             files: vec![],
             dependencies: deps,
+            targets: std::collections::HashMap::new(),
         }
     }
 

@@ -31,6 +31,10 @@ pub struct InstallationPlan {
     pub missing_dependencies: Vec<String>,
     pub warnings: Vec<String>,
     #[serde(default)]
+    pub requires_privilege: bool,
+    #[serde(default)]
+    pub selected_target: Option<String>,
+    #[serde(default)]
     pub dependency_report: Option<crate::dependency::DependencyResolutionReport>,
     #[serde(default)]
     pub cryptographic_evaluation: Option<crate::crypto::CryptographicEvaluation>,
@@ -353,8 +357,28 @@ pub fn validate_package_source_file(
 /// Must start with "~/", must be within user home, and must be under ~/.config/
 /// or other standard user config scope.
 pub fn validate_target_safety(target_str: &str, home_dir: &Path) -> Result<PathBuf, String> {
+    // System scope for SDDM display manager greeter themes
+    if target_str.starts_with("/usr/share/sddm/themes/") {
+        if target_str.contains('\0') {
+            return Err(format!("Target path '{}' contains null bytes", target_str));
+        }
+        for comp in Path::new(target_str).components() {
+            if let Component::ParentDir = comp {
+                return Err(format!(
+                    "Target path '{}' contains forbidden parent traversal ('..')",
+                    target_str
+                ));
+            }
+        }
+        if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+            let rel = target_str.trim_start_matches('/');
+            return Ok(Path::new(&sys_root).join(rel));
+        }
+        return Ok(PathBuf::from(target_str));
+    }
+
     if !target_str.starts_with("~/") {
-        return Err(format!("Target path '{}' must start with '~/'", target_str));
+        return Err(format!("Target path '{}' must start with '~/' or '/usr/share/sddm/themes/'", target_str));
     }
     if target_str.contains('\0') {
         return Err(format!("Target path '{}' contains null bytes", target_str));
@@ -437,8 +461,17 @@ pub fn generate_installation_plan_in(
     home_dir: &Path,
     system_info: &SystemInfo,
 ) -> Result<InstallationPlan, String> {
+    generate_installation_plan_target_in(package_dir, home_dir, system_info, None)
+}
+
+pub fn generate_installation_plan_target_in(
+    package_dir: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    target: Option<&str>,
+) -> Result<InstallationPlan, String> {
     let trust_store = crate::crypto::TrustStore::load_default();
-    generate_installation_plan_in_with_trust(package_dir, home_dir, system_info, &trust_store)
+    generate_installation_plan_target_in_with_trust(package_dir, home_dir, system_info, &trust_store, target)
 }
 
 pub fn generate_installation_plan_in_with_trust(
@@ -447,14 +480,38 @@ pub fn generate_installation_plan_in_with_trust(
     system_info: &SystemInfo,
     trust_store: &crate::crypto::TrustStore,
 ) -> Result<InstallationPlan, String> {
+    generate_installation_plan_target_in_with_trust(package_dir, home_dir, system_info, trust_store, None)
+}
+
+pub fn generate_installation_plan_target_in_with_trust(
+    package_dir: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    trust_store: &crate::crypto::TrustStore,
+    target: Option<&str>,
+) -> Result<InstallationPlan, String> {
     let manifest = load_package_manifest(package_dir)?;
 
-    // Compatibility check
+    // Target validation
+    let mut conflicts = Vec::new();
+    let mut warnings = Vec::new();
+    if let Some(tgt) = target {
+        if tgt == "both" {
+            if !manifest.supports_target("quickshell") && !manifest.supports_target("sddm") {
+                conflicts.push(format!("Package '{}' does not support target 'both'", manifest.id));
+            }
+        } else if !manifest.supports_target(tgt) {
+            conflicts.push(format!("Package '{}' does not support target '{}'", manifest.id, tgt));
+        }
+    }
+
+    // Compatibility check (SDDM is a display manager greeter, not a user desktop session)
+    let is_sddm_target = target == Some("sddm");
     let reqs = CompatibilityRequirements {
         supported_distros: manifest.compatibility.distros.clone(),
-        supported_desktops: manifest.compatibility.desktops.clone(),
-        supported_sessions: manifest.compatibility.sessions.clone(),
-        required_binaries: manifest.compatibility.required.clone(),
+        supported_desktops: if is_sddm_target { vec![] } else { manifest.compatibility.desktops.clone() },
+        supported_sessions: if is_sddm_target { vec![] } else { manifest.compatibility.sessions.clone() },
+        required_binaries: if target.is_some() { vec![] } else { manifest.compatibility.required.clone() },
         optional_binaries: manifest.compatibility.optional.clone(),
     };
     let compat_report = evaluate_compatibility(system_info, &reqs);
@@ -475,8 +532,6 @@ pub fn generate_installation_plan_in_with_trust(
     let mut files_to_replace = Vec::new();
     let mut files_unchanged = Vec::new();
     let mut directories_to_create = Vec::new();
-    let mut conflicts = Vec::new();
-    let mut warnings = Vec::new();
 
     // Phase 12: Cryptographic Signature & Trust Chain Evaluation
     let crypto_eval =
@@ -492,10 +547,10 @@ pub fn generate_installation_plan_in_with_trust(
         }
     }
 
-    // Phase 9: Dependency Intelligence & Resolution
+    // Target-Aware Dependency Intelligence & Resolution
     let provider = crate::dependency::RepositoryPackageProvider::new();
     let resolver = crate::dependency::DependencyResolver::new(&provider, system_info);
-    let dep_report = resolver.resolve_manifest(&manifest);
+    let dep_report = resolver.resolve_manifest_for_target(&manifest, target);
 
     for m in &dep_report.missing_required {
         if !missing_deps.contains(m) {
@@ -520,7 +575,15 @@ pub fn generate_installation_plan_in_with_trust(
         compat_status = "missing_dependencies".to_string();
     }
 
-    for file_decl in &manifest.files {
+    let target_files = match manifest.target_files(target) {
+        Ok(f) => f,
+        Err(e) => {
+            conflicts.push(e);
+            vec![]
+        }
+    };
+
+    for file_decl in &target_files {
         // Validate source file
         let src_path = match validate_package_source_file(package_dir, &file_decl.source) {
             Ok(p) => p,
@@ -576,6 +639,24 @@ pub fn generate_installation_plan_in_with_trust(
         }
     }
 
+    let target_required_deps = if target.is_some() {
+        dep_report
+            .system_dependencies
+            .iter()
+            .filter(|d| d.required)
+            .map(|d| d.binary.clone())
+            .collect()
+    } else {
+        manifest.compatibility.required.clone()
+    };
+
+    let requires_privilege = target == Some("sddm")
+        || target == Some("both")
+        || files_to_create
+            .iter()
+            .chain(files_to_replace.iter())
+            .any(|f| f.starts_with("/usr/"));
+
     Ok(InstallationPlan {
         package_id: manifest.id,
         package_name: manifest.name,
@@ -586,9 +667,11 @@ pub fn generate_installation_plan_in_with_trust(
         directories_to_create,
         conflicts,
         compatibility_status: compat_status,
-        required_dependencies: manifest.compatibility.required,
+        required_dependencies: target_required_deps,
         missing_dependencies: missing_deps,
         warnings,
+        requires_privilege,
+        selected_target: target.map(|s| s.to_string()),
         dependency_report: Some(dep_report),
         cryptographic_evaluation: crypto_eval,
     })
@@ -639,8 +722,30 @@ pub fn install_package_options_in(
     system_info: &SystemInfo,
     create_snapshot: bool,
 ) -> Result<InstallResult, String> {
+    install_package_target_options_in(
+        package_dir,
+        snapshots_root,
+        installed_root,
+        staging_root,
+        home_dir,
+        system_info,
+        create_snapshot,
+        None,
+    )
+}
+
+pub fn install_package_target_options_in(
+    package_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    staging_root: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    create_snapshot: bool,
+    target: Option<&str>,
+) -> Result<InstallResult, String> {
     let trust_store = crate::crypto::TrustStore::load_default();
-    install_package_options_in_with_trust(
+    install_package_target_options_in_with_trust(
         package_dir,
         snapshots_root,
         installed_root,
@@ -649,6 +754,7 @@ pub fn install_package_options_in(
         system_info,
         &trust_store,
         create_snapshot,
+        target,
     )
 }
 
@@ -661,7 +767,7 @@ pub fn install_package_in_with_trust(
     system_info: &SystemInfo,
     trust_store: &crate::crypto::TrustStore,
 ) -> Result<InstallResult, String> {
-    install_package_options_in_with_trust(
+    install_package_target_options_in_with_trust(
         package_dir,
         snapshots_root,
         installed_root,
@@ -670,6 +776,7 @@ pub fn install_package_in_with_trust(
         system_info,
         trust_store,
         true,
+        None,
     )
 }
 
@@ -683,11 +790,35 @@ pub fn install_package_options_in_with_trust(
     trust_store: &crate::crypto::TrustStore,
     create_snapshot: bool,
 ) -> Result<InstallResult, String> {
+    install_package_target_options_in_with_trust(
+        package_dir,
+        snapshots_root,
+        installed_root,
+        staging_root,
+        home_dir,
+        system_info,
+        trust_store,
+        create_snapshot,
+        None,
+    )
+}
+
+pub fn install_package_target_options_in_with_trust(
+    package_dir: &Path,
+    snapshots_root: &Path,
+    installed_root: &Path,
+    staging_root: &Path,
+    home_dir: &Path,
+    system_info: &SystemInfo,
+    trust_store: &crate::crypto::TrustStore,
+    create_snapshot: bool,
+    target: Option<&str>,
+) -> Result<InstallResult, String> {
     let manifest = load_package_manifest(package_dir)?;
 
     // 1. Pre-flight check & plan
     let plan =
-        generate_installation_plan_in_with_trust(package_dir, home_dir, system_info, trust_store)?;
+        generate_installation_plan_target_in_with_trust(package_dir, home_dir, system_info, trust_store, target)?;
 
     if !plan.conflicts.is_empty() {
         return Err(format!(
@@ -725,9 +856,19 @@ pub fn install_package_options_in_with_trust(
         return Err(format!("Cryptographic Verification Error: {}", err_msg));
     }
 
+    let target_files = manifest.target_files(target)?;
+
+    // Privilege check: in live mode, ensure root permissions if system paths are targeted
+    if plan.requires_privilege && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+        let is_root = std::env::var("USER").map(|u| u == "root").unwrap_or(false);
+        if !is_root {
+            return Err("Administrator privilege (pkexec) required to install SDDM system themes to /usr/share/sddm/themes/".to_string());
+        }
+    }
+
     // 2. Collect target paths and optionally create pre-install snapshot
     let snapshot_id_opt: Option<String> = if create_snapshot {
-        let target_paths: Vec<String> = manifest.files.iter().map(|f| f.target.clone()).collect();
+        let target_paths: Vec<String> = target_files.iter().filter(|f| f.target.starts_with("~/")).map(|f| f.target.clone()).collect();
         let snapshot_label = format!("pre-install-{}", manifest.id);
         let snapshot_meta =
             create_snapshot_in(&snapshot_label, &target_paths, home_dir, snapshots_root)
@@ -762,7 +903,7 @@ pub fn install_package_options_in_with_trust(
     // 6. Stage payload files and calculate expected checksums / link targets
     let mut staged_items = Vec::new(); // (staged_path, target_path, expected_hash, is_symlink, symlink_target, target_str)
 
-    for (idx, file_decl) in manifest.files.iter().enumerate() {
+    for (idx, file_decl) in target_files.iter().enumerate() {
         let src_path = match validate_package_source_file(package_dir, &file_decl.source) {
             Ok(p) => p,
             Err(e) => {
@@ -2642,15 +2783,19 @@ pub fn resolve_update_package(
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn preview_installation(package_id: String) -> Result<InstallationPlan, String> {
+pub fn preview_installation(package_id: String, target: Option<String>) -> Result<InstallationPlan, String> {
     let home = get_home_dir();
     let package_dir = find_package_dir(&package_id, None)?;
     let sys = detect_system_info();
-    generate_installation_plan_in(&package_dir, &home, &sys)
+    generate_installation_plan_target_in(&package_dir, &home, &sys, target.as_deref())
 }
 
 #[tauri::command]
-pub fn install_package(package_id: String, create_snapshot: Option<bool>) -> Result<InstallResult, String> {
+pub fn install_package(
+    package_id: String,
+    create_snapshot: Option<bool>,
+    target: Option<String>,
+) -> Result<InstallResult, String> {
     let home = get_home_dir();
     let package_dir = find_package_dir(&package_id, None)?;
     let snapshots_root = get_ryzora_snapshots_dir();
@@ -2658,7 +2803,7 @@ pub fn install_package(package_id: String, create_snapshot: Option<bool>) -> Res
     let staging_root = get_ryzora_staging_dir();
     let sys = detect_system_info();
 
-    install_package_options_in(
+    install_package_target_options_in(
         &package_dir,
         &snapshots_root,
         &installed_root,
@@ -2666,6 +2811,7 @@ pub fn install_package(package_id: String, create_snapshot: Option<bool>) -> Res
         &home,
         &sys,
         create_snapshot.unwrap_or(true),
+        target.as_deref(),
     )
 }
 
@@ -6403,4 +6549,125 @@ mod tests {
         assert!(rollback.is_ok());
         assert!(rollback.unwrap().success);
     }
+
+    #[test]
+    fn test_target_aware_sddm_does_not_resolve_quickshell_sway_cosmic() {
+        let sandbox = TestSandbox::new("target-sddm-isolation");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let plan = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("sddm")).unwrap();
+        
+        // SDDM target must resolve SDDM
+        assert!(plan.required_dependencies.contains(&"sddm".to_string()));
+        // SDDM target must NOT resolve quickshell
+        assert!(!plan.required_dependencies.contains(&"quickshell".to_string()));
+        assert!(!plan.missing_dependencies.contains(&"quickshell".to_string()));
+        // SDDM target must NOT resolve sway
+        assert!(!plan.required_dependencies.contains(&"sway".to_string()));
+        assert!(!plan.missing_dependencies.contains(&"sway".to_string()));
+        // SDDM target must NOT resolve cosmic
+        assert!(!plan.required_dependencies.contains(&"cosmic".to_string()));
+        assert!(!plan.missing_dependencies.contains(&"cosmic".to_string()));
+        // SDDM target must require privilege
+        assert!(plan.requires_privilege);
+        assert_eq!(plan.selected_target, Some("sddm".to_string()));
+    }
+
+    #[test]
+    fn test_target_aware_quickshell_resolves_quickshell() {
+        let sandbox = TestSandbox::new("target-quickshell");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let plan = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("quickshell")).unwrap();
+        
+        assert!(plan.required_dependencies.contains(&"quickshell".to_string()));
+        assert!(!plan.required_dependencies.contains(&"sddm".to_string()));
+        // Quickshell is user-space: does not require privilege
+        assert!(!plan.requires_privilege);
+        assert_eq!(plan.selected_target, Some("quickshell".to_string()));
+    }
+
+    #[test]
+    fn test_target_aware_both_resolves_union() {
+        let sandbox = TestSandbox::new("target-both");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let plan = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("both")).unwrap();
+        
+        // Both target must contain union of quickshell and sddm
+        assert!(plan.required_dependencies.contains(&"quickshell".to_string()));
+        assert!(plan.required_dependencies.contains(&"sddm".to_string()));
+        // Privilege required because SDDM is included
+        assert!(plan.requires_privilege);
+        assert_eq!(plan.selected_target, Some("both".to_string()));
+    }
+
+    #[test]
+    fn test_target_aware_dry_run_and_real_install_same_plan() {
+        let sandbox = TestSandbox::new("target-dryrun-parity");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let dry_run_plan = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("sddm")).unwrap();
+        
+        assert_eq!(dry_run_plan.required_dependencies, vec!["sddm".to_string()]);
+        assert_eq!(dry_run_plan.selected_target, Some("sddm".to_string()));
+        assert!(dry_run_plan.requires_privilege);
+    }
+
+    #[test]
+    fn test_target_aware_unsupported_target_rejected() {
+        let sandbox = TestSandbox::new("target-unsupported");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        // Hyprlock is unsupported by Dog Samurai
+        let plan = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("hyprlock")).unwrap();
+        assert_eq!(plan.compatibility_status, "incompatible");
+        assert!(plan.conflicts.iter().any(|c| c.contains("does not support target 'hyprlock'")));
+    }
+
+    #[test]
+    fn test_target_aware_clean_machine_isolation() {
+        let sandbox = TestSandbox::new("clean-machine-target");
+        let sys = TestSandbox::mock_system();
+        let dog_samurai_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-dog-samurai");
+
+        let plan_q = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("quickshell")).unwrap();
+        for f in &plan_q.files_to_create {
+            assert!(!f.contains("/home/silentbyte/qylock"));
+            assert!(!f.contains("~/.local/share/qylock"));
+            assert!(!f.contains("~/.config/qylock"));
+            assert!(f.contains(".local/share/ryzora"));
+        }
+
+        let plan_s = generate_installation_plan_target_in(&dog_samurai_dir, &sandbox.home_dir, &sys, Some("sddm")).unwrap();
+        for f in &plan_s.files_to_create {
+            assert!(!f.contains("/home/silentbyte/qylock"));
+            assert!(!f.contains("~/.local/share/qylock"));
+            assert!(f.starts_with("/usr/share/sddm/themes/ryzora-"));
+        }
+    }
 }
+

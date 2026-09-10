@@ -1,7 +1,7 @@
 use crate::dependency::{DependencyKind, DependencySpec};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ryzora Package Manifest — spec version "1"
@@ -70,7 +70,7 @@ pub struct ManifestCompatibility {
 }
 
 /// A single file mapping inside a Ryzora package.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ManifestFile {
     /// Path relative to the package root (e.g. "files/hypr/hyprland.conf").
     pub source: String,
@@ -82,6 +82,60 @@ pub struct ManifestFile {
     /// Human-readable description of what this file does.
     #[serde(default)]
     pub description: String,
+}
+
+
+/// Target-specific execution and configuration definition (e.g. Quickshell, SDDM).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TargetDefinition {
+    #[serde(default = "default_true")]
+    pub supported: bool,
+
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+
+    #[serde(default)]
+    pub files: Vec<ManifestFile>,
+
+    #[serde(default)]
+    pub scope: Option<String>,
+
+    #[serde(default)]
+    pub entrypoint: Option<String>,
+}
+
+pub fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TargetEntry {
+    Boolean(bool),
+    Definition(TargetDefinition),
+}
+
+impl TargetEntry {
+    pub fn to_definition(&self, target_name: &str) -> TargetDefinition {
+        match self {
+            TargetEntry::Boolean(b) => {
+                let default_scope = if target_name == "sddm" { "system" } else { "user" };
+                let default_deps = if *b {
+                    vec![target_name.to_string()]
+                } else {
+                    vec![]
+                };
+                TargetDefinition {
+                    supported: *b,
+                    dependencies: default_deps,
+                    files: vec![],
+                    scope: Some(default_scope.to_string()),
+                    entrypoint: None,
+                }
+            }
+            TargetEntry::Definition(d) => d.clone(),
+        }
+    }
 }
 
 /// The authoritative Ryzora package manifest (spec v1).
@@ -127,9 +181,221 @@ pub struct RyzoraManifest {
     /// Typed dependencies (Phase 9).
     #[serde(default)]
     pub dependencies: Vec<DependencySpec>,
+
+    /// Target definitions for dual/multi-target packages (e.g. quickshell, sddm).
+    #[serde(default)]
+    pub targets: HashMap<String, TargetEntry>,
 }
 
 impl RyzoraManifest {
+
+    pub fn get_target_definition(&self, target_name: &str) -> Option<TargetDefinition> {
+        self.targets.get(target_name).map(|entry| entry.to_definition(target_name))
+    }
+
+    pub fn supports_target(&self, target_name: &str) -> bool {
+        if let Some(def) = self.get_target_definition(target_name) {
+            def.supported
+        } else {
+            false
+        }
+    }
+
+    /// Resolve dependencies specific to a target selection ("quickshell", "sddm", "both", or None).
+    pub fn target_dependencies(&self, target: Option<&str>) -> Result<Vec<DependencySpec>, String> {
+        match target {
+            None => {
+                if self.targets.is_empty() {
+                    Ok(self.all_dependencies())
+                } else {
+                    let mut result = Vec::new();
+                    let mut seen = HashSet::new();
+                    for (tname, entry) in &self.targets {
+                        let def = entry.to_definition(tname);
+                        if def.supported {
+                            for dep_name in def.dependencies {
+                                if !seen.contains(&dep_name) {
+                                    seen.insert(dep_name.clone());
+                                    result.push(DependencySpec {
+                                        id: dep_name.clone(),
+                                        kind: DependencyKind::SystemBinary,
+                                        version_req: None,
+                                        required: true,
+                                        description: Some(format!("Required for target '{}': {}", tname, dep_name)),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    Ok(result)
+                }
+            }
+            Some("quickshell") => {
+                if !self.supports_target("quickshell") {
+                    return Err(format!("Package '{}' does not support target 'quickshell'", self.id));
+                }
+                let def = self.get_target_definition("quickshell").unwrap();
+                let deps = def.dependencies.into_iter().map(|dep_name| {
+                    DependencySpec {
+                        id: dep_name.clone(),
+                        kind: DependencyKind::SystemBinary,
+                        version_req: None,
+                        required: true,
+                        description: Some(format!("Required for Quickshell session lock: {}", dep_name)),
+                    }
+                }).collect();
+                Ok(deps)
+            }
+            Some("sddm") => {
+                if !self.supports_target("sddm") {
+                    return Err(format!("Package '{}' does not support target 'sddm'", self.id));
+                }
+                let def = self.get_target_definition("sddm").unwrap();
+                let deps = def.dependencies.into_iter().map(|dep_name| {
+                    DependencySpec {
+                        id: dep_name.clone(),
+                        kind: DependencyKind::SystemBinary,
+                        version_req: None,
+                        required: true,
+                        description: Some(format!("Required for SDDM login screen: {}", dep_name)),
+                    }
+                }).collect();
+                Ok(deps)
+            }
+            Some("both") => {
+                if !self.supports_target("quickshell") && !self.supports_target("sddm") {
+                    return Err(format!("Package '{}' does not support target 'both'", self.id));
+                }
+                let mut result = Vec::new();
+                let mut seen = HashSet::new();
+                for t in &["quickshell", "sddm"] {
+                    if let Some(def) = self.get_target_definition(t) {
+                        if def.supported {
+                            for dep_name in def.dependencies {
+                                if !seen.contains(&dep_name) {
+                                    seen.insert(dep_name.clone());
+                                    result.push(DependencySpec {
+                                        id: dep_name.clone(),
+                                        kind: DependencyKind::SystemBinary,
+                                        version_req: None,
+                                        required: true,
+                                        description: Some(format!("Required for target '{}': {}", t, dep_name)),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(result)
+            }
+            Some(other) => {
+                if let Some(def) = self.get_target_definition(other) {
+                    if !def.supported {
+                        return Err(format!("Package '{}' target '{}' is marked unsupported", self.id, other));
+                    }
+                    let deps = def.dependencies.into_iter().map(|dep_name| {
+                        DependencySpec {
+                            id: dep_name.clone(),
+                            kind: DependencyKind::SystemBinary,
+                            version_req: None,
+                            required: true,
+                            description: Some(format!("Required for target '{}': {}", other, dep_name)),
+                        }
+                    }).collect();
+                    Ok(deps)
+                } else {
+                    Err(format!("Package '{}' does not support target '{}'", self.id, other))
+                }
+            }
+        }
+    }
+
+    /// Resolve files specific to target selection.
+    pub fn target_files(&self, target: Option<&str>) -> Result<Vec<ManifestFile>, String> {
+        match target {
+            None => Ok(self.files.clone()),
+            Some("quickshell") => {
+                if !self.supports_target("quickshell") {
+                    return Err(format!("Package '{}' does not support target 'quickshell'", self.id));
+                }
+                let def = self.get_target_definition("quickshell").unwrap();
+                if !def.files.is_empty() {
+                    Ok(def.files)
+                } else {
+                    let qfiles: Vec<ManifestFile> = self.files.iter()
+                        .filter(|f| f.target.starts_with("~/"))
+                        .cloned()
+                        .collect();
+                    if qfiles.is_empty() {
+                        Ok(self.files.clone())
+                    } else {
+                        Ok(qfiles)
+                    }
+                }
+            }
+            Some("sddm") => {
+                if !self.supports_target("sddm") {
+                    return Err(format!("Package '{}' does not support target 'sddm'", self.id));
+                }
+                let def = self.get_target_definition("sddm").unwrap();
+                if !def.files.is_empty() {
+                    Ok(def.files)
+                } else {
+                    let sddm_files: Vec<ManifestFile> = self.files.iter()
+                        .filter(|f| f.target.starts_with("/usr/share/sddm/themes/"))
+                        .cloned()
+                        .collect();
+                    if !sddm_files.is_empty() {
+                        Ok(sddm_files)
+                    } else {
+                        let theme_id = self.id.trim_start_matches("lockscreen-qylock-").trim_start_matches("lockscreen-");
+                        Ok(vec![
+                            ManifestFile {
+                                source: "files/config".to_string(),
+                                target: format!("/usr/share/sddm/themes/ryzora-{}/Main.qml", theme_id),
+                                description: format!("SDDM greeter QML for {}", self.name),
+                            },
+                            ManifestFile {
+                                source: "files/config".to_string(),
+                                target: format!("/usr/share/sddm/themes/ryzora-{}/metadata.desktop", theme_id),
+                                description: format!("SDDM theme metadata for {}", self.name),
+                            }
+                        ])
+                    }
+                }
+            }
+            Some("both") => {
+                let mut all_files = Vec::new();
+                if self.supports_target("quickshell") {
+                    let mut qf = self.target_files(Some("quickshell"))?;
+                    all_files.append(&mut qf);
+                }
+                if self.supports_target("sddm") {
+                    let mut sf = self.target_files(Some("sddm"))?;
+                    all_files.append(&mut sf);
+                }
+                if all_files.is_empty() {
+                    return Err(format!("Package '{}' has no files for target 'both'", self.id));
+                }
+                Ok(all_files)
+            }
+            Some(other) => {
+                if let Some(def) = self.get_target_definition(other) {
+                    if !def.supported {
+                        return Err(format!("Target '{}' is unsupported for package '{}'", other, self.id));
+                    }
+                    if !def.files.is_empty() {
+                        Ok(def.files)
+                    } else {
+                        Ok(self.files.clone())
+                    }
+                } else {
+                    Err(format!("Package '{}' does not support target '{}'", self.id, other))
+                }
+            }
+        }
+    }
+
     /// Return all dependencies, merging explicit  with legacy
     /// , , ,
     /// and .
@@ -177,19 +443,24 @@ impl RyzoraManifest {
         }
 
         // 3. Desktop / WM capabilities
-        for dt in &self.compatibility.desktops {
-            let dt_lower = dt.to_lowercase();
-            if dt_lower != "universal" && dt_lower != "all" {
-                let key = (dt.clone(), DependencyKind::DesktopCapability);
-                if !existing.contains(&key) {
-                    existing.insert(key);
-                    result.push(DependencySpec {
-                        id: dt.clone(),
-                        kind: DependencyKind::DesktopCapability,
-                        version_req: None,
-                        required: true,
-                        description: Some(format!("Desktop/WM capability: {}", dt)),
-                    });
+        // If a single desktop is specified, treat as mandatory.
+        // If multiple desktops are listed (e.g. ["hyprland", "sway", "cosmic"]), they are alternative targets,
+        // so they are evaluated as compatibility alternatives rather than co-requisite dependencies.
+        if self.compatibility.desktops.len() == 1 {
+            for dt in &self.compatibility.desktops {
+                let dt_lower = dt.to_lowercase();
+                if dt_lower != "universal" && dt_lower != "all" {
+                    let key = (dt.clone(), DependencyKind::DesktopCapability);
+                    if !existing.contains(&key) {
+                        existing.insert(key);
+                        result.push(DependencySpec {
+                            id: dt.clone(),
+                            kind: DependencyKind::DesktopCapability,
+                            version_req: None,
+                            required: true,
+                            description: Some(format!("Desktop/WM capability: {}", dt)),
+                        });
+                    }
                 }
             }
         }

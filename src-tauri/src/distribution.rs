@@ -975,6 +975,7 @@ pub mod tests {
                 description: "Waybar cyber styling".to_string(),
             }],
             dependencies: vec![],
+            targets: std::collections::HashMap::new(),
         }
     }
 

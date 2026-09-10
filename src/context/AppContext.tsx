@@ -60,9 +60,9 @@ interface AppContextType {
   isInstalling: boolean;
   installProgress: number;
   installLogs: string[];
-  previewInstallation: (packageId: string) => Promise<InstallationPlan>;
+  previewInstallation: (packageId: string, target?: string) => Promise<InstallationPlan>;
   resolvePackageDependencies: (packageId: string) => Promise<DependencyResolutionReport>;
-  installPackage: (pkg: PackageItem, createSnapshot?: boolean) => Promise<InstallResult>;
+  installPackage: (pkg: PackageItem, createSnapshot?: boolean, target?: string) => Promise<InstallResult>;
   uninstallPackage: (packageId: string) => Promise<UninstallResult>;
   checkPackageUpdate: (packageId: string) => Promise<PackageUpdateStatus>;
   checkAllUpdates: () => Promise<PackageUpdateStatus[]>;
@@ -561,13 +561,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const previewInstallation = async (packageId: string): Promise<InstallationPlan> => {
+  const previewInstallation = async (packageId: string, target?: string): Promise<InstallationPlan> => {
     try {
       await invoke("prepare_provider_package", { packageId });
     } catch {
       // Non-provider package or already present locally
     }
-    return await invoke<InstallationPlan>("preview_installation", { packageId });
+    return await invoke<InstallationPlan>("preview_installation", { packageId, target });
   };
 
   const resolvePackageDependencies = async (packageId: string): Promise<DependencyResolutionReport> => {
@@ -576,7 +576,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const installPackage = async (
     pkg: PackageItem,
-    createSnapshot: boolean = true
+    createSnapshot: boolean = true,
+    target?: string
   ): Promise<InstallResult> => {
     setIsInstalling(true);
     setInstallProgress(10);
@@ -599,7 +600,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Step 1: Pre-flight preview/plan
-      const plan = await previewInstallation(pkg.id);
+      const plan = await previewInstallation(pkg.id, target);
       setInstallProgress(25);
       setInstallLogs((prev) => [
         ...prev,
@@ -641,6 +642,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const result = await invoke<InstallResult>("install_package", {
         packageId: pkg.id,
         createSnapshot,
+        target,
       });
 
       if (result.success) {
