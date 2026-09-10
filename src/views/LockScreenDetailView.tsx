@@ -192,7 +192,11 @@ export const LockScreenDetailView: React.FC = () => {
   const handleApply = async () => {
     setIsApplying(true);
     try {
-      await applyLockscreen(selectedPackage.id, selectedTarget, customConfig);
+      const fullConfig = {
+        ...customConfig,
+        variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
+      };
+      await applyLockscreen(selectedPackage.id, selectedTarget, fullConfig);
     } catch {
       // toast is handled in AppContext
     } finally {
@@ -212,10 +216,17 @@ export const LockScreenDetailView: React.FC = () => {
   };
 
   const handleTest = async () => {
+    if (!isInstalled) {
+      setToast({
+        message: `Please install ${selectedPackage.title} before running a test.`,
+        type: "warning",
+      });
+      return;
+    }
     try {
-      await testLockscreen(selectedPackage.id);
-    } catch {
-      // toast is handled in AppContext
+      await testLockscreen(selectedPackage.id, selectedTarget);
+    } catch (e: any) {
+      // toast is handled in AppContext or error returned
     }
   };
 

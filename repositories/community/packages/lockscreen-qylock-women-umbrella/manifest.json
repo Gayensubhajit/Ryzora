@@ -1,0 +1,175 @@
+{
+  "id": "lockscreen-qylock-women-umbrella",
+  "name": "Women Umbrella",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Authentic Qylock lockscreen theme 'Women Umbrella', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
+  "tags": [
+    "qylock",
+    "quickshell",
+    "sddm",
+    "women-umbrella",
+    "animated"
+  ],
+  "color_palette": [
+    "#8b5cf6",
+    "#12141a",
+    "#24283b",
+    "#a9b1d6"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/Main.qml",
+      "description": "women-umbrella files/Main.qml"
+    },
+    {
+      "source": "files/bg.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/bg.png",
+      "description": "women-umbrella files/bg.png"
+    },
+    {
+      "source": "files/font/Itim-Regular.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/font/Itim-Regular.ttf",
+      "description": "women-umbrella files/font/Itim-Regular.ttf"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/metadata.desktop",
+      "description": "women-umbrella files/metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/theme.conf",
+      "description": "women-umbrella files/theme.conf"
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/Main.qml",
+      "files": [
+        {
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/Main.qml",
+          "description": "women-umbrella Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/bg.png",
+          "description": "women-umbrella bg.png (quickshell)"
+        },
+        {
+          "source": "files/font/Itim-Regular.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/font/Itim-Regular.ttf",
+          "description": "women-umbrella font/Itim-Regular.ttf (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/metadata.desktop",
+          "description": "women-umbrella metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/theme.conf",
+          "description": "women-umbrella theme.conf (quickshell)"
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-women-umbrella/Main.qml",
+      "files": [
+        {
+          "source": "files/Main.qml",
+          "target": "/usr/share/sddm/themes/ryzora-women-umbrella/Main.qml",
+          "description": "women-umbrella Main.qml (sddm)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "/usr/share/sddm/themes/ryzora-women-umbrella/bg.png",
+          "description": "women-umbrella bg.png (sddm)"
+        },
+        {
+          "source": "files/font/Itim-Regular.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-women-umbrella/font/Itim-Regular.ttf",
+          "description": "women-umbrella font/Itim-Regular.ttf (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "/usr/share/sddm/themes/ryzora-women-umbrella/metadata.desktop",
+          "description": "women-umbrella metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-women-umbrella/theme.conf",
+          "description": "women-umbrella theme.conf (sddm)"
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/women-umbrella"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
+    "license": "GPL-3.0",
+    "path": "themes/women-umbrella"
+  },
+  "media": {
+    "poster": "assets/lockscreens/women-umbrella.gif",
+    "preview_animated": "assets/lockscreens/women-umbrella.gif",
+    "media_type": "animated"
+  },
+  "media_type": "animated",
+  "config_schema": {
+    "options": {
+      "themeMode": {
+        "id": "themeMode",
+        "label": "Theme Mode",
+        "type": "select",
+        "default": "light",
+        "options": [
+          {
+            "value": "light",
+            "label": "Light Mode"
+          },
+          {
+            "value": "dark",
+            "label": "Dark Mode"
+          }
+        ]
+      }
+    }
+  }
+}

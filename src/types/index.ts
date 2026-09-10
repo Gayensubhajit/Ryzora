@@ -321,6 +321,8 @@ export interface LockscreenProvenance {
   provider_name: "qylock" | "hyprlock-community" | "swaylock-community" | "ryzora-native" | string;
   upstream_repo?: string;
   upstream_revision?: string;
+  upstream_path?: string;
+  variant?: string;
   author: string;
   license: string;
 }

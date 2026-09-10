@@ -1,25 +1,23 @@
 {
   "id": "lockscreen-qylock-ninja-gaiden",
-  "name": "Ninja Gaiden Moon",
+  "name": "Ninja Gaiden",
   "version": "1.0.0",
   "ryzora_spec": "1",
   "author": "Darkkal44",
   "package_type": "lockscreen",
-  "description": "Dark silhouette of Ryu Hayabusa against an ominous blood-red full moon.",
+  "description": "Authentic Qylock lockscreen theme 'Ninja Gaiden', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
   "tags": [
-    "action",
-    "blood-moon",
-    "ninja",
-    "quickshell",
     "qylock",
-    "retro",
-    "sddm"
+    "quickshell",
+    "sddm",
+    "ninja-gaiden",
+    "image"
   ],
   "color_palette": [
-    "#ef4444",
-    "#18181b",
-    "#b91c1c",
-    "#fca5a5"
+    "#8b5cf6",
+    "#12141a",
+    "#24283b",
+    "#a9b1d6"
   ],
   "compatibility": {
     "desktops": [
@@ -40,27 +38,32 @@
     {
       "source": "files/Main.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/Main.qml",
-      "description": "ninja-gaiden Main.qml"
+      "description": "ninja-gaiden files/Main.qml"
     },
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/bg.png",
-      "description": "ninja-gaiden bg.png"
+      "description": "ninja-gaiden files/bg.png"
     },
     {
-      "source": "files/metadata.desktop",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/metadata.desktop",
-      "description": "ninja-gaiden metadata.desktop"
-    },
-    {
-      "source": "files/theme.conf",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
-      "description": "ninja-gaiden theme.conf"
+      "source": "files/font/.gitkeep",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/.gitkeep",
+      "description": "ninja-gaiden files/font/.gitkeep"
     },
     {
       "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
-      "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf"
+      "description": "ninja-gaiden files/font/Tektur-VariableFont_wdth,wght.ttf"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/metadata.desktop",
+      "description": "ninja-gaiden files/metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
+      "description": "ninja-gaiden files/theme.conf"
     }
   ],
   "provider": "qylock",
@@ -84,6 +87,16 @@
           "description": "ninja-gaiden bg.png (quickshell)"
         },
         {
+          "source": "files/font/.gitkeep",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/.gitkeep",
+          "description": "ninja-gaiden font/.gitkeep (quickshell)"
+        },
+        {
+          "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
+          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (quickshell)"
+        },
+        {
           "source": "files/metadata.desktop",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/metadata.desktop",
           "description": "ninja-gaiden metadata.desktop (quickshell)"
@@ -92,11 +105,6 @@
           "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/theme.conf",
           "description": "ninja-gaiden theme.conf (quickshell)"
-        },
-        {
-          "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
-          "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
-          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (quickshell)"
         }
       ]
     },
@@ -119,6 +127,16 @@
           "description": "ninja-gaiden bg.png (sddm)"
         },
         {
+          "source": "files/font/.gitkeep",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/font/.gitkeep",
+          "description": "ninja-gaiden font/.gitkeep (sddm)"
+        },
+        {
+          "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
+          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (sddm)"
+        },
+        {
           "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/metadata.desktop",
           "description": "ninja-gaiden metadata.desktop (sddm)"
@@ -127,11 +145,6 @@
           "source": "files/theme.conf",
           "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/theme.conf",
           "description": "ninja-gaiden theme.conf (sddm)"
-        },
-        {
-          "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
-          "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
-          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (sddm)"
         }
       ]
     }
@@ -144,12 +157,13 @@
   },
   "provenance": {
     "upstream": "https://github.com/Darkkal44/qylock",
-    "revision": "main",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
     "license": "GPL-3.0",
     "path": "themes/ninja_gaiden"
   },
   "media": {
     "poster": "assets/lockscreens/ninja-gaiden-poster.jpg",
+    "preview_animated": "assets/lockscreens/ninja-gaiden.gif",
     "media_type": "image"
   },
   "media_type": "image"

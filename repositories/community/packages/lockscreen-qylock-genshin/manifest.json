@@ -1,25 +1,23 @@
 {
   "id": "lockscreen-qylock-genshin",
-  "name": "Genshin Impact",
+  "name": "Genshin",
   "version": "1.0.0",
   "ryzora_spec": "1",
   "author": "Darkkal44",
   "package_type": "lockscreen",
-  "description": "Dynamic time-of-day Teyvat lockscreen with dawn, day, dusk, and night animated cycles.",
+  "description": "Authentic Qylock lockscreen theme 'Genshin', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
   "tags": [
-    "anime",
-    "day-night",
-    "dynamic",
-    "genshin",
-    "quickshell",
     "qylock",
-    "sddm"
+    "quickshell",
+    "sddm",
+    "genshin",
+    "video"
   ],
   "color_palette": [
-    "#d4af37",
-    "#1e293b",
-    "#38bdf8",
-    "#f8fafc"
+    "#8b5cf6",
+    "#12141a",
+    "#24283b",
+    "#a9b1d6"
   ],
   "compatibility": {
     "desktops": [
@@ -40,52 +38,57 @@
     {
       "source": "files/GenshinButton.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/GenshinButton.qml",
-      "description": "genshin GenshinButton.qml"
+      "description": "genshin files/GenshinButton.qml"
     },
     {
       "source": "files/GenshinFrame.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/GenshinFrame.qml",
-      "description": "genshin GenshinFrame.qml"
+      "description": "genshin files/GenshinFrame.qml"
     },
     {
       "source": "files/Main.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/Main.qml",
-      "description": "genshin Main.qml"
+      "description": "genshin files/Main.qml"
     },
     {
       "source": "files/dawn.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dawn.mp4",
-      "description": "genshin dawn.mp4"
+      "description": "genshin files/dawn.mp4"
     },
     {
       "source": "files/day.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/day.mp4",
-      "description": "genshin day.mp4"
+      "description": "genshin files/day.mp4"
     },
     {
       "source": "files/dusk.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dusk.mp4",
-      "description": "genshin dusk.mp4"
+      "description": "genshin files/dusk.mp4"
+    },
+    {
+      "source": "files/font/.gitkeep",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/font/.gitkeep",
+      "description": "genshin files/font/.gitkeep"
     },
     {
       "source": "files/logo.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/logo.png",
-      "description": "genshin logo.png"
+      "description": "genshin files/logo.png"
     },
     {
       "source": "files/metadata.desktop",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/metadata.desktop",
-      "description": "genshin metadata.desktop"
+      "description": "genshin files/metadata.desktop"
     },
     {
       "source": "files/night.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/night.mp4",
-      "description": "genshin night.mp4"
+      "description": "genshin files/night.mp4"
     },
     {
       "source": "files/theme.conf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/theme.conf",
-      "description": "genshin theme.conf"
+      "description": "genshin files/theme.conf"
     }
   ],
   "provider": "qylock",
@@ -127,6 +130,11 @@
           "source": "files/dusk.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dusk.mp4",
           "description": "genshin dusk.mp4 (quickshell)"
+        },
+        {
+          "source": "files/font/.gitkeep",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/font/.gitkeep",
+          "description": "genshin font/.gitkeep (quickshell)"
         },
         {
           "source": "files/logo.png",
@@ -189,6 +197,11 @@
           "description": "genshin dusk.mp4 (sddm)"
         },
         {
+          "source": "files/font/.gitkeep",
+          "target": "/usr/share/sddm/themes/ryzora-genshin/font/.gitkeep",
+          "description": "genshin font/.gitkeep (sddm)"
+        },
+        {
           "source": "files/logo.png",
           "target": "/usr/share/sddm/themes/ryzora-genshin/logo.png",
           "description": "genshin logo.png (sddm)"
@@ -219,7 +232,7 @@
   },
   "provenance": {
     "upstream": "https://github.com/Darkkal44/qylock",
-    "revision": "main",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
     "license": "GPL-3.0",
     "path": "themes/Genshin"
   },
@@ -229,5 +242,58 @@
     "preview_animated": "assets/lockscreens/genshin.gif",
     "media_type": "video"
   },
-  "media_type": "video"
+  "media_type": "video",
+  "config_schema": {
+    "options": {
+      "background_mode": {
+        "id": "background_mode",
+        "label": "Atmosphere Mode",
+        "type": "select",
+        "description": "Select how Genshin Impact backgrounds transition.",
+        "default": "time",
+        "options": [
+          {
+            "value": "time",
+            "label": "Time-based",
+            "description": "Matches current time: dawn, day, dusk, or night"
+          },
+          {
+            "value": "random",
+            "label": "Random",
+            "description": "Random atmosphere per lock session"
+          },
+          {
+            "value": "static",
+            "label": "Static Cycle",
+            "description": "Fixed chosen atmosphere"
+          }
+        ]
+      },
+      "background_index": {
+        "id": "background_index",
+        "label": "Atmosphere Selection",
+        "type": "select",
+        "description": "Active atmosphere when in static mode.",
+        "default": "2",
+        "options": [
+          {
+            "value": "1",
+            "label": "Dawn (Mondstadt)"
+          },
+          {
+            "value": "2",
+            "label": "Day (Liyue Harbor)"
+          },
+          {
+            "value": "3",
+            "label": "Dusk (Grand Narukami)"
+          },
+          {
+            "value": "4",
+            "label": "Night (Celestia Sky)"
+          }
+        ]
+      }
+    }
+  }
 }

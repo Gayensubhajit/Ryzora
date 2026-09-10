@@ -1,25 +1,23 @@
 {
   "id": "lockscreen-qylock-sword",
-  "name": "Sword in the Stone",
+  "name": "Sword",
   "version": "1.0.0",
   "ryzora_spec": "1",
   "author": "Darkkal44",
   "package_type": "lockscreen",
-  "description": "Atmospheric pixel fantasy lockscreen of a legendary blade resting in an enchanted glade.",
+  "description": "Authentic Qylock lockscreen theme 'Sword', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
   "tags": [
-    "animated",
-    "fantasy",
-    "pixel",
-    "quickshell",
     "qylock",
+    "quickshell",
     "sddm",
-    "sword"
+    "sword",
+    "video"
   ],
   "color_palette": [
-    "#a855f7",
-    "#1e1b4b",
-    "#6366f1",
-    "#f1f5f9"
+    "#8b5cf6",
+    "#12141a",
+    "#24283b",
+    "#a9b1d6"
   ],
   "compatibility": {
     "desktops": [
@@ -40,32 +38,37 @@
     {
       "source": "files/BackgroundVideo.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/sword/BackgroundVideo.qml",
-      "description": "sword BackgroundVideo.qml"
+      "description": "sword files/BackgroundVideo.qml"
     },
     {
       "source": "files/Main.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/sword/Main.qml",
-      "description": "sword Main.qml"
+      "description": "sword files/Main.qml"
     },
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/sword/bg.mp4",
-      "description": "sword bg.mp4"
+      "description": "sword files/bg.mp4"
     },
     {
-      "source": "files/metadata.desktop",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/sword/metadata.desktop",
-      "description": "sword metadata.desktop"
-    },
-    {
-      "source": "files/theme.conf",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/sword/theme.conf",
-      "description": "sword theme.conf"
+      "source": "files/font/.gitkeep",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/.gitkeep",
+      "description": "sword files/font/.gitkeep"
     },
     {
       "source": "files/font/The Last Shuriken.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/The Last Shuriken.ttf",
-      "description": "sword font/The Last Shuriken.ttf"
+      "description": "sword files/font/The Last Shuriken.ttf"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/sword/metadata.desktop",
+      "description": "sword files/metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/sword/theme.conf",
+      "description": "sword files/theme.conf"
     }
   ],
   "provider": "qylock",
@@ -94,6 +97,16 @@
           "description": "sword bg.mp4 (quickshell)"
         },
         {
+          "source": "files/font/.gitkeep",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/.gitkeep",
+          "description": "sword font/.gitkeep (quickshell)"
+        },
+        {
+          "source": "files/font/The Last Shuriken.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/The Last Shuriken.ttf",
+          "description": "sword font/The Last Shuriken.ttf (quickshell)"
+        },
+        {
           "source": "files/metadata.desktop",
           "target": "~/.local/share/ryzora/lockscreens/qylock/sword/metadata.desktop",
           "description": "sword metadata.desktop (quickshell)"
@@ -102,11 +115,6 @@
           "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/sword/theme.conf",
           "description": "sword theme.conf (quickshell)"
-        },
-        {
-          "source": "files/font/The Last Shuriken.ttf",
-          "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/The Last Shuriken.ttf",
-          "description": "sword font/The Last Shuriken.ttf (quickshell)"
         }
       ]
     },
@@ -134,6 +142,16 @@
           "description": "sword bg.mp4 (sddm)"
         },
         {
+          "source": "files/font/.gitkeep",
+          "target": "/usr/share/sddm/themes/ryzora-sword/font/.gitkeep",
+          "description": "sword font/.gitkeep (sddm)"
+        },
+        {
+          "source": "files/font/The Last Shuriken.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-sword/font/The Last Shuriken.ttf",
+          "description": "sword font/The Last Shuriken.ttf (sddm)"
+        },
+        {
           "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-sword/metadata.desktop",
           "description": "sword metadata.desktop (sddm)"
@@ -142,11 +160,6 @@
           "source": "files/theme.conf",
           "target": "/usr/share/sddm/themes/ryzora-sword/theme.conf",
           "description": "sword theme.conf (sddm)"
-        },
-        {
-          "source": "files/font/The Last Shuriken.ttf",
-          "target": "/usr/share/sddm/themes/ryzora-sword/font/The Last Shuriken.ttf",
-          "description": "sword font/The Last Shuriken.ttf (sddm)"
         }
       ]
     }
@@ -159,7 +172,7 @@
   },
   "provenance": {
     "upstream": "https://github.com/Darkkal44/qylock",
-    "revision": "main",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
     "license": "GPL-3.0",
     "path": "themes/sword"
   },

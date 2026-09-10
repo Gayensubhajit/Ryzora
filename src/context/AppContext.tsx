@@ -130,7 +130,7 @@ interface AppContextType {
   applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both", config?: Record<string, any>) => Promise<ActiveLockscreenState>;
   deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
-  testLockscreen: (packageId?: string) => Promise<void>;
+  testLockscreen: (packageId?: string, target?: string) => Promise<void>;
   checkConfigDrift: () => Promise<string | null>;
   privilegedHelperStatus: PrivilegedHelperStatus | null;
   isSettingUpHelper: boolean;
@@ -631,9 +631,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const testLockscreen = async (packageId?: string): Promise<void> => {
+  const testLockscreen = async (packageId?: string, target?: string): Promise<void> => {
     try {
-      await invoke("launch_lockscreen_test", { packageId });
+      await invoke("launch_lockscreen_test", { packageId, target });
       setToast({
         message: "Lockscreen test launched.",
         type: "success",

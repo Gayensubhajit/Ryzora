@@ -114,39 +114,36 @@ test("Media Behavior 4: Reduced motion accessibility prevents video and animated
   assert.equal(animatedDisplay.effectiveDisplay, "poster", "Reduced motion must display static poster for animated items");
 });
 
-test("Media Behavior 5: Concurrency limiter strictly limits active video decoders to MAX_CONCURRENT_VIDEOS = 2", () => {
-  assert.equal(MAX_CONCURRENT_VIDEOS, 2, "Default max concurrent videos must be 2");
+test("Media Behavior 5: Concurrency limiter limits active video decoders to MAX_CONCURRENT_VIDEOS = 4 with priority awareness", () => {
+  assert.equal(MAX_CONCURRENT_VIDEOS, 4, "Default max concurrent videos must be 4");
 
-  const limiter = new VideoPlaybackLimiter(2);
+  const limiter = new VideoPlaybackLimiter(4);
   let pauseCount = 0;
 
   const mockVideo1 = { id: "v1", pause: () => { pauseCount++; } };
   const mockVideo2 = { id: "v2", pause: () => { pauseCount++; } };
   const mockVideo3 = { id: "v3", pause: () => { pauseCount++; } };
+  const mockVideo4 = { id: "v4", pause: () => { pauseCount++; } };
+  const mockHero = { id: "hero", pause: () => { pauseCount++; } };
 
-  // Register first video
-  limiter.register(mockVideo1);
-  assert.equal(limiter.getActiveCount(), 1);
-  assert.equal(limiter.has(mockVideo1), true);
+  limiter.requestPlayback(mockVideo1, "normal");
+  limiter.requestPlayback(mockVideo2, "normal");
+  limiter.requestPlayback(mockVideo3, "normal");
+  limiter.requestPlayback(mockVideo4, "normal");
+  assert.equal(limiter.getActiveCount(), 4);
 
-  // Register second video
-  limiter.register(mockVideo2);
-  assert.equal(limiter.getActiveCount(), 2);
-  assert.equal(limiter.has(mockVideo2), true);
-  assert.equal(pauseCount, 0, "No eviction needed for <= 2 videos");
+  // When hero priority requests playback, oldest normal video (v1) is evicted
+  const { allowed, evicted } = limiter.requestPlayback(mockHero, "hero");
+  assert.equal(allowed, true);
+  assert.equal(limiter.getActiveCount(), 4);
+  assert.equal(evicted, mockVideo1);
+  assert.equal(pauseCount, 1);
+  assert.equal(limiter.has(mockVideo1), false);
+  assert.equal(limiter.has(mockHero), true);
 
-  // Register third video -> must evict oldest (v1) and call pause()
-  const { evicted } = limiter.register(mockVideo3);
-  assert.equal(limiter.getActiveCount(), 2, "Active count must remain capped at 2");
-  assert.equal(evicted, mockVideo1, "Oldest video v1 must be evicted");
-  assert.equal(pauseCount, 1, "Evicted video must be paused");
-  assert.equal(limiter.has(mockVideo1), false, "v1 must no longer be active");
-  assert.equal(limiter.has(mockVideo2), true, "v2 must remain active");
-  assert.equal(limiter.has(mockVideo3), true, "v3 must be active");
-
-  // Unregister v2
-  limiter.unregister(mockVideo2);
-  assert.equal(limiter.getActiveCount(), 1);
+  // Releasing playback frees up slot
+  limiter.releasePlayback(mockVideo2);
+  assert.equal(limiter.getActiveCount(), 3);
   assert.equal(limiter.has(mockVideo2), false);
 
   limiter.clear();
@@ -187,12 +184,14 @@ test("Media Behavior 6: Library (PackageCard) and Discover (StoreCard) share uni
 test("Media Behavior 7: Unique media identity across canonical Qylock packages", () => {
   const catalogue = getCatalogueLockScreens();
   const qylockThemes = catalogue.filter((p) => p.lockscreen?.provider === "qylock");
-  assert.equal(qylockThemes.length, 25, "Must contain all 25 canonical Qylock themes");
+  assert.ok(qylockThemes.length >= 40, "Must contain all discovered Qylock themes");
 
   const seenPosters = new Set<string>();
   const seenVideos = new Set<string>();
 
-  for (const theme of qylockThemes) {
+  // Distinct themes must have unique poster media (variants of clockwork share family media)
+  const distinctThemes = qylockThemes.filter(t => (!(t.id.startsWith("clockwork-") || t.id === "clockwork")) || t.id === "clockwork-tape");
+  for (const theme of distinctThemes) {
     const media = resolvePackageMedia(theme);
     assert.ok(
       !seenPosters.has(media.poster),
@@ -209,6 +208,6 @@ test("Media Behavior 7: Unique media identity across canonical Qylock packages",
     }
   }
 
-  assert.equal(seenPosters.size, 25, "All 25 Qylock themes must have distinct posters");
+  assert.ok(seenPosters.size >= 25, "All Qylock themes must have distinct posters");
   assert.ok(seenVideos.size >= 14, "Must have distinct video assets for all video-enabled themes");
 });

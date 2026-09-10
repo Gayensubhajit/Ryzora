@@ -1,25 +1,23 @@
 {
   "id": "lockscreen-qylock-girl-coffee",
-  "name": "Morning Coffee",
+  "name": "Girl Coffee",
   "version": "1.0.0",
   "ryzora_spec": "1",
   "author": "Darkkal44",
   "package_type": "lockscreen",
-  "description": "Peaceful early morning coffee break overlooking a sleepy sunlit city.",
+  "description": "Authentic Qylock lockscreen theme 'Girl Coffee', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
   "tags": [
-    "anime",
-    "coffee",
-    "morning",
-    "peaceful",
-    "quickshell",
     "qylock",
-    "sddm"
+    "quickshell",
+    "sddm",
+    "girl-coffee",
+    "image"
   ],
   "color_palette": [
-    "#f97316",
-    "#1c1917",
-    "#ea580c",
-    "#ffedd5"
+    "#8b5cf6",
+    "#12141a",
+    "#24283b",
+    "#a9b1d6"
   ],
   "compatibility": {
     "desktops": [
@@ -40,27 +38,27 @@
     {
       "source": "files/Main.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/Main.qml",
-      "description": "girl-coffee Main.qml"
+      "description": "girl-coffee files/Main.qml"
     },
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/bg.png",
-      "description": "girl-coffee bg.png"
-    },
-    {
-      "source": "files/metadata.desktop",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/metadata.desktop",
-      "description": "girl-coffee metadata.desktop"
-    },
-    {
-      "source": "files/theme.conf",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/theme.conf",
-      "description": "girl-coffee theme.conf"
+      "description": "girl-coffee files/bg.png"
     },
     {
       "source": "files/font/Itim-Regular.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/font/Itim-Regular.ttf",
-      "description": "girl-coffee font/Itim-Regular.ttf"
+      "description": "girl-coffee files/font/Itim-Regular.ttf"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/metadata.desktop",
+      "description": "girl-coffee files/metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/theme.conf",
+      "description": "girl-coffee files/theme.conf"
     }
   ],
   "provider": "qylock",
@@ -84,6 +82,11 @@
           "description": "girl-coffee bg.png (quickshell)"
         },
         {
+          "source": "files/font/Itim-Regular.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/font/Itim-Regular.ttf",
+          "description": "girl-coffee font/Itim-Regular.ttf (quickshell)"
+        },
+        {
           "source": "files/metadata.desktop",
           "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/metadata.desktop",
           "description": "girl-coffee metadata.desktop (quickshell)"
@@ -92,11 +95,6 @@
           "source": "files/theme.conf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/theme.conf",
           "description": "girl-coffee theme.conf (quickshell)"
-        },
-        {
-          "source": "files/font/Itim-Regular.ttf",
-          "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/font/Itim-Regular.ttf",
-          "description": "girl-coffee font/Itim-Regular.ttf (quickshell)"
         }
       ]
     },
@@ -119,6 +117,11 @@
           "description": "girl-coffee bg.png (sddm)"
         },
         {
+          "source": "files/font/Itim-Regular.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-girl-coffee/font/Itim-Regular.ttf",
+          "description": "girl-coffee font/Itim-Regular.ttf (sddm)"
+        },
+        {
           "source": "files/metadata.desktop",
           "target": "/usr/share/sddm/themes/ryzora-girl-coffee/metadata.desktop",
           "description": "girl-coffee metadata.desktop (sddm)"
@@ -127,11 +130,6 @@
           "source": "files/theme.conf",
           "target": "/usr/share/sddm/themes/ryzora-girl-coffee/theme.conf",
           "description": "girl-coffee theme.conf (sddm)"
-        },
-        {
-          "source": "files/font/Itim-Regular.ttf",
-          "target": "/usr/share/sddm/themes/ryzora-girl-coffee/font/Itim-Regular.ttf",
-          "description": "girl-coffee font/Itim-Regular.ttf (sddm)"
         }
       ]
     }
@@ -144,12 +142,13 @@
   },
   "provenance": {
     "upstream": "https://github.com/Darkkal44/qylock",
-    "revision": "main",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
     "license": "GPL-3.0",
     "path": "themes/girl-coffee"
   },
   "media": {
     "poster": "assets/lockscreens/girl-coffee-poster.jpg",
+    "preview_animated": "assets/lockscreens/girl-coffee.gif",
     "media_type": "image"
   },
   "media_type": "image"

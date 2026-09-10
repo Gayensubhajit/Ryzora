@@ -1,0 +1,184 @@
+{
+  "id": "lockscreen-qylock-clockwork-neo-orbital",
+  "name": "Clockwork (Neo-Brutalism)",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Darkkal44",
+  "package_type": "lockscreen",
+  "description": "Authentic Neo-Brutalism variant of clockwork from Qylock.",
+  "tags": [
+    "qylock",
+    "quickshell",
+    "sddm",
+    "clockwork",
+    "neo-orbital",
+    "variant"
+  ],
+  "color_palette": [
+    "#f59e0b",
+    "#18181b",
+    "#24283b",
+    "#a9b1d6"
+  ],
+  "compatibility": {
+    "desktops": [
+      "hyprland",
+      "sway",
+      "cosmic"
+    ],
+    "sessions": [
+      "wayland"
+    ],
+    "distros": [],
+    "required": [],
+    "optional": [
+      "sddm"
+    ]
+  },
+  "files": [
+    {
+      "source": "files/Main.qml",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/Main.qml",
+      "description": "clockwork-neo-orbital files/Main.qml"
+    },
+    {
+      "source": "files/bg.png",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/bg.png",
+      "description": "clockwork-neo-orbital files/bg.png"
+    },
+    {
+      "source": "files/font/Outfit-Black.ttf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/font/Outfit-Black.ttf",
+      "description": "clockwork-neo-orbital files/font/Outfit-Black.ttf"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/metadata.desktop",
+      "description": "clockwork-neo-orbital files/metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/theme.conf",
+      "description": "clockwork-neo-orbital files/theme.conf"
+    }
+  ],
+  "provider": "qylock",
+  "targets": {
+    "quickshell": {
+      "supported": true,
+      "dependencies": [
+        "quickshell"
+      ],
+      "scope": "user",
+      "entrypoint": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/Main.qml",
+      "files": [
+        {
+          "source": "files/Main.qml",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/Main.qml",
+          "description": "clockwork-neo-orbital Main.qml (quickshell)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/bg.png",
+          "description": "clockwork-neo-orbital bg.png (quickshell)"
+        },
+        {
+          "source": "files/font/Outfit-Black.ttf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/font/Outfit-Black.ttf",
+          "description": "clockwork-neo-orbital font/Outfit-Black.ttf (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/metadata.desktop",
+          "description": "clockwork-neo-orbital metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-neo-orbital/theme.conf",
+          "description": "clockwork-neo-orbital theme.conf (quickshell)"
+        }
+      ]
+    },
+    "sddm": {
+      "supported": true,
+      "dependencies": [
+        "sddm"
+      ],
+      "scope": "system",
+      "entrypoint": "/usr/share/sddm/themes/ryzora-clockwork-neo-orbital/Main.qml",
+      "files": [
+        {
+          "source": "files/Main.qml",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-neo-orbital/Main.qml",
+          "description": "clockwork-neo-orbital Main.qml (sddm)"
+        },
+        {
+          "source": "files/bg.png",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-neo-orbital/bg.png",
+          "description": "clockwork-neo-orbital bg.png (sddm)"
+        },
+        {
+          "source": "files/font/Outfit-Black.ttf",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-neo-orbital/font/Outfit-Black.ttf",
+          "description": "clockwork-neo-orbital font/Outfit-Black.ttf (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-neo-orbital/metadata.desktop",
+          "description": "clockwork-neo-orbital metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-clockwork-neo-orbital/theme.conf",
+          "description": "clockwork-neo-orbital theme.conf (sddm)"
+        }
+      ]
+    }
+  },
+  "source": {
+    "type": "git",
+    "repository": "https://github.com/Darkkal44/qylock",
+    "revision": "main",
+    "path": "themes/clockwork/neo-orbital"
+  },
+  "provenance": {
+    "upstream": "https://github.com/Darkkal44/qylock",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
+    "license": "GPL-3.0",
+    "path": "themes/clockwork/neo-orbital"
+  },
+  "media": {
+    "poster": "assets/lockscreens/clockwork-poster.jpg",
+    "preview_video": "assets/lockscreens/clockwork-preview.mp4",
+    "preview_animated": "assets/lockscreens/clockwork.gif",
+    "media_type": "animated"
+  },
+  "media_type": "animated",
+  "config_schema": {
+    "options": {
+      "themeMode": {
+        "id": "themeMode",
+        "label": "Theme Mode",
+        "type": "select",
+        "default": "dark",
+        "options": [
+          {
+            "value": "dark",
+            "label": "Dark Mode"
+          },
+          {
+            "value": "light",
+            "label": "Light Mode"
+          }
+        ]
+      },
+      "enableWindup": {
+        "id": "enableWindup",
+        "label": "Windup Animation",
+        "type": "boolean",
+        "description": "Play mechanical gear train windup animation during unlock.",
+        "default": true
+      }
+    }
+  }
+}

@@ -28,7 +28,7 @@ export function getSystemPreferredTheme(): ResolvedTheme {
   if (typeof window === "undefined" || !window.matchMedia) {
     return "dark";
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "dark";
 }
 
 export function getSystemPrefersReducedMotion(): boolean {
@@ -53,13 +53,13 @@ export function loadSavedAppearance(): {
 } {
   if (typeof window === "undefined") {
     return {
-      mode: "system",
+      mode: "dark",
       accent: "blue",
       accessibility: { reduceTransparency: false, reduceMotion: false, increaseContrast: false },
     };
   }
 
-  const mode = (localStorage.getItem(STORAGE_KEYS.MODE) as AppearanceMode) || "system";
+  const mode = (localStorage.getItem(STORAGE_KEYS.MODE) as AppearanceMode) || "dark";
   const accent = (localStorage.getItem(STORAGE_KEYS.ACCENT) as AccentColor) || "blue";
 
   const reduceTransparency =

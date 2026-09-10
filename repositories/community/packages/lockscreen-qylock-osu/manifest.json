@@ -1,25 +1,23 @@
 {
   "id": "lockscreen-qylock-osu",
-  "name": "osu! Beatmap Lock",
+  "name": "Osu",
   "version": "1.0.0",
   "ryzora_spec": "1",
   "author": "Darkkal44",
   "package_type": "lockscreen",
-  "description": "Dynamic rhythm game themed lockscreen with pink accent glows and combo counter aesthetic.",
+  "description": "Authentic Qylock lockscreen theme 'Osu', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
   "tags": [
-    "anime",
-    "gaming",
-    "osu",
-    "quickshell",
     "qylock",
-    "rhythm",
-    "sddm"
+    "quickshell",
+    "sddm",
+    "osu",
+    "animated"
   ],
   "color_palette": [
-    "#f43f5e",
-    "#1e1b4b",
-    "#fb7185",
-    "#ffe4e6"
+    "#8b5cf6",
+    "#12141a",
+    "#24283b",
+    "#a9b1d6"
   ],
   "compatibility": {
     "desktops": [
@@ -40,72 +38,72 @@
     {
       "source": "files/Main.qml",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/Main.qml",
-      "description": "osu Main.qml"
-    },
-    {
-      "source": "files/metadata.desktop",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/metadata.desktop",
-      "description": "osu metadata.desktop"
-    },
-    {
-      "source": "files/theme.conf",
-      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
-      "description": "osu theme.conf"
+      "description": "osu files/Main.qml"
     },
     {
       "source": "files/avatars/achlys.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/achlys.png",
-      "description": "osu avatars/achlys.png"
+      "description": "osu files/avatars/achlys.png"
     },
     {
       "source": "files/avatars/darkkal.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/darkkal.png",
-      "description": "osu avatars/darkkal.png"
+      "description": "osu files/avatars/darkkal.png"
     },
     {
       "source": "files/avatars/kaizky.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/kaizky.png",
-      "description": "osu avatars/kaizky.png"
+      "description": "osu files/avatars/kaizky.png"
     },
     {
       "source": "files/background/A Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/A Glow.jpg",
-      "description": "osu background/A Glow.jpg"
+      "description": "osu files/background/A Glow.jpg"
     },
     {
       "source": "files/background/B Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/B Glow.jpg",
-      "description": "osu background/B Glow.jpg"
+      "description": "osu files/background/B Glow.jpg"
     },
     {
       "source": "files/background/C Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/C Glow.jpg",
-      "description": "osu background/C Glow.jpg"
+      "description": "osu files/background/C Glow.jpg"
     },
     {
       "source": "files/background/D Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/D Glow.jpg",
-      "description": "osu background/D Glow.jpg"
+      "description": "osu files/background/D Glow.jpg"
     },
     {
       "source": "files/background/E Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/E Glow.jpg",
-      "description": "osu background/E Glow.jpg"
+      "description": "osu files/background/E Glow.jpg"
     },
     {
       "source": "files/background/F Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/F Glow.jpg",
-      "description": "osu background/F Glow.jpg"
+      "description": "osu files/background/F Glow.jpg"
     },
     {
       "source": "files/background/G Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/G Glow.jpg",
-      "description": "osu background/G Glow.jpg"
+      "description": "osu files/background/G Glow.jpg"
     },
     {
       "source": "files/font/Torus Regular.otf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/font/Torus Regular.otf",
-      "description": "osu font/Torus Regular.otf"
+      "description": "osu files/font/Torus Regular.otf"
+    },
+    {
+      "source": "files/metadata.desktop",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/metadata.desktop",
+      "description": "osu files/metadata.desktop"
+    },
+    {
+      "source": "files/theme.conf",
+      "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
+      "description": "osu files/theme.conf"
     }
   ],
   "provider": "qylock",
@@ -122,16 +120,6 @@
           "source": "files/Main.qml",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/Main.qml",
           "description": "osu Main.qml (quickshell)"
-        },
-        {
-          "source": "files/metadata.desktop",
-          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/metadata.desktop",
-          "description": "osu metadata.desktop (quickshell)"
-        },
-        {
-          "source": "files/theme.conf",
-          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
-          "description": "osu theme.conf (quickshell)"
         },
         {
           "source": "files/avatars/achlys.png",
@@ -187,6 +175,16 @@
           "source": "files/font/Torus Regular.otf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/font/Torus Regular.otf",
           "description": "osu font/Torus Regular.otf (quickshell)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/metadata.desktop",
+          "description": "osu metadata.desktop (quickshell)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "~/.local/share/ryzora/lockscreens/qylock/osu/theme.conf",
+          "description": "osu theme.conf (quickshell)"
         }
       ]
     },
@@ -202,16 +200,6 @@
           "source": "files/Main.qml",
           "target": "/usr/share/sddm/themes/ryzora-osu/Main.qml",
           "description": "osu Main.qml (sddm)"
-        },
-        {
-          "source": "files/metadata.desktop",
-          "target": "/usr/share/sddm/themes/ryzora-osu/metadata.desktop",
-          "description": "osu metadata.desktop (sddm)"
-        },
-        {
-          "source": "files/theme.conf",
-          "target": "/usr/share/sddm/themes/ryzora-osu/theme.conf",
-          "description": "osu theme.conf (sddm)"
         },
         {
           "source": "files/avatars/achlys.png",
@@ -267,6 +255,16 @@
           "source": "files/font/Torus Regular.otf",
           "target": "/usr/share/sddm/themes/ryzora-osu/font/Torus Regular.otf",
           "description": "osu font/Torus Regular.otf (sddm)"
+        },
+        {
+          "source": "files/metadata.desktop",
+          "target": "/usr/share/sddm/themes/ryzora-osu/metadata.desktop",
+          "description": "osu metadata.desktop (sddm)"
+        },
+        {
+          "source": "files/theme.conf",
+          "target": "/usr/share/sddm/themes/ryzora-osu/theme.conf",
+          "description": "osu theme.conf (sddm)"
         }
       ]
     }
@@ -279,13 +277,38 @@
   },
   "provenance": {
     "upstream": "https://github.com/Darkkal44/qylock",
-    "revision": "main",
+    "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
     "license": "GPL-3.0",
     "path": "themes/osu"
   },
   "media": {
     "poster": "assets/lockscreens/osu-poster.jpg",
-    "media_type": "image"
+    "preview_video": "assets/lockscreens/osu-preview.mp4",
+    "preview_animated": "assets/lockscreens/osu.gif",
+    "media_type": "animated"
   },
-  "media_type": "image"
+  "media_type": "animated",
+  "config_schema": {
+    "options": {
+      "gameMode": {
+        "id": "gameMode",
+        "label": "Login Mode",
+        "type": "select",
+        "description": "Interactive rhythm gate before password prompt or direct login.",
+        "default": "game",
+        "options": [
+          {
+            "value": "game",
+            "label": "Rhythm Game Gate",
+            "description": "Interactive circle-clicking rhythm gate before unlock"
+          },
+          {
+            "value": "menu",
+            "label": "Direct Password Menu",
+            "description": "Standard authentication prompt without rhythm gate"
+          }
+        ]
+      }
+    }
+  }
 }

@@ -309,45 +309,74 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             </div>
           )}
         </div>
-
         {/* ── Installation & Active Status Preview ── */}
         {isInstalled && (
-          <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] mb-3 text-xs">
-            <div className="flex items-center justify-between text-[11px] mb-1">
-              <span className="text-[var(--rz-text-muted)]">Lifecycle State:</span>
-              <span className="font-semibold">
+          <div className="p-3.5 rounded-xl bg-[var(--rz-surface-elevated,#12161f)] border border-[var(--rz-border-subtle,#222a38)] mb-3 text-xs space-y-2.5">
+            <div className="flex items-center justify-between text-[11px] pb-2 border-b border-[var(--rz-border-subtle,#222a38)]">
+              <span className="font-mono uppercase tracking-wider text-[var(--rz-text-muted,#747d8f)] font-bold text-[10px] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--rz-accent,#4f8ff7)]" />
+                Installation & Materialization
+              </span>
+              <span className="font-semibold text-xs flex items-center gap-1.5">
                 {selectedTarget === "both" ? (
-                  <span>
-                    QS: {activeTargets?.quickshell ? <span className="text-emerald-400 font-bold">✓ Active</span> : <span className="text-amber-400">○ Inactive</span>} · SDDM: {activeTargets?.sddm ? <span className="text-emerald-400 font-bold">✓ Active</span> : <span className="text-amber-400">○ Inactive</span>}
+                  <span className="text-xs">
+                    QS: {activeTargets?.quickshell ? <span className="text-emerald-400 font-bold">● Active</span> : <span className="text-zinc-400">○ Inactive</span>} · SDDM: {activeTargets?.sddm ? <span className="text-emerald-400 font-bold">● Active</span> : <span className="text-zinc-400">○ Inactive</span>}
                   </span>
                 ) : isActive ? (
-                  <span className="text-emerald-400 font-bold">✓ Active</span>
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>● Active</span>
+                  </span>
                 ) : (
-                  <span className="text-amber-400">○ Inactive</span>
+                  <span className="flex items-center gap-1.5 text-zinc-400 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-zinc-500" />
+                    <span>○ Inactive (Installed)</span>
+                  </span>
                 )}
               </span>
             </div>
 
-            {selectedTarget === "quickshell" && (
-              <div className="font-mono text-emerald-400 text-[10px] truncate" title={`~/.local/share/ryzora/lockscreens/qylock/${pkgSlug}/`}>
-                ~/.local/share/ryzora/lockscreens/qylock/{pkgSlug}/
+            <div className="space-y-2 text-[11px]">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--rz-text-muted,#747d8f)] block">Target</span>
+                <span className="font-semibold text-[var(--rz-text,#f5f5f7)]">
+                  {selectedTarget === "both" ? "Session Lock (Quickshell) + Login Screen (SDDM)" : selectedTarget === "sddm" ? "Login Screen · SDDM" : "Session Lock · Quickshell"}
+                </span>
               </div>
-            )}
-            {selectedTarget === "sddm" && (
-              <div className="font-mono text-amber-400 text-[10px] truncate" title={`/usr/share/sddm/themes/ryzora-${pkgSlug}/`}>
-                /usr/share/sddm/themes/ryzora-{pkgSlug}/
+
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--rz-text-muted,#747d8f)] block mb-0.5">Runtime Destination</span>
+                {selectedTarget === "quickshell" && (
+                  <div className="font-mono text-emerald-400 text-[10.5px] px-2.5 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#222a38)] truncate" title={`~/.local/share/ryzora/lockscreens/qylock/${pkgSlug}/`}>
+                    ~/.local/share/ryzora/lockscreens/qylock/{pkgSlug}/
+                  </div>
+                )}
+                {selectedTarget === "sddm" && (
+                  <div className="font-mono text-amber-400 text-[10.5px] px-2.5 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#222a38)] truncate" title={`/usr/share/sddm/themes/ryzora-${pkgSlug}/`}>
+                    /usr/share/sddm/themes/ryzora-{pkgSlug}/
+                  </div>
+                )}
+                {selectedTarget === "both" && (
+                  <div className="space-y-1 font-mono text-[10.5px]">
+                    <div className="text-emerald-400 px-2.5 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#222a38)] truncate">
+                      User: ~/.local/share/ryzora/lockscreens/qylock/{pkgSlug}/
+                    </div>
+                    <div className="text-amber-400 px-2.5 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#222a38)] truncate">
+                      System: /usr/share/sddm/themes/ryzora-{pkgSlug}/
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {selectedTarget === "both" && (
-              <div className="space-y-0.5 text-[10px] font-mono">
-                <div className="text-emerald-400 truncate">
-                  User: ~/.local/share/ryzora/lockscreens/qylock/{pkgSlug}/
+
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--rz-text-muted,#747d8f)] block mb-0.5">
+                  {selectedTarget === "sddm" ? "Configuration" : "Integration"}
+                </span>
+                <div className="font-mono text-[10.5px] text-[var(--rz-text-secondary,#a6aab3)] px-2.5 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#222a38)] truncate">
+                  {selectedTarget === "sddm" ? "/etc/sddm.conf.d/ryzora-theme.conf" : "~/.local/bin/ryzora-lock"}
                 </div>
-                <div className="text-amber-400 truncate">
-                  System: /usr/share/sddm/themes/ryzora-{pkgSlug}/
-                </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 

@@ -463,6 +463,29 @@ pub fn launch_test_process(lock_sh: &Path) -> Result<(), String> {
 
 /// Launch Quickshell in isolated test mode for any specified theme directory.
 /// Does not alter hypridle.conf, active symlinks, or persistent active state.
+/// Launch SDDM greeter in isolated test mode for any specified theme directory.
+pub fn launch_test_sddm_process(theme_dir: &Path) -> Result<(), String> {
+    // Check available greeter binary
+    let binary = if Path::new("/usr/bin/sddm-greeter-qt6").exists() {
+        "sddm-greeter-qt6"
+    } else if Path::new("/usr/bin/sddm-greeter").exists() {
+        "sddm-greeter"
+    } else {
+        return Err("Neither 'sddm-greeter-qt6' nor 'sddm-greeter' was found in /usr/bin. Install SDDM to preview login themes.".to_string());
+    };
+
+    std::process::Command::new(binary)
+        .arg("--test-mode")
+        .arg("--theme")
+        .arg(theme_dir.as_os_str())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn SDDM greeter test: {}", e))?;
+    Ok(())
+}
+
 pub fn launch_test_qml_process(lock_shell_qml: &Path, theme_dir: &Path) -> Result<(), String> {
     std::process::Command::new("quickshell")
         .arg("-p")

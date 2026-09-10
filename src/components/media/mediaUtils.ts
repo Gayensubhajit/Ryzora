@@ -1,6 +1,6 @@
 import type { PackageItem } from "../../types/index.ts";
 
-export const MAX_CONCURRENT_VIDEOS = 2;
+export const MAX_CONCURRENT_VIDEOS = 4;
 
 export function normalizeMediaUrl(url?: string): string {
   if (!url) return "";
@@ -16,46 +16,111 @@ export function normalizeMediaUrl(url?: string): string {
   return "/" + url;
 }
 
+export type PlaybackPriority = "hero" | "hover" | "normal";
+
+interface RegisteredVideoItem {
+  video: any;
+  priority: PlaybackPriority;
+  registeredAt: number;
+}
+
 export class VideoPlaybackLimiter {
-  private activeElements: Set<any> = new Set();
+  private activeItems: Map<any, RegisteredVideoItem> = new Map();
   private maxConcurrent: number;
 
   constructor(maxConcurrent: number = MAX_CONCURRENT_VIDEOS) {
     this.maxConcurrent = maxConcurrent;
   }
 
-  register(video: any): { evicted: any | null } {
+  requestPlayback(video: any, priority: PlaybackPriority = "normal"): { allowed: boolean; evicted: any | null } {
+    if (this.activeItems.has(video)) {
+      const item = this.activeItems.get(video)!;
+      item.priority = priority;
+      return { allowed: true, evicted: null };
+    }
+
     let evicted: any | null = null;
-    if (this.activeElements.size >= this.maxConcurrent) {
-      const oldest = this.activeElements.values().next().value;
-      if (oldest && oldest !== video) {
-        if (typeof oldest.pause === "function") {
+    if (this.activeItems.size >= this.maxConcurrent) {
+      // Find lowest priority candidate (normal < hover < hero), then oldest
+      let candidateKey: any = null;
+      let candidateItem: RegisteredVideoItem | null = null;
+
+      const priorityWeight: Record<PlaybackPriority, number> = {
+        normal: 1,
+        hover: 2,
+        hero: 3,
+      };
+
+      for (const [key, item] of this.activeItems.entries()) {
+        if (!candidateItem) {
+          candidateKey = key;
+          candidateItem = item;
+          continue;
+        }
+
+        const candidateScore = priorityWeight[candidateItem.priority];
+        const currentScore = priorityWeight[item.priority];
+
+        if (currentScore < candidateScore) {
+          candidateKey = key;
+          candidateItem = item;
+        } else if (currentScore === candidateScore && item.registeredAt < candidateItem.registeredAt) {
+          candidateKey = key;
+          candidateItem = item;
+        }
+      }
+
+      // If incoming priority is lower than or equal to lowest candidate and we cannot evict
+      const incomingScore = priorityWeight[priority];
+      if (candidateItem && priorityWeight[candidateItem.priority] > incomingScore) {
+        return { allowed: false, evicted: null };
+      }
+
+      if (candidateKey) {
+        if (typeof candidateKey.pause === "function") {
           try {
-            oldest.pause();
+            candidateKey.pause();
           } catch {}
         }
-        this.activeElements.delete(oldest);
-        evicted = oldest;
+        this.activeItems.delete(candidateKey);
+        evicted = candidateKey;
       }
     }
-    this.activeElements.add(video);
-    return { evicted };
+
+    this.activeItems.set(video, {
+      video,
+      priority,
+      registeredAt: Date.now(),
+    });
+
+    return { allowed: true, evicted };
   }
 
+  // Backward compatibility alias for register()
+  register(video: any): { evicted: any | null } {
+    const res = this.requestPlayback(video, "normal");
+    return { evicted: res.evicted };
+  }
+
+  releasePlayback(video: any): boolean {
+    return this.activeItems.delete(video);
+  }
+
+  // Backward compatibility alias for unregister()
   unregister(video: any): boolean {
-    return this.activeElements.delete(video);
+    return this.releasePlayback(video);
   }
 
   getActiveCount(): number {
-    return this.activeElements.size;
+    return this.activeItems.size;
   }
 
   has(video: any): boolean {
-    return this.activeElements.has(video);
+    return this.activeItems.has(video);
   }
 
   clear(): void {
-    this.activeElements.clear();
+    this.activeItems.clear();
   }
 }
 

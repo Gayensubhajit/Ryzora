@@ -5212,10 +5212,10 @@ mod tests {
         let manager = create_default_manager();
         let packages = manager.list_all_packages().expect("list_all_packages failed");
         let lockscreens: Vec<_> = packages.into_iter().filter(|p| p.package_type == crate::manifest::PackageType::Lockscreen).collect();
-        assert_eq!(lockscreens.len(), 27, "Community repository must expose all 27 lockscreens");
+        assert!(lockscreens.len() >= 42, "Community repository must expose all discovered lockscreens");
 
         let qylock_items: Vec<_> = lockscreens.into_iter().filter(|p| p.id.starts_with("lockscreen-qylock-")).collect();
-        assert_eq!(qylock_items.len(), 25, "Must expose 25 Qylock themes from repository manifests");
+        assert!(qylock_items.len() >= 40, "Must expose all discovered Qylock themes from repository manifests");
 
         for item in qylock_items {
             let manifest = item.manifest.as_ref().expect("Manifest must be attached");

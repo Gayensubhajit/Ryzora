@@ -1,18 +1,28 @@
 import React from "react";
-import { Sliders, Check, RotateCcw, Sparkles, Clock, Palette, Eye } from "lucide-react";
-import type {
-  PackageItem,
-  LockscreenConfigSchema,
-} from "../../types/index.ts";
+import {
+  Sliders,
+  RotateCcw,
+  Palette,
+  Check,
+  Sparkles,
+  Sun,
+  Moon,
+  Shuffle,
+  Clock,
+  Gamepad2,
+  KeyRound,
+  Image as ImageIcon,
+  Play,
+} from "lucide-react";
+import type { LockscreenConfigSchema, PackageItem } from "../../types/index.ts";
 
-export interface LockScreenCustomizerProps {
+interface LockScreenCustomizerProps {
   packageItem: PackageItem;
   configSchema: LockscreenConfigSchema;
   currentConfig: Record<string, any>;
-  selectedVariantId?: string;
+  selectedVariantId: string;
   onChangeConfig: (newConfig: Record<string, any>) => void;
   onSelectVariant: (variantId: string) => void;
-  onResetDefaults?: () => void;
 }
 
 export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
@@ -22,15 +32,18 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
   selectedVariantId,
   onChangeConfig,
   onSelectVariant,
-  onResetDefaults,
 }) => {
   const variants = configSchema.variants || [];
   const options = configSchema.options || {};
   const optionEntries = Object.entries(options);
 
+  // If there are no variants and no options, do NOT render any customization UI
   if (variants.length === 0 && optionEntries.length === 0) {
     return null;
   }
+
+  const activeVariantId = selectedVariantId || variants[0]?.id || "";
+  const activeVariant = variants.find((v) => v.id === activeVariantId) || variants[0];
 
   const handleOptionChange = (key: string, value: any) => {
     onChangeConfig({
@@ -39,11 +52,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
     });
   };
 
-  const handleReset = () => {
-    if (onResetDefaults) {
-      onResetDefaults();
-      return;
-    }
+  const handleResetDefaults = () => {
     const defaults: Record<string, any> = {};
     for (const [key, spec] of optionEntries) {
       defaults[key] = spec.default;
@@ -54,34 +63,50 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
     }
   };
 
-  const activeVariant = variants.find((v) => v.id === selectedVariantId) || variants[0];
+  // Extract authentic known controls
+  const themeModeSpec = options["themeMode"];
+  const enableWindupSpec = options["enableWindup"];
+  const bgModeSpec = options["background_mode"];
+  const bgIndexSpec = options["background_index"];
+  const gameModeSpec = options["gameMode"];
+
+  // Remaining options not handled by dedicated UI controls
+  const handledKeys = new Set(["themeMode", "enableWindup", "background_mode", "background_index", "gameMode"]);
+  const remainingOptions = optionEntries.filter(([k]) => !handledKeys.has(k));
+
+  const currentBgMode = currentConfig["background_mode"] ?? bgModeSpec?.default ?? "time";
+  const isStaticBgActive = currentBgMode === "static";
 
   return (
-    <section className="mt-8 rounded-2xl border border-[var(--rz-border-subtle,#27272a)] bg-[var(--rz-surface,#18181b)]/60 backdrop-blur-md overflow-hidden shadow-sm">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-[var(--rz-border-subtle,#27272a)] bg-gradient-to-r from-purple-500/5 via-cyan-500/5 to-transparent">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+    <section
+      data-theme="dark"
+      className="rounded-2xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface,#131720)] text-[var(--rz-text,#f5f5f7)] overflow-hidden shadow-xl my-5"
+    >
+      {/* ── Header ── */}
+      <div className="px-5 py-4 border-b border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)]/80 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400">
             <Sliders size={18} />
           </div>
           <div>
-            <h2 className="text-sm font-semibold tracking-tight text-[var(--rz-text,#f4f4f5)] flex items-center gap-2">
-              <span>Theme Customization</span>
-              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                Interactive
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-[var(--rz-text,#f5f5f7)] tracking-tight">
+                Authentic Theme Customization
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                UPSTREAM VERIFIED
               </span>
-            </h2>
-            <p className="text-xs text-[var(--rz-text-secondary,#a1a1aa)] mt-0.5">
-              Select visual styles, clock formats, and interface widgets for {packageItem.title}.
+            </div>
+            <p className="text-xs text-[var(--rz-text-secondary,#a6aab3)] mt-0.5">
+              Configure supported runtime parameters for {packageItem.title}.
             </p>
           </div>
         </div>
 
         <button
           type="button"
-          onClick={handleReset}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text-secondary,#a1a1aa)] hover:text-[var(--rz-text,#f4f4f5)] bg-[var(--rz-surface-elevated,#27272a)] hover:bg-[var(--rz-surface-elevated,#27272a)]/80 border border-[var(--rz-border-subtle,#3f3f46)] transition-colors cursor-pointer"
-          title="Reset to default options"
+          onClick={handleResetDefaults}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)] bg-[var(--rz-surface,#131720)] border border-[var(--rz-border-subtle,#242b38)] hover:border-[var(--rz-border-strong,#363e50)] transition-all cursor-pointer select-none"
         >
           <RotateCcw size={13} />
           <span>Reset Defaults</span>
@@ -89,41 +114,60 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
       </div>
 
       <div className="p-5 space-y-6">
-        {/* ── 1. Variant Selector ── */}
+        {/* ── 1. THEME VARIANTS (when variants are present) ── */}
         {variants.length > 0 && (
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--rz-text-secondary,#a1a1aa)] mb-2.5 flex items-center gap-1.5">
-              <Palette size={13} className="text-purple-400" />
-              <span>Visual Variant</span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Palette size={14} className="text-purple-400" />
+              <h3 className="text-[11px] font-mono font-bold uppercase tracking-wider text-[var(--rz-text-secondary,#a6aab3)]">
+                Theme Variant
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {variants.map((v) => {
-                const isSelected = v.id === selectedVariantId || (!selectedVariantId && v === variants[0]);
+                const isSelected = v.id === activeVariantId;
+                const previewImg = v.preview_image || packageItem.preview_poster_url || packageItem.hero_image;
+
                 return (
                   <button
                     key={v.id}
                     type="button"
                     onClick={() => onSelectVariant(v.id)}
-                    className={`text-left p-3 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${
+                    className={`relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex gap-3 select-none ${
                       isSelected
-                        ? "bg-purple-950/30 border-purple-500/60 ring-1 ring-purple-500/40 shadow-sm"
-                        : "bg-[var(--rz-surface-elevated,#202024)] border-[var(--rz-border-subtle,#2e2e33)] hover:border-[var(--rz-border,#3e3e44)]"
+                        ? "bg-emerald-950/25 border-emerald-500 ring-1 ring-emerald-500/50 shadow-md"
+                        : "bg-[var(--rz-surface-elevated,#1a202c)] border-[var(--rz-border-subtle,#242b38)] hover:border-[var(--rz-border-strong,#363e50)] hover:bg-[var(--rz-surface-hover,#222938)]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className={`text-xs font-semibold ${isSelected ? "text-purple-200" : "text-[var(--rz-text,#f4f4f5)]"}`}>
-                        {v.name}
-                      </span>
-                      {isSelected && (
-                        <div className="p-0.5 rounded-full bg-purple-500 text-black shrink-0">
-                          <Check size={11} strokeWidth={3} />
-                        </div>
+                    {previewImg && (
+                      <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-black/40">
+                        <img
+                          src={previewImg}
+                          alt={v.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0 pr-6">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] truncate">
+                          {v.name}
+                        </h4>
+                      </div>
+                      {v.description && (
+                        <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 line-clamp-2 leading-relaxed">
+                          {v.description}
+                        </p>
                       )}
                     </div>
-                    {v.description && (
-                      <p className="text-[11px] text-[var(--rz-text-muted,#71717a)] mt-1 line-clamp-2 leading-relaxed">
-                        {v.description}
-                      </p>
+
+                    {isSelected && (
+                      <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow-sm">
+                        <Check size={12} strokeWidth={3} />
+                      </div>
                     )}
                   </button>
                 );
@@ -132,131 +176,305 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
           </div>
         )}
 
-        {/* ── 2. Component Options ── */}
+        {/* ── 2. AUTHENTIC OPTIONS GRID ── */}
         {optionEntries.length > 0 && (
-          <div className="space-y-4 pt-2 border-t border-[var(--rz-border-subtle,#27272a)]">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--rz-text-secondary,#a1a1aa)] flex items-center gap-1.5">
-              <Clock size={13} className="text-cyan-400" />
-              <span>Component Options</span>
-            </h3>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Sliders size={14} className="text-emerald-400" />
+              <h3 className="text-[11px] font-mono font-bold uppercase tracking-wider text-[var(--rz-text-secondary,#a6aab3)]">
+                Runtime Options
+              </h3>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {optionEntries.map(([key, spec]) => {
-                const val = currentConfig[key] !== undefined ? currentConfig[key] : spec.default;
+              {/* Option: themeMode (Dark / Light) */}
+              {themeModeSpec && (
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                      <Moon size={14} className="text-purple-400" />
+                      <span>{themeModeSpec.label || "Theme Appearance"}</span>
+                    </span>
+                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                      Select light or dark contrast palette for interface elements.
+                    </p>
+                  </div>
 
-                return (
-                  <div
-                    key={key}
-                    className="p-3.5 rounded-xl border border-[var(--rz-border-subtle,#27272a)] bg-[var(--rz-surface-elevated,#1e1e22)]/50 flex flex-col justify-between gap-2.5"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <label className="text-xs font-medium text-[var(--rz-text,#f4f4f5)]">
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                    {themeModeSpec.options?.map((opt) => {
+                      const currentVal = currentConfig["themeMode"] ?? themeModeSpec.default;
+                      const active = String(currentVal) === String(opt.value);
+
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleOptionChange("themeMode", opt.value)}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                            active
+                              ? "bg-emerald-500 text-black shadow-xs font-bold"
+                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                          }`}
+                        >
+                          {opt.value === "light" ? <Sun size={13} /> : <Moon size={13} />}
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Option: enableWindup (Windup toggle) */}
+              {enableWindupSpec && (
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                      <Play size={14} className="text-amber-400" />
+                      <span>{enableWindupSpec.label || "Windup Animation"}</span>
+                    </span>
+                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                      {enableWindupSpec.description || "Play mechanical gear train windup sequence during unlock."}
+                    </p>
+                  </div>
+
+                  {(() => {
+                    const val = currentConfig["enableWindup"] !== undefined ? currentConfig["enableWindup"] : enableWindupSpec.default;
+                    const isChecked = Boolean(val);
+
+                    return (
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                        <span className="text-xs font-medium text-[var(--rz-text,#f5f5f7)]">
+                          {isChecked ? "Windup Enabled (On)" : "Windup Disabled (Off)"}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isChecked}
+                          onClick={() => handleOptionChange("enableWindup", !isChecked)}
+                          className={`w-10 h-6 rounded-full p-0.5 transition-colors cursor-pointer flex items-center ${
+                            isChecked ? "bg-emerald-500 justify-end" : "bg-zinc-700 justify-start"
+                          }`}
+                        >
+                          <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Option: background_mode (Terraria / Genshin atmosphere transition) */}
+              {bgModeSpec && (
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                      <Shuffle size={14} className="text-cyan-400" />
+                      <span>{bgModeSpec.label || "Background Mode"}</span>
+                    </span>
+                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                      {bgModeSpec.description || "Controls how dynamic wallpapers transition."}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                    {bgModeSpec.options?.map((opt) => {
+                      const currentVal = currentConfig["background_mode"] ?? bgModeSpec.default;
+                      const active = String(currentVal) === String(opt.value);
+
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleOptionChange("background_mode", opt.value)}
+                          className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium rounded-md transition-all cursor-pointer text-center truncate ${
+                            active
+                              ? "bg-emerald-500 text-black font-bold shadow-xs"
+                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                          }`}
+                        >
+                          {opt.value === "time" ? <Clock size={12} /> : opt.value === "random" ? <Shuffle size={12} /> : <ImageIcon size={12} />}
+                          <span className="truncate">{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Option: background_index (Terraria / Genshin static index) */}
+              {bgIndexSpec && (
+                <div
+                  className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                    isStaticBgActive
+                      ? "border-emerald-500/60 bg-[var(--rz-surface-elevated,#1a202c)] shadow-sm"
+                      : "border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)]/60 opacity-75"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                        <ImageIcon size={14} className="text-amber-400" />
+                        <span>{bgIndexSpec.label || "Static Biome Wallpaper"}</span>
+                      </span>
+                      {!isStaticBgActive && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                          Applies in Static Mode
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                      {bgIndexSpec.description || "Active wallpaper selection when in static mode."}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                    {bgIndexSpec.options?.map((opt) => {
+                      const currentVal = currentConfig["background_index"] ?? bgIndexSpec.default;
+                      const active = String(currentVal) === String(opt.value);
+
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            handleOptionChange("background_index", opt.value);
+                            if (!isStaticBgActive) {
+                              handleOptionChange("background_mode", "static");
+                            }
+                          }}
+                          className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer text-center truncate ${
+                            active
+                              ? "bg-emerald-500 text-black font-bold shadow-xs"
+                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Option: gameMode (osu / osumania rhythm gate vs direct login) */}
+              {gameModeSpec && (
+                <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-[var(--rz-text,#f5f5f7)] flex items-center gap-1.5">
+                      <Gamepad2 size={14} className="text-pink-400" />
+                      <span>{gameModeSpec.label || "Login Mode"}</span>
+                    </span>
+                    <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5 leading-normal">
+                      {gameModeSpec.description || "Select between rhythm game unlock gate or direct password authentication."}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                    {gameModeSpec.options?.map((opt) => {
+                      const currentVal = currentConfig["gameMode"] ?? gameModeSpec.default;
+                      const active = String(currentVal) === String(opt.value);
+
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleOptionChange("gameMode", opt.value)}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                            active
+                              ? "bg-emerald-500 text-black font-bold shadow-xs"
+                              : "text-[var(--rz-text-secondary,#a6aab3)] hover:text-[var(--rz-text,#f5f5f7)]"
+                          }`}
+                        >
+                          {opt.value === "game" ? <Gamepad2 size={13} /> : <KeyRound size={13} />}
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Any remaining authentic options (if any) */}
+            {remainingOptions.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                {remainingOptions.map(([key, spec]) => {
+                  const val = currentConfig[key] !== undefined ? currentConfig[key] : spec.default;
+
+                  return (
+                    <div
+                      key={key}
+                      className="p-3.5 rounded-xl border border-[var(--rz-border-subtle,#242b38)] bg-[var(--rz-surface-elevated,#1a202c)] flex flex-col justify-between gap-2"
+                    >
+                      <div>
+                        <label className="text-xs font-bold text-[var(--rz-text,#f5f5f7)]">
                           {spec.label}
                         </label>
-                        {spec.type === "boolean" && (
+                        {spec.description && (
+                          <p className="text-[11px] text-[var(--rz-text-muted,#747d8f)] mt-0.5">
+                            {spec.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {spec.type === "select" && spec.options && (
+                        <select
+                          value={String(val)}
+                          onChange={(e) => handleOptionChange(key, e.target.value)}
+                          className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)] text-[var(--rz-text,#f5f5f7)] focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
+                        >
+                          {spec.options.map((opt) => (
+                            <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-100">
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {spec.type === "boolean" && (
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--rz-bg,#090b0e)] border border-[var(--rz-border-subtle,#242b38)]">
+                          <span className="text-xs font-medium text-[var(--rz-text,#f5f5f7)]">
+                            {val ? "Enabled" : "Disabled"}
+                          </span>
                           <button
                             type="button"
                             role="switch"
                             aria-checked={Boolean(val)}
                             onClick={() => handleOptionChange(key, !val)}
                             className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer flex items-center ${
-                              Boolean(val) ? "bg-emerald-500 justify-end" : "bg-zinc-700 justify-start"
+                              val ? "bg-emerald-500 justify-end" : "bg-zinc-700 justify-start"
                             }`}
                           >
                             <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
                           </button>
-                        )}
-                      </div>
-                      {spec.description && (
-                        <p className="text-[11px] text-[var(--rz-text-muted,#71717a)] mt-0.5 leading-normal">
-                          {spec.description}
-                        </p>
+                        </div>
                       )}
                     </div>
-
-                    {/* Select / Segmented Control */}
-                    {spec.type === "select" && spec.options && (
-                      <div className="mt-1">
-                        {spec.options.length <= 3 ? (
-                          /* 2-3 choices: Sleek Segmented Pill Switch */
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 p-1 rounded-lg bg-black/40 border border-white/5">
-                            {spec.options.map((opt) => {
-                              const active = String(val) === String(opt.value);
-                              return (
-                                <button
-                                  key={opt.value}
-                                  type="button"
-                                  onClick={() => handleOptionChange(key, opt.value)}
-                                  className={`px-2 py-1 text-xs font-medium rounded-md transition-all cursor-pointer truncate ${
-                                    active
-                                      ? "bg-purple-600 text-white shadow-xs font-semibold"
-                                      : "text-zinc-400 hover:text-zinc-200"
-                                  }`}
-                                >
-                                  {opt.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          /* 4+ choices: Modern Custom Select */
-                          <select
-                            value={String(val)}
-                            onChange={(e) => handleOptionChange(key, e.target.value)}
-                            className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-black/50 border border-[var(--rz-border-subtle,#3f3f46)] text-[var(--rz-text,#f4f4f5)] focus:border-purple-500 focus:outline-none transition-colors cursor-pointer"
-                          >
-                            {spec.options.map((opt) => (
-                              <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-100">
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Numeric Range Slider */}
-                    {spec.type === "number" && (
-                      <div className="mt-1 flex items-center gap-3">
-                        <input
-                          type="range"
-                          min={spec.min ?? 0}
-                          max={spec.max ?? 100}
-                          step={spec.step ?? 1}
-                          value={Number(val)}
-                          onChange={(e) => handleOptionChange(key, Number(e.target.value))}
-                          className="flex-1 accent-purple-500 cursor-pointer"
-                        />
-                        <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-black/40 border border-white/10 text-purple-300">
-                          {val} {spec.unit || ""}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {/* ── 3. Live Configuration Summary Readout ── */}
-        <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/20 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-purple-300">
-            <Eye size={14} />
-            <span className="font-semibold">Target Setup:</span>
-            <span className="font-mono text-zinc-300">
+        <div className="p-3.5 rounded-xl bg-[var(--rz-surface-elevated,#1a202c)] border border-[var(--rz-border-subtle,#242b38)] flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-semibold text-[var(--rz-text,#f5f5f7)]">Materialization Target:</span>
+            <span className="font-mono text-emerald-400 font-bold">
               {activeVariant ? activeVariant.name : "Default"}
             </span>
             {optionEntries.length > 0 && (
-              <span className="text-[11px] text-zinc-400">
-                ({optionEntries.length} option{optionEntries.length > 1 ? "s" : ""} configured)
+              <span className="text-[11px] text-[var(--rz-text-muted,#747d8f)]">
+                ({optionEntries.length} verified parameters)
               </span>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-            <Sparkles size={12} />
-            <span>Config will be materialized on Apply</span>
+            <Sparkles size={13} />
+            <span>Parameters write directly to theme.conf and ryzora_config.json</span>
           </div>
         </div>
       </div>

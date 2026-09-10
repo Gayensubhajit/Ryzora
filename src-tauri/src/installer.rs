@@ -1,3 +1,49 @@
+pub fn update_theme_conf_with_config(
+    theme_conf_path: &Path,
+    cfg: &std::collections::HashMap<String, serde_json::Value>,
+) -> std::io::Result<()> {
+    let existing = if theme_conf_path.exists() {
+        fs::read_to_string(theme_conf_path)?
+    } else {
+        String::new()
+    };
+
+    let mut out_lines: Vec<String> = existing.lines().map(|s| s.to_string()).collect();
+    if !out_lines.iter().any(|l| l.trim() == "[General]") {
+        out_lines.insert(0, "[General]".to_string());
+    }
+
+    let general_idx = out_lines.iter().position(|l| l.trim() == "[General]").unwrap();
+
+    for (k, v) in cfg {
+        let v_str = match v {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::Number(n) => n.to_string(),
+            other => other.to_string(),
+        };
+        let key_prefix = format!("{}=", k);
+        let mut found = false;
+
+        for idx in (general_idx + 1)..out_lines.len() {
+            if out_lines[idx].trim().starts_with('[') {
+                break;
+            }
+            if out_lines[idx].trim().starts_with(&key_prefix) {
+                out_lines[idx] = format!("{}={}", k, v_str);
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            out_lines.insert(general_idx + 1, format!("{}={}", k, v_str));
+        }
+    }
+
+    fs::write(theme_conf_path, out_lines.join("\n") + "\n")
+}
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -3173,10 +3219,20 @@ pub fn save_active_lockscreen_state_in(state_dir: &Path, state: &ActiveLockscree
     Ok(())
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct TransactionBackupItem {
+    pub orig_path: String,
+    pub backup_file_name: String,
+    pub existed: bool,
+    #[serde(default)]
+    pub is_symlink: bool,
+    #[serde(default)]
+    pub symlink_target: Option<String>,
+}
+
 /// Create a lightweight transactional backup of specified files before modifying them.
 /// Stored in ~/.local/share/ryzora/backups/operation-<timestamp>/
-/// Even when full snapshots are disabled by user preference, transactional backups
-/// are always created so that Ryzora can guarantee safe rollback.
+/// Supports regular files, directories, and symlinks (e.g. active lockscreen symlink).
 pub fn create_transaction_backup(
     paths: &[&Path],
     home: &Path,
@@ -3192,15 +3248,43 @@ pub fn create_transaction_backup(
     let mut manifest_entries = Vec::new();
 
     for (idx, p) in paths.iter().enumerate() {
-        if p.exists() {
-            let file_name = format!("file_{}_{}", idx, p.file_name().unwrap_or_default().to_string_lossy());
-            let dest = backups_dir.join(&file_name);
-            fs::copy(p, &dest)
-                .map_err(|e| format!("Failed to backup file '{}': {}", p.display(), e))?;
-            manifest_entries.push((p.to_string_lossy().to_string(), file_name, true));
-        } else {
-            manifest_entries.push((p.to_string_lossy().to_string(), String::new(), false));
+        if let Ok(meta) = fs::symlink_metadata(p) {
+            if meta.file_type().is_symlink() {
+                if let Ok(target) = fs::read_link(p) {
+                    manifest_entries.push(TransactionBackupItem {
+                        orig_path: p.to_string_lossy().to_string(),
+                        backup_file_name: String::new(),
+                        existed: true,
+                        is_symlink: true,
+                        symlink_target: Some(target.to_string_lossy().to_string()),
+                    });
+                    continue;
+                }
+            }
+
+            if meta.is_file() {
+                let file_name = format!("file_{}_{}", idx, p.file_name().unwrap_or_default().to_string_lossy());
+                let dest = backups_dir.join(&file_name);
+                fs::copy(p, &dest)
+                    .map_err(|e| format!("Failed to backup file '{}': {}", p.display(), e))?;
+                manifest_entries.push(TransactionBackupItem {
+                    orig_path: p.to_string_lossy().to_string(),
+                    backup_file_name: file_name,
+                    existed: true,
+                    is_symlink: false,
+                    symlink_target: None,
+                });
+                continue;
+            }
         }
+
+        manifest_entries.push(TransactionBackupItem {
+            orig_path: p.to_string_lossy().to_string(),
+            backup_file_name: String::new(),
+            existed: false,
+            is_symlink: false,
+            symlink_target: None,
+        });
     }
 
     let manifest_path = backups_dir.join("transaction.json");
@@ -3221,22 +3305,51 @@ pub fn rollback_transaction_backup(backup_dir: &Path) -> Result<(), String> {
 
     let raw = fs::read_to_string(&manifest_path)
         .map_err(|e| format!("Failed to read transaction manifest: {}", e))?;
-    let entries: Vec<(String, String, bool)> = serde_json::from_str(&raw)
-        .map_err(|e| format!("Failed to parse transaction manifest: {}", e))?;
-
-    for (orig_path_str, backup_file_name, existed) in entries {
-        let orig_path = PathBuf::from(&orig_path_str);
-        if existed {
-            let backup_file = backup_dir.join(&backup_file_name);
-            if backup_file.exists() {
-                if let Some(parent) = orig_path.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                fs::copy(&backup_file, &orig_path)
-                    .map_err(|e| format!("Failed to restore '{}': {}", orig_path.display(), e))?;
+    let entries: Vec<TransactionBackupItem> = match serde_json::from_str(&raw) {
+        Ok(items) => items,
+        Err(_) => {
+            if let Ok(tuples) = serde_json::from_str::<Vec<(String, String, bool)>>(&raw) {
+                tuples.into_iter().map(|(orig_path, backup_file_name, existed)| {
+                    TransactionBackupItem {
+                        orig_path,
+                        backup_file_name,
+                        existed,
+                        is_symlink: false,
+                        symlink_target: None,
+                    }
+                }).collect()
+            } else {
+                return Err("Failed to parse transaction manifest".to_string());
             }
-        } else if orig_path.exists() {
+        }
+    };
+
+    for entry in entries {
+        let orig_path = PathBuf::from(&entry.orig_path);
+        if entry.existed {
+            if entry.is_symlink {
+                if let Some(target_str) = entry.symlink_target {
+                    let _ = fs::remove_file(&orig_path);
+                    let _ = fs::remove_dir_all(&orig_path);
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::symlink;
+                        let _ = symlink(Path::new(&target_str), &orig_path);
+                    }
+                }
+            } else {
+                let backup_file = backup_dir.join(&entry.backup_file_name);
+                if backup_file.exists() {
+                    if let Some(parent) = orig_path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    fs::copy(&backup_file, &orig_path)
+                        .map_err(|e| format!("Failed to restore '{}': {}", orig_path.display(), e))?;
+                }
+            }
+        } else {
             let _ = fs::remove_file(&orig_path);
+            let _ = fs::remove_dir_all(&orig_path);
         }
     }
 
@@ -3340,22 +3453,7 @@ pub fn apply_lockscreen_target_in_with_config(
             }
 
             let theme_conf_path = qs_dir.join("theme.conf");
-            let mut conf_content = fs::read_to_string(&theme_conf_path).unwrap_or_default();
-            if let Some(idx) = conf_content.find("[RyzoraConfig]") {
-                conf_content.truncate(idx);
-            }
-            conf_content.push_str("
-[RyzoraConfig]
-");
-            for (k, v) in cfg {
-                let v_str = match v {
-                    serde_json::Value::String(s) => s.clone(),
-                    other => other.to_string(),
-                };
-                conf_content.push_str(&format!("{}={}
-", k, v_str));
-            }
-            let _ = fs::write(&theme_conf_path, conf_content);
+            let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
         }
 
         // Apply hypridle integration: generate config, write drop-in, reload service
@@ -3413,6 +3511,15 @@ pub fn apply_lockscreen_target_in_with_config(
         }
 
         // Activate SDDM theme using restricted helper
+        // Materialize user-selected configuration to SDDM theme directory
+        if let Some(ref cfg) = config {
+            let config_json_path = sddm_theme_dir.join("ryzora_config.json");
+            if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
+                let _ = fs::write(&config_json_path, serialized);
+            }
+            let theme_conf_path = sddm_theme_dir.join("theme.conf");
+            let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
+        }
         crate::sddm_helper::activate_sddm_theme(&slug)?;
 
         state.sddm = Some(package_id.to_string());
@@ -3509,36 +3616,185 @@ pub fn deactivate_lockscreen(target: String) -> Result<ActiveLockscreenState, St
 /// If package_id is provided, tests that installed package in isolated test mode.
 /// If package_id is None, tests the currently applied lockscreen.
 #[tauri::command]
-pub fn launch_lockscreen_test(package_id: Option<String>) -> Result<(), String> {
+pub fn launch_lockscreen_test(
+    package_id: Option<String>,
+    target: Option<String>,
+    config: Option<std::collections::HashMap<String, serde_json::Value>>,
+) -> Result<(), String> {
     let home = get_home_dir();
     let state_dir = get_ryzora_state_dir();
-
-    // Ensure Quickshell runtime exists
-    let _ = ensure_quickshell_runtime_in(&home);
-    let lock_shell = home.join(".local/share/ryzora/integrations/quickshell/lock_shell.qml");
+    let installed_root = get_ryzora_installed_dir();
 
     if let Some(ref pkg_id) = package_id {
         let slug = pkg_id
             .strip_prefix("lockscreen-qylock-")
             .or_else(|| pkg_id.strip_prefix("lockscreen-"))
             .unwrap_or(pkg_id);
-        let theme_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(slug);
-        if !theme_dir.exists() {
-            return Err(format!(
-                "Theme directory not found at '{}'. Install the package first.",
-                theme_dir.display()
-            ));
-        }
-        if lock_shell.exists() {
-            crate::hypridle::launch_test_qml_process(&lock_shell, &theme_dir)
+
+        let mut qs_theme_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(slug);
+        let mut sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+            PathBuf::from(sys_root).join("usr/share/sddm/themes").join(format!("ryzora-{}", slug))
         } else {
-            let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
-            crate::hypridle::launch_test_process(&lock_sh)
+            PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug))
+        };
+
+        // If a variant is specified in custom config, resolve variant directory
+        if let Some(v) = config.as_ref().and_then(|c| c.get("variant")).and_then(|v| v.as_str()) {
+            let variant_sub = qs_theme_dir.join(v);
+            if variant_sub.exists() && variant_sub.join("Main.qml").exists() {
+                qs_theme_dir = variant_sub;
+            } else {
+                let variant_alt = home.join(".local/share/ryzora/lockscreens/qylock").join(format!("{}-{}", slug, v));
+                if variant_alt.exists() && variant_alt.join("Main.qml").exists() {
+                    qs_theme_dir = variant_alt;
+                }
+            }
+
+            let sddm_sub = sddm_theme_dir.join(v);
+            if sddm_sub.exists() && sddm_sub.join("Main.qml").exists() {
+                sddm_theme_dir = sddm_sub;
+            } else {
+                let sys_prefix = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+                    PathBuf::from(sys_root).join("usr/share/sddm/themes")
+                } else {
+                    PathBuf::from("/usr/share/sddm/themes")
+                };
+                let variant_alt = sys_prefix.join(format!("ryzora-{}-{}", slug, v));
+                if variant_alt.exists() && variant_alt.join("Main.qml").exists() {
+                    sddm_theme_dir = variant_alt;
+                }
+            }
+        }
+
+        // Query installed package record if present
+        let record = get_installed_package_in(pkg_id, &installed_root)
+            .or_else(|_| get_installed_package_in(&format!("lockscreen-qylock-{}", slug), &installed_root))
+            .or_else(|_| get_installed_package_in(slug, &installed_root))
+            .ok()
+            .flatten();
+
+        // Target-aware discrimination: Session Lock (Quickshell) vs Login Screen (SDDM)
+        let is_sddm = match target.as_deref() {
+            Some("sddm") | Some("login") => true,
+            Some("quickshell") | Some("session") => false,
+            _ => {
+                if let Some(ref r) = record {
+                    let has_sddm = r.installed_files.iter().any(|f| f.contains("/sddm/themes/"));
+                    let has_qs = r.installed_files.iter().any(|f| f.contains("/lockscreens/qylock/"));
+                    if has_sddm && !has_qs {
+                        true
+                    } else if has_qs {
+                        false
+                    } else {
+                        sddm_theme_dir.exists() && !qs_theme_dir.exists()
+                    }
+                } else {
+                    sddm_theme_dir.exists() && !qs_theme_dir.exists()
+                }
+            }
+        };
+
+        if is_sddm {
+            let sddm_dir = if sddm_theme_dir.exists() && sddm_theme_dir.join("Main.qml").exists() {
+                Some(sddm_theme_dir.clone())
+            } else {
+                record.as_ref().and_then(|r| {
+                    r.installed_files.iter().find_map(|f| {
+                        let p = PathBuf::from(f);
+                        if p.ends_with("Main.qml") && p.exists() && f.contains("sddm") {
+                            p.parent().map(|d| d.to_path_buf())
+                        } else {
+                            None
+                        }
+                    })
+                })
+            };
+
+            let theme_dir = match sddm_dir {
+                Some(d) => d,
+                None => {
+                    return Err(format!(
+                        "Package '{}' SDDM theme directory was not found at '{}'. Please install SDDM theme before testing.",
+                        pkg_id, sddm_theme_dir.display()
+                    ));
+                }
+            };
+
+            if let Some(ref cfg) = config {
+                let config_json_path = theme_dir.join("ryzora_config.json");
+                if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
+                    let _ = fs::write(&config_json_path, serialized);
+                }
+                let theme_conf_path = theme_dir.join("theme.conf");
+                let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
+            }
+            crate::hypridle::launch_test_sddm_process(&theme_dir)
+        } else {
+            // Session Lock (Quickshell)
+            let qs_dir = if qs_theme_dir.exists() && qs_theme_dir.join("Main.qml").exists() {
+                Some(qs_theme_dir)
+            } else {
+                record.as_ref().and_then(|r| {
+                    r.installed_files.iter().find_map(|f| {
+                        let p = PathBuf::from(f);
+                        if p.ends_with("Main.qml") && p.exists() && !f.contains("sddm") {
+                            p.parent().map(|d| d.to_path_buf())
+                        } else {
+                            None
+                        }
+                    })
+                })
+            };
+
+            let theme_dir = match qs_dir {
+                Some(d) => d,
+                None => {
+                    // If SDDM theme exists, test SDDM rather than failing
+                    if sddm_theme_dir.exists() && sddm_theme_dir.join("Main.qml").exists() {
+                        return crate::hypridle::launch_test_sddm_process(&sddm_theme_dir);
+                    }
+                    return Err(format!(
+                        "Package '{}' is not installed for session lock. Please install the package before testing.",
+                        pkg_id
+                    ));
+                }
+            };
+
+            if let Some(ref cfg) = config {
+                let config_json_path = theme_dir.join("ryzora_config.json");
+                if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
+                    let _ = fs::write(&config_json_path, serialized);
+                }
+                let theme_conf_path = theme_dir.join("theme.conf");
+                let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
+            }
+
+            let _ = ensure_quickshell_runtime_in(&home);
+            let lock_shell = home.join(".local/share/ryzora/integrations/quickshell/lock_shell.qml");
+            if lock_shell.exists() {
+                crate::hypridle::launch_test_qml_process(&lock_shell, &theme_dir)
+            } else {
+                let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
+                crate::hypridle::launch_test_process(&lock_sh)
+            }
         }
     } else {
         let state = get_active_lockscreen_state_in(&state_dir);
-        if state.quickshell.is_none() {
-            return Err("No Quickshell lockscreen is currently applied".to_string());
+        if let Some(ref sddm_pkg) = state.sddm {
+            if state.quickshell.is_none() {
+                let slug = sddm_pkg
+                    .strip_prefix("lockscreen-qylock-")
+                    .or_else(|| sddm_pkg.strip_prefix("lockscreen-"))
+                    .unwrap_or(sddm_pkg);
+                let sddm_theme_dir = PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug));
+                if sddm_theme_dir.exists() {
+                    return crate::hypridle::launch_test_sddm_process(&sddm_theme_dir);
+                }
+            }
+        }
+
+        if state.quickshell.is_none() && state.sddm.is_none() {
+            return Err("No lockscreen is currently applied. Apply a lockscreen first to test.".to_string());
         }
         let lock_sh = home.join(".local/share/ryzora/integrations/quickshell/lock.sh");
         if !lock_sh.exists() {
@@ -7895,6 +8151,27 @@ mod tests {
 
         assert_eq!(fs::read_to_string(&file1).unwrap(), "original content 1");
         assert_eq!(fs::read_to_string(&file2).unwrap(), "original content 2");
+
+        // Test with directory symlink (e.g. active lockscreen symlink)
+        let target_dir = sandbox.home_dir.join("some_theme_dir");
+        fs::create_dir_all(&target_dir).unwrap();
+        let symlink_path = sandbox.home_dir.join("active_quickshell_symlink");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink(&target_dir, &symlink_path).unwrap();
+            let tx_dir2 = create_transaction_backup(&[&symlink_path], &sandbox.home_dir).unwrap();
+            assert!(tx_dir2.exists());
+
+            // Remove symlink
+            fs::remove_file(&symlink_path).unwrap();
+            assert!(!symlink_path.exists());
+
+            // Rollback
+            rollback_transaction_backup(&tx_dir2).unwrap();
+            assert!(symlink_path.exists());
+            assert_eq!(fs::read_link(&symlink_path).unwrap(), target_dir);
+        }
     }
 
     #[test]
@@ -7961,6 +8238,66 @@ mod tests {
         );
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("not installed"));
+    }
+
+
+    #[test]
+    fn test_apply_lockscreen_writes_general_theme_conf_and_json() {
+        let sandbox = TestSandbox::new("apply-custom-config");
+        let sys = TestSandbox::mock_system();
+        let tape_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages/lockscreen-qylock-clockwork-tape");
+
+        // Install Quickshell target
+        install_package_target_options_in(
+            &tape_dir,
+            &sandbox.snapshots_dir,
+            &sandbox.installed_dir,
+            &sandbox.staging_dir,
+            &sandbox.home_dir,
+            &sys,
+            false,
+            Some("quickshell"),
+        ).unwrap();
+
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        let mut custom_cfg = std::collections::HashMap::new();
+        custom_cfg.insert("variant".to_string(), serde_json::json!("midnight-chrome"));
+        custom_cfg.insert("clockPosition".to_string(), serde_json::json!("center"));
+        custom_cfg.insert("clockStyle".to_string(), serde_json::json!("digital"));
+        custom_cfg.insert("showDate".to_string(), serde_json::json!(true));
+        custom_cfg.insert("showSeconds".to_string(), serde_json::json!(false));
+        custom_cfg.insert("showSystemInfo".to_string(), serde_json::json!(true));
+
+        let active = apply_lockscreen_target_in_with_config(
+            "lockscreen-qylock-clockwork-tape",
+            "quickshell",
+            Some(custom_cfg),
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+
+        assert_eq!(active.quickshell, Some("lockscreen-qylock-clockwork-tape".to_string()));
+
+        // Inspect the generated theme.conf on disk!
+        let installed_theme_conf = sandbox.home_dir.join(".local/share/ryzora/lockscreens/qylock/clockwork-tape/theme.conf");
+        assert!(installed_theme_conf.exists(), "theme.conf must exist on disk");
+        let conf_content = fs::read_to_string(&installed_theme_conf).unwrap();
+
+        assert!(conf_content.contains("[General]"), "Must contain [General] section");
+        assert!(conf_content.contains("variant=midnight-chrome"), "Must persist variant=midnight-chrome");
+        assert!(conf_content.contains("clockPosition=center"), "Must persist clockPosition=center");
+        assert!(conf_content.contains("clockStyle=digital"), "Must persist clockStyle=digital");
+        assert!(conf_content.contains("showSeconds=false"), "Must persist showSeconds=false");
+
+        // Inspect ryzora_config.json on disk!
+        let json_path = sandbox.home_dir.join(".local/share/ryzora/lockscreens/qylock/clockwork-tape/ryzora_config.json");
+        assert!(json_path.exists(), "ryzora_config.json must exist");
+        let json_str = fs::read_to_string(&json_path).unwrap();
+        assert!(json_str.contains("midnight-chrome"));
     }
 
 }

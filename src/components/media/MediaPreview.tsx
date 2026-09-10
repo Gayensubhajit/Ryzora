@@ -1,58 +1,63 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, memo } from "react";
 import { Play, Pause, Volume2, VolumeX, AlertCircle } from "lucide-react";
-import { determineMediaDisplayState } from "./mediaUtils.ts";
+import {
+  determineMediaDisplayState,
+  globalVideoLimiter,
+  PlaybackPriority,
+} from "./mediaUtils.ts";
 
 export interface MediaPreviewProps {
-  poster: string;
+  poster?: string;
   videoSrc?: string;
   animatedSrc?: string;
-  mediaType?: "image" | "video" | "animated";
-  alt: string;
+  mediaType?: "video" | "animated" | "image";
+  alt?: string;
   mode?: "card" | "hero";
   isHovered?: boolean;
-  aspectRatio?: "16/9" | "4/3" | "1/1";
-  className?: string;
+  aspectRatio?: "16/9" | "4/3" | "square";
   showBadge?: boolean;
   onVideoError?: (err: any) => void;
+  className?: string;
 }
 
-export const MediaPreview: React.FC<MediaPreviewProps> = ({
-  poster,
+export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
+  poster = "",
   videoSrc,
   animatedSrc,
-  mediaType = "image",
-  alt,
+  mediaType,
+  alt = "Media preview",
   mode = "card",
+  isHovered = false,
   aspectRatio = "16/9",
-  className = "",
   showBadge = false,
   onVideoError,
+  className = "",
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const isMountedRef = useRef(true);
-  const retryTimeoutRef = useRef<number | null>(null);
-  const retryCountRef = useRef(0);
-  const isIntentionalPauseRef = useRef(false);
-
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [videoError, setVideoError] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [isInViewport, setIsInViewport] = useState(false);
 
-  // Check prefers-reduced-motion accessibility setting
+  const isMountedRef = useRef(true);
+  const isIntentionalPauseRef = useRef(false);
+  const retryTimeoutRef = useRef<number | null>(null);
+
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-      setPrefersReducedMotion(mediaQuery.matches);
-      const listener = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-      mediaQuery.addEventListener("change", listener);
-      return () => mediaQuery.removeEventListener("change", listener);
-    }
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
   }, []);
 
-  // Track component mount status
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -60,6 +65,9 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
       if (retryTimeoutRef.current !== null) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
+      }
+      if (videoRef.current) {
+        globalVideoLimiter.releasePlayback(videoRef.current);
       }
     };
   }, []);
@@ -75,54 +83,110 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
 
   const { hasVideo, hasAnimatedImage, finalPoster, finalVideo, finalAnimated } = displayState;
 
-  // Resilient autoplay function with exponential backoff retry
+  // Viewport IntersectionObserver: pause off-screen, play in-viewport
+  useEffect(() => {
+    if (!hasVideo || typeof IntersectionObserver === "undefined") {
+      setIsInViewport(true);
+      return;
+    }
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) {
+          setIsInViewport(entry.isIntersecting);
+        }
+      },
+      { threshold: 0.15 }
+    );
+
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasVideo]);
+
+  const priority: PlaybackPriority = mode === "hero" ? "hero" : isHovered ? "hover" : "normal";
+
+  // Playback request through the priority-aware limiter
   const attemptPlay = useCallback(() => {
-    if (!isMountedRef.current || prefersReducedMotion || videoError) return;
+    if (!isMountedRef.current || prefersReducedMotion || videoError || !isInViewport) return;
     const video = videoRef.current;
     if (!video) return;
 
-    if (video.paused && !isIntentionalPauseRef.current) {
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            if (isMountedRef.current) {
-              setIsPlaying(true);
-              retryCountRef.current = 0;
-            }
-          })
-          .catch((_err) => {
-            if (!isMountedRef.current) return;
-            setIsPlaying(false);
-            // Intelligent backoff retry: 300ms, 600ms, 1200ms, up to 3000ms max (capped at 6 tries)
-            if (retryCountRef.current < 6) {
-              const delay = Math.min(300 * Math.pow(1.5, retryCountRef.current), 3000);
-              retryCountRef.current += 1;
-              if (retryTimeoutRef.current !== null) {
-                clearTimeout(retryTimeoutRef.current);
-              }
-              retryTimeoutRef.current = window.setTimeout(attemptPlay, delay);
-            }
-          });
-      }
+    if (isIntentionalPauseRef.current) return;
+
+    const req = globalVideoLimiter.requestPlayback(video, priority);
+    if (!req.allowed) {
+      // Limiter reached capacity for this priority — remain paused with poster visible underneath
+      setIsPlaying(false);
+      return;
     }
-  }, [prefersReducedMotion, videoError]);
 
-  // Initial playback launch when hasVideo or finalVideo updates
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          if (isMountedRef.current) {
+            setIsPlaying(true);
+          }
+        })
+        .catch(() => {
+          if (isMountedRef.current) {
+            setIsPlaying(false);
+          }
+        });
+    }
+  }, [prefersReducedMotion, videoError, isInViewport, priority]);
+
+  // Viewport & priority synchronization
   useEffect(() => {
-    if (!hasVideo || prefersReducedMotion || videoError) return;
-    isIntentionalPauseRef.current = false;
-    attemptPlay();
-  }, [hasVideo, finalVideo, prefersReducedMotion, videoError, attemptPlay]);
+    if (!hasVideo) return;
+    const video = videoRef.current;
+    if (!video) return;
 
-  // Event handlers for resilient media playback
+    if (isInViewport && !isIntentionalPauseRef.current) {
+      attemptPlay();
+    } else {
+      globalVideoLimiter.releasePlayback(video);
+      try {
+        video.pause();
+      } catch {}
+      setIsPlaying(false);
+    }
+  }, [isInViewport, hasVideo, priority, attemptPlay]);
+
+  // Window visibility listener: resume when window is focused
+  useEffect(() => {
+    const handleVisChange = () => {
+      if (document.visibilityState === "visible" && isInViewport && !isIntentionalPauseRef.current) {
+        attemptPlay();
+      } else if (document.visibilityState !== "visible" && videoRef.current) {
+        globalVideoLimiter.releasePlayback(videoRef.current);
+        try {
+          videoRef.current.pause();
+        } catch {}
+        setIsPlaying(false);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisChange);
+    return () => document.removeEventListener("visibilitychange", handleVisChange);
+  }, [isInViewport, attemptPlay]);
+
+  // Media event handlers
   const handleLoadedData = () => {
     setVideoLoaded(true);
-    attemptPlay();
+    if (isInViewport && !isIntentionalPauseRef.current) {
+      attemptPlay();
+    }
   };
 
   const handleCanPlay = () => {
-    if (videoRef.current?.paused && !isIntentionalPauseRef.current) {
+    if (isInViewport && videoRef.current?.paused && !isIntentionalPauseRef.current) {
       attemptPlay();
     }
   };
@@ -137,37 +201,32 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
 
   const handlePause = () => {
     if (!isMountedRef.current) return;
-    // If pause occurred without user pressing pause, schedule automatic recovery
-    if (!isIntentionalPauseRef.current && hasVideo && !prefersReducedMotion && !videoError) {
-      setIsPlaying(false);
-      if (retryTimeoutRef.current !== null) {
-        clearTimeout(retryTimeoutRef.current);
-      }
-      retryTimeoutRef.current = window.setTimeout(attemptPlay, 250);
-    } else {
-      setIsPlaying(false);
+    setIsPlaying(false);
+    if (videoRef.current) {
+      globalVideoLimiter.releasePlayback(videoRef.current);
     }
   };
 
   const handlePlay = () => {
     setIsPlaying(true);
-    retryCountRef.current = 0;
   };
 
   const handleWaiting = () => {
-    // Normal chunk buffering — do NOT treat as an error or pause
+    // Buffering chunk: retain video element without tearing down
   };
 
   const handleStalled = () => {
-    // Normal network pipeline stall — do NOT treat as an error
+    // Pipeline stall: retain video element
   };
 
   const handleVideoError = (err: any) => {
-    // Only permanently fall back on genuine fatal video errors
     const video = videoRef.current;
     if (video?.error) {
       setVideoError(true);
       setIsPlaying(false);
+      if (video) {
+        globalVideoLimiter.releasePlayback(video);
+      }
       if (onVideoError) {
         onVideoError(err);
       }
@@ -184,6 +243,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
     } else {
       isIntentionalPauseRef.current = true;
       video.pause();
+      globalVideoLimiter.releasePlayback(video);
       setIsPlaying(false);
     }
   };
@@ -221,7 +281,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
 
       {/* 
         2. Video Player: Mounted on top of poster.
-        Autoplays muted in loop with zero scroll-pause eviction.
+        Viewport-aware priority decoding with zero teardown.
       */}
       {hasVideo && (
         <video
@@ -231,7 +291,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
           loop
           playsInline
           autoPlay
-          preload="auto"
+          preload="metadata"
           onLoadedData={handleLoadedData}
           onCanPlay={handleCanPlay}
           onEnded={handleEnded}
@@ -296,4 +356,4 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
       )}
     </div>
   );
-};
+});

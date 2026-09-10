@@ -5,7 +5,8 @@
  * selective accents, depth hierarchies, and accessibility primitives.
  */
 
-:root {
+:root,
+[data-theme="dark"] {
   /* Default to Dark Ryzora Glass */
   color-scheme: dark;
 

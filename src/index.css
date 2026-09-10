@@ -540,28 +540,28 @@ textarea:focus {
 }
 
 
-/* ─── Responsive fluid store grid (Marketplace Layout: 1 col mobile, 2 cols tablet, 3 cols desktop) ─── */
+/* ─── Responsive fluid store grid (Marketplace Layout: 1 col mobile, 2 cols tablet, 4 cols desktop) ─── */
 .store-grid-fluid,
 .catalogue-grid-density {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
 }
 
-/* Tablet (2 columns) */
+/* Tablet: 640px–1023px (2 columns) */
 @media (min-width: 640px) {
   .store-grid-fluid,
   .catalogue-grid-density {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
+    gap: 16px;
   }
 }
 
-/* Desktop & Large Desktop (3 columns) */
+/* Desktop & Large Desktop: >=1024px (Exactly 4 columns) */
 @media (min-width: 1024px) {
   .store-grid-fluid,
   .catalogue-grid-density {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
   }
 }
