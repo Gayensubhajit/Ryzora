@@ -11,6 +11,34 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
 
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
+
+static INSTALLED_FLATPAK_CACHE: RwLock<Option<(Instant, std::collections::HashSet<String>)>> = RwLock::new(None);
+
+pub fn get_installed_flatpak_ids() -> std::collections::HashSet<String> {
+    if let Ok(read) = INSTALLED_FLATPAK_CACHE.read() {
+        if let Some((instant, ref set)) = *read {
+            if instant.elapsed() < Duration::from_secs(30) {
+                return set.clone();
+            }
+        }
+    }
+    let list = list_installed_flatpak_apps().unwrap_or_default();
+    let set: std::collections::HashSet<String> = list.into_iter().map(|a| a.id.to_lowercase()).collect();
+    if let Ok(mut write) = INSTALLED_FLATPAK_CACHE.write() {
+        *write = Some((Instant::now(), set.clone()));
+    }
+    set
+}
+
+pub fn invalidate_flatpak_cache() {
+    if let Ok(mut write) = INSTALLED_FLATPAK_CACHE.write() {
+        *write = None;
+    }
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FlatpakAppInfo {
     pub id: String,
@@ -171,8 +199,7 @@ pub fn search_flathub_apps(query: &str) -> Result<Vec<FlatpakAppInfo>, String> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let installed_list = list_installed_flatpak_apps().unwrap_or_default();
-    let installed_ids: std::collections::HashSet<String> = installed_list.into_iter().map(|a| a.id.to_lowercase()).collect();
+    let installed_ids = get_installed_flatpak_ids();
 
     let mut results = Vec::new();
 
@@ -262,6 +289,7 @@ pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
         return Err(format!("flatpak install failed: {}", err.trim()));
     }
 
+    invalidate_flatpak_cache();
     Ok(format!("Successfully installed Flatpak application '{}'", app_id))
 }
 
@@ -281,6 +309,7 @@ pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
         return Err(format!("flatpak uninstall failed: {}", err.trim()));
     }
 
+    invalidate_flatpak_cache();
     Ok(format!("Successfully uninstalled Flatpak application '{}'", app_id))
 }
 

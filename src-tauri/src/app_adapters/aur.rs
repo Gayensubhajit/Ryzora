@@ -163,6 +163,24 @@ pub fn aur_search_rpc(query: &str) -> Result<Vec<AurPackageInfo>, String> {
         });
     }
 
+let query_lower = trimmed.to_lowercase();
+    list.sort_by(|a, b| {
+        let a_name = a.name.to_lowercase();
+        let b_name = b.name.to_lowercase();
+        let a_exact = a_name == query_lower;
+        let b_exact = b_name == query_lower;
+        if a_exact != b_exact {
+            return b_exact.cmp(&a_exact);
+        }
+        let a_starts = a_name.starts_with(&query_lower);
+        let b_starts = b_name.starts_with(&query_lower);
+        if a_starts != b_starts {
+            return b_starts.cmp(&a_starts);
+        }
+        b.popularity.partial_cmp(&a.popularity).unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.votes.cmp(&a.votes))
+    });
+
     Ok(list)
 }
 
@@ -471,5 +489,80 @@ mod tests {
         let pkgbuild = aur_get_pkgbuild("spotify");
         assert!(pkgbuild.is_ok(), "spotify PKGBUILD should be fetched from AUR cgit: {:?}", pkgbuild.err());
         assert!(pkgbuild.unwrap().contains("pkgname=spotify"));
+    }
+    #[test]
+    fn test_aur_search_relevance_sorting() {
+        let mut mock_list = vec![
+            AurPackageInfo {
+                name: "spotify-tui".to_string(),
+                package_base: Some("spotify-tui".to_string()),
+                version: "0.25.0".to_string(),
+                description: "Spotify for the terminal".to_string(),
+                url: None,
+                maintainer: None,
+                popularity: Some(15.0),
+                votes: Some(400),
+                out_of_date: None,
+                license: None,
+                depends: vec![],
+                make_depends: vec![],
+                is_installed: false,
+                installed_version: None,
+            },
+            AurPackageInfo {
+                name: "spotify".to_string(),
+                package_base: Some("spotify".to_string()),
+                version: "1.2.0".to_string(),
+                description: "Spotify desktop client".to_string(),
+                url: None,
+                maintainer: None,
+                popularity: Some(85.0),
+                votes: Some(3500),
+                out_of_date: None,
+                license: None,
+                depends: vec![],
+                make_depends: vec![],
+                is_installed: false,
+                installed_version: None,
+            },
+            AurPackageInfo {
+                name: "audion-bin".to_string(),
+                package_base: Some("audion-bin".to_string()),
+                version: "1.0.0".to_string(),
+                description: "Spotify player alternative".to_string(),
+                url: None,
+                maintainer: None,
+                popularity: Some(2.0),
+                votes: Some(10),
+                out_of_date: None,
+                license: None,
+                depends: vec![],
+                make_depends: vec![],
+                is_installed: false,
+                installed_version: None,
+            },
+        ];
+
+        let query_lower = "spotify".to_string();
+        mock_list.sort_by(|a, b| {
+            let a_name = a.name.to_lowercase();
+            let b_name = b.name.to_lowercase();
+            let a_exact = a_name == query_lower;
+            let b_exact = b_name == query_lower;
+            if a_exact != b_exact {
+                return b_exact.cmp(&a_exact);
+            }
+            let a_starts = a_name.starts_with(&query_lower);
+            let b_starts = b_name.starts_with(&query_lower);
+            if a_starts != b_starts {
+                return b_starts.cmp(&a_starts);
+            }
+            b.popularity.partial_cmp(&a.popularity).unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.votes.cmp(&a.votes))
+        });
+
+        assert_eq!(mock_list[0].name, "spotify", "Exact match must rank first");
+        assert_eq!(mock_list[1].name, "spotify-tui", "Prefix match must rank second");
+        assert_eq!(mock_list[2].name, "audion-bin", "General substring must rank last");
     }
 }

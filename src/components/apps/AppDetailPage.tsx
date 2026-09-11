@@ -105,6 +105,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const [availableProviders, setAvailableProviders] = useState<PackageProviderOption[]>(() => {
     return appProviderCache.get(app.id) || [initialProvider];
   });
+  const [loadingProviders, setLoadingProviders] = useState<boolean>(() => !appProviderCache.has(app.id));
   const [selectedProvider, setSelectedProvider] = useState<PackageProviderOption>(() => {
     const cached = appProviderCache.get(app.id);
     if (cached && cached.length > 0) {
@@ -281,6 +282,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     const cached = appProviderCache.get(app.id);
     if (cached && cached.length > 0) {
       setAvailableProviders(cached);
+      setLoadingProviders(false);
       const installed = cached.find((p) => p.isInstalled);
       if (installed) {
         setSelectedProvider(installed);
@@ -289,9 +291,11 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       return;
     }
 
+    setLoadingProviders(true);
     const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
     if (!isTauri) {
       setAvailableProviders(SUPPORTED_PROVIDERS);
+      setLoadingProviders(false);
       return;
     }
 
@@ -347,6 +351,9 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       })
       .catch((err) => {
         console.error("Failed to resolve app providers:", err);
+      })
+      .finally(() => {
+        if (active) setLoadingProviders(false);
       });
 
     return () => {
@@ -675,7 +682,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         <div className="relative rounded-3xl p-8 md:p-10 bg-[var(--rz-surface)] border border-[var(--rz-border)] shadow-md z-10">
           {/* Subtle blurred watermark art behind right side */}
           <div className="absolute -right-12 -top-12 w-96 h-96 pointer-events-none select-none opacity-5 dark:opacity-10 blur-xl scale-125 overflow-hidden flex items-center justify-center">
-            <AppIcon appId={app.id} size="2xl" iconName={(app as any).icon_name} iconPath={(app as any).icon_path} />
+            <AppIcon appId={app.id} size="2xl" iconName={(app as any).icon_name} iconPath={(app as any).icon_path} repository={repository} />
           </div>
 
           <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
@@ -683,7 +690,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             <div className="flex flex-col sm:flex-row items-start gap-6 max-w-3xl">
               {/* Authentic Application Icon */}
               <div className="p-3.5 rounded-3xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-sm shrink-0">
-                <AppIcon appId={app.id} size="2xl" iconName={(app as any).icon_name} iconPath={(app as any).icon_path} />
+                <AppIcon appId={app.id} size="2xl" iconName={(app as any).icon_name} iconPath={(app as any).icon_path} repository={repository} />
               </div>
 
               <div className="space-y-3.5">
@@ -1201,6 +1208,121 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Installation Sources Panel */}
+            <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Installation sources</h2>
+                {loadingProviders && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--rz-text-muted)]">
+                    <Loader2 size={11} className="animate-spin text-blue-500" />
+                    <span>Checking…</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2 text-xs">
+                {/* Pacman Source */}
+                {availableProviders.some((p) => p.id === "pacman") && (
+                  <div
+                    onClick={() => {
+                      const p = availableProviders.find((x) => x.id === "pacman");
+                      if (p) setSelectedProvider(p);
+                    }}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                      selectedProvider.id === "pacman"
+                        ? "bg-blue-600/10 border-blue-500/40 text-[var(--rz-text)] shadow-xs"
+                        : "bg-[var(--rz-surface-elevated)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:bg-[var(--rz-surface-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-[var(--rz-text)]">Pacman · {repository}</div>
+                        <div className="text-[11px] text-[var(--rz-text-muted)]">Official Arch Linux repository</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                      ✓ Available
+                    </span>
+                  </div>
+                )}
+
+                {/* AUR Source */}
+                {availableProviders.some((p) => p.id === "aur") ? (
+                  <div
+                    onClick={() => {
+                      const p = availableProviders.find((x) => x.id === "aur");
+                      if (p) setSelectedProvider(p);
+                    }}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                      selectedProvider.id === "aur"
+                        ? "bg-cyan-600/10 border-cyan-500/40 text-[var(--rz-text)] shadow-xs"
+                        : "bg-[var(--rz-surface-elevated)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:bg-[var(--rz-surface-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-[var(--rz-text)]">AUR</div>
+                        <div className="text-[11px] text-[var(--rz-text-muted)]">Arch User Repository (unprivileged build)</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-medium text-cyan-600 dark:text-cyan-400">
+                      ○ Available
+                    </span>
+                  </div>
+                ) : loadingProviders ? (
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]/60 text-[var(--rz-text-muted)]">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+                      <div>
+                        <div className="font-medium">AUR</div>
+                        <div className="text-[11px]">User contributed</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-[var(--rz-text-muted)]">Checking…</span>
+                  </div>
+                ) : null}
+
+                {/* Flathub Source */}
+                {availableProviders.some((p) => p.id === "flatpak") ? (
+                  <div
+                    onClick={() => {
+                      const p = availableProviders.find((x) => x.id === "flatpak");
+                      if (p) setSelectedProvider(p);
+                    }}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                      selectedProvider.id === "flatpak"
+                        ? "bg-violet-600/10 border-violet-500/40 text-[var(--rz-text)] shadow-xs"
+                        : "bg-[var(--rz-surface-elevated)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:bg-[var(--rz-surface-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-[var(--rz-text)]">Flathub</div>
+                        <div className="text-[11px] text-[var(--rz-text-muted)]">Universal Flatpak container</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-medium text-violet-600 dark:text-violet-400">
+                      ○ Available
+                    </span>
+                  </div>
+                ) : loadingProviders ? (
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]/60 text-[var(--rz-text-muted)]">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+                      <div>
+                        <div className="font-medium">Flathub</div>
+                        <div className="text-[11px]">Flatpak sandbox</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-[var(--rz-text-muted)]">Checking…</span>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {/* Application Information Panel */}

@@ -38,6 +38,8 @@ export interface AppIconProps {
   iconName?: string | null;
   /** Pre-resolved icon_path from CatalogItem */
   iconPath?: string | null;
+  /** Repository / origin source (e.g. "aur", "flathub", "extra") */
+  repository?: string | null;
 }
 
 export function resolvePixelSize(size: AppIconSize): number {
@@ -76,6 +78,7 @@ export const AppIcon: React.FC<AppIconProps> = ({
   preferSystemIcon: _preferSystemIcon = true,
   iconName,
   iconPath,
+  repository,
 }) => {
   const targetId = (appId || packageId || "").toLowerCase().trim();
   const px = resolvePixelSize(size);
@@ -161,32 +164,53 @@ export const AppIcon: React.FC<AppIconProps> = ({
     );
   }
 
-  // Tier 5: Fallback unique colorful letter avatar (used while resolving or when no icon exists)
-  const color = fallbackColor(targetId);
+  // Tier 5: Fallback unique colorful letter avatar or AUR community badge
+  const isAur = repository?.toLowerCase() === "aur" || targetId.endsWith("-git") || targetId.endsWith("-bin");
+  const color = isAur ? "#06b6d4" : fallbackColor(targetId);
   const letter = fallbackLetter(targetId);
   const isResolving = resolved === undefined;
 
   return (
     <div
-      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all ${className}`}
+      className={`relative aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all ${className}`}
       style={{
         ...containerStyle,
-        background: isResolving ? `${color}22` : `${color}18`,
-        border: `1.5px solid ${isResolving ? `${color}44` : `${color}33`}`,
+        background: isAur
+          ? "linear-gradient(135deg, rgba(6, 182, 212, 0.18), rgba(59, 130, 246, 0.12))"
+          : isResolving
+          ? `${color}22`
+          : `${color}18`,
+        border: isAur
+          ? "1.5px solid rgba(6, 182, 212, 0.35)"
+          : `1.5px solid ${isResolving ? `${color}44` : `${color}33`}`,
+        boxShadow: isAur ? "0 2px 8px rgba(6, 182, 212, 0.08)" : undefined,
       }}
-      title={isResolving ? `Loading ${targetId}...` : targetId}
+      title={isResolving ? `Loading ${targetId}...` : isAur ? `${targetId} (AUR Community)` : targetId}
     >
       <span
         style={{
           fontSize: Math.round(px * 0.38),
           fontWeight: 700,
-          color: isResolving ? color : `${color}bb`,
+          color: isAur ? "#22d3ee" : isResolving ? color : `${color}bb`,
           lineHeight: 1,
           userSelect: "none",
         }}
       >
         {letter}
       </span>
+      {isAur && px >= 48 && (
+        <span
+          className="absolute bottom-1 right-1 px-1 py-0.2 rounded text-[8px] font-bold tracking-tight uppercase"
+          style={{
+            background: "rgba(6, 182, 212, 0.25)",
+            color: "#67e8f9",
+            border: "1px solid rgba(6, 182, 212, 0.4)",
+            lineHeight: "1.1",
+          }}
+        >
+          AUR
+        </span>
+      )}
     </div>
   );
 };

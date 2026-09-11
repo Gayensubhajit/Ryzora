@@ -950,13 +950,21 @@ pub fn flatpak_list_installed() -> Result<Vec<flatpak::FlatpakAppInfo>, String> 
 }
 
 #[tauri::command]
-pub fn flatpak_search(query: String) -> Result<Vec<flatpak::FlatpakAppInfo>, String> {
-    flatpak::search_flathub_apps(&query)
+pub async fn flatpak_search(query: String) -> Result<Vec<flatpak::FlatpakAppInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        flatpak::search_flathub_apps(&query)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn flatpak_get_info(app_id: String) -> Result<Option<flatpak::FlatpakAppInfo>, String> {
-    flatpak::get_flatpak_app_info(&app_id)
+pub async fn flatpak_get_info(app_id: String) -> Result<Option<flatpak::FlatpakAppInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        flatpak::get_flatpak_app_info(&app_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -989,18 +997,30 @@ pub fn aur_get_status() -> Result<aur::AurStatus, String> {
 }
 
 #[tauri::command]
-pub fn aur_search(query: String) -> Result<Vec<aur::AurPackageInfo>, String> {
-    aur::aur_search_rpc(&query)
+pub async fn aur_search(query: String) -> Result<Vec<aur::AurPackageInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        aur::aur_search_rpc(&query)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn aur_get_info(package_name: String) -> Result<Option<aur::AurPackageInfo>, String> {
-    aur::aur_get_info_rpc(&package_name)
+pub async fn aur_get_info(package_name: String) -> Result<Option<aur::AurPackageInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        aur::aur_get_info_rpc(&package_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn aur_get_pkgbuild(package_name: String) -> Result<String, String> {
-    aur::aur_get_pkgbuild(&package_name)
+pub async fn aur_get_pkgbuild(package_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        aur::aur_get_pkgbuild(&package_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1162,8 +1182,12 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
 }
 
 #[tauri::command]
-pub fn resolve_app_providers(package_id: String, display_name: Option<String>) -> Result<Vec<AppProviderSource>, String> {
-    Ok(resolve_app_providers_sync(&package_id, display_name.as_deref()))
+pub async fn resolve_app_providers(package_id: String, display_name: Option<String>) -> Result<Vec<AppProviderSource>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(resolve_app_providers_sync(&package_id, display_name.as_deref()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

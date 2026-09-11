@@ -38,6 +38,17 @@ pub type DesktopAppIconInfo = DesktopAppInfo;
 // Package ID → Desktop/Icon Aliases
 // ─────────────────────────────────────────────────────────────────────────────
 
+fn strip_packaging_suffix(name: &str) -> Option<&str> {
+    for suffix in &["-stable-bin", "-stable", "-bin", "-git", "-nightly", "-beta", "-electron", "-app"] {
+        if let Some(base) = name.strip_suffix(suffix) {
+            if !base.is_empty() {
+                return Some(base);
+            }
+        }
+    }
+    None
+}
+
 fn known_aliases(pkg: &str) -> Option<(&'static str, &'static str)> {
     match pkg {
         "visual-studio-code" | "visual-studio-code-bin" | "code-oss" | "vscodium" => Some(("code", "vscode")),
@@ -70,6 +81,18 @@ fn known_aliases(pkg: &str) -> Option<(&'static str, &'static str)> {
         "darktable" => Some(("darktable", "darktable")),
         "chromium" => Some(("chromium", "chromium")),
         "firefox" => Some(("firefox", "firefox")),
+        "google-chrome" | "google-chrome-stable" | "google-chrome-beta" | "google-chrome-dev" => Some(("google-chrome", "google-chrome")),
+        "brave-bin" | "brave-browser-bin" | "brave" => Some(("brave-browser", "brave-browser")),
+        "microsoft-edge-stable-bin" | "microsoft-edge-dev-bin" => Some(("microsoft-edge", "microsoft-edge")),
+        "postman-bin" | "postman" => Some(("postman", "postman")),
+        "sublime-text-4" | "sublime-text" => Some(("sublime_text", "sublime-text")),
+        "zoom" => Some(("zoom", "zoom")),
+        "tor-browser-bin" | "tor-browser" => Some(("torbrowser", "tor-browser")),
+        "github-desktop-bin" | "github-desktop" => Some(("github-desktop", "github-desktop")),
+        "obsidian-bin" | "obsidian" => Some(("obsidian", "obsidian")),
+        "notion-app-electron" | "notion-app" => Some(("notion-app", "notion-app")),
+        "bitwarden-bin" | "bitwarden" => Some(("bitwarden", "bitwarden")),
+        "discord-canary" | "discord-ptb" => Some(("discord", "discord")),
         _ => None,
     }
 }
@@ -751,6 +774,18 @@ pub fn resolve_desktop_icon_for_app(package_id: &str) -> Option<DesktopAppInfo> 
             } else {
                 None
             }
+        })
+        .or_else(|| {
+            if let Some(base) = strip_packaging_suffix(&pkg_lower) {
+                if let Some(alias) = known_aliases(base) {
+                    if let Some(f) = resolve_icon_file(alias.1, base) {
+                        return Some(f);
+                    }
+                }
+                resolve_icon_file(base, base)
+            } else {
+                None
+            }
         });
 
     // Step 3b: Fall back to AppStream swcatalog icons
@@ -895,5 +930,12 @@ mod tests {
         assert!(info.is_some(), "Hints should resolve icon immediately");
         let info = info.unwrap();
         assert!(info.icon_data_uri.is_some());
+    }
+    #[test]
+    fn test_strip_packaging_suffix() {
+        assert_eq!(strip_packaging_suffix("google-chrome-stable"), Some("google-chrome"));
+        assert_eq!(strip_packaging_suffix("visual-studio-code-bin"), Some("visual-studio-code"));
+        assert_eq!(strip_packaging_suffix("discord-git"), Some("discord"));
+        assert_eq!(strip_packaging_suffix("firefox"), None);
     }
 }

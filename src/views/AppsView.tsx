@@ -87,13 +87,46 @@ export const AppsView: React.FC = () => {
   // Request epoch for cancellation — prevents stale responses overwriting latest view
   const requestEpoch = useRef<number>(0);
 
-  // Debounce search input (200ms)
+  // Request epoch for single-flight remote search cancellation (stale-result protection)
+  const remoteEpochRef = useRef<number>(0);
+
+  // Debounce search input for instant local Pacman catalogue (150ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery.trim());
-    }, 120);
+    }, 150);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Two-tier search: 400ms debounced single-flight remote search (AUR + Flathub) strictly for 3+ chars
+  useEffect(() => {
+    const epoch = ++remoteEpochRef.current;
+    const trimmed = debouncedSearch;
+
+    if (trimmed.length < 3 || viewMode !== "applications" || selectedCategory === "Installed") {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      catalogService.searchRemoteProviders(trimmed).then((remoteItems) => {
+        // Stale result protection: if user continued typing, discard older response
+        if (epoch !== remoteEpochRef.current) return;
+        if (remoteItems.length > 0) {
+          setCatalogueItems((curr) => {
+            const seen = new Set(curr.map((p) => p.id.toLowerCase()));
+            const toAdd = remoteItems
+              .filter((ri) => !seen.has(ri.id.toLowerCase()))
+              .map((ri) => catalogService.catalogItemToPackageItem(ri));
+            if (toAdd.length === 0) return curr;
+            return [...curr, ...toAdd];
+          });
+          setTotalCatalogueCount((prev) => prev + remoteItems.length);
+        }
+      }).catch(() => {});
+    }, 250); // 150ms local + 250ms = 400ms debounced remote search
+
+    return () => clearTimeout(timer);
+  }, [debouncedSearch, viewMode, selectedCategory]);
 
   // Initial catalog status & subscriber
   useEffect(() => {
@@ -167,23 +200,7 @@ export const AppsView: React.FC = () => {
       // Pre-fetch icons for the loaded page in one batch IPC call
       prefetchIconsForPage(res.items.map((i) => ({ id: i.id, icon_name: i.icon_name, icon_path: i.icon_path })));
 
-      // Non-blocking background search for Flathub and AUR multi-source results
-      if (debouncedSearch && debouncedSearch.length >= 2 && viewMode === "applications" && !isInstalledOnly) {
-        catalogService.searchRemoteProviders(debouncedSearch).then((remoteItems) => {
-          if (epoch !== requestEpoch.current) return;
-          if (remoteItems.length > 0) {
-            setCatalogueItems((curr) => {
-              const seen = new Set(curr.map((p) => p.id.toLowerCase()));
-              const toAdd = remoteItems
-                .filter((ri) => !seen.has(ri.id.toLowerCase()))
-                .map((ri) => catalogService.catalogItemToPackageItem(ri));
-              if (toAdd.length === 0) return curr;
-              return [...curr, ...toAdd];
-            });
-            setTotalCatalogueCount((prev) => prev + remoteItems.length);
-          }
-        }).catch(() => {});
-      }
+
     } catch (err) {
       if (epoch !== requestEpoch.current) return;
       console.error("[AppsView] Failed to query catalog items:", err);
@@ -334,7 +351,10 @@ export const AppsView: React.FC = () => {
     gridScrollRef.current = gridRef.current?.scrollTop ?? 0;
     setAppHistory([]);
     setSelectedApp(app);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (gridRef.current) {
+      gridRef.current.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
   }, []);
 
   const handleSelectRelated = useCallback(
@@ -348,13 +368,13 @@ export const AppsView: React.FC = () => {
       if (found && selectedApp) {
         setAppHistory((prev) => [...prev, selectedApp]);
         setSelectedApp(found);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo(0, 0);
       } else {
         catalogService.getItemDetails(relatedId).then((item) => {
           if (item && selectedApp) {
             setAppHistory((prev) => [...prev, selectedApp]);
             setSelectedApp(catalogService.catalogItemToPackageItem(item));
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            window.scrollTo(0, 0);
           }
         });
       }
@@ -367,7 +387,7 @@ export const AppsView: React.FC = () => {
       const prevApp = appHistory[appHistory.length - 1];
       setAppHistory((prev) => prev.slice(0, prev.length - 1));
       setSelectedApp(prevApp);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo(0, 0);
     } else {
       setSelectedApp(null);
       try {
@@ -480,6 +500,7 @@ export const AppsView: React.FC = () => {
     return (
       <>
         <AppDetailPage
+          key={selectedApp.id}
           app={selectedApp}
           backLabel={backLabel}
           onBack={handleBack}
@@ -912,7 +933,7 @@ const AppCatalogueTile: React.FC<{
       className="group flex flex-col items-center text-center p-4 rounded-2xl bg-[var(--rz-surface)]/30 hover:bg-[var(--rz-surface)] border border-transparent hover:border-[var(--rz-border-subtle)] transition-all duration-200 ease-out cursor-pointer hover:shadow-md hover:-translate-y-0.5"
     >
       <div className="mb-3 transition-transform group-hover:scale-105 duration-200 flex items-center justify-center">
-        <AppIcon appId={app.id} size="lg" iconName={iconName} iconPath={iconPath} />
+        <AppIcon appId={app.id} size="lg" iconName={iconName} iconPath={iconPath} repository={repo} />
       </div>
       <span
         className="text-xs sm:text-[13px] font-bold text-[var(--rz-text)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate w-full"

@@ -623,19 +623,31 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
 export function resolveAppMetadata(packageId: string, title?: string): AppMetadata {
   const normId = packageId.toLowerCase().trim();
 
-  // 1. Direct match
+  // 1. Direct match in curated repository
   if (KNOWN_APPS[normId]) {
     return KNOWN_APPS[normId];
   }
 
-  // 2. Fuzzy match by prefix/suffix
+  // 2. Fallback: Canonical alias match (e.g. google-chrome -> chromium, visual-studio-code-bin -> code)
+  // Maintains provider authority while inheriting curated icon/artwork fallback
+  const canonicalId = resolveCanonicalAppId(normId);
+  if (canonicalId !== normId && KNOWN_APPS[canonicalId]) {
+    const canonicalMeta = KNOWN_APPS[canonicalId];
+    const cleanTitle = title || packageId.charAt(0).toUpperCase() + packageId.slice(1);
+    return {
+      ...canonicalMeta,
+      displayName: cleanTitle,
+    };
+  }
+
+  // 3. Fuzzy match by prefix/suffix in curated apps
   for (const [key, meta] of Object.entries(KNOWN_APPS)) {
     if (normId.startsWith(key) || normId.endsWith(key) || normId.includes(key)) {
       return meta;
     }
   }
 
-  // 3. Fallback for generic pacman packages
+  // 4. Fallback for generic packages
   const cleanTitle = title || packageId.charAt(0).toUpperCase() + packageId.slice(1);
   return {
     displayName: cleanTitle,
@@ -650,14 +662,26 @@ export function resolveAppMetadata(packageId: string, title?: string): AppMetada
   };
 }
 
-
 // Canonical alias dictionary for package IDs, desktop files, and aliases
 const CANONICAL_ALIASES: Record<string, string> = {
   "firefox-developer-edition": "firefox",
   "firefox-nightly": "firefox",
   "google-chrome": "chromium",
   "google-chrome-stable": "chromium",
+  "google-chrome-beta": "chromium",
+  "google-chrome-dev": "chromium",
   "chromium-browser": "chromium",
+  "brave-bin": "chromium",
+  "brave-browser-bin": "chromium",
+  "brave": "chromium",
+  "microsoft-edge-stable-bin": "chromium",
+  "microsoft-edge-dev-bin": "chromium",
+  "tor-browser-bin": "firefox",
+  "zen-browser-bin": "firefox",
+  "floorp-bin": "firefox",
+  "github-desktop-bin": "git",
+  "vscodium-bin": "code",
+  "spotify-adblock": "spotify",
   "visual-studio-code-bin": "code",
   "code-oss": "code",
   "vscode": "code",

@@ -1,3 +1,4 @@
+import { catalogService } from "../services/catalogService.ts";
 /**
  * Phase 23A — Pacman App Provider & Engine Integration Tests
  */
@@ -184,5 +185,46 @@ describe("Phase 23A — Pacman App Provider", () => {
     for (const recId of RECOMMENDED_CANONICAL_IDS) {
       assert.ok(!popularSet.has(recId), `Recommended ID '${recId}' must not exist in Popular picks`);
     }
+  });
+
+  it("Phase 25.1 - 1: Canonical alias fallback preserves real title while resolving icon", () => {
+    const metaChrome = resolveAppMetadata("google-chrome", "Google Chrome");
+    assert.equal(metaChrome.displayName, "Google Chrome");
+    assert.equal(metaChrome.iconUrl, "/assets/apps/chromium/icon.png");
+
+    const metaEdge = resolveAppMetadata("microsoft-edge-stable-bin", "Microsoft Edge");
+    assert.equal(metaEdge.displayName, "Microsoft Edge");
+    assert.equal(metaEdge.iconUrl, "/assets/apps/chromium/icon.png");
+  });
+
+  it("Phase 25.1 - 2: PackageItem preserves repository and metadata_source fields", () => {
+    const pkg = catalogService.catalogItemToPackageItem({
+      id: "spotify",
+      display_name: "Spotify",
+      summary: "Music player",
+      description: "Music streaming service",
+      repository: "aur",
+      version: "1.2.0",
+      is_installed: false,
+      installed_version: null,
+      is_application: true,
+      category: "Multimedia",
+      subcategories: [],
+      icon_name: "spotify",
+      icon_path: null,
+      launchable: "spotify.desktop",
+      homepage: "https://spotify.com",
+      license: "Proprietary",
+      download_size: null,
+      installed_size: null,
+      dependencies: [],
+      screenshots: [],
+      developer: "Spotify AB",
+      metadata_source: "aur",
+    });
+
+    assert.equal((pkg as any).repository, "aur");
+    assert.equal((pkg as any).metadata_source, "aur");
+    assert.equal(pkg.repository_id, "aur");
   });
 });

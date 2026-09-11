@@ -204,10 +204,12 @@ export class CatalogService {
   }
 
   private remoteSearchCache = new Map<string, CatalogItem[]>();
+  private activeRemoteEpoch = 0;
 
   async searchRemoteProviders(query: string): Promise<CatalogItem[]> {
     const trimmed = query.trim().toLowerCase();
-    if (trimmed.length < 2 || !isTauri) {
+    // Strict threshold: never trigger remote processes for queries under 3 chars
+    if (trimmed.length < 3 || !isTauri) {
       return [];
     }
 
@@ -215,17 +217,24 @@ export class CatalogService {
       return this.remoteSearchCache.get(trimmed)!;
     }
 
+    const currentEpoch = ++this.activeRemoteEpoch;
+
     try {
       const [flatpakResults, aurResults] = await Promise.allSettled([
         invokeTauri<any[]>("flatpak_search", { query: trimmed }),
         invokeTauri<any[]>("aur_search", { query: trimmed }),
       ]);
 
+      // Stale-result protection: discard if user updated search term while in-flight
+      if (currentEpoch !== this.activeRemoteEpoch) {
+        return [];
+      }
+
       const items: CatalogItem[] = [];
       const seenIds = new Set<string>();
 
       if (flatpakResults.status === "fulfilled" && Array.isArray(flatpakResults.value)) {
-        for (const fp of flatpakResults.value.slice(0, 5)) {
+        for (const fp of flatpakResults.value.slice(0, 10)) {
           if (!seenIds.has(fp.id.toLowerCase())) {
             seenIds.add(fp.id.toLowerCase());
             items.push({
@@ -257,7 +266,7 @@ export class CatalogService {
       }
 
       if (aurResults.status === "fulfilled" && Array.isArray(aurResults.value)) {
-        for (const aur of aurResults.value.slice(0, 5)) {
+        for (const aur of aurResults.value.slice(0, 10)) {
           if (!seenIds.has(aur.name.toLowerCase())) {
             seenIds.add(aur.name.toLowerCase());
             items.push({
@@ -525,6 +534,8 @@ export class CatalogService {
     (pkg as any).icon_path = item.icon_path;
     (pkg as any).icon_name = item.icon_name;
     (pkg as any).is_application = item.is_application;
+    (pkg as any).repository = item.repository;
+    (pkg as any).metadata_source = item.metadata_source;
     return pkg;
   }
 }
