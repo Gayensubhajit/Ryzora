@@ -11,23 +11,6 @@
  */
 
 import React, { useEffect, useState } from "react";
-import {
-  Globe,
-  Terminal,
-  Code2,
-  Gamepad2,
-  Tv,
-  Image as ImageIcon,
-  Cpu,
-  Sparkles,
-  Brush,
-  Box,
-  Disc3,
-  Video,
-  Music2,
-  Camera,
-  MonitorPlay,
-} from "lucide-react";
 import { KNOWN_APPS, resolveAppMetadata, type AppMetadata } from "./appMetadata.ts";
 
 export { resolveAppMetadata, KNOWN_APPS, type AppMetadata };
@@ -67,35 +50,6 @@ export function resolvePixelSize(size: AppIconSize): number {
     case "xl": return 88;
     case "2xl": return 112;
     default: return 68;
-  }
-}
-
-/**
- * Pick a distinct fallback icon for a given application, based on category and app ID.
- * Ensures GIMP, Blender, VLC, etc. each have visually distinct placeholder artwork.
- */
-function getFallbackIcon(appId: string, category: string) {
-  const id = appId.toLowerCase();
-
-  // App-specific distinct fallbacks for common non-installed apps
-  if (id.includes("gimp") || id.includes("inkscape") || id.includes("krita")) return Brush;
-  if (id.includes("blender")) return Box;
-  if (id.includes("vlc") || id.includes("celluloid")) return Disc3;
-  if (id.includes("obs")) return Video;
-  if (id.includes("audacity") || id.includes("ardour") || id.includes("spotify") || id.includes("music")) return Music2;
-  if (id.includes("darktable") || id.includes("shotwell") || id.includes("digikam")) return Camera;
-  if (id.includes("mpv") || id.includes("totem") || id.includes("player")) return MonitorPlay;
-
-  // Category fallbacks
-  switch (category) {
-    case "Internet": return Globe;
-    case "Development": return Code2;
-    case "Multimedia": return Tv;
-    case "Graphics": return ImageIcon;
-    case "Games": return Gamepad2;
-    case "Utilities": return Terminal;
-    case "System": return Cpu;
-    default: return Sparkles;
   }
 }
 
@@ -190,20 +144,27 @@ export const AppIcon: React.FC<AppIconProps> = ({
     );
   }
 
-  // Tier 3: Distinct geometric category fallback
-  const FallbackIcon = getFallbackIcon(targetId, meta.category);
-
+  // Tier 3: Neutral Ryzora application fallback (communicates artwork unavailable without pretending)
   return (
     <div
-      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all ${className}`}
-      style={{
-        ...containerStyle,
-        background: `linear-gradient(135deg, ${meta.accentColor}22, ${meta.accentColor}08)`,
-        color: meta.accentColor,
-        border: `1.5px solid ${meta.accentColor}35`,
-      }}
+      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all bg-white/[0.04] border border-white/[0.08] text-foreground-muted/60 ${className}`}
+      style={containerStyle}
+      title="Application artwork unavailable"
     >
-      <FallbackIcon size={Math.round(px * 0.52)} />
+      <svg
+        width={Math.round(px * 0.44)}
+        height={Math.round(px * 0.44)}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="3" y="3" width="18" height="18" rx="4" />
+        <path d="M8 8h5a3 3 0 0 1 0 6H8V8z" />
+        <path d="M12 14l4 4" />
+      </svg>
     </div>
   );
 };

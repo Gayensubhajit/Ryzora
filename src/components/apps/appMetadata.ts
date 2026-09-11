@@ -25,6 +25,9 @@ export interface AppMetadata {
   iconUrl?: string;
   screenshots?: AppScreenshot[];
   relatedApps?: string[];
+  tagline?: string;
+  documentationUrl?: string;
+  highlights?: string[];
   isCuratedApp: boolean;
 }
 
@@ -44,6 +47,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Seamless cross-device tab, bookmark, and history synchronization",
       "Picture-in-Picture video overlay with multiple window support",
       "Extensive add-ons and theme customization library",
+    ],
+    tagline: "Browse the web on your terms",
+    documentationUrl: "https://support.mozilla.org",
+    highlights: [
+      "Enhanced Tracking Protection",
+      "Extensive Customization",
+      "Sync Across Devices",
+      "Open Source and Community Driven"
     ],
     website: "https://www.mozilla.org/firefox",
     sourceRepository: "https://hg.mozilla.org/mozilla-central",
@@ -79,6 +90,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Native modern web standards: WebGPU, WebAssembly, and PWA",
       "Granular site permissions and security control center",
     ],
+    tagline: "The open-source engine of the modern web",
+    documentationUrl: "https://www.chromium.org/developers/",
+    highlights: [
+      "Sandboxed Tab Security",
+      "V8 High-Speed Engine",
+      "Full Developer Tools",
+      "Open Standards Compliance"
+    ],
     website: "https://www.chromium.org",
     sourceRepository: "https://chromium.googlesource.com/chromium/src",
     issueTracker: "https://issues.chromium.org",
@@ -112,6 +131,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Built-in Git and GitHub source control management with visual diffs",
       "Integrated multi-split terminal running your favorite Linux shell",
       "Extensive marketplace covering Python, Rust, Go, TypeScript, and more",
+    ],
+    tagline: "Code editing redefined",
+    documentationUrl: "https://code.visualstudio.com/docs",
+    highlights: [
+      "IntelliSense Completion",
+      "Integrated Git Control",
+      "Built-in Terminal Shell",
+      "Rich Extensions Ecosystem"
     ],
     website: "https://code.visualstudio.com",
     sourceRepository: "https://github.com/microsoft/vscode",
@@ -220,6 +247,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Network streaming support (HTTP, RTP, RTSP, MMS)",
       "Subtitle synchronization and real-time audio/video filters",
     ],
+    tagline: "Plays everything, everywhere",
+    documentationUrl: "https://www.videolan.org/support/",
+    highlights: [
+      "Plays All Formats & Codecs",
+      "Hardware GPU Acceleration",
+      "Network Stream Playback",
+      "Audio & Subtitle Sync"
+    ],
     website: "https://www.videolan.org/vlc",
     sourceRepository: "https://code.videolan.org/videolan/vlc",
     issueTracker: "https://trac.videolan.org/vlc",
@@ -242,6 +277,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Sub-pixel sampling for high-quality anti-aliasing across all brushes",
       "Advanced layers, channels, and customizable masks",
       "Multi-format support for RAW, PSD, TIFF, PNG, and SVG",
+    ],
+    tagline: "The free & open source image editor",
+    documentationUrl: "https://www.gimp.org/docs/",
+    highlights: [
+      "Professional Photo Retouching",
+      "Extensible Python Plugins",
+      "Multi-Layer Composition",
+      "Comprehensive File Formats"
     ],
     website: "https://www.gimp.org",
     sourceRepository: "https://gitlab.gnome.org/GNOME/gimp",
@@ -272,6 +315,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Advanced rigging, character animation, and motion tracking",
       "VFX, compositing, and integrated Python scripting API",
     ],
+    tagline: "Open source 3D creation suite",
+    documentationUrl: "https://docs.blender.org",
+    highlights: [
+      "3D Modeling & Sculpting",
+      "Real-time EEVEE & Cycles",
+      "VFX & Character Rigging",
+      "Integrated Video Sequencer"
+    ],
     website: "https://www.blender.org",
     sourceRepository: "https://projects.blender.org/blender/blender",
     issueTracker: "https://projects.blender.org/blender/blender/issues",
@@ -300,6 +351,14 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
       "Unlimited scenes with custom seamless transitions",
       "Intuitive audio mixer with per-source noise suppression and gain filters",
       "Native direct streaming to Twitch, YouTube, Kick, and custom RTMP",
+    ],
+    tagline: "Broadcast your world in real-time",
+    documentationUrl: "https://obsproject.com/wiki",
+    highlights: [
+      "Real-time Video/Audio Capture",
+      "Multi-Scene Compositing",
+      "Per-Source Audio Filters",
+      "Native Twitch & YouTube RTMP"
     ],
     website: "https://obsproject.com",
     sourceRepository: "https://github.com/obsproject/obs-studio",
