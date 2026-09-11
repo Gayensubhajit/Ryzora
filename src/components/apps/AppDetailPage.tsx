@@ -110,16 +110,21 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const [activeOperation, setActiveOperation] = useState<string | null>(() =>
     transactionManager.getPackageActiveOperation(app.id)
   );
+  // Live transaction progress for this package (percentage, message)
+  const [txProgress, setTxProgress] = useState<{ percentage: number | null; message: string } | null>(null);
 
   useEffect(() => {
     return transactionManager.subscribePackageStatus(app.id, (operating, op) => {
       setIsOperating(operating);
       setActiveOperation(op || transactionManager.getPackageActiveOperation(app.id));
       if (!operating) {
-        // Transaction finished: perform authoritative state query from ALPM database
+        // Transaction finished: clear progress UI immediately
+        setTxProgress(null);
+        // Then perform authoritative state query from ALPM database
         catalogService
           .refreshInstalledState()
           .then(async () => {
+            // itemCache is now cleared by refreshInstalledState; re-fetch fresh state
             const item = await catalogService.getItemDetails(app.id);
             if (item) {
               setLocalInstalled(item.is_installed);
@@ -132,6 +137,22 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       }
     });
   }, [app.id, onStatusChanged]);
+
+  // Track live tx progress (percentage + message) for the hero progress bar
+  useEffect(() => {
+    return transactionManager.subscribe((state) => {
+      if (
+        state &&
+        state.packageName.toLowerCase() === app.id.toLowerCase() &&
+        state.stage !== "completed" &&
+        state.stage !== "failed"
+      ) {
+        setTxProgress({ percentage: state.percentage, message: state.message });
+      } else if (!state || state.packageName.toLowerCase() !== app.id.toLowerCase()) {
+        setTxProgress(null);
+      }
+    });
+  }, [app.id]);
 
   const prevAppIdRef = useRef(app.id);
   // Reset transient operation states ONLY upon navigating to a different product
@@ -475,10 +496,25 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                     <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--rz-text)]">
                       {meta.displayName}
                     </h1>
-                    {isInstalled ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                    {installState === "installed" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 transition-all">
                         <CheckCircle2 size={13} />
                         <span>Installed</span>
+                      </span>
+                    ) : installState === "installing" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-500 border border-blue-500/25 animate-pulse">
+                        <Loader2 size={13} className="animate-spin" />
+                        <span>Installing…</span>
+                      </span>
+                    ) : installState === "uninstalling" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/25 animate-pulse">
+                        <Loader2 size={13} className="animate-spin" />
+                        <span>Removing…</span>
+                      </span>
+                    ) : installState === "updating" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/15 text-violet-500 border border-violet-500/25 animate-pulse">
+                        <Loader2 size={13} className="animate-spin" />
+                        <span>Reinstalling…</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-500/10 text-[var(--rz-text-muted)] border border-zinc-500/20">
@@ -640,6 +676,30 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* ── Hero Transaction Progress Panel ── */}
+                {txProgress && actionsConfig.isBusy && (
+                  <div className="pt-3 space-y-1.5">
+                    {/* Progress bar */}
+                    <div className="w-full h-1.5 rounded-full bg-[var(--rz-surface-hover)] overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300 ease-out"
+                        style={{
+                          width: `${txProgress.percentage ?? 2}%`,
+                          background: installState === "uninstalling"
+                            ? "linear-gradient(90deg, #f59e0b, #ef4444)"
+                            : installState === "updating"
+                            ? "linear-gradient(90deg, #8b5cf6, #3b82f6)"
+                            : "linear-gradient(90deg, #3b82f6, #06b6d4)",
+                        }}
+                      />
+                    </div>
+                    {/* Message */}
+                    <p className="text-xs text-[var(--rz-text-muted)] truncate leading-tight">
+                      {txProgress.message}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

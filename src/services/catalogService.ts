@@ -286,7 +286,27 @@ export class CatalogService {
     return found || null;
   }
 
+  /**
+   * Evicts a single package from the item cache so the next getItemDetails
+   * call fetches authoritative ALPM state from the backend.
+   */
+  invalidateItem(packageId: string): void {
+    this.itemCache.delete(packageId);
+  }
+
+  /**
+   * Clears the entire item detail cache. Used after full installed-state refreshes
+   * so every subsequent getItemDetails call re-queries the backend for fresh
+   * is_installed / installed_version values.
+   */
+  invalidateAllItems(): void {
+    this.itemCache.clear();
+  }
+
   async refreshInstalledState(): Promise<CatalogStatus> {
+    // Wipe item cache so subsequent getItemDetails re-queries authoritative ALPM state
+    this.itemCache.clear();
+
     if (isTauri) {
       try {
         const res = await invokeTauri<CatalogStatus>("pacman_refresh_catalog_installed_state");
