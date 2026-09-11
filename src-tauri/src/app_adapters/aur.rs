@@ -249,10 +249,14 @@ pub fn aur_get_pkgbuild(name: &str) -> Result<String, String> {
     }
 
     // 2. If not found in AUR, check official Arch Linux GitLab packaging
-    let gl_encoded = percent_encoding::utf8_percent_encode(trimmed, percent_encoding::NON_ALPHANUMERIC).to_string();
+    // Validate package name characters before URL interpolation
+    if !trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '+') {
+        return Err(format!("Invalid package name '{}'", trimmed));
+    }
+
     let gitlab_url = format!(
         "https://gitlab.archlinux.org/archlinux/packaging/packages/{}/-/raw/main/PKGBUILD",
-        gl_encoded
+        trimmed
     );
 
     if let Ok(gl_resp) = ureq::get(&gitlab_url)
@@ -447,5 +451,25 @@ pub fn get_aur_cleanup_info(pkg_name: &str) -> AurCleanupInfo {
         build_dir: if build_dir.exists() { Some(build_dir.display().to_string()) } else { None },
         yay_cache: if yay_cache.exists() { Some(yay_cache.display().to_string()) } else { None },
         paru_cache: if paru_cache.exists() { Some(paru_cache.display().to_string()) } else { None },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aur_get_pkgbuild_official_arch_gitlab_fallback() {
+        let pkgbuild = aur_get_pkgbuild("gnome-2048");
+        assert!(pkgbuild.is_ok(), "gnome-2048 PKGBUILD should be fetched from Arch GitLab: {:?}", pkgbuild.err());
+        let content = pkgbuild.unwrap();
+        assert!(content.contains("gnome-2048"));
+    }
+
+    #[test]
+    fn test_aur_get_pkgbuild_aur_package() {
+        let pkgbuild = aur_get_pkgbuild("spotify");
+        assert!(pkgbuild.is_ok(), "spotify PKGBUILD should be fetched from AUR cgit: {:?}", pkgbuild.err());
+        assert!(pkgbuild.unwrap().contains("pkgname=spotify"));
     }
 }
