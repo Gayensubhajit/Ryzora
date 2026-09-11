@@ -165,6 +165,7 @@ describe("Phase 23A — Pacman App Provider", () => {
     assert.equal(resolveCanonicalAppId("spotify-launcher"), "spotify");
     assert.equal(resolveCanonicalAppId("obs"), "obs-studio");
     assert.equal(resolveCanonicalAppId("telegram-desktop"), "telegram");
+    assert.equal(resolveCanonicalAppId("cursor-bin"), "cursor");
   });
 
   it("Phase 23C.1 - 2: DeduplicateAppPackages eliminates duplicates by canonical identity", () => {

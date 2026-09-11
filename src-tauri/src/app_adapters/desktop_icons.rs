@@ -51,6 +51,7 @@ fn strip_packaging_suffix(name: &str) -> Option<&str> {
 
 fn known_aliases(pkg: &str) -> Option<(&'static str, &'static str)> {
     match pkg {
+        "cursor" | "cursor-bin" | "cursor-appimage" | "cursor-nightly-bin" | "cursor-cli" => Some(("cursor", "cursor")),
         "visual-studio-code" | "visual-studio-code-bin" | "code-oss" | "vscodium" => Some(("code", "vscode")),
         "obs-studio" | "obs" => Some(("com.obsproject.Studio", "com.obsproject.Studio")),
         "telegram-desktop" | "telegram" => Some(("org.telegram.desktop", "org.telegram.desktop")),
@@ -632,7 +633,67 @@ fn load_icon_file(path: &Path) -> (Option<String>, Option<String>, Option<String
 // Public Entry Point
 // ─────────────────────────────────────────────────────────────────────────────
 
+static FLATPAK_ICON_CACHE: std::sync::OnceLock<std::collections::HashMap<String, PathBuf>> = std::sync::OnceLock::new();
+
+fn get_flatpak_icon_cache() -> &'static std::collections::HashMap<String, PathBuf> {
+    FLATPAK_ICON_CACHE.get_or_init(|| {
+        let mut map = std::collections::HashMap::new();
+        let mut icon_dirs = vec![
+            PathBuf::from("/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128"),
+            PathBuf::from("/var/lib/flatpak/appstream/flathub/x86_64/active/icons/64x64"),
+        ];
+
+        let home = crate::snapshot::get_home_dir();
+        icon_dirs.push(home.join(".local/share/flatpak/appstream/flathub/x86_64/active/icons/128x128"));
+        icon_dirs.push(home.join(".local/share/flatpak/appstream/flathub/x86_64/active/icons/64x64"));
+
+        for dir in icon_dirs {
+            if dir.exists() {
+                if let Ok(entries) = fs::read_dir(&dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
+                                let key = file_name.to_lowercase();
+                                map.entry(key).or_insert(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        map
+    })
+}
+
 pub fn find_swcatalog_icon(pkg_id: &str, icon_name: Option<&str>) -> Option<PathBuf> {
+    // 1. Check Flathub AppStream icon cache (case-insensitive O(1) in-memory lookup)
+    let flathub_cache = get_flatpak_icon_cache();
+    let mut keys_to_check = Vec::new();
+
+    if let Some(name) = icon_name {
+        let n = name.trim().to_lowercase();
+        if !n.is_empty() {
+            keys_to_check.push(format!("{}.png", n));
+            keys_to_check.push(format!("{}.desktop.png", n));
+            keys_to_check.push(format!("{}.svg", n));
+        }
+    }
+
+    let p = pkg_id.trim().to_lowercase();
+    if !p.is_empty() {
+        keys_to_check.push(format!("{}.png", p));
+        keys_to_check.push(format!("{}.desktop.png", p));
+        keys_to_check.push(format!("{}.svg", p));
+    }
+
+    for key in &keys_to_check {
+        if let Some(path) = flathub_cache.get(key) {
+            return Some(path.clone());
+        }
+    }
+
+    // 2. Check traditional Arch Linux AppStream directories
     let base_dirs = [
         "/usr/share/swcatalog/icons",
         "/var/lib/app-info/icons",
@@ -651,10 +712,12 @@ pub fn find_swcatalog_icon(pkg_id: &str, icon_name: Option<&str>) -> Option<Path
         if !name.is_empty() {
             candidate_filenames.push(format!("{}_{}.png", pkg_id, name));
             candidate_filenames.push(format!("{}.png", name));
+            candidate_filenames.push(format!("{}.desktop.png", name));
         }
     }
     candidate_filenames.push(format!("{}_{}.png", pkg_id, pkg_id));
     candidate_filenames.push(format!("{}.png", pkg_id));
+    candidate_filenames.push(format!("{}.desktop.png", pkg_id));
 
     for base in &base_dirs {
         let base_path = Path::new(base);
@@ -931,6 +994,24 @@ mod tests {
         let info = info.unwrap();
         assert!(info.icon_data_uri.is_some());
     }
+    #[test]
+    fn test_flathub_appstream_icons_resolution() {
+        let rotp = find_swcatalog_icon("com.remnantsoftheprecursors.ROTP", None);
+        assert!(rotp.is_some(), "ROTP icon should resolve from Flathub AppStream");
+
+        let hatari = find_swcatalog_icon("org.tuxfamily.hatari", None);
+        assert!(hatari.is_some(), "Hatari icon should resolve from Flathub AppStream");
+
+        let kruler = find_swcatalog_icon("org.kde.kruler", None);
+        assert!(kruler.is_some(), "KRuler icon should resolve from Flathub AppStream");
+    }
+
+    #[test]
+    fn test_known_alias_cursor() {
+        assert_eq!(known_aliases("cursor-bin"), Some(("cursor", "cursor")));
+        assert_eq!(known_aliases("cursor"), Some(("cursor", "cursor")));
+    }
+
     #[test]
     fn test_strip_packaging_suffix() {
         assert_eq!(strip_packaging_suffix("google-chrome-stable"), Some("google-chrome"));

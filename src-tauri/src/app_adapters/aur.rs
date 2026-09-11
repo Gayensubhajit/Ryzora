@@ -372,7 +372,8 @@ pub fn aur_build_and_install_package(pkg_name: &str) -> Result<String, String> {
     // If yay or paru is available, invoke it unprivileged.
     if has_yay {
         let output = Command::new("yay")
-            .args(["-S", "--noconfirm", trimmed])
+            .args(["-S", "--noconfirm", "--sudo", "pkexec", trimmed])
+            .stdin(std::process::Stdio::null())
             .output()
             .map_err(|e| format!("Failed to run yay: {}", e))?;
 
@@ -383,7 +384,8 @@ pub fn aur_build_and_install_package(pkg_name: &str) -> Result<String, String> {
         return Ok(format!("Successfully built and installed AUR package '{}' via yay", trimmed));
     } else if has_paru {
         let output = Command::new("paru")
-            .args(["-S", "--noconfirm", trimmed])
+            .args(["-S", "--noconfirm", "--sudo", "pkexec", trimmed])
+            .stdin(std::process::Stdio::null())
             .output()
             .map_err(|e| format!("Failed to run paru: {}", e))?;
 
@@ -418,6 +420,7 @@ pub fn aur_build_and_install_package(pkg_name: &str) -> Result<String, String> {
     let output = Command::new("makepkg")
         .args(["-s", "--noconfirm"])
         .current_dir(&working_dir)
+        .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("makepkg execution failed: {}", e))?;
 
@@ -446,6 +449,7 @@ pub fn aur_build_and_install_package(pkg_name: &str) -> Result<String, String> {
     let install_output = Command::new("pkexec")
         .args(["pacman", "-U", "--noconfirm"])
         .arg(&built_package)
+        .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("Failed to invoke pkexec pacman -U: {}", e))?;
 

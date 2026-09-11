@@ -618,6 +618,29 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     relatedApps: ["discord", "firefox", "thunderbird"],
     isCuratedApp: true,
   },
+  cursor: {
+    iconUrl: "/assets/apps/cursor/icon.svg",
+    displayName: "Cursor",
+    publisher: "Anysphere Inc.",
+    category: "Development",
+    accentColor: "#000000",
+    brandColor: "#000000",
+    summary: "AI-first code editor built on Visual Studio Code",
+    fullDescription:
+      "Cursor is an AI-powered code editor engineered for pair-programming with large language models. Built as a fork of Visual Studio Code, Cursor integrates chat, code generation, multi-file edits, and smart terminal execution directly into your development workflow.",
+    features: [
+      "AI code editing with multi-file diffusion and fast apply",
+      "Repository-wide code indexing and semantic context querying",
+      "Full VS Code extension and keybinding compatibility",
+      "Integrated AI terminal agent for automated task execution",
+    ],
+    website: "https://www.cursor.com",
+    sourceRepository: "https://github.com/getcursor/cursor",
+    issueTracker: "https://forum.cursor.com",
+    architecture: "x86_64",
+    relatedApps: ["code", "visual-studio-code-bin", "neovim"],
+    isCuratedApp: true,
+  },
 };
 
 export function resolveAppMetadata(packageId: string, title?: string): AppMetadata {
@@ -696,6 +719,13 @@ const CANONICAL_ALIASES: Record<string, string> = {
   "org.gimp.GIMP": "gimp",
   "org.blender.Blender": "blender",
   "org.inkscape.Inkscape": "inkscape",
+  "cursor-bin": "cursor",
+  "cursor-appimage": "cursor",
+  "cursor-cli": "cursor",
+  "cursor-nightly-bin": "cursor",
+  "cursor-clip-bin": "cursor",
+  "cursor-companion": "cursor",
+  "cursor-early-access-bin": "cursor",
 };
 
 export function resolveCanonicalAppId(packageId: string): string {

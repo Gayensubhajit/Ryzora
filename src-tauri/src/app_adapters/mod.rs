@@ -1029,8 +1029,12 @@ pub fn aur_list_installed() -> Result<Vec<aur::AurPackageInfo>, String> {
 }
 
 #[tauri::command]
-pub fn aur_install(package_name: String) -> Result<String, String> {
-    aur::aur_build_and_install_package(&package_name)
+pub async fn aur_install(package_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        aur::aur_build_and_install_package(&package_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
