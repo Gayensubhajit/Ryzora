@@ -273,12 +273,12 @@ pub fn launch_desktop_app(package_id: String) -> Result<bool, String> {
     }
 
     if let Some(info) = desktop_icons::resolve_desktop_icon_for_app(&package_id) {
-        // Try gtk-launch with desktop file name
         let desktop_file_name = std::path::Path::new(&info.desktop_file)
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(&info.desktop_file);
 
+        // 1. Try launching with gtk-launch using desktop file name
         if let Ok(_child) = std::process::Command::new("gtk-launch")
             .arg(desktop_file_name)
             .spawn()
@@ -286,21 +286,30 @@ pub fn launch_desktop_app(package_id: String) -> Result<bool, String> {
             return Ok(true);
         }
 
-        // Fallback: spawn the exec binary directly
+        // 2. Parse exec command from desktop entry, stripping Freedesktop field codes (%u, %F, etc.)
         if let Some(exec_cmd) = &info.exec {
-            let binary = exec_cmd.split_whitespace().next().unwrap_or("");
-            if !binary.is_empty() {
-                if let Ok(_child) = std::process::Command::new(binary).spawn() {
-                    return Ok(true);
+            let tokens: Vec<&str> = exec_cmd
+                .split_whitespace()
+                .filter(|tok| !tok.starts_with('%'))
+                .collect();
+
+            if let Some((binary, args)) = tokens.split_first() {
+                if !binary.is_empty() {
+                    if let Ok(_child) = std::process::Command::new(binary).args(args).spawn() {
+                        return Ok(true);
+                    }
                 }
             }
         }
     }
 
-    // Direct binary fallback by package_id
+    // 3. Fallback: try spawning binary by package_id directly
     if let Ok(_child) = std::process::Command::new(&package_id).spawn() {
         return Ok(true);
     }
 
-    Ok(true)
+    Err(format!(
+        "Could not launch application '{}'. Desktop entry or executable was not found on system.",
+        package_id
+    ))
 }

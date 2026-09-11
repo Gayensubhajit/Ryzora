@@ -57,6 +57,7 @@ export const AppsView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("All");
   const [selectedApp, setSelectedApp] = useState<PackageItem | null>(null);
+  const [appHistory, setAppHistory] = useState<PackageItem[]>([]);
 
   // Load all app packages
   const loadApps = async () => {
@@ -98,18 +99,49 @@ export const AppsView: React.FC = () => {
   // Save scroll position when entering detail view
   const openAppDetail = useCallback((app: PackageItem) => {
     gridScrollRef.current = gridRef.current?.scrollTop ?? 0;
+    setAppHistory([]);
     setSelectedApp(app);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // Restore scroll position when returning
-  const handleBack = useCallback(() => {
-    setSelectedApp(null);
-    requestAnimationFrame(() => {
-      if (gridRef.current) {
-        gridRef.current.scrollTop = gridScrollRef.current;
+  // When selecting a related app from detail page: push current app to history, replace active app
+  const handleSelectRelated = useCallback(
+    (relatedId: string) => {
+      const found = packages.find(
+        (p) =>
+          p.id.toLowerCase() === relatedId.toLowerCase() ||
+          resolveCanonicalAppId(p.id) === relatedId.toLowerCase()
+      );
+      if (found && selectedApp) {
+        setAppHistory((prev) => [...prev, selectedApp]);
+        setSelectedApp(found);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
-    });
-  }, []);
+    },
+    [packages, selectedApp]
+  );
+
+  // Restore previous app from history or return to grid
+  const handleBack = useCallback(() => {
+    if (appHistory.length > 0) {
+      const prevApp = appHistory[appHistory.length - 1];
+      setAppHistory((prev) => prev.slice(0, prev.length - 1));
+      setSelectedApp(prevApp);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setSelectedApp(null);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("app");
+        window.history.replaceState({}, "", url.toString());
+      } catch {}
+      requestAnimationFrame(() => {
+        if (gridRef.current) {
+          gridRef.current.scrollTop = gridScrollRef.current;
+        }
+      });
+    }
+  }, [appHistory]);
 
   const checkInstalled = useCallback((pkg: PackageItem): boolean => {
     const meta = pacmanAppProvider.getMeta(pkg);
@@ -233,23 +265,19 @@ export const AppsView: React.FC = () => {
 
   // If an app is selected, render the full-screen AppDetailPage!
   if (selectedApp) {
+    const parentApp = appHistory.length > 0 ? appHistory[appHistory.length - 1] : null;
+    const parentMeta = parentApp ? resolveAppMetadata(parentApp.id, parentApp.title) : null;
+    const backLabel = parentMeta ? `Back to ${parentMeta.displayName}` : "Back to Applications";
+
     return (
       <AppDetailPage
         app={selectedApp}
+        backLabel={backLabel}
         onBack={handleBack}
         onStatusChanged={() => {
           loadApps();
         }}
-        onSelectRelated={(relatedId) => {
-          const found = packages.find(
-            (p) =>
-              p.id.toLowerCase() === relatedId.toLowerCase() ||
-              resolveCanonicalAppId(p.id) === relatedId.toLowerCase()
-          );
-          if (found) {
-            setSelectedApp(found);
-          }
-        }}
+        onSelectRelated={handleSelectRelated}
       />
     );
   }

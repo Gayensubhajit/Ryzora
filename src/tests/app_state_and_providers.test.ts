@@ -119,3 +119,58 @@ describe("Phase 23D — App State, Provider Selection & Storefront Actions", () 
     assert.equal(unknown.badgeLabel, "Unknown source");
   });
 });
+
+describe("Phase 23E — Real Package Transactions, Application Launch & Navigation", () => {
+  it("Phase 23E - 1: Non-pacman providers cannot be installed and are rejected", () => {
+    const stagedProviders = SUPPORTED_PROVIDERS.filter((p) => p.id !== "pacman");
+    for (const p of stagedProviders) {
+      assert.equal(p.available, false, `Staged provider '${p.name}' must not be available`);
+    }
+  });
+
+  it("Phase 23E - 2: Successful install operation transitions state from not-installed to installed in-place", () => {
+    let currentState: "not-installed" | "installing" | "installed" = "not-installed";
+    let actions = getApplicationActions(currentState, SUPPORTED_PROVIDERS[0]);
+    assert.equal(actions.primaryAction, "install");
+    assert.equal(actions.showProviderSelector, true);
+
+    // Operation starts
+    currentState = "installing";
+    actions = getApplicationActions(currentState, SUPPORTED_PROVIDERS[0]);
+    assert.equal(actions.primaryAction, "installing");
+    assert.equal(actions.isBusy, true);
+    assert.equal(actions.showProviderSelector, false);
+
+    // Transaction finishes successfully
+    currentState = "installed";
+    actions = getApplicationActions(currentState, SUPPORTED_PROVIDERS[0]);
+    assert.equal(actions.primaryAction, "open");
+    assert.equal(actions.canUninstall, true);
+    assert.equal(actions.showOverflow, true);
+    assert.equal(actions.showProviderSelector, false, "Installed app must never show provider selector");
+  });
+
+  it("Phase 23E - 3: Successful uninstall operation transitions state from installed to not-installed", () => {
+    let currentState: "installed" | "uninstalling" | "not-installed" = "installed";
+    let actions = getApplicationActions(currentState, SUPPORTED_PROVIDERS[0]);
+    assert.equal(actions.primaryAction, "open");
+
+    // Uninstall operation starts
+    currentState = "uninstalling";
+    actions = getApplicationActions(currentState, SUPPORTED_PROVIDERS[0]);
+    assert.equal(actions.primaryAction, "uninstalling");
+    assert.equal(actions.isBusy, true);
+
+    // Uninstall completes
+    currentState = "not-installed";
+    actions = getApplicationActions(currentState, SUPPORTED_PROVIDERS[0]);
+    assert.equal(actions.primaryAction, "install");
+    assert.equal(actions.showProviderSelector, true);
+  });
+
+  it("Phase 23E - 4: Reinstall operation uses updating state without flipping to not-installed", () => {
+    const updating = getApplicationActions("updating", SUPPORTED_PROVIDERS[0]);
+    assert.equal(updating.primaryAction, "updating");
+    assert.equal(updating.isBusy, true);
+  });
+});

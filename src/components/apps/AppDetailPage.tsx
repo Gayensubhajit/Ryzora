@@ -57,6 +57,7 @@ import { VerificationBadge } from "./VerificationBadge.tsx";
 
 interface AppDetailPageProps {
   app: PackageItem;
+  backLabel?: string;
   onBack: () => void;
   onStatusChanged?: () => void;
   onSelectRelated?: (appId: string) => void;
@@ -64,12 +65,23 @@ interface AppDetailPageProps {
 
 export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   app,
+  backLabel = "Back to Applications",
   onBack,
   onStatusChanged,
   onSelectRelated,
 }) => {
   const [selectedProvider, setSelectedProvider] = useState<PackageProviderOption>(SUPPORTED_PROVIDERS[0]);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [operation, setOperation] = useState<
+    "idle" | "installing" | "uninstalling" | "reinstalling" | "launching"
+  >("idle");
+  const [showUninstallConfirm, setShowUninstallConfirm] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("openModal") === "uninstall";
+    } catch {
+      return false;
+    }
+  });
+  const [localInstalled, setLocalInstalled] = useState<boolean | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(() => {
@@ -88,7 +100,23 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   });
   const [installedFiles, setInstalledFiles] = useState<string[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+
+  const prevAppIdRef = useRef(app.id);
+  // Reset transient operation states ONLY upon navigating to a different product
+  useEffect(() => {
+    if (prevAppIdRef.current !== app.id) {
+      prevAppIdRef.current = app.id;
+      setLocalInstalled(null);
+      setOperation("idle");
+      setActionError(null);
+      setActionSuccess(null);
+      setShowUninstallConfirm(false);
+      setFilesError(null);
+      setInstalledFiles([]);
+    }
+  }, [app.id]);
 
   const [showAllDeps, setShowAllDeps] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
@@ -105,22 +133,23 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const meta = useMemo(() => resolveAppMetadata(app.id, app.title), [app.id, app.title]);
   const pacmanMeta = useMemo(() => pacmanAppProvider.getMeta(app), [app]);
   const isInstalled = useMemo(() => {
+    if (localInstalled !== null) return localInstalled;
     try {
       const q = new URLSearchParams(window.location.search).get("installed");
       if (q === "true") return true;
       if (q === "false") return false;
     } catch {}
     return pacmanMeta?.isInstalled ?? false;
-  }, [pacmanMeta]);
+  }, [localInstalled, pacmanMeta]);
 
-  // Derive explicit application install state
+  // Derive explicit application install state from operation enum
   const installState: AppInstallState = useMemo(() => {
-    if (actionLoading && actionSuccess?.includes("installed")) return "installing";
-    if (actionLoading && actionSuccess?.includes("uninstalled")) return "uninstalling";
-    if (actionLoading) return isInstalled ? "uninstalling" : "installing";
+    if (operation === "installing") return "installing";
+    if (operation === "uninstalling") return "uninstalling";
+    if (operation === "reinstalling") return "updating";
     if (actionError) return "error";
     return isInstalled ? "installed" : "not-installed";
-  }, [actionLoading, actionSuccess, actionError, isInstalled]);
+  }, [operation, actionError, isInstalled]);
 
   const actionsConfig = useMemo(
     () => getApplicationActions(installState, selectedProvider),
@@ -137,9 +166,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       ? `${(rawSizeBytes / 1024).toFixed(0)} KB`
       : `${(rawSizeBytes / (1024 * 1024)).toFixed(1)} MB`
     : "Not available";
-  const installedSize = rawSizeBytes
-    ? `${((rawSizeBytes * 2.4) / (1024 * 1024)).toFixed(1)} MB`
-    : "Not available";
+  const installedSize = "Not available";
 
   const allDependencies = pacmanMeta?.dependencies || app.dependencies?.packages || [];
   const visibleDependencies = showAllDeps ? allDependencies : allDependencies.slice(0, 10);
@@ -221,62 +248,92 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
   // Primary Actions: Install, Uninstall, Open, Reinstall
   const handleInstall = async () => {
-    setActionLoading(true);
+    if (selectedProvider.id !== "pacman") {
+      setActionError(`Provider '${selectedProvider.name}' is not available yet. Only Pacman is currently supported.`);
+      return;
+    }
+    setOperation("installing");
     setActionError(null);
     setActionSuccess(null);
     try {
-      const res = (await pacmanAppProvider.install(app, "native")) as {
-        success: boolean;
-        message?: string;
-        error?: string;
-      };
-      if (res.success) {
+      const res = (await pacmanAppProvider.install(app, "native")) as any;
+      if (res?.success !== false) {
+        setLocalInstalled(true);
         setActionSuccess(`Installed ${meta.displayName} successfully via ${selectedProvider.name}.`);
         onStatusChanged?.();
       } else {
-        setActionError(res.error || "Installation failed.");
+        setActionError(res?.error || "Installation failed.");
       }
     } catch (err: any) {
-      setActionError(err?.message || "Failed to install.");
+      setActionError(err?.message || "Failed to install package.");
     } finally {
-      setActionLoading(false);
+      setOperation("idle");
     }
   };
 
-  const handleUninstall = async () => {
-    setActionLoading(true);
+  const handleUninstall = () => {
+    setShowUninstallConfirm(true);
+  };
+
+  const executeUninstall = async () => {
+    setShowUninstallConfirm(false);
+    setOperation("uninstalling");
     setActionError(null);
     setActionSuccess(null);
     try {
-      const res = (await pacmanAppProvider.uninstall(app, "native")) as {
-        success: boolean;
-        message?: string;
-        error?: string;
-      };
-      if (res.success) {
+      const res = (await pacmanAppProvider.uninstall(app, "native")) as any;
+      if (res?.success !== false) {
+        setLocalInstalled(false);
         setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
         onStatusChanged?.();
       } else {
-        setActionError(res.error || "Uninstall failed.");
+        setActionError(res?.error || "Uninstall failed.");
       }
     } catch (err: any) {
-      setActionError(err?.message || "Failed to uninstall.");
+      setActionError(err?.message || "Failed to uninstall package.");
     } finally {
-      setActionLoading(false);
+      setOperation("idle");
+    }
+  };
+
+  const handleReinstall = async () => {
+    setOperation("reinstalling");
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = (await pacmanAppProvider.install(app, "native")) as any;
+      if (res?.success !== false) {
+        setLocalInstalled(true);
+        setActionSuccess(`Reinstalled ${meta.displayName} successfully.`);
+        onStatusChanged?.();
+      } else {
+        setActionError(res?.error || "Reinstallation failed.");
+      }
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to reinstall package.");
+    } finally {
+      setOperation("idle");
     }
   };
 
   const handleOpenApp = async () => {
+    setOperation("launching");
     setActionError(null);
+    setActionSuccess(null);
     try {
       const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
       if (isTauri) {
         const { invoke } = await import("@tauri-apps/api/core");
         await invoke("launch_desktop_app", { packageId: app.id });
+        setActionSuccess(`Launched ${meta.displayName}.`);
+      } else {
+        setActionSuccess(`Launch command dispatched for ${meta.displayName}.`);
       }
-      setActionSuccess(`Launched ${meta.displayName}.`);
-    } catch {
-      setActionSuccess(`${meta.displayName} is running.`);
+    } catch (err: any) {
+      const msg = err?.message || err || "Desktop entry or executable not found.";
+      setActionError(`Could not launch ${meta.displayName}: ${msg}`);
+    } finally {
+      setOperation("idle");
     }
   };
 
@@ -289,8 +346,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         await invoke("launch_desktop_app", { packageId: "alacritty" });
       }
       setActionSuccess("Terminal launcher trigger sent.");
-    } catch {
-      setActionSuccess("Terminal launcher trigger sent.");
+    } catch (err: any) {
+      setActionError(`Could not open terminal: ${err?.message || err}`);
     }
   };
 
@@ -298,32 +355,25 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setOverflowMenuOpen(false);
     setFilesModalOpen(true);
     setLoadingFiles(true);
+    setFilesError(null);
     try {
       const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
       if (isTauri) {
         const { invoke } = await import("@tauri-apps/api/core");
         const files = await invoke<string[]>("get_installed_package_files", { packageName: app.id });
-        setInstalledFiles(files && files.length > 0 ? files : [
-          `/usr/bin/${app.id}`,
-          `/usr/share/applications/${app.id}.desktop`,
-          `/usr/share/icons/hicolor/scalable/apps/${app.id}.svg`,
-          `/usr/share/doc/${app.id}/`,
-        ]);
+        if (files && files.length > 0) {
+          setInstalledFiles(files);
+        } else {
+          setInstalledFiles([]);
+          setFilesError("Unable to retrieve installed package files. Package may not be installed locally or file ledger is unavailable.");
+        }
       } else {
-        setInstalledFiles([
-          `/usr/bin/${app.id}`,
-          `/usr/share/applications/${app.id}.desktop`,
-          `/usr/share/icons/hicolor/scalable/apps/${app.id}.svg`,
-          `/usr/share/licenses/${app.id}/LICENSE`,
-        ]);
+        setInstalledFiles([]);
+        setFilesError("Unable to retrieve installed package files. Local package ledger requires native desktop runtime.");
       }
-    } catch {
-      setInstalledFiles([
-        `/usr/bin/${app.id}`,
-        `/usr/share/applications/${app.id}.desktop`,
-        `/usr/share/icons/hicolor/scalable/apps/${app.id}.svg`,
-        `/usr/share/licenses/${app.id}/LICENSE`,
-      ]);
+    } catch (err: any) {
+      setInstalledFiles([]);
+      setFilesError(`Unable to retrieve installed package files: ${err?.message || err}`);
     } finally {
       setLoadingFiles(false);
     }
@@ -346,10 +396,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         <button
           onClick={onBack}
           className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-          title="Back to Applications (Alt + Left)"
+          title={`${backLabel} (Alt + Left)`}
         >
           <ArrowLeft size={14} />
-          <span>Back to Applications</span>
+          <span>{backLabel}</span>
         </button>
 
         <div className="flex items-center gap-2 text-xs text-[var(--rz-text-muted)] font-mono">
@@ -427,10 +477,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <button
                         type="button"
                         onClick={handleUninstall}
-                        disabled={actionLoading}
+                        disabled={operation !== "idle"}
                         className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-all cursor-pointer disabled:opacity-50 shadow-xs"
                       >
-                        {actionLoading ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                        {operation === "uninstalling" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                         <span>Uninstall</span>
                       </button>
 
@@ -498,9 +548,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                               type="button"
                               onClick={() => {
                                 setOverflowMenuOpen(false);
-                                handleInstall();
+                                handleReinstall();
                               }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left"
+                              disabled={operation !== "idle"}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left disabled:opacity-50"
                             >
                               <RefreshCw size={14} className="text-[var(--rz-text-muted)]" />
                               <span>Reinstall Application</span>
@@ -515,14 +566,14 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <ProviderSelector
                         selectedProvider={selectedProvider}
                         onSelectProvider={setSelectedProvider}
-                        disabled={actionLoading}
+                        disabled={operation !== "idle"}
                       />
 
                       {/* Install Action Button */}
                       <button
                         type="button"
                         onClick={handleInstall}
-                        disabled={actionLoading}
+                        disabled={operation !== "idle"}
                         className="inline-flex items-center gap-2 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg hover:shadow-blue-500/20 cursor-pointer disabled:opacity-50"
                       >
                         <Download size={16} />
@@ -786,25 +837,21 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 </div>
               </div>
 
-              {/* In-Card Secondary Action Buttons */}
+              {/* In-Card Secondary Action: Reinstall ONLY */}
               {isInstalled && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="pt-1">
                   <button
                     type="button"
-                    onClick={handleInstall}
-                    disabled={actionLoading}
-                    className="w-full py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer disabled:opacity-50"
+                    onClick={handleReinstall}
+                    disabled={operation !== "idle"}
+                    className="w-full py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-xs"
                   >
-                    Reinstall
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleUninstall}
-                    disabled={actionLoading}
-                    className="w-full py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/25 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Uninstall
+                    {operation === "reinstalling" ? (
+                      <Loader2 size={13} className="animate-spin text-blue-500" />
+                    ) : (
+                      <RefreshCw size={13} className="text-[var(--rz-text-muted)]" />
+                    )}
+                    <span>{operation === "reinstalling" ? "Reinstalling…" : "Reinstall"}</span>
                   </button>
                 </div>
               )}
@@ -931,14 +978,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 <div className="grid grid-cols-3 gap-3 pt-1">
                   {relatedAppIds.slice(0, 3).map((relId) => {
                     const relMeta = resolveAppMetadata(relId);
-                    // Check if this related app is already installed
-                    const relInstalled = pacmanAppProvider.getMeta({ id: relId } as any)?.isInstalled ?? false;
-
                     return (
-                      <div
+                      <button
                         key={relId}
+                        type="button"
                         onClick={() => onSelectRelated?.(relId)}
-                        className="flex flex-col items-center text-center p-3 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer group shadow-xs hover:shadow-sm"
+                        className="flex flex-col items-center text-center p-3 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] hover:border-blue-500/40 transition-all cursor-pointer group shadow-xs hover:shadow-sm text-left w-full"
                       >
                         <div className="p-1 mb-2 group-hover:scale-105 transition-transform duration-200">
                           <AppIcon appId={relId} size="md" />
@@ -949,21 +994,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         <div className="text-[10px] text-[var(--rz-text-muted)] truncate w-full pt-0.5 mb-2.5">
                           {relMeta.category}
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectRelated?.(relId);
-                          }}
-                          className={`w-full py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
-                            relInstalled
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20"
-                              : "bg-blue-600/10 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/20"
-                          }`}
-                        >
-                          {relInstalled ? "Open" : "Install"}
-                        </button>
-                      </div>
+                        <span className="w-full py-1 rounded-lg text-[11px] font-semibold bg-blue-600/10 text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white border border-blue-500/20 transition-all text-center">
+                          View
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -1006,6 +1040,54 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         )}
       </div>
 
+            {/* ── Uninstall Confirmation Modal ── */}
+      {showUninstallConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-md animate-fadeIn"
+          onClick={() => setShowUninstallConfirm(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--rz-text)]">
+                  Uninstall {meta.displayName}?
+                </h3>
+                <p className="text-xs text-[var(--rz-text-muted)]">
+                  Package <span className="font-mono text-[var(--rz-text)]">{app.id}</span>
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
+              This will remove {meta.displayName} and its installed components from your Arch Linux system via the pacman package manager.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowUninstallConfirm(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeUninstall}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-colors cursor-pointer shadow-sm shadow-rose-600/30"
+              >
+                Confirm Uninstall
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── View Files Modal (Authentic Installed Package File List) ── */}
       {filesModalOpen && (
         <div
@@ -1037,9 +1119,13 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                   <Loader2 size={16} className="animate-spin text-blue-500" />
                   <span>Reading package file ownership ledger...</span>
                 </div>
+              ) : filesError ? (
+                <div className="text-center py-12 text-zinc-400 font-sans text-xs px-6">
+                  {filesError}
+                </div>
               ) : installedFiles.length === 0 ? (
-                <div className="text-center py-12 text-[var(--rz-text-muted)]">
-                  No files recorded for this package.
+                <div className="text-center py-12 text-[var(--rz-text-muted)] font-sans text-xs px-6">
+                  Unable to retrieve installed package files.
                 </div>
               ) : (
                 installedFiles.map((f, i) => (
