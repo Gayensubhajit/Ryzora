@@ -5,6 +5,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { packageEngine, pacmanAppProvider, PacmanAppProvider } from "../providers/index.ts";
+import {
+  resolveAppMetadata,
+  resolveCanonicalAppId,
+  deduplicateAppPackages,
+  POPULAR_CANONICAL_IDS,
+  RECOMMENDED_CANONICAL_IDS,
+} from "../components/apps/appMetadata.ts";
 import type { PackageTargetSpec } from "../providers/types.ts";
 
 describe("Phase 23A — Pacman App Provider", () => {
@@ -148,5 +155,34 @@ describe("Phase 23A — Pacman App Provider", () => {
     assert.equal(uninstallRes.success, true);
     meta = provider.getMeta(btop);
     assert.equal(meta?.isInstalled, false);
+  });
+  it("Phase 23C.1 - 1: Canonical App ID maps package aliases to single identity", () => {
+    assert.equal(resolveCanonicalAppId("visual-studio-code-bin"), "code");
+    assert.equal(resolveCanonicalAppId("code-oss"), "code");
+    assert.equal(resolveCanonicalAppId("firefox-developer-edition"), "firefox");
+    assert.equal(resolveCanonicalAppId("google-chrome"), "chromium");
+    assert.equal(resolveCanonicalAppId("spotify-launcher"), "spotify");
+    assert.equal(resolveCanonicalAppId("obs"), "obs-studio");
+    assert.equal(resolveCanonicalAppId("telegram-desktop"), "telegram");
+  });
+
+  it("Phase 23C.1 - 2: DeduplicateAppPackages eliminates duplicates by canonical identity", () => {
+    const rawList = [
+      { id: "firefox", title: "Firefox", category: "apps" as const, package_type: "native" as const, version: "1.0", maintainer: "arch", tags: [] },
+      { id: "firefox-developer-edition", title: "Firefox Dev", category: "apps" as const, package_type: "native" as const, version: "1.0", maintainer: "arch", tags: [] },
+      { id: "code", title: "Code", category: "apps" as const, package_type: "native" as const, version: "1.0", maintainer: "arch", tags: [] },
+      { id: "visual-studio-code-bin", title: "VS Code Bin", category: "apps" as const, package_type: "native" as const, version: "1.0", maintainer: "arch", tags: [] },
+      { id: "discord", title: "Discord", category: "apps" as const, package_type: "native" as const, version: "1.0", maintainer: "arch", tags: [] },
+    ];
+    const deduped = deduplicateAppPackages(rawList);
+    assert.equal(deduped.length, 3);
+    assert.deepEqual(deduped.map(d => resolveCanonicalAppId(d.id)), ["firefox", "code", "discord"]);
+  });
+
+  it("Phase 23C.1 - 3: Popular and Recommended canonical IDs are strictly non-overlapping", () => {
+    const popularSet = new Set(POPULAR_CANONICAL_IDS);
+    for (const recId of RECOMMENDED_CANONICAL_IDS) {
+      assert.ok(!popularSet.has(recId), `Recommended ID '${recId}' must not exist in Popular picks`);
+    }
   });
 });

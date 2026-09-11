@@ -34,16 +34,10 @@ import {
   Image as ImageIcon,
   Info,
   Sparkles,
-  RefreshCw,
-  Layers,
   Globe,
   Code2,
   HelpCircle,
   FileText,
-  Lock,
-  Users,
-  Sliders,
-  Cpu,
 } from "lucide-react";
 import type { PackageItem } from "../../providers/types.ts";
 import { pacmanAppProvider } from "../../providers/index.ts";
@@ -193,28 +187,6 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const isLongDescription = fullDescription.length > 340;
 
   // Render feature icon based on label keywords
-  const getHighlightIcon = (text: string, idx: number) => {
-    const t = text.toLowerCase();
-    if (t.includes("privacy") || t.includes("tracking") || t.includes("security") || t.includes("sandbox")) {
-      return { icon: Lock, bg: "bg-purple-500/15 text-purple-400 border-purple-500/25" };
-    }
-    if (t.includes("custom") || t.includes("extension") || t.includes("plugin") || t.includes("format")) {
-      return { icon: Sliders, bg: "bg-blue-500/15 text-blue-400 border-blue-500/25" };
-    }
-    if (t.includes("sync") || t.includes("cloud") || t.includes("cross-device") || t.includes("stream")) {
-      return { icon: RefreshCw, bg: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" };
-    }
-    if (t.includes("open source") || t.includes("community") || t.includes("standards") || t.includes("free")) {
-      return { icon: Users, bg: "bg-amber-500/15 text-amber-400 border-amber-500/25" };
-    }
-    const fallbacks = [
-      { icon: ShieldCheck, bg: "bg-blue-500/15 text-blue-400 border-blue-500/25" },
-      { icon: Sparkles, bg: "bg-purple-500/15 text-purple-400 border-purple-500/25" },
-      { icon: Cpu, bg: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" },
-      { icon: Layers, bg: "bg-amber-500/15 text-amber-400 border-amber-500/25" },
-    ];
-    return fallbacks[idx % fallbacks.length];
-  };
 
   return (
     <div className="relative flex flex-col flex-1 h-full w-full overflow-y-auto bg-[var(--rz-bg)] text-[var(--rz-text)] animate-fadeIn scroll-smooth">
@@ -500,25 +472,15 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 </button>
               )}
 
-              {/* Highlights row with clean circular badges */}
+              {/* Feature highlights: subtle bullet strip */}
               {highlights.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
-                  {highlights.map((h, idx) => {
-                    const { icon: HIcon, bg } = getHighlightIcon(h, idx);
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-3 p-3.5 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border)] shadow-xs"
-                      >
-                        <div className={`p-2 rounded-full border ${bg} shrink-0`}>
-                          <HIcon size={14} />
-                        </div>
-                        <span className="text-xs sm:text-sm font-medium text-[var(--rz-text)]">
-                          {h}
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 pt-4 border-t border-[var(--rz-border-subtle)]">
+                  {highlights.map((h, idx) => (
+                    <div key={idx} className="flex items-center gap-2.5 text-xs sm:text-sm text-[var(--rz-text)]">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 ring-4 ring-blue-500/15" />
+                      <span className="font-medium text-[var(--rz-text)]">{h}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -632,37 +594,35 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
             {/* You Might Also Like */}
             {relatedAppIds.length > 0 && (
-              <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3.5 shadow-sm">
+              <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">You might also like</h2>
-                  <span className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">See all →</span>
                 </div>
-                <div className="flex flex-col gap-2.5 pt-1">
+                <div className="grid grid-cols-3 gap-3 pt-1">
                   {relatedAppIds.slice(0, 3).map((relId) => {
                     const relMeta = resolveAppMetadata(relId);
                     return (
                       <div
                         key={relId}
                         onClick={() => onSelectRelated?.(relId)}
-                        className="flex items-center justify-between p-3 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] transition-all cursor-pointer group shadow-xs"
+                        className="flex flex-col items-center text-center p-3 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)] transition-all cursor-pointer group shadow-xs hover:shadow-sm"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-1 mb-2 group-hover:scale-105 transition-transform duration-200">
                           <AppIcon appId={relId} size="md" />
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-[var(--rz-text)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
-                              {relMeta.displayName}
-                            </div>
-                            <div className="text-[11px] text-[var(--rz-text-muted)] truncate">
-                              {relMeta.summary || relMeta.category}
-                            </div>
-                          </div>
+                        </div>
+                        <div className="text-xs font-bold text-[var(--rz-text)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate w-full">
+                          {relMeta.displayName}
+                        </div>
+                        <div className="text-[10px] text-[var(--rz-text-muted)] truncate w-full pt-0.5 mb-2.5">
+                          {relMeta.category}
                         </div>
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectRelated?.(relId);
                           }}
-                          className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600/15 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 transition-colors cursor-pointer shrink-0 ml-2"
+                          className="w-full py-1 rounded-lg text-[11px] font-semibold bg-blue-600/10 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/20 transition-colors cursor-pointer"
                         >
                           View
                         </button>

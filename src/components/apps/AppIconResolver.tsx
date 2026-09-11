@@ -11,9 +11,17 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { KNOWN_APPS, resolveAppMetadata, type AppMetadata } from "./appMetadata.ts";
+import { resolveAppMetadata } from "./appMetadata.ts";
 
-export { resolveAppMetadata, KNOWN_APPS, type AppMetadata };
+export {
+  resolveAppMetadata,
+  KNOWN_APPS,
+  type AppMetadata,
+  resolveCanonicalAppId,
+  deduplicateAppPackages,
+  POPULAR_CANONICAL_IDS,
+  RECOMMENDED_CANONICAL_IDS,
+} from './appMetadata.ts';
 
 export type AppIconSize = "sm" | "md" | "lg" | "xl" | "2xl" | number;
 

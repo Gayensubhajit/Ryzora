@@ -85,7 +85,7 @@ const MainLayout: React.FC = () => {
             </div>
 
             {/* Active Content View */}
-            {activeCategory === "discover" ? (
+            {activeCategory === "discover" || activeCategory === "apps" ? (
               renderActiveView()
             ) : (
               <div className="px-4 sm:px-6 py-4 sm:py-6">

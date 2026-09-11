@@ -649,3 +649,83 @@ export function resolveAppMetadata(packageId: string, title?: string): AppMetada
     isCuratedApp: false,
   };
 }
+
+
+// Canonical alias dictionary for package IDs, desktop files, and aliases
+const CANONICAL_ALIASES: Record<string, string> = {
+  "firefox-developer-edition": "firefox",
+  "firefox-nightly": "firefox",
+  "google-chrome": "chromium",
+  "google-chrome-stable": "chromium",
+  "chromium-browser": "chromium",
+  "visual-studio-code-bin": "code",
+  "code-oss": "code",
+  "vscode": "code",
+  "discord-ptb": "discord",
+  "discord-canary": "discord",
+  "steam-native": "steam",
+  "obs": "obs-studio",
+  "com.obsproject.Studio": "obs-studio",
+  "spotify-launcher": "spotify",
+  "telegram-desktop": "telegram",
+  "org.telegram.desktop": "telegram",
+  "org.gimp.GIMP": "gimp",
+  "org.blender.Blender": "blender",
+  "org.inkscape.Inkscape": "inkscape",
+};
+
+export function resolveCanonicalAppId(packageId: string): string {
+  const normId = packageId.toLowerCase().trim();
+  if (CANONICAL_ALIASES[normId]) {
+    return CANONICAL_ALIASES[normId];
+  }
+  if (KNOWN_APPS[normId]) {
+    return normId;
+  }
+  for (const [alias, canonical] of Object.entries(CANONICAL_ALIASES)) {
+    if (normId.includes(alias)) return canonical;
+  }
+  for (const key of Object.keys(KNOWN_APPS)) {
+    if (normId.startsWith(key) || normId.endsWith(key) || normId.includes(key)) {
+      return key;
+    }
+  }
+  return normId;
+}
+
+// 8 Curated Popular picks in canonical order
+export const POPULAR_CANONICAL_IDS: string[] = [
+  "firefox",
+  "chromium",
+  "code",
+  "discord",
+  "steam",
+  "vlc",
+  "gimp",
+  "obs-studio",
+];
+
+// 8 Curated Recommended picks in canonical order (strictly non-overlapping with Popular)
+export const RECOMMENDED_CANONICAL_IDS: string[] = [
+  "blender",
+  "inkscape",
+  "alacritty",
+  "neovim",
+  "spotify",
+  "telegram",
+  "thunderbird",
+  "mpv",
+];
+
+export function deduplicateAppPackages<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    const cid = resolveCanonicalAppId(item.id);
+    if (!seen.has(cid)) {
+      seen.add(cid);
+      result.push(item);
+    }
+  }
+  return result;
+}
