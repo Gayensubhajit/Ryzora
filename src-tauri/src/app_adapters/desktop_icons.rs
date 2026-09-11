@@ -609,6 +609,104 @@ fn load_icon_file(path: &Path) -> (Option<String>, Option<String>, Option<String
 // Public Entry Point
 // ─────────────────────────────────────────────────────────────────────────────
 
+pub fn find_swcatalog_icon(pkg_id: &str, icon_name: Option<&str>) -> Option<PathBuf> {
+    let base_dirs = [
+        "/usr/share/swcatalog/icons",
+        "/var/lib/app-info/icons",
+        "/usr/share/app-info/icons",
+    ];
+    let subdirs = [
+        "archlinux-arch-extra",
+        "archlinux-arch-core",
+        "archlinux-arch-multilib",
+        "archlinux",
+    ];
+    let sizes = ["128x128", "64x64", "48x48"];
+
+    let mut candidate_filenames = Vec::new();
+    if let Some(name) = icon_name {
+        if !name.is_empty() {
+            candidate_filenames.push(format!("{}_{}.png", pkg_id, name));
+            candidate_filenames.push(format!("{}.png", name));
+        }
+    }
+    candidate_filenames.push(format!("{}_{}.png", pkg_id, pkg_id));
+    candidate_filenames.push(format!("{}.png", pkg_id));
+
+    for base in &base_dirs {
+        let base_path = Path::new(base);
+        if !base_path.exists() {
+            continue;
+        }
+        for sub in &subdirs {
+            for sz in &sizes {
+                let dir = base_path.join(sub).join(sz);
+                if !dir.exists() {
+                    continue;
+                }
+                for fname in &candidate_filenames {
+                    let candidate = dir.join(fname);
+                    if candidate.is_file() {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+pub fn resolve_desktop_icon_with_hints(
+    package_id: &str,
+    icon_name: Option<&str>,
+    icon_path: Option<&str>,
+) -> Option<DesktopAppInfo> {
+    // 1. Direct explicit path hint (e.g. from AppStream catalog item)
+    if let Some(path_str) = icon_path {
+        let p = Path::new(path_str);
+        if p.is_file() {
+            let (path_opt, icon_svg_content, icon_data_uri) = load_icon_file(p);
+            if icon_svg_content.is_some() || icon_data_uri.is_some() {
+                return Some(DesktopAppInfo {
+                    desktop_file: String::new(),
+                    name: package_id.to_string(),
+                    generic_name: None,
+                    icon_name: icon_name.map(|s| s.to_string()),
+                    icon_path: path_opt,
+                    icon_svg_content,
+                    icon_data_uri,
+                    exec: None,
+                    startup_wm_class: None,
+                    categories: Vec::new(),
+                });
+            }
+        }
+    }
+
+    // 2. Direct icon name / swcatalog lookup
+    if let Some(p) = find_swcatalog_icon(package_id, icon_name) {
+        let (path_opt, icon_svg_content, icon_data_uri) = load_icon_file(&p);
+        if icon_svg_content.is_some() || icon_data_uri.is_some() {
+            return Some(DesktopAppInfo {
+                desktop_file: String::new(),
+                name: package_id.to_string(),
+                generic_name: None,
+                icon_name: icon_name.map(|s| s.to_string()),
+                icon_path: path_opt,
+                icon_svg_content,
+                icon_data_uri,
+                exec: None,
+                startup_wm_class: None,
+                categories: Vec::new(),
+            });
+        }
+    }
+
+    // 3. Fall back to standard resolution
+    resolve_desktop_icon_for_app(package_id)
+}
+
 pub fn resolve_desktop_icon_for_app(package_id: &str) -> Option<DesktopAppInfo> {
     let pkg_lower = package_id.to_lowercase().trim().to_string();
     let alias = known_aliases(&pkg_lower);
@@ -655,13 +753,18 @@ pub fn resolve_desktop_icon_for_app(package_id: &str) -> Option<DesktopAppInfo> 
             }
         });
 
+    // Step 3b: Fall back to AppStream swcatalog icons
+    let icon_file = icon_file.or_else(|| {
+        find_swcatalog_icon(&pkg_lower, icon_name.as_deref())
+    });
+
     // Step 4: Load the icon
     let (icon_path, icon_svg_content, icon_data_uri) = match icon_file.as_ref() {
         Some(f) => load_icon_file(f),
         None => (None, None, None),
     };
 
-    if desktop_file.is_empty() && icon_path.is_none() {
+    if desktop_file.is_empty() && icon_path.is_none() && icon_data_uri.is_none() && icon_svg_content.is_none() {
         return None;
     }
 
@@ -772,5 +875,25 @@ mod tests {
                 assert!(path.contains("hicolor") || path.contains("firefox") || path.contains("pixmaps"), "Unexpected path: {}", path);
             }
         }
+    }
+    #[test]
+    fn test_swcatalog_icon_blender_uninstalled() {
+        let info = resolve_desktop_icon_for_app("blender");
+        assert!(info.is_some(), "Blender icon should be resolved via swcatalog even when uninstalled");
+        let info = info.unwrap();
+        assert!(info.icon_data_uri.is_some(), "Blender should have icon_data_uri");
+        assert!(info.icon_data_uri.as_ref().unwrap().starts_with("data:image/png;base64,"));
+    }
+
+    #[test]
+    fn test_resolve_desktop_icon_with_explicit_hints() {
+        let info = resolve_desktop_icon_with_hints(
+            "blender",
+            Some("blender"),
+            Some("/usr/share/swcatalog/icons/archlinux-arch-extra/128x128/blender_blender.png"),
+        );
+        assert!(info.is_some(), "Hints should resolve icon immediately");
+        let info = info.unwrap();
+        assert!(info.icon_data_uri.is_some());
     }
 }

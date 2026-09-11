@@ -344,7 +344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const q = new URLSearchParams(window.location.search).get("view");
       if (q) return q as CategoryId;
     } catch {}
-    return "discover";
+    return "apps";
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem("ryzora_sidebar_collapsed");

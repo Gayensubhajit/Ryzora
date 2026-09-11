@@ -21,6 +21,7 @@ pub mod snapshot;
 pub mod system;
 pub mod updates;
 pub mod sddm_helper;
+pub mod package_helper;
 pub mod hypridle;
 pub mod ownership;
 pub mod engine;
@@ -30,6 +31,10 @@ pub mod app_adapters;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|_app| {
+            app_adapters::catalog::initialize_catalog();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // System Probe
             system::detect_system_info,
@@ -160,7 +165,12 @@ pub fn run() {
             app_adapters::pacman_get_package_details,
             app_adapters::pacman_list_installed_packages,
             app_adapters::pacman_install_package,
-            app_adapters::pacman_uninstall_package, app_adapters::resolve_desktop_app_icon, app_adapters::launch_desktop_app, app_adapters::get_installed_package_files,
+            app_adapters::pacman_uninstall_package, app_adapters::pacman_stream_transaction, app_adapters::pacman_start_transaction, app_adapters::resolve_desktop_app_icon, app_adapters::resolve_desktop_icon_batch, app_adapters::launch_desktop_app, app_adapters::get_installed_package_files, package_helper::get_privileged_package_helper_status, package_helper::setup_privileged_package_helper,
+            app_adapters::pacman_get_catalog_status,
+            app_adapters::pacman_get_catalog_items,
+            app_adapters::pacman_get_catalog_item_details,
+            app_adapters::pacman_refresh_catalog,
+            app_adapters::pacman_refresh_catalog_installed_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# =============================================================================
+# ryzora-package-helper — Ryzora Restricted Privileged Package Manager Helper
+# =============================================================================
+# Invoked via pkexec, authorized by Polkit io.ryzora.package.manage
+# Exposes ONLY these operations with strict package name validation:
+#
+#   install    <package_name>
+#   uninstall  <package_name>
+#   reinstall  <package_name>
+#
+# Security invariants:
+#  - Only 2 arguments allowed ($1: operation, $2: package_name)
+#  - Package name must strictly match ^[a-zA-Z0-9@._+-]{1,64}$
+#  - Package name MUST NOT start with '-' or '.' or '+'
+#  - No arbitrary root or shell command execution
+#  - No user-supplied paths or flags allowed
+#  - Directly execs /usr/bin/pacman with explicit argument boundaries
+# =============================================================================
+
+set -euo pipefail
+
+die() {
+    echo "ryzora-package-helper: ERROR: $*" >&2
+    exit 1
+}
+
+# Verify exact argument count (strictly 2 arguments: operation package_name)
+if [ "$#" -ne 2 ]; then
+    die "Invalid number of arguments: expected exactly 2, got $#"
+fi
+
+OPERATION="$1"
+PKG="$2"
+
+# Validate operation
+case "$OPERATION" in
+    install|uninstall|reinstall)
+        ;;
+    *)
+        die "Unknown operation: '$OPERATION'. Allowed: install, uninstall, reinstall"
+        ;;
+esac
+
+# Validate package name
+if [ -z "$PKG" ]; then
+    die "Package name cannot be empty"
+fi
+
+if [ "${#PKG}" -gt 64 ]; then
+    die "Package name exceeds maximum length of 64 characters"
+fi
+
+# Reject leading hyphen, dot, or plus sign
+case "$PKG" in
+    -*|+*|.*)
+        die "Package name cannot start with '-', '+', or '.'"
+        ;;
+esac
+
+# Strict whitelist: ASCII alphanumeric, @, ., _, +, -
+if ! [[ "$PKG" =~ ^[a-zA-Z0-9@._+-]+$ ]]; then
+    die "Package name contains invalid characters"
+fi
+
+# Check for pacman binary
+PACMAN_BIN="/usr/bin/pacman"
+if [ ! -x "$PACMAN_BIN" ]; then
+    die "Pacman binary not found or not executable at $PACMAN_BIN"
+fi
+
+# Execute corresponding pacman transaction with unbuffered streaming
+case "$OPERATION" in
+    install)
+        exec "$PACMAN_BIN" -S --noconfirm -- "$PKG"
+        ;;
+    reinstall)
+        exec "$PACMAN_BIN" -S --noconfirm -- "$PKG"
+        ;;
+    uninstall)
+        exec "$PACMAN_BIN" -R --noconfirm -- "$PKG"
+        ;;
+esac

@@ -301,14 +301,86 @@ pub fn get_pacman_package_details_in(
     sync_dir: &Path,
     local_dir: &Path,
 ) -> Result<Option<PacmanPackageInfo>, String> {
-    let matches = search_pacman_packages_in(pkg_name, sync_dir, local_dir, 10)?;
-    for item in matches {
-        if item.name.eq_ignore_ascii_case(pkg_name) {
-            return Ok(Some(item));
+    // Check sync repositories first
+    if sync_dir.exists() {
+        let mut db_files: Vec<PathBuf> = fs::read_dir(sync_dir)
+            .map_err(|e| format!("Failed to read sync dir: {}", e))?
+            .filter_map(|e| e.ok().map(|entry| entry.path()))
+            .filter(|p| p.extension().map_or(false, |ext| ext == "db"))
+            .collect();
+
+        db_files.sort_by(|a, b| {
+            let a_name = a.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            let b_name = b.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            let priority = |name: &str| match name {
+                n if n.starts_with("core") => 0,
+                n if n.starts_with("extra") => 1,
+                n if n.starts_with("multilib") => 2,
+                _ => 3,
+            };
+            priority(a_name).cmp(&priority(b_name))
+        });
+
+        let target_lower = pkg_name.to_lowercase();
+        let target_prefix = format!("{}-", target_lower);
+
+        for db_path in db_files {
+            let repo_name = db_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+
+            let file = match File::open(&db_path) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+
+            let gz = GzDecoder::new(file);
+            let mut archive = Archive::new(gz);
+
+            let entries = match archive.entries() {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            for entry_res in entries {
+                let mut entry = match entry_res {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+
+                let path_buf = match entry.path() {
+                    Ok(p) => p.to_path_buf(),
+                    Err(_) => continue,
+                };
+
+                let path_str = path_buf.to_string_lossy();
+                if !path_str.ends_with("/desc") {
+                    continue;
+                }
+
+                let folder_name = path_str.split('/').next().unwrap_or("");
+                let folder_lower = folder_name.to_lowercase();
+
+                if folder_lower.starts_with(&target_prefix) || folder_lower == target_lower {
+                    let mut content = String::new();
+                    if let Ok(_) = entry.read_to_string(&mut content) {
+                        if let Some(mut info) = parse_alpm_desc(&content, &repo_name) {
+                            if info.name.eq_ignore_ascii_case(pkg_name) {
+                                let (is_installed, installed_ver) = check_installed_status_in(&info.name, local_dir);
+                                info.is_installed = is_installed;
+                                info.installed_version = installed_ver;
+                                return Ok(Some(info));
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // If not in sync_dir, check if installed locally
+    // Fallback: check if installed locally
     if local_dir.exists() {
         let (is_installed, ver) = check_installed_status_in(pkg_name, local_dir);
         if is_installed {

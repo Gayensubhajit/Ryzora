@@ -1,17 +1,20 @@
 /**
- * AppIconResolver — Phase 23B
+ * AppIconResolver — Phase 24.2
  *
- * Resolves application icons via the Tauri desktop-entry / icon-theme backend.
- * All fake hand-authored brand SVGs have been removed.
+ * Resolves application icons via:
+ *   1. Batch IPC icon resolution via iconCache (data URI / SVG from swcatalog & system icon themes)
+ *   2. Trusted app metadata icon URL (curated list)
+ *   3. Unique colorful letter-avatar fallback (never an empty space or broken image)
  *
- * Fallback hierarchy:
- *   1. System icon (SVG) from desktop entry / icon theme via Tauri IPC
- *   2. System icon (PNG/XPM data URI) from desktop entry / icon theme via Tauri IPC
- *   3. Distinct category-specific geometric fallback (unique per category; never shared)
+ * Performance guarantee:
+ *   - Zero per-card IPC on initial render (batched per page)
+ *   - In-memory Map cache lookup is 0ms
+ *   - If any image fails to load, gracefully falls back to letter avatar
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { resolveAppMetadata } from "./appMetadata.ts";
+import { useIconCached } from "../../services/iconCache.ts";
 
 export {
   resolveAppMetadata,
@@ -25,29 +28,17 @@ export {
 
 export type AppIconSize = "sm" | "md" | "lg" | "xl" | "2xl" | number;
 
-interface AppIconProps {
+export interface AppIconProps {
   appId?: string;
   packageId?: string;
   className?: string;
   size?: AppIconSize;
   preferSystemIcon?: boolean;
+  /** Pre-resolved icon_name from CatalogItem */
+  iconName?: string | null;
+  /** Pre-resolved icon_path from CatalogItem */
+  iconPath?: string | null;
 }
-
-interface DesktopIconInfo {
-  desktop_file: string;
-  name: string;
-  generic_name: string | null;
-  icon_name: string | null;
-  icon_path: string | null;
-  icon_svg_content: string | null;
-  icon_data_uri: string | null;
-  exec: string | null;
-  startup_wm_class: string | null;
-  categories: string[];
-}
-
-// Global in-memory cache for resolved desktop system icons
-const desktopIconCache = new Map<string, DesktopIconInfo | null>();
 
 export function resolvePixelSize(size: AppIconSize): number {
   if (typeof size === "number") return size;
@@ -61,47 +52,44 @@ export function resolvePixelSize(size: AppIconSize): number {
   }
 }
 
+// ── Fallback geometric icon (unique per first letter, never a shared generic icon) ──
+const FALLBACK_COLORS = [
+  "#3b82f6","#8b5cf6","#ec4899","#f97316","#10b981",
+  "#06b6d4","#f59e0b","#6366f1","#14b8a6","#84cc16",
+];
+function fallbackColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return FALLBACK_COLORS[hash % FALLBACK_COLORS.length];
+}
+function fallbackLetter(id: string): string {
+  return (id || "?").replace(/^[^a-zA-Z0-9]*/, "").charAt(0).toUpperCase() || "?";
+}
+
+// ── Main AppIcon component ───────────────────────────────────────────────────
+
 export const AppIcon: React.FC<AppIconProps> = ({
   appId,
   packageId,
   className = "",
   size = "lg",
-  preferSystemIcon = true,
+  preferSystemIcon: _preferSystemIcon = true,
+  iconName,
+  iconPath,
 }) => {
   const targetId = (appId || packageId || "").toLowerCase().trim();
   const px = resolvePixelSize(size);
-  const [systemIconSvg, setSystemIconSvg] = useState<string | null>(null);
-  const [systemIconUri, setSystemIconUri] = useState<string | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
 
-  useEffect(() => {
-    if (!preferSystemIcon || !targetId) return;
-
-    if (desktopIconCache.has(targetId)) {
-      const cached = desktopIconCache.get(targetId);
-      if (cached?.icon_svg_content) setSystemIconSvg(cached.icon_svg_content);
-      else if (cached?.icon_data_uri) setSystemIconUri(cached.icon_data_uri);
-      return;
-    }
-
-    import("@tauri-apps/api/core")
-      .then(({ invoke }) => {
-        invoke<DesktopIconInfo | null>("resolve_desktop_app_icon", { packageId: targetId })
-          .then((res) => {
-            desktopIconCache.set(targetId, res || null);
-            if (res?.icon_svg_content) setSystemIconSvg(res.icon_svg_content);
-            else if (res?.icon_data_uri) setSystemIconUri(res.icon_data_uri);
-          })
-          .catch(() => { desktopIconCache.set(targetId, null); });
-      })
-      .catch(() => { desktopIconCache.set(targetId, null); });
-  }, [targetId, preferSystemIcon]);
+  // Use the centralized batch-based cache — no per-card IPC
+  const resolved = useIconCached(targetId, iconName, iconPath);
 
   const containerStyle: React.CSSProperties = {
     width: px, height: px, minWidth: px, minHeight: px, maxWidth: px, maxHeight: px,
   };
 
-  // Tier 1: System SVG from icon theme (with injected viewBox if needed)
-  if (systemIconSvg) {
+  // Tier 1: Inline SVG from icon theme (vector quality)
+  if (resolved?.svgContent) {
     return (
       <div
         className={`aspect-square shrink-0 flex items-center justify-center overflow-hidden select-none ${className}`}
@@ -109,33 +97,53 @@ export const AppIcon: React.FC<AppIconProps> = ({
       >
         <div
           className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:object-contain"
-          dangerouslySetInnerHTML={{ __html: systemIconSvg }}
+          dangerouslySetInnerHTML={{ __html: resolved.svgContent }}
         />
       </div>
     );
   }
 
-  // Tier 2: System PNG/XPM data URI
-  if (systemIconUri) {
+  // Tier 2: Base64 Data URI (PNG/XPM from AppStream or icon theme)
+  if (resolved?.dataUri && !imgFailed) {
     return (
       <div
         className={`aspect-square shrink-0 flex items-center justify-center overflow-hidden select-none ${className}`}
         style={containerStyle}
       >
         <img
-          src={systemIconUri}
+          src={resolved.dataUri}
           alt={targetId}
           width={px}
           height={px}
           className="w-full h-full object-contain pointer-events-none"
+          onError={() => setImgFailed(true)}
         />
       </div>
     );
   }
 
-  // Tier 2.5: Trusted application metadata icon (authentic bundled icon for catalog apps)
+  // Tier 3: Direct fileUrl if explicitly provided and not failed
+  if (resolved?.fileUrl && !imgFailed) {
+    return (
+      <div
+        className={`aspect-square shrink-0 flex items-center justify-center overflow-hidden select-none ${className}`}
+        style={containerStyle}
+      >
+        <img
+          src={resolved.fileUrl}
+          alt={targetId}
+          width={px}
+          height={px}
+          className="w-full h-full object-contain pointer-events-none"
+          onError={() => setImgFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  // Tier 4: Trusted curated metadata icon (only for well-known apps)
   const meta = resolveAppMetadata(targetId);
-  if (meta.iconUrl) {
+  if (meta.iconUrl && !imgFailed) {
     return (
       <div
         className={`aspect-square shrink-0 flex items-center justify-center overflow-hidden select-none ${className}`}
@@ -147,32 +155,38 @@ export const AppIcon: React.FC<AppIconProps> = ({
           width={px}
           height={px}
           className="w-full h-full object-contain pointer-events-none"
+          onError={() => setImgFailed(true)}
         />
       </div>
     );
   }
 
-  // Tier 3: Neutral Ryzora application fallback (communicates artwork unavailable without pretending)
+  // Tier 5: Fallback unique colorful letter avatar (used while resolving or when no icon exists)
+  const color = fallbackColor(targetId);
+  const letter = fallbackLetter(targetId);
+  const isResolving = resolved === undefined;
+
   return (
     <div
-      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] text-[var(--rz-text-muted)] shadow-xs ${className}`}
-      style={containerStyle}
-      title="Application artwork unavailable"
+      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all ${className}`}
+      style={{
+        ...containerStyle,
+        background: isResolving ? `${color}22` : `${color}18`,
+        border: `1.5px solid ${isResolving ? `${color}44` : `${color}33`}`,
+      }}
+      title={isResolving ? `Loading ${targetId}...` : targetId}
     >
-      <svg
-        width={Math.round(px * 0.44)}
-        height={Math.round(px * 0.44)}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      <span
+        style={{
+          fontSize: Math.round(px * 0.38),
+          fontWeight: 700,
+          color: isResolving ? color : `${color}bb`,
+          lineHeight: 1,
+          userSelect: "none",
+        }}
       >
-        <rect x="3" y="3" width="18" height="18" rx="4" />
-        <path d="M8 8h5a3 3 0 0 1 0 6H8V8z" />
-        <path d="M12 14l4 4" />
-      </svg>
+        {letter}
+      </span>
     </div>
   );
 };

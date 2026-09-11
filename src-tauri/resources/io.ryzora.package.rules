@@ -1,0 +1,11 @@
+// Ryzora Package Management Rule
+// Authorizes local active wheel users to execute Ryzora Package Helper without repeated password prompts
+polkit.addRule(function(action, subject) {
+    if (action.id == "io.ryzora.package.manage" &&
+        subject.active == true &&
+        subject.local == true &&
+        subject.isInGroup("wheel")) {
+            return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

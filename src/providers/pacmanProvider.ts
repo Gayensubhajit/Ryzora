@@ -16,6 +16,7 @@ import type {
   PacmanAppMeta,
 } from "./types.ts";
 import { resolveAppMetadata } from "../components/apps/appMetadata.ts";
+import { catalogService } from "../services/catalogService.ts";
 
 export interface PacmanRawInfo {
   name: string;
@@ -261,21 +262,22 @@ export class PacmanAppProvider implements PackageProvider<PacmanAppMeta> {
    */
   async search(query: string): Promise<PackageItem[]> {
     const trimmed = query.trim();
-
-    // If query is empty, return curated applications for the default store experience
     if (!trimmed) {
       return this.discover();
     }
 
     if (isTauri) {
       try {
-        const rawList = await invokeTauri<PacmanRawInfo[]>("pacman_search_packages", {
-          query: trimmed,
-          limit: 60,
+        const res = await catalogService.getItems({
+          search_query: trimmed,
+          is_application_only: false,
+          page_size: 100,
         });
-        return rawList.map((raw) => this.normalize(raw));
+        if (res.items.length > 0) {
+          return res.items.map((item) => catalogService.catalogItemToPackageItem(item));
+        }
       } catch (err) {
-        console.warn("[PacmanAppProvider] Backend search failed, using fallback:", err);
+        console.warn("[PacmanAppProvider] Catalog search failed, using fallback:", err);
       }
     }
 
@@ -293,23 +295,17 @@ export class PacmanAppProvider implements PackageProvider<PacmanAppMeta> {
    * Discovers featured Arch applications for the store front.
    */
   async discover(): Promise<PackageItem[]> {
-    // If running in live Tauri, update installed states for curated packages
     if (isTauri) {
       try {
-        const installedList = await invokeTauri<PacmanRawInfo[]>("pacman_list_installed_packages");
-        const installedMap = new Map(installedList.map((p) => [p.name, p.version]));
-
-        return CURATED_ARCH_PACKAGES.map((raw) => {
-          const isInst = installedMap.has(raw.name);
-          const item = this.normalize({
-            ...raw,
-            is_installed: isInst,
-            installed_version: isInst ? installedMap.get(raw.name) : undefined,
-          });
-          return item;
+        const res = await catalogService.getItems({
+          is_application_only: true,
+          page_size: 500,
         });
-      } catch {
-        // ignore and fallback
+        if (res.items.length > 0) {
+          return res.items.map((item) => catalogService.catalogItemToPackageItem(item));
+        }
+      } catch (err) {
+        console.warn("[PacmanAppProvider] Catalog discover failed, using fallback:", err);
       }
     }
 
@@ -322,11 +318,9 @@ export class PacmanAppProvider implements PackageProvider<PacmanAppMeta> {
   async getDetails(name: string): Promise<PackageItem | null> {
     if (isTauri) {
       try {
-        const raw = await invokeTauri<PacmanRawInfo | null>("pacman_get_package_details", {
-          packageName: name,
-        });
-        if (raw) {
-          return this.normalize(raw);
+        const item = await catalogService.getItemDetails(name);
+        if (item) {
+          return catalogService.catalogItemToPackageItem(item);
         }
       } catch (err) {
         console.warn("[PacmanAppProvider] getDetails failed:", err);
@@ -479,9 +473,49 @@ export class PacmanAppProvider implements PackageProvider<PacmanAppMeta> {
     return this.metaCache.get(pkg.id);
   }
 
+  recordCatalogItem(item: {
+    id: string;
+    version: string;
+    installed_version?: string | null;
+    summary?: string;
+    repository: string;
+    is_installed: boolean;
+    installed_size?: number | null;
+    download_size?: number | null;
+    license?: string | null;
+    homepage?: string | null;
+    dependencies?: string[];
+  }): void {
+    const meta: PacmanAppMeta = {
+      repository: item.repository,
+      isInstalled: item.is_installed,
+      installedVersion: item.installed_version ?? undefined,
+      sizeBytes: item.installed_size ?? item.download_size ?? undefined,
+      license: item.license ?? undefined,
+      url: item.homepage ?? undefined,
+      dependencies: item.dependencies ?? [],
+    };
+    this.metaCache.set(item.id, meta);
+  }
+
+  setPackageMeta(packageId: string, meta: Partial<PacmanAppMeta>): void {
+    const existing = this.metaCache.get(packageId) || {
+      repository: "extra",
+      isInstalled: false,
+      dependencies: [],
+    };
+    this.metaCache.set(packageId, { ...existing, ...meta });
+  }
+
   async install(pkg: PackageItem, _target: string): Promise<unknown> {
     if (isTauri) {
-      return invokeTauri("pacman_install_package", { packageName: pkg.id });
+      const res = await invokeTauri<any>("pacman_install_package", { packageName: pkg.id });
+      const meta = this.metaCache.get(pkg.id);
+      if (meta) {
+        meta.isInstalled = true;
+        meta.installedVersion = res?.version || pkg.version;
+      }
+      return res;
     }
     const meta = this.metaCache.get(pkg.id);
     if (meta) {
@@ -493,7 +527,13 @@ export class PacmanAppProvider implements PackageProvider<PacmanAppMeta> {
 
   async uninstall(pkg: PackageItem, _target: string): Promise<unknown> {
     if (isTauri) {
-      return invokeTauri("pacman_uninstall_package", { packageName: pkg.id });
+      const res = await invokeTauri<any>("pacman_uninstall_package", { packageName: pkg.id });
+      const meta = this.metaCache.get(pkg.id);
+      if (meta) {
+        meta.isInstalled = false;
+        meta.installedVersion = undefined;
+      }
+      return res;
     }
     const meta = this.metaCache.get(pkg.id);
     if (meta) {

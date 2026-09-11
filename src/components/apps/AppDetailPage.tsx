@@ -44,6 +44,8 @@ import {
 } from "lucide-react";
 import type { PackageItem } from "../../providers/types.ts";
 import { pacmanAppProvider } from "../../providers/index.ts";
+import { catalogService } from "../../services/catalogService.ts";
+import { transactionManager } from "../../services/transactionManager.ts";
 import { AppIcon, resolveAppMetadata } from "./AppIconResolver.tsx";
 import {
   type AppInstallState,
@@ -102,6 +104,34 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isOperating, setIsOperating] = useState<boolean>(() =>
+    transactionManager.isPackageOperating(app.id)
+  );
+  const [activeOperation, setActiveOperation] = useState<string | null>(() =>
+    transactionManager.getPackageActiveOperation(app.id)
+  );
+
+  useEffect(() => {
+    return transactionManager.subscribePackageStatus(app.id, (operating, op) => {
+      setIsOperating(operating);
+      setActiveOperation(op || transactionManager.getPackageActiveOperation(app.id));
+      if (!operating) {
+        // Transaction finished: perform authoritative state query from ALPM database
+        catalogService
+          .refreshInstalledState()
+          .then(async () => {
+            const item = await catalogService.getItemDetails(app.id);
+            if (item) {
+              setLocalInstalled(item.is_installed);
+            }
+            onStatusChanged?.();
+          })
+          .catch(() => {
+            onStatusChanged?.();
+          });
+      }
+    });
+  }, [app.id, onStatusChanged]);
 
   const prevAppIdRef = useRef(app.id);
   // Reset transient operation states ONLY upon navigating to a different product
@@ -139,17 +169,26 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       if (q === "true") return true;
       if (q === "false") return false;
     } catch {}
+    if ((app as any)?.is_installed !== undefined) return Boolean((app as any).is_installed);
+    if (app.tags?.includes("installed")) return true;
     return pacmanMeta?.isInstalled ?? false;
-  }, [localInstalled, pacmanMeta]);
+  }, [localInstalled, pacmanMeta, app]);
+
+  const isCurrentAppTransacting = isOperating;
 
   // Derive explicit application install state from operation enum
   const installState: AppInstallState = useMemo(() => {
+    if (isCurrentAppTransacting) {
+      if (activeOperation === "uninstall" || operation === "uninstalling") return "uninstalling";
+      if (activeOperation === "reinstall" || operation === "reinstalling") return "updating";
+      return "installing";
+    }
     if (operation === "installing") return "installing";
     if (operation === "uninstalling") return "uninstalling";
     if (operation === "reinstalling") return "updating";
     if (actionError) return "error";
     return isInstalled ? "installed" : "not-installed";
-  }, [operation, actionError, isInstalled]);
+  }, [isCurrentAppTransacting, activeOperation, operation, actionError, isInstalled]);
 
   const actionsConfig = useMemo(
     () => getApplicationActions(installState, selectedProvider),
@@ -246,7 +285,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     );
   };
 
-  // Primary Actions: Install, Uninstall, Open, Reinstall
+  // Primary Actions: Install, Uninstall, Open, Reinstall via TransactionManager
   const handleInstall = async () => {
     if (selectedProvider.id !== "pacman") {
       setActionError(`Provider '${selectedProvider.name}' is not available yet. Only Pacman is currently supported.`);
@@ -256,16 +295,18 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setActionError(null);
     setActionSuccess(null);
     try {
-      const res = (await pacmanAppProvider.install(app, "native")) as any;
-      if (res?.success !== false) {
+      const txRes = await transactionManager.runTransaction(app.id, "install");
+      if (txRes.stage === "completed") {
         setLocalInstalled(true);
-        setActionSuccess(`Installed ${meta.displayName} successfully via ${selectedProvider.name}.`);
+        setActionSuccess(`Installed ${meta.displayName} successfully.`);
+        await catalogService.refreshInstalledState();
         onStatusChanged?.();
-      } else {
-        setActionError(res?.error || "Installation failed.");
+      } else if (txRes.stage === "failed") {
+        setActionError(txRes.message || txRes.error || "Installation failed.");
       }
     } catch (err: any) {
-      setActionError(err?.message || "Failed to install package.");
+      const msg = typeof err === "string" ? err : (err?.message || "Failed to install package.");
+      setActionError(msg);
     } finally {
       setOperation("idle");
     }
@@ -281,16 +322,18 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setActionError(null);
     setActionSuccess(null);
     try {
-      const res = (await pacmanAppProvider.uninstall(app, "native")) as any;
-      if (res?.success !== false) {
+      const txRes = await transactionManager.runTransaction(app.id, "uninstall");
+      if (txRes.stage === "completed") {
         setLocalInstalled(false);
         setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
+        await catalogService.refreshInstalledState();
         onStatusChanged?.();
-      } else {
-        setActionError(res?.error || "Uninstall failed.");
+      } else if (txRes.stage === "failed") {
+        setActionError(txRes.message || txRes.error || "Uninstall failed.");
       }
     } catch (err: any) {
-      setActionError(err?.message || "Failed to uninstall package.");
+      const msg = typeof err === "string" ? err : (err?.message || "Failed to uninstall package.");
+      setActionError(msg);
     } finally {
       setOperation("idle");
     }
@@ -301,16 +344,17 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setActionError(null);
     setActionSuccess(null);
     try {
-      const res = (await pacmanAppProvider.install(app, "native")) as any;
-      if (res?.success !== false) {
+      const txRes = await transactionManager.runTransaction(app.id, "reinstall");
+      if (txRes.stage === "completed") {
         setLocalInstalled(true);
         setActionSuccess(`Reinstalled ${meta.displayName} successfully.`);
         onStatusChanged?.();
-      } else {
-        setActionError(res?.error || "Reinstallation failed.");
+      } else if (txRes.stage === "failed") {
+        setActionError(txRes.message || txRes.error || "Reinstallation failed.");
       }
     } catch (err: any) {
-      setActionError(err?.message || "Failed to reinstall package.");
+      const msg = typeof err === "string" ? err : (err?.message || "Failed to reinstall package.");
+      setActionError(msg);
     } finally {
       setOperation("idle");
     }
@@ -414,7 +458,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         <div className="relative rounded-3xl p-8 md:p-10 bg-[var(--rz-surface)] border border-[var(--rz-border)] shadow-md z-10">
           {/* Subtle blurred watermark art behind right side */}
           <div className="absolute -right-12 -top-12 w-96 h-96 pointer-events-none select-none opacity-5 dark:opacity-10 blur-xl scale-125 overflow-hidden flex items-center justify-center">
-            <AppIcon appId={app.id} size="2xl" />
+            <AppIcon appId={app.id} size="2xl" iconName={(app as any).icon_name} iconPath={(app as any).icon_path} />
           </div>
 
           <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
@@ -422,7 +466,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             <div className="flex flex-col sm:flex-row items-start gap-6 max-w-3xl">
               {/* Authentic Application Icon */}
               <div className="p-3.5 rounded-3xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-sm shrink-0">
-                <AppIcon appId={app.id} size="2xl" />
+                <AppIcon appId={app.id} size="2xl" iconName={(app as any).icon_name} iconPath={(app as any).icon_path} />
               </div>
 
               <div className="space-y-3.5">
@@ -588,7 +632,11 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       className="inline-flex items-center gap-2.5 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600/70 text-white transition-all shadow-md cursor-not-allowed"
                     >
                       <Loader2 size={16} className="animate-spin" />
-                      <span>{actionsConfig.primaryLabel}</span>
+                      <span>
+                        {isCurrentAppTransacting
+                          ? `${activeOperation === "uninstall" || operation === "uninstalling" ? "Uninstalling" : activeOperation === "reinstall" || operation === "reinstalling" ? "Reinstalling" : "Installing"}…`
+                          : actionsConfig.primaryLabel}
+                      </span>
                     </button>
                   )}
                 </div>
