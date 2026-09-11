@@ -510,7 +510,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                           className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-[var(--rz-bg)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
                         >
                           {spec.options.map((opt) => (
-                            <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-100">
+                            <option key={opt.value} value={opt.value} className="bg-[var(--rz-surface-elevated)] text-[var(--rz-text)]">
                               {opt.label}
                             </option>
                           ))}

@@ -147,7 +147,7 @@ export const AppIcon: React.FC<AppIconProps> = ({
   // Tier 3: Neutral Ryzora application fallback (communicates artwork unavailable without pretending)
   return (
     <div
-      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all bg-white/[0.04] border border-white/[0.08] text-foreground-muted/60 ${className}`}
+      className={`aspect-square shrink-0 flex items-center justify-center rounded-2xl select-none transition-all bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] text-[var(--rz-text-muted)] shadow-xs ${className}`}
       style={containerStyle}
       title="Application artwork unavailable"
     >

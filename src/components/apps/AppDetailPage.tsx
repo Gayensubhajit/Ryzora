@@ -217,12 +217,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col flex-1 h-full w-full overflow-y-auto bg-[#090b0f] text-foreground animate-fadeIn scroll-smooth">
+    <div className="relative flex flex-col flex-1 h-full w-full overflow-y-auto bg-[var(--rz-bg)] text-[var(--rz-text)] animate-fadeIn scroll-smooth">
       {/* ── Persistent sticky navigation bar ── */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-3 bg-[#090b0f]/90 backdrop-blur-md border-b border-white/[0.06]">
+      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-3 bg-[var(--rz-bg)]/90 backdrop-blur-md border-b border-[var(--rz-border-subtle)]">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm font-medium text-foreground-muted hover:text-foreground transition-colors cursor-pointer group"
+          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] transition-colors cursor-pointer group"
           title="Back to Applications (Alt+Left)"
         >
           <ArrowLeft
@@ -231,8 +231,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
           />
           <span>Back to Applications</span>
         </button>
-        <div className="flex items-center gap-2 text-xs text-foreground-muted">
-          <span className="font-mono text-accent-primary">{app.id}</span>
+        <div className="flex items-center gap-2 text-xs text-[var(--rz-text-muted)]">
+          <span className="font-mono text-[var(--rz-text)] font-semibold">{app.id}</span>
           <span className="opacity-40">·</span>
           <span>{repository}</span>
         </div>
@@ -240,54 +240,54 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
       <div className="px-8 py-6 space-y-6 max-w-7xl mx-auto w-full">
         {/* ── Cinematic Hero Banner ── */}
-        <div className="relative w-full rounded-2xl md:rounded-3xl p-7 md:p-8 bg-gradient-to-r from-surface-elevated/70 via-surface-elevated/40 to-surface-elevated/20 border border-white/[0.08] overflow-hidden backdrop-blur-md shadow-2xl">
+        <div className="relative w-full rounded-2xl md:rounded-3xl p-7 md:p-8 bg-[var(--rz-surface)] border border-[var(--rz-border)] overflow-hidden backdrop-blur-md shadow-md">
           {/* Subtle atmospheric glow behind icon */}
           <div
-            className="absolute -left-12 -top-12 w-64 h-64 rounded-full blur-3xl pointer-events-none"
+            className="absolute -left-12 -top-12 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-15 dark:opacity-20"
             style={{
-              background: `radial-gradient(circle, ${meta.accentColor || "#3B82F6"}18, transparent 70%)`,
+              background: `radial-gradient(circle, ${meta.accentColor || "#3B82F6"}28, transparent 70%)`,
             }}
           />
 
           <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
             <div className="flex items-start md:items-center gap-7 min-w-0">
               {/* 112px Authentic Application Icon */}
-              <div className="shrink-0 p-1 rounded-2xl bg-white/[0.03] border border-white/[0.08] shadow-inner">
+              <div className="shrink-0 p-1 rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-xs">
                 <AppIcon appId={app.id} size="2xl" />
               </div>
 
               {/* Title & Metadata */}
               <div className="space-y-2.5 min-w-0">
-                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white truncate">
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--rz-text)] truncate">
                   {meta.displayName}
                 </h1>
 
                 {/* Subtitle row with verified badges */}
-                <div className="flex items-center gap-2.5 text-sm text-foreground-muted flex-wrap">
-                  <span className="font-medium text-white/90 inline-flex items-center gap-1">
+                <div className="flex items-center gap-2.5 text-sm text-[var(--rz-text-muted)] flex-wrap">
+                  <span className="font-medium text-[var(--rz-text)] inline-flex items-center gap-1">
                     {meta.publisher}
-                    <CheckCircle2 size={13} className="text-blue-400" />
+                    <CheckCircle2 size={13} className="text-blue-600 dark:text-blue-400" />
                   </span>
 
                   {isInstalled ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-600/20 text-blue-400 border border-blue-500/30">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                       Installed
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/5 text-foreground-muted border border-white/10">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)]">
                       Not Installed
                     </span>
                   )}
 
-                  <span className="inline-flex items-center gap-1 text-xs text-foreground-muted/80 bg-white/[0.04] px-2.5 py-0.5 rounded-full border border-white/[0.06]">
-                    <ShieldCheck size={12} className="text-foreground-muted" />
+                  <span className="inline-flex items-center gap-1 text-xs text-[var(--rz-text-muted)] bg-[var(--rz-surface-hover)] px-2.5 py-0.5 rounded-full border border-[var(--rz-border-subtle)]">
+                    <ShieldCheck size={12} className="text-[var(--rz-text-muted)]" />
                     Official Repository
                   </span>
                 </div>
 
                 {/* Lead Summary */}
-                <p className="text-sm text-foreground-muted leading-relaxed max-w-2xl">
+                <p className="text-sm text-[var(--rz-text-secondary)] leading-relaxed max-w-2xl">
                   {meta.summary}
                 </p>
 
@@ -305,13 +305,13 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <button
                         onClick={handleUninstall}
                         disabled={actionLoading}
-                        className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/15 text-white/90 border border-white/10 transition-all cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-all cursor-pointer disabled:opacity-50 shadow-xs"
                       >
                         {actionLoading ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                         <span>Uninstall</span>
                       </button>
                       <button
-                        className="p-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white/80 border border-white/10 transition-all cursor-pointer"
+                        className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] border border-[var(--rz-border)] transition-all cursor-pointer shadow-xs"
                         title="More options"
                       >
                         <MoreHorizontal size={16} />
@@ -337,7 +337,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             {/* Right Side: Atmospheric Artwork & Inspiring Tagline */}
             {meta.tagline && (
               <div className="hidden lg:flex flex-col items-end justify-center text-right pr-4 z-10 max-w-xs shrink-0">
-                <span className="text-2xl font-bold tracking-tight text-white/90 leading-snug">
+                <span className="text-2xl font-bold tracking-tight text-[var(--rz-text-faint)]/40 dark:text-[var(--rz-text-faint)]/60 leading-snug">
                   {meta.tagline}
                 </span>
               </div>
@@ -347,20 +347,20 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
         {/* ── Status Feedback Banners ── */}
         {actionSuccess && (
-          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-medium">
+          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
             <CheckCircle2 size={16} className="shrink-0" />
             <span>{actionSuccess}</span>
           </div>
         )}
         {actionError && (
-          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs font-medium">
+          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-medium">
             <AlertCircle size={16} className="shrink-0" />
             <span>{actionError}</span>
           </div>
         )}
 
         {/* ── Navigation Tabs ── */}
-        <div className="flex items-center gap-2 border-b border-white/[0.08] pb-1 pt-1">
+        <div className="flex items-center gap-2 border-b border-[var(--rz-border-subtle)] pb-1 pt-1">
           {[
             { id: "overview", label: "Overview", icon: Home },
             { id: "screenshots", label: "Screenshots", icon: ImageIcon, count: screenshots.length },
@@ -384,14 +384,14 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 }}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive
-                    ? "bg-blue-600/20 text-blue-400 border border-blue-500/30"
-                    : "text-foreground-muted hover:text-foreground hover:bg-white/[0.03]"
+                    ? "bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                    : "text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)]"
                 }`}
               >
                 <Icon size={14} />
                 <span>{tab.label}</span>
                 {tab.count !== undefined && tab.count > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/[0.06] text-foreground-muted">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)]">
                     {tab.count}
                   </span>
                 )}
@@ -408,22 +408,22 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             {screenshots.length > 0 && (
               <div ref={screenshotsRef} className="space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold tracking-tight text-white">Screenshots</h2>
+                  <h2 className="text-lg font-bold tracking-tight text-[var(--rz-text)]">Screenshots</h2>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-foreground-muted">
+                    <span className="text-xs text-[var(--rz-text-muted)]">
                       {screenshots.length} screenshot{screenshots.length > 1 ? "s" : ""}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => scrollScreenshots("left")}
-                        className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white/80 border border-white/[0.06] transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer shadow-xs"
                         title="Scroll left"
                       >
                         <ChevronLeft size={14} />
                       </button>
                       <button
                         onClick={() => scrollScreenshots("right")}
-                        className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white/80 border border-white/[0.06] transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer shadow-xs"
                         title="Scroll right"
                       >
                         <ChevronRight size={14} />
@@ -441,10 +441,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                     <div
                       key={idx}
                       onClick={() => openLightbox(idx)}
-                      className="shrink-0 snap-start rounded-2xl overflow-hidden border border-white/[0.08] hover:border-blue-500/50 bg-surface-elevated/40 shadow-lg transition-all duration-300 cursor-pointer group relative"
+                      className="shrink-0 snap-start rounded-2xl overflow-hidden border border-[var(--rz-border)] hover:border-blue-500/50 bg-[var(--rz-surface)] shadow-md transition-all duration-300 cursor-pointer group relative"
                       style={{ width: screenshots.length === 1 ? "100%" : "min(490px, 80vw)" }}
                     >
-                      <div className="relative aspect-video w-full overflow-hidden bg-black/20">
+                      <div className="relative aspect-video w-full overflow-hidden bg-black/10 dark:bg-black/40">
                         <img
                           src={s.url}
                           alt={s.caption || `Screenshot ${idx + 1}`}
@@ -453,7 +453,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         />
                       </div>
                       {s.caption && (
-                        <div className="px-4 py-2.5 text-xs text-foreground-muted bg-surface-elevated/80 border-t border-white/[0.06] truncate font-medium">
+                        <div className="px-4 py-2.5 text-xs text-[var(--rz-text-muted)] bg-[var(--rz-surface-elevated)] border-t border-[var(--rz-border-subtle)] truncate font-medium">
                           {s.caption}
                         </div>
                       )}
@@ -469,8 +469,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         key={i}
                         className={`h-1.5 rounded-full transition-all duration-300 ${
                           activeScreenshotIdx === i
-                            ? "w-6 bg-blue-500"
-                            : "w-1.5 bg-white/20"
+                            ? "w-6 bg-blue-600 dark:bg-blue-400"
+                            : "w-1.5 bg-[var(--rz-border-strong)]"
                         }`}
                       />
                     ))}
@@ -481,8 +481,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
             {/* About this app Section */}
             <div className="space-y-3.5 pt-2">
-              <h2 className="text-lg font-bold tracking-tight text-white">About this app</h2>
-              <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--rz-text)]">About this app</h2>
+              <div className="text-sm text-[var(--rz-text-secondary)] leading-relaxed whitespace-pre-line">
                 {showFullDesc || !isLongDescription
                   ? fullDescription
                   : fullDescription.slice(0, 340) + "…"}
@@ -490,7 +490,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               {isLongDescription && (
                 <button
                   onClick={() => setShowFullDesc(!showFullDesc)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer"
                 >
                   {showFullDesc ? (
                     <><ChevronUp size={13} />Read less</>
@@ -508,12 +508,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                     return (
                       <div
                         key={idx}
-                        className="flex items-center gap-3 p-3.5 rounded-xl bg-surface-elevated/30 border border-white/[0.06]"
+                        className="flex items-center gap-3 p-3.5 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border)] shadow-xs"
                       >
                         <div className={`p-2 rounded-full border ${bg} shrink-0`}>
                           <HIcon size={14} />
                         </div>
-                        <span className="text-xs sm:text-sm font-medium text-foreground/90">
+                        <span className="text-xs sm:text-sm font-medium text-[var(--rz-text)]">
                           {h}
                         </span>
                       </div>
@@ -527,8 +527,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
           {/* ── Right Column (Information, Installation Source, Resources, Related) ── */}
           <div ref={detailsRef} className="lg:col-span-5 space-y-6">
             {/* Information Grid Panel */}
-            <div className="p-6 rounded-2xl bg-surface-elevated/40 border border-white/[0.08] space-y-4">
-              <h2 className="text-base font-bold tracking-tight text-white">Information</h2>
+            <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-4 shadow-sm">
+              <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Information</h2>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 {[
                   { label: "Version", value: version },
@@ -542,10 +542,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 ].map(({ label, value }) => (
                   <div
                     key={label}
-                    className="flex flex-col py-1.5 border-b border-white/[0.04]"
+                    className="flex flex-col py-1.5 border-b border-[var(--rz-border-subtle)]"
                   >
-                    <span className="text-[11px] font-medium text-foreground-muted">{label}</span>
-                    <span className="font-mono text-xs text-foreground/90 font-semibold truncate pt-0.5">
+                    <span className="text-[11px] font-medium text-[var(--rz-text-muted)]">{label}</span>
+                    <span className="font-mono text-xs text-[var(--rz-text)] font-semibold truncate pt-0.5">
                       {value}
                     </span>
                   </div>
@@ -554,76 +554,76 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             </div>
 
             {/* Installation Source Card */}
-            <div className="p-6 rounded-2xl bg-surface-elevated/40 border border-white/[0.08] space-y-3.5">
+            <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3.5 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-xs font-bold text-white uppercase tracking-wider">Arch Linux</div>
-                  <div className="text-xs text-foreground-muted font-medium">Official Repository</div>
+                  <div className="text-xs font-bold text-[var(--rz-text)] uppercase tracking-wider">Arch Linux</div>
+                  <div className="text-xs text-[var(--rz-text-muted)] font-medium">Official Repository</div>
                 </div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                  <CheckCircle2 size={12} className="text-emerald-400" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                  <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
                   Verified
                 </span>
               </div>
-              <div className="text-[11px] font-mono text-foreground-muted bg-white/[0.03] px-3 py-1.5 rounded-lg border border-white/[0.04] inline-block">
+              <div className="text-[11px] font-mono text-[var(--rz-text-muted)] bg-[var(--rz-surface-hover)] px-3 py-1.5 rounded-lg border border-[var(--rz-border-subtle)] inline-block">
                 pacman · {repository}
               </div>
-              <p className="text-xs text-foreground-muted/80 leading-relaxed">
+              <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
                 This package is distributed through the official Arch Linux repositories and is cryptographically verified.
               </p>
             </div>
 
             {/* Resources Panel */}
             {(meta.website || meta.sourceRepository || meta.issueTracker || meta.documentationUrl) && (
-              <div className="p-6 rounded-2xl bg-surface-elevated/40 border border-white/[0.08] space-y-3">
-                <h2 className="text-base font-bold tracking-tight text-white">Resources</h2>
+              <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3 shadow-sm">
+                <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Resources</h2>
                 <div className="flex flex-col gap-2 pt-1">
                   {meta.website && (
                     <button
                       onClick={() => openExternal(meta.website)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.05] text-xs font-medium text-foreground transition-colors cursor-pointer text-left group"
+                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
                     >
                       <span className="inline-flex items-center gap-2">
-                        <Globe size={13} className="text-foreground-muted" />
+                        <Globe size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                         <span>Project website</span>
                       </span>
-                      <ExternalLink size={13} className="text-foreground-muted group-hover:text-white transition-colors" />
+                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
                     </button>
                   )}
                   {meta.sourceRepository && (
                     <button
                       onClick={() => openExternal(meta.sourceRepository)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.05] text-xs font-medium text-foreground transition-colors cursor-pointer text-left group"
+                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
                     >
                       <span className="inline-flex items-center gap-2">
-                        <Code2 size={13} className="text-foreground-muted" />
+                        <Code2 size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                         <span>Source code</span>
                       </span>
-                      <ExternalLink size={13} className="text-foreground-muted group-hover:text-white transition-colors" />
+                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
                     </button>
                   )}
                   {meta.issueTracker && (
                     <button
                       onClick={() => openExternal(meta.issueTracker)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.05] text-xs font-medium text-foreground transition-colors cursor-pointer text-left group"
+                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
                     >
                       <span className="inline-flex items-center gap-2">
-                        <HelpCircle size={13} className="text-foreground-muted" />
+                        <HelpCircle size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                         <span>Issue tracker</span>
                       </span>
-                      <ExternalLink size={13} className="text-foreground-muted group-hover:text-white transition-colors" />
+                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
                     </button>
                   )}
                   {meta.documentationUrl && (
                     <button
                       onClick={() => openExternal(meta.documentationUrl)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.05] text-xs font-medium text-foreground transition-colors cursor-pointer text-left group"
+                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
                     >
                       <span className="inline-flex items-center gap-2">
-                        <FileText size={13} className="text-foreground-muted" />
+                        <FileText size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                         <span>Documentation</span>
                       </span>
-                      <ExternalLink size={13} className="text-foreground-muted group-hover:text-white transition-colors" />
+                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
                     </button>
                   )}
                 </div>
@@ -632,10 +632,10 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
             {/* You Might Also Like */}
             {relatedAppIds.length > 0 && (
-              <div className="p-6 rounded-2xl bg-surface-elevated/40 border border-white/[0.08] space-y-3.5">
+              <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3.5 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold tracking-tight text-white">You might also like</h2>
-                  <span className="text-xs text-blue-400 hover:underline cursor-pointer">See all →</span>
+                  <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">You might also like</h2>
+                  <span className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">See all →</span>
                 </div>
                 <div className="flex flex-col gap-2.5 pt-1">
                   {relatedAppIds.slice(0, 3).map((relId) => {
@@ -644,15 +644,15 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <div
                         key={relId}
                         onClick={() => onSelectRelated?.(relId)}
-                        className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.05] transition-all cursor-pointer group"
+                        className="flex items-center justify-between p-3 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] transition-all cursor-pointer group shadow-xs"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <AppIcon appId={relId} size="md" />
                           <div className="min-w-0">
-                            <div className="text-xs font-bold text-white group-hover:text-blue-400 transition-colors truncate">
+                            <div className="text-xs font-bold text-[var(--rz-text)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                               {relMeta.displayName}
                             </div>
-                            <div className="text-[11px] text-foreground-muted truncate">
+                            <div className="text-[11px] text-[var(--rz-text-muted)] truncate">
                               {relMeta.summary || relMeta.category}
                             </div>
                           </div>
@@ -662,7 +662,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                             e.stopPropagation();
                             onSelectRelated?.(relId);
                           }}
-                          className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 transition-colors cursor-pointer shrink-0 ml-2"
+                          className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600/15 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 transition-colors cursor-pointer shrink-0 ml-2"
                         >
                           View
                         </button>
@@ -677,18 +677,18 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
         {/* ── Bottom Section: Dependencies ── */}
         {allDependencies.length > 0 && (
-          <div className="pt-6 border-t border-white/[0.08] space-y-3">
+          <div className="pt-6 border-t border-[var(--rz-border-subtle)] space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold tracking-tight text-white">
+              <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">
                 Dependencies
-                <span className="ml-2 text-xs font-normal text-foreground-muted">
+                <span className="ml-2 text-xs font-normal text-[var(--rz-text-muted)]">
                   ({allDependencies.length})
                 </span>
               </h2>
               {allDependencies.length > 10 && (
                 <button
                   onClick={() => setShowAllDeps(!showAllDeps)}
-                  className="text-xs text-blue-400 hover:underline font-semibold cursor-pointer"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
                 >
                   {showAllDeps ? "Show fewer" : `Show all ${allDependencies.length}`}
                 </button>
@@ -699,7 +699,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               {visibleDependencies.map((dep, idx) => (
                 <span
                   key={idx}
-                  className="px-2.5 py-1 rounded-lg text-xs font-mono bg-white/[0.03] border border-white/[0.06] text-foreground-muted"
+                  className="px-2.5 py-1 rounded-lg text-xs font-mono bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] shadow-xs"
                 >
                   {dep}
                 </span>
