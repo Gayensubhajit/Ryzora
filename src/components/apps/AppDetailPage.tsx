@@ -43,9 +43,10 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { PackageItem } from "../../providers/types.ts";
-import { pacmanAppProvider } from "../../providers/index.ts";
+import { pacmanAppProvider, flatpakAppProvider, aurAppProvider } from "../../providers/index.ts";
+import { PkgbuildViewerModal } from "./PkgbuildViewerModal.tsx";
 import { catalogService } from "../../services/catalogService.ts";
-import { transactionManager } from "../../services/transactionManager.ts";
+import { transactionManager, type TransactionStage } from "../../services/transactionManager.ts";
 import { AppIcon, resolveAppMetadata } from "./AppIconResolver.tsx";
 import {
   type AppInstallState,
@@ -76,6 +77,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const [operation, setOperation] = useState<
     "idle" | "installing" | "uninstalling" | "reinstalling" | "launching"
   >("idle");
+  const [showPkgbuildModal, setShowPkgbuildModal] = useState(false);
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(() => {
     try {
       return new URLSearchParams(window.location.search).get("openModal") === "uninstall";
@@ -111,7 +113,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     transactionManager.getPackageActiveOperation(app.id)
   );
   // Live transaction progress for this package (percentage, message)
-  const [txProgress, setTxProgress] = useState<{ percentage: number | null; message: string } | null>(null);
+  const [txProgress, setTxProgress] = useState<{
+    percentage: number | null;
+    message: string;
+    stage: TransactionStage;
+    isCached: boolean;
+  } | null>(null);
 
   useEffect(() => {
     return transactionManager.subscribePackageStatus(app.id, (operating, op) => {
@@ -138,7 +145,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     });
   }, [app.id, onStatusChanged]);
 
-  // Track live tx progress (percentage + message) for the hero progress bar
+  // Track live tx progress (percentage + message + stage + cache) for hero
   useEffect(() => {
     return transactionManager.subscribe((state) => {
       if (
@@ -147,7 +154,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         state.stage !== "completed" &&
         state.stage !== "failed"
       ) {
-        setTxProgress({ percentage: state.percentage, message: state.message });
+        setTxProgress({
+          percentage: state.percentage,
+          message: state.message,
+          stage: state.stage,
+          isCached: Boolean(state.isCached),
+        });
       } else if (!state || state.packageName.toLowerCase() !== app.id.toLowerCase()) {
         setTxProgress(null);
       }
@@ -306,15 +318,37 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     );
   };
 
-  // Primary Actions: Install, Uninstall, Open, Reinstall via TransactionManager
+  // Primary Actions: Install, Uninstall, Open, Reinstall across multi-providers
   const handleInstall = async () => {
-    if (selectedProvider.id !== "pacman") {
-      setActionError(`Provider '${selectedProvider.name}' is not available yet. Only Pacman is currently supported.`);
-      return;
-    }
-    setOperation("installing");
     setActionError(null);
     setActionSuccess(null);
+
+    // AUR: trigger user inspection of PKGBUILD first
+    if (selectedProvider.id === "aur") {
+      setShowPkgbuildModal(true);
+      return;
+    }
+
+    // Flatpak: native flatpak install
+    if (selectedProvider.id === "flatpak") {
+      setOperation("installing");
+      try {
+        await flatpakAppProvider.install(app.id);
+        setLocalInstalled(true);
+        setActionSuccess(`Installed ${meta.displayName} via Flathub.`);
+        await catalogService.refreshInstalledState();
+        onStatusChanged?.();
+      } catch (err: any) {
+        const msg = typeof err === "string" ? err : (err?.message || "Flatpak installation failed.");
+        setActionError(msg);
+      } finally {
+        setOperation("idle");
+      }
+      return;
+    }
+
+    // Pacman: existing secure transaction path
+    setOperation("installing");
     try {
       const txRes = await transactionManager.runTransaction(app.id, "install");
       if (txRes.stage === "completed") {
@@ -333,6 +367,24 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     }
   };
 
+  const executeAurInstall = async () => {
+    setOperation("installing");
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await aurAppProvider.buildAndInstall(app.id);
+      setLocalInstalled(true);
+      setActionSuccess(`Built and installed ${meta.displayName} successfully from AUR.`);
+      await catalogService.refreshInstalledState();
+      onStatusChanged?.();
+    } catch (err: any) {
+      const msg = typeof err === "string" ? err : (err?.message || "AUR build/installation failed.");
+      setActionError(msg);
+    } finally {
+      setOperation("idle");
+    }
+  };
+
   const handleUninstall = () => {
     setShowUninstallConfirm(true);
   };
@@ -343,14 +395,22 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setActionError(null);
     setActionSuccess(null);
     try {
-      const txRes = await transactionManager.runTransaction(app.id, "uninstall");
-      if (txRes.stage === "completed") {
+      if (selectedProvider.id === "flatpak" || app.repository_id === "flathub") {
+        await flatpakAppProvider.uninstall(app.id);
         setLocalInstalled(false);
         setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
         await catalogService.refreshInstalledState();
         onStatusChanged?.();
-      } else if (txRes.stage === "failed") {
-        setActionError(txRes.message || txRes.error || "Uninstall failed.");
+      } else {
+        const txRes = await transactionManager.runTransaction(app.id, "uninstall");
+        if (txRes.stage === "completed") {
+          setLocalInstalled(false);
+          setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
+          await catalogService.refreshInstalledState();
+          onStatusChanged?.();
+        } else if (txRes.stage === "failed") {
+          setActionError(txRes.message || txRes.error || "Uninstall failed.");
+        }
       }
     } catch (err: any) {
       const msg = typeof err === "string" ? err : (err?.message || "Failed to uninstall package.");
@@ -386,13 +446,18 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setActionError(null);
     setActionSuccess(null);
     try {
-      const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
-      if (isTauri) {
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("launch_desktop_app", { packageId: app.id });
+      if (selectedProvider.id === "flatpak" || app.repository_id === "flathub") {
+        await flatpakAppProvider.run(app.id);
         setActionSuccess(`Launched ${meta.displayName}.`);
       } else {
-        setActionSuccess(`Launch command dispatched for ${meta.displayName}.`);
+        const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+        if (isTauri) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("launch_desktop_app", { packageId: app.id });
+          setActionSuccess(`Launched ${meta.displayName}.`);
+        } else {
+          setActionSuccess(`Launch command dispatched for ${meta.displayName}.`);
+        }
       }
     } catch (err: any) {
       const msg = err?.message || err || "Desktop entry or executable not found.";
@@ -504,7 +569,21 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                     ) : installState === "installing" ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-500 border border-blue-500/25 animate-pulse">
                         <Loader2 size={13} className="animate-spin" />
-                        <span>Installing…</span>
+                        <span>
+                          {txProgress?.stage === "preparing"
+                            ? "Preparing…"
+                            : txProgress?.stage === "resolving"
+                            ? "Resolving dependencies…"
+                            : txProgress?.stage === "downloading"
+                            ? "Downloading…"
+                            : txProgress?.stage === "installing"
+                            ? txProgress?.isCached
+                              ? "Ready for installation…"
+                              : "Installing…"
+                            : txProgress?.stage === "finalizing"
+                            ? "Finalizing…"
+                            : "Installing…"}
+                        </span>
                       </span>
                     ) : installState === "uninstalling" ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/25 animate-pulse">
@@ -670,7 +749,25 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <Loader2 size={16} className="animate-spin" />
                       <span>
                         {isCurrentAppTransacting
-                          ? `${activeOperation === "uninstall" || operation === "uninstalling" ? "Uninstalling" : activeOperation === "reinstall" || operation === "reinstalling" ? "Reinstalling" : "Installing"}…`
+                          ? txProgress
+                            ? txProgress.stage === "preparing"
+                              ? "Preparing…"
+                              : txProgress.stage === "resolving"
+                              ? "Resolving dependencies…"
+                              : txProgress.stage === "downloading"
+                              ? "Downloading…"
+                              : txProgress.stage === "installing"
+                              ? txProgress.isCached
+                                ? "Using cached package…"
+                                : "Installing…"
+                              : txProgress.stage === "finalizing"
+                              ? "Finalizing…"
+                              : "Processing…"
+                            : activeOperation === "uninstall" || operation === "uninstalling"
+                            ? "Uninstalling…"
+                            : activeOperation === "reinstall" || operation === "reinstalling"
+                            ? "Reinstalling…"
+                            : "Installing…"
                           : actionsConfig.primaryLabel}
                       </span>
                     </button>
@@ -694,10 +791,19 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         }}
                       />
                     </div>
-                    {/* Message */}
-                    <p className="text-xs text-[var(--rz-text-muted)] truncate leading-tight">
-                      {txProgress.message}
-                    </p>
+                    {/* Message & Stage */}
+                    <div className="flex items-center justify-between text-xs text-[var(--rz-text-muted)] leading-tight">
+                      <p className="truncate max-w-[80%]">
+                        {txProgress.isCached && (txProgress.stage === "installing" || txProgress.percentage === 95)
+                          ? "Using cached package • Ready for installation"
+                          : txProgress.message || (txProgress.stage === "resolving" ? "Resolving dependencies…" : "Processing transaction…")}
+                      </p>
+                      {txProgress.percentage !== null && (
+                        <span className="font-mono text-[11px] shrink-0 font-medium text-[var(--rz-text-muted)]">
+                          {txProgress.percentage}%
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1256,6 +1362,14 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* PKGBUILD Inspection Modal (Phase 25 AUR) */}
+      <PkgbuildViewerModal
+        packageName={app.id}
+        isOpen={showPkgbuildModal}
+        onClose={() => setShowPkgbuildModal(false)}
+        onConfirmInstall={executeAurInstall}
+      />
 
       {/* ── Screenshots Lightbox Modal ── */}
       {lightboxOpen && screenshots.length > 0 && (

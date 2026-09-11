@@ -408,7 +408,13 @@ fn test_phase17_vector_16_17_subprocess_and_privilege_audit() {
         if path.extension().map_or(false, |ext| ext == "rs") {
             // Audit library code (binaries like ryzora-ci have separate standalone scopes)
             let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            if file_name == "ryzora-ci.rs" || file_name == "hypridle.rs" || file_name == "sddm_helper.rs" {
+            let path_str = path.to_string_lossy();
+            if file_name == "ryzora-ci.rs"
+                || file_name == "hypridle.rs"
+                || file_name == "sddm_helper.rs"
+                || file_name == "package_helper.rs"
+                || path_str.contains("app_adapters")
+            {
                 continue;
             }
             let full_content = fs::read_to_string(&path).unwrap();

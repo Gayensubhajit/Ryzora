@@ -64,6 +64,7 @@ export const AppsView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [installedSourceFilter, setInstalledSourceFilter] = useState<"All" | "pacman" | "aur" | "flathub">("All");
 
   // Storefront & Catalogue Data
   const [storefrontPackages, setStorefrontPackages] = useState<PackageItem[]>([]);
@@ -370,6 +371,28 @@ export const AppsView: React.FC = () => {
     return meta?.isInstalled ?? false;
   }, []);
 
+  // Filter catalogue items based on installedSourceFilter
+  const displayedCatalogueItems = useMemo(() => {
+    if (selectedCategory !== "Installed" || installedSourceFilter === "All") {
+      return catalogueItems;
+    }
+    return catalogueItems.filter((item) => {
+      const repo = ((item as any).repository_id || (item as any).repository || "").toLowerCase();
+      const metaSource = ((item as any).metadata_source || "").toLowerCase();
+
+      if (installedSourceFilter === "flathub") {
+        return repo === "flathub" || metaSource === "flatpak";
+      }
+      if (installedSourceFilter === "aur") {
+        return repo === "aur" || metaSource === "aur";
+      }
+      if (installedSourceFilter === "pacman") {
+        return repo !== "flathub" && repo !== "aur" && metaSource !== "flatpak" && metaSource !== "aur";
+      }
+      return true;
+    });
+  }, [catalogueItems, selectedCategory, installedSourceFilter]);
+
   // Storefront Home Curations
   const deduplicatedPackages = useMemo(() => {
     return deduplicateAppPackages(storefrontPackages);
@@ -581,7 +604,10 @@ export const AppsView: React.FC = () => {
             return (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  setInstalledSourceFilter("All");
+                }}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                   isSelected
                     ? "bg-blue-600 text-white shadow-xs"
@@ -593,6 +619,38 @@ export const AppsView: React.FC = () => {
             );
           })}
         </div>
+
+        {/* ── Installed Multi-Source Sub-Filter (Phase 25) ── */}
+        {selectedCategory === "Installed" && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <span className="text-xs text-[var(--rz-text-muted)] font-medium">Source filter:</span>
+            <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-xs font-medium">
+              {(["All", "pacman", "aur", "flathub"] as const).map((source) => {
+                const isCurrent = installedSourceFilter === source;
+                return (
+                  <button
+                    key={source}
+                    type="button"
+                    onClick={() => setInstalledSourceFilter(source)}
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+                      isCurrent
+                        ? "bg-blue-600 text-white shadow-xs font-semibold"
+                        : "text-[var(--rz-text-muted)] hover:text-[var(--rz-text)]"
+                    }`}
+                  >
+                    {source === "All"
+                      ? "All Sources"
+                      : source === "pacman"
+                      ? "Pacman"
+                      : source === "aur"
+                      ? "AUR"
+                      : "Flathub"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {isStorefrontHome ? (
           /* ═══════════════════════════════════════════════════════════════
@@ -785,7 +843,7 @@ export const AppsView: React.FC = () => {
             ) : (
               <VirtualizedAppGrid
                 scrollContainerRef={gridRef}
-                items={catalogueItems}
+                items={displayedCatalogueItems}
                 hasMore={catalogueItems.length < totalCatalogueCount}
                 isLoadingMore={loadingMore}
                 onLoadMore={loadMore}
@@ -808,8 +866,7 @@ export const AppsView: React.FC = () => {
 };
 
 // ── Lightweight Catalogue App Tile ───────────────────────────────────────────
-// Memoized tile — only re-renders when id, isInstalled, or icon fields change.
-// This prevents the entire grid from re-rendering when one icon resolves.
+// Memoized tile with subtle source badges (Pacman / AUR / Flathub)
 const AppCatalogueTile: React.FC<{
   app: PackageItem;
   isInstalled: boolean;
@@ -820,6 +877,15 @@ const AppCatalogueTile: React.FC<{
   const categoryName = (app as any).category || meta.category || "Application";
   const iconName: string | null = (app as any).icon_name ?? null;
   const iconPath: string | null = (app as any).icon_path ?? null;
+
+  const repo = ((app as any).repository_id || (app as any).repository || "").toLowerCase();
+  const metaSource = ((app as any).metadata_source || "").toLowerCase();
+  const sourceLabel =
+    repo === "flathub" || metaSource === "flatpak"
+      ? "● Flathub"
+      : repo === "aur" || metaSource === "aur"
+      ? "● AUR"
+      : `● Pacman · ${repo || "extra"}`;
 
   return (
     <div
@@ -838,13 +904,16 @@ const AppCatalogueTile: React.FC<{
       <span className="text-[11px] text-[var(--rz-text-muted)] truncate w-full pt-0.5">
         {categoryName}
       </span>
+      <span className="text-[10px] text-[var(--rz-text-muted)] truncate w-full pt-0.5 opacity-75 font-mono">
+        {sourceLabel}
+      </span>
       {isInstalled ? (
-        <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
           <CheckCircle2 size={12} />
           <span>Installed</span>
         </span>
       ) : (
-        <span className="mt-2 h-4" />
+        <span className="mt-1.5 h-4" />
       )}
     </div>
   );
@@ -852,5 +921,6 @@ const AppCatalogueTile: React.FC<{
   prev.app.id === next.app.id &&
   prev.isInstalled === next.isInstalled &&
   (prev.app as any).icon_name === (next.app as any).icon_name &&
-  (prev.app as any).icon_path === (next.app as any).icon_path
+  (prev.app as any).icon_path === (next.app as any).icon_path &&
+  (prev.app as any).repository === (next.app as any).repository
 );

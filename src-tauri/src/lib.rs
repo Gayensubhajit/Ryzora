@@ -171,6 +171,23 @@ pub fn run() {
             app_adapters::pacman_get_catalog_item_details,
             app_adapters::pacman_refresh_catalog,
             app_adapters::pacman_refresh_catalog_installed_state,
+            // Flatpak & Flathub (Phase 25)
+            app_adapters::flatpak_get_status,
+            app_adapters::flatpak_list_installed,
+            app_adapters::flatpak_search,
+            app_adapters::flatpak_get_info,
+            app_adapters::flatpak_run,
+            app_adapters::flatpak_install,
+            app_adapters::flatpak_uninstall,
+            app_adapters::flatpak_get_cleanup_info,
+            // AUR (Phase 25)
+            app_adapters::aur_get_status,
+            app_adapters::aur_search,
+            app_adapters::aur_get_info,
+            app_adapters::aur_get_pkgbuild,
+            app_adapters::aur_list_installed,
+            app_adapters::aur_install,
+            app_adapters::aur_get_cleanup_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

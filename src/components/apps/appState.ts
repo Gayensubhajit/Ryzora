@@ -41,22 +41,20 @@ export const SUPPORTED_PROVIDERS: PackageProviderOption[] = [
     available: true,
   },
   {
-    id: "aur",
-    name: "AUR",
-    shortName: "AUR · yay",
-    repository: "AUR",
-    description: "Arch User Repository",
-    available: false,
-    statusNote: "Coming soon",
-  },
-  {
     id: "flatpak",
     name: "Flatpak",
-    shortName: "Flatpak · Flathub",
+    shortName: "Flathub · Flatpak",
     repository: "Flathub",
-    description: "Coming soon",
-    available: false,
-    statusNote: "Coming soon",
+    description: "Universal Flatpak sandbox",
+    available: true,
+  },
+  {
+    id: "aur",
+    name: "AUR",
+    shortName: "AUR · User",
+    repository: "AUR",
+    description: "Arch User Repository (Unprivileged)",
+    available: true,
   },
 ];
 

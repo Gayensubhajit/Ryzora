@@ -209,6 +209,86 @@ export class CatalogService {
         const res = await invokeTauri<CatalogPageResponse>("pacman_get_catalog_items", {
           filter,
         });
+
+        // Multi-source search integration (Phase 25)
+        if (filter.search_query && (filter.page ?? 0) === 0 && (filter.is_application_only ?? true)) {
+          const q = filter.search_query.trim();
+          try {
+            const [flatpakResults, aurResults] = await Promise.allSettled([
+              invokeTauri<any[]>("flatpak_search", { query: q }),
+              invokeTauri<any[]>("aur_search", { query: q }),
+            ]);
+
+            const existingIds = new Set(res.items.map((i) => i.id.toLowerCase()));
+
+            if (flatpakResults.status === "fulfilled" && Array.isArray(flatpakResults.value)) {
+              for (const fp of flatpakResults.value.slice(0, 5)) {
+                if (!existingIds.has(fp.id.toLowerCase())) {
+                  existingIds.add(fp.id.toLowerCase());
+                  res.items.push({
+                    id: fp.id,
+                    display_name: fp.name || fp.id,
+                    summary: fp.description || "",
+                    description: fp.description || "",
+                    repository: "flathub",
+                    version: fp.version || "stable",
+                    is_installed: Boolean(fp.is_installed),
+                    installed_version: fp.is_installed ? fp.version : null,
+                    is_application: true,
+                    category: "Utilities",
+                    subcategories: [],
+                    icon_name: fp.id,
+                    icon_path: null,
+                    launchable: fp.id,
+                    homepage: null,
+                    license: null,
+                    download_size: null,
+                    installed_size: null,
+                    dependencies: [],
+                    screenshots: [],
+                    developer: null,
+                    metadata_source: "flatpak",
+                  });
+                }
+              }
+            }
+
+            if (aurResults.status === "fulfilled" && Array.isArray(aurResults.value)) {
+              for (const aur of aurResults.value.slice(0, 5)) {
+                if (!existingIds.has(aur.name.toLowerCase())) {
+                  existingIds.add(aur.name.toLowerCase());
+                  res.items.push({
+                    id: aur.name,
+                    display_name: aur.name,
+                    summary: aur.description || "",
+                    description: aur.description || "",
+                    repository: "aur",
+                    version: aur.version || "latest",
+                    is_installed: Boolean(aur.is_installed),
+                    installed_version: aur.installed_version || null,
+                    is_application: true,
+                    category: "Utilities",
+                    subcategories: [],
+                    icon_name: aur.name,
+                    icon_path: null,
+                    launchable: `${aur.name}.desktop`,
+                    homepage: aur.url || null,
+                    license: aur.license ? aur.license.join(", ") : null,
+                    download_size: null,
+                    installed_size: null,
+                    dependencies: aur.depends || [],
+                    screenshots: [],
+                    developer: aur.maintainer || null,
+                    metadata_source: "aur",
+                  });
+                }
+              }
+            }
+          } catch (multiErr) {
+            console.warn("[CatalogService] Multi-source search error:", multiErr);
+          }
+        }
+
         for (const item of res.items) {
           this.itemCache.set(item.id, item);
         }
@@ -365,17 +445,24 @@ export class CatalogService {
   catalogItemToPackageItem(item: CatalogItem): PackageItem {
     pacmanAppProvider.recordCatalogItem(item);
     const appMeta = resolveAppMetadata(item.id, item.display_name);
+    const isFlathub = item.repository === "flathub" || item.metadata_source === "flatpak";
+    const isAur = item.repository === "aur" || item.metadata_source === "aur";
+    const sourceLabel = isFlathub
+      ? "Flathub • Flatpak sandbox"
+      : isAur
+      ? "Arch User Repository • AUR"
+      : `Arch Linux (${item.repository})`;
 
     const pkg: PackageItem = {
       id: item.id,
       title: item.display_name || item.id,
-      subtitle: `${appMeta.publisher} • Arch Linux (${item.repository})`,
-      description: item.description || item.summary || "Arch Linux official package",
+      subtitle: `${item.developer || appMeta.publisher || (isFlathub ? "Flathub" : isAur ? "AUR Community" : "Arch")} • ${sourceLabel}`,
+      description: item.description || item.summary || (isFlathub ? "Flatpak sandboxed application" : isAur ? "Arch User Repository package" : "Arch Linux official package"),
       version: item.version,
       author: {
-        name: item.developer || appMeta.publisher,
-        avatar: "arch",
-        verified: true,
+        name: item.developer || appMeta.publisher || (isFlathub ? "Flathub" : isAur ? "AUR Community" : "Arch"),
+        avatar: isFlathub ? "flathub" : isAur ? "community" : "arch",
+        verified: !isAur,
       },
       category: "apps",
       package_type: "app",

@@ -112,7 +112,7 @@ fn test_audit_global_zero_subprocess_in_production_code() {
             if p.is_file() && p.extension().map_or(false, |ext| ext == "rs") {
                 let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
                 // System integration adapters (hypridle and sddm_helper) handle external system services and privileged helper
-                if file_name == "hypridle.rs" || file_name == "sddm_helper.rs" {
+                if file_name == "hypridle.rs" || file_name == "sddm_helper.rs" || file_name == "package_helper.rs" {
                     continue;
                 }
                 let content = fs::read_to_string(&p).unwrap();

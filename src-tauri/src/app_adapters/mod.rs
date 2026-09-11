@@ -6,6 +6,8 @@
 pub mod pacman;
 pub mod transaction;
 pub mod catalog;
+pub mod aur;
+pub mod flatpak;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -930,4 +932,88 @@ pub fn pacman_refresh_catalog() -> Result<catalog::CatalogStatus, String> {
 #[tauri::command]
 pub fn pacman_refresh_catalog_installed_state() -> Result<catalog::CatalogStatus, String> {
     catalog::refresh_installed_state_internal()
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flatpak & Flathub Commands — Phase 25
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn flatpak_get_status() -> Result<flatpak::FlatpakStatus, String> {
+    Ok(flatpak::detect_flatpak_status())
+}
+
+#[tauri::command]
+pub fn flatpak_list_installed() -> Result<Vec<flatpak::FlatpakAppInfo>, String> {
+    flatpak::list_installed_flatpak_apps()
+}
+
+#[tauri::command]
+pub fn flatpak_search(query: String) -> Result<Vec<flatpak::FlatpakAppInfo>, String> {
+    flatpak::search_flathub_apps(&query)
+}
+
+#[tauri::command]
+pub fn flatpak_get_info(app_id: String) -> Result<Option<flatpak::FlatpakAppInfo>, String> {
+    flatpak::get_flatpak_app_info(&app_id)
+}
+
+#[tauri::command]
+pub fn flatpak_run(app_id: String) -> Result<(), String> {
+    flatpak::run_flatpak_app(&app_id)
+}
+
+#[tauri::command]
+pub fn flatpak_install(app_id: String) -> Result<String, String> {
+    flatpak::install_flatpak_app(&app_id)
+}
+
+#[tauri::command]
+pub fn flatpak_uninstall(app_id: String) -> Result<String, String> {
+    flatpak::uninstall_flatpak_app(&app_id)
+}
+
+#[tauri::command]
+pub fn flatpak_get_cleanup_info(app_id: String) -> Result<flatpak::FlatpakCleanupInfo, String> {
+    Ok(flatpak::get_flatpak_cleanup_info(&app_id))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUR Commands — Phase 25
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn aur_get_status() -> Result<aur::AurStatus, String> {
+    Ok(aur::detect_aur_status())
+}
+
+#[tauri::command]
+pub fn aur_search(query: String) -> Result<Vec<aur::AurPackageInfo>, String> {
+    aur::aur_search_rpc(&query)
+}
+
+#[tauri::command]
+pub fn aur_get_info(package_name: String) -> Result<Option<aur::AurPackageInfo>, String> {
+    aur::aur_get_info_rpc(&package_name)
+}
+
+#[tauri::command]
+pub fn aur_get_pkgbuild(package_name: String) -> Result<String, String> {
+    aur::aur_get_pkgbuild(&package_name)
+}
+
+#[tauri::command]
+pub fn aur_list_installed() -> Result<Vec<aur::AurPackageInfo>, String> {
+    aur::list_installed_foreign_packages()
+}
+
+#[tauri::command]
+pub fn aur_install(package_name: String) -> Result<String, String> {
+    aur::aur_build_and_install_package(&package_name)
+}
+
+#[tauri::command]
+pub fn aur_get_cleanup_info(package_name: String) -> Result<aur::AurCleanupInfo, String> {
+    Ok(aur::get_aur_cleanup_info(&package_name))
 }

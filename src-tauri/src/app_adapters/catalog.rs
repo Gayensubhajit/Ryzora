@@ -1255,7 +1255,7 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
                 display_name,
                 summary: format!("Installed package {}", inst_pkg),
                 description: String::new(),
-                repository: "local".to_string(),
+                repository: "aur".to_string(),
                 version: inst_ver.clone(),
                 is_installed: true,
                 installed_version: Some(inst_ver.clone()),
@@ -1272,7 +1272,7 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
                 dependencies: Vec::new(),
                 screenshots: Vec::new(),
                 developer: None,
-                metadata_source: "pacman_local".to_string(),
+                metadata_source: "aur".to_string(),
             };
 
             let new_idx = store.items.len();
@@ -1282,6 +1282,48 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
             }
             total_installed_pkgs += 1;
             store.items.push(new_item);
+        }
+    }
+
+    // Also include any locally installed Flatpak applications
+    if let Ok(flatpaks) = crate::app_adapters::flatpak::list_installed_flatpak_apps() {
+        for fp in flatpaks {
+            let fp_lower = fp.id.to_lowercase();
+            if let Some(&idx) = store.by_id.get(&fp_lower) {
+                store.items[idx].is_installed = true;
+                store.items[idx].installed_version = Some(fp.version.clone());
+            } else {
+                let display_name = if !fp.name.is_empty() { fp.name } else { fp.id.clone() };
+                let new_item = CatalogItem {
+                    id: fp.id.clone(),
+                    display_name,
+                    summary: fp.description.clone(),
+                    description: fp.description,
+                    repository: "flathub".to_string(),
+                    version: fp.version.clone(),
+                    is_installed: true,
+                    installed_version: Some(fp.version),
+                    is_application: true,
+                    category: "Multimedia".to_string(),
+                    subcategories: Vec::new(),
+                    icon_name: Some(fp.id.clone()),
+                    icon_path: None,
+                    launchable: Some(fp.id.clone()),
+                    homepage: None,
+                    license: None,
+                    download_size: None,
+                    installed_size: None,
+                    dependencies: Vec::new(),
+                    screenshots: Vec::new(),
+                    developer: None,
+                    metadata_source: "flatpak".to_string(),
+                };
+                let new_idx = store.items.len();
+                store.by_id.insert(fp_lower, new_idx);
+                total_installed_apps += 1;
+                total_installed_pkgs += 1;
+                store.items.push(new_item);
+            }
         }
     }
 

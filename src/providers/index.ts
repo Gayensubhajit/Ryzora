@@ -7,6 +7,8 @@
 
 export * from "./types.ts";
 export { pacmanAppProvider, PacmanAppProvider } from "./pacmanProvider.ts";
+export { flatpakAppProvider, FlatpakAppProvider } from "./flatpakProvider.ts";
+export { aurAppProvider, AurAppProvider } from "./aurProvider.ts";
 export {
   qylockLockscreenProvider,
   normalizeQylockTheme,
@@ -17,6 +19,8 @@ export {
 
 import { qylockLockscreenProvider } from "./qylockProvider.ts";
 import { pacmanAppProvider } from "./pacmanProvider.ts";
+import { flatpakAppProvider } from "./flatpakProvider.ts";
+import { aurAppProvider } from "./aurProvider.ts";
 import type { LockscreenProvider, LockscreenTargetsSpec, PackageItem } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +123,8 @@ packageEngine.register(swaylockLockscreenProvider as any);
 
 // Register pacman app provider (Phase 23A)
 packageEngine.register(pacmanAppProvider as any);
+packageEngine.register(flatpakAppProvider as any);
+packageEngine.register(aurAppProvider as any);
 
 // Re-export the engine so consumers can import it from the providers module
 export { packageEngine } from "../engine/PackageEngine.ts";
