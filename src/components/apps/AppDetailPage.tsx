@@ -58,6 +58,9 @@ import {
 import { ProviderSelector } from "./ProviderSelector.tsx";
 import { VerificationBadge } from "./VerificationBadge.tsx";
 
+// Module-level cache for resolved app providers (instant sub-millisecond retrieval)
+const appProviderCache = new Map<string, PackageProviderOption[]>();
+
 interface AppDetailPageProps {
   app: PackageItem;
   backLabel?: string;
@@ -73,8 +76,43 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   onStatusChanged,
   onSelectRelated,
 }) => {
-  const [selectedProvider, setSelectedProvider] = useState<PackageProviderOption>(SUPPORTED_PROVIDERS[0]);
-  const [availableProviders, setAvailableProviders] = useState<PackageProviderOption[]>([]);
+  // Synchronous initial provider derived directly from app properties (0ms)
+  const initialProvider: PackageProviderOption = useMemo(() => {
+    const isFlatpak = app.repository_id === "flathub" || app.id.includes(".");
+    if (isFlatpak) {
+      return {
+        id: "flatpak",
+        name: "Flatpak",
+        shortName: "Flathub · Flatpak",
+        repository: "flathub",
+        description: "Universal Flatpak container",
+        available: true,
+        targetId: app.id,
+      };
+    }
+    const repo = (app as any).repository || app.repository_id || "extra";
+    return {
+      id: "pacman",
+      name: "Pacman",
+      shortName: `Pacman · ${repo}`,
+      repository: repo,
+      description: "Official Arch Linux repository",
+      available: true,
+      targetId: app.id,
+    };
+  }, [app]);
+
+  const [availableProviders, setAvailableProviders] = useState<PackageProviderOption[]>(() => {
+    return appProviderCache.get(app.id) || [initialProvider];
+  });
+  const [selectedProvider, setSelectedProvider] = useState<PackageProviderOption>(() => {
+    const cached = appProviderCache.get(app.id);
+    if (cached && cached.length > 0) {
+      const installed = cached.find((p) => p.isInstalled);
+      return installed || cached[0];
+    }
+    return initialProvider;
+  });
   const [operation, setOperation] = useState<
     "idle" | "installing" | "uninstalling" | "reinstalling" | "launching"
   >("idle");
@@ -122,17 +160,19 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   } | null>(null);
 
   useEffect(() => {
+    let wasOperating = transactionManager.isPackageOperating(app.id);
     return transactionManager.subscribePackageStatus(app.id, (operating, op) => {
       setIsOperating(operating);
       setActiveOperation(op || transactionManager.getPackageActiveOperation(app.id));
-      if (!operating) {
+      if (wasOperating && !operating) {
+        wasOperating = false;
         // Transaction finished: clear progress UI immediately
         setTxProgress(null);
+        appProviderCache.delete(app.id);
         // Then perform authoritative state query from ALPM database
         catalogService
           .refreshInstalledState()
           .then(async () => {
-            // itemCache is now cleared by refreshInstalledState; re-fetch fresh state
             const item = await catalogService.getItemDetails(app.id);
             if (item) {
               setLocalInstalled(item.is_installed);
@@ -142,6 +182,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
           .catch(() => {
             onStatusChanged?.();
           });
+      } else if (operating) {
+        wasOperating = true;
       }
     });
   }, [app.id, onStatusChanged]);
@@ -235,6 +277,18 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   useEffect(() => {
     let active = true;
 
+    // Check module cache first (instant sub-millisecond retrieval)
+    const cached = appProviderCache.get(app.id);
+    if (cached && cached.length > 0) {
+      setAvailableProviders(cached);
+      const installed = cached.find((p) => p.isInstalled);
+      if (installed) {
+        setSelectedProvider(installed);
+        setLocalInstalled(true);
+      }
+      return;
+    }
+
     const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
     if (!isTauri) {
       setAvailableProviders(SUPPORTED_PROVIDERS);
@@ -271,6 +325,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             version: s.version,
             isInstalled: s.is_installed,
           }));
+          appProviderCache.set(app.id, options);
           setAvailableProviders(options);
 
           // Select matching installed provider or first available
@@ -285,31 +340,19 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             });
           }
         } else {
-          // Fallback: derive single provider from app.repository_id
-          const fallbackId = app.repository_id === "flathub" ? "flatpak" : "pacman";
-          const fallbackOption: PackageProviderOption = {
-            id: fallbackId,
-            name: fallbackId === "flatpak" ? "Flatpak" : "Pacman",
-            shortName: fallbackId === "flatpak" ? "Flathub · Flatpak" : `Pacman · ${app.repository_id || "extra"}`,
-            repository: app.repository_id || "extra",
-            description: fallbackId === "flatpak" ? "Universal Flatpak container" : "Official Arch Linux repository",
-            available: true,
-            targetId: app.id,
-            isInstalled: isInstalled,
-          };
-          setAvailableProviders([fallbackOption]);
-          setSelectedProvider(fallbackOption);
+          appProviderCache.set(app.id, [initialProvider]);
+          setAvailableProviders([initialProvider]);
+          setSelectedProvider(initialProvider);
         }
-        })
+      })
       .catch((err) => {
         console.error("Failed to resolve app providers:", err);
-        if (!active) return;
-        });
+      });
 
     return () => {
       active = false;
     };
-  }, [app.id, meta.displayName, isInstalled]);
+  }, [app.id, meta.displayName, initialProvider]);
 
   const version = app.version || pacmanMeta?.installedVersion || "Unknown";
   const repository = pacmanMeta?.repository || "extra";

@@ -91,7 +91,7 @@ export const AppsView: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery.trim());
-    }, 200);
+    }, 120);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -163,8 +163,27 @@ export const AppsView: React.FC = () => {
       const mapped = (res.items || []).map((i) => catalogService.catalogItemToPackageItem(i));
       setCatalogueItems(mapped);
       setTotalCatalogueCount(res.total_count);
+      setLoading(false);
       // Pre-fetch icons for the loaded page in one batch IPC call
       prefetchIconsForPage(res.items.map((i) => ({ id: i.id, icon_name: i.icon_name, icon_path: i.icon_path })));
+
+      // Non-blocking background search for Flathub and AUR multi-source results
+      if (debouncedSearch && debouncedSearch.length >= 2 && viewMode === "applications" && !isInstalledOnly) {
+        catalogService.searchRemoteProviders(debouncedSearch).then((remoteItems) => {
+          if (epoch !== requestEpoch.current) return;
+          if (remoteItems.length > 0) {
+            setCatalogueItems((curr) => {
+              const seen = new Set(curr.map((p) => p.id.toLowerCase()));
+              const toAdd = remoteItems
+                .filter((ri) => !seen.has(ri.id.toLowerCase()))
+                .map((ri) => catalogService.catalogItemToPackageItem(ri));
+              if (toAdd.length === 0) return curr;
+              return [...curr, ...toAdd];
+            });
+            setTotalCatalogueCount((prev) => prev + remoteItems.length);
+          }
+        }).catch(() => {});
+      }
     } catch (err) {
       if (epoch !== requestEpoch.current) return;
       console.error("[AppsView] Failed to query catalog items:", err);

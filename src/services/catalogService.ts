@@ -203,91 +203,104 @@ export class CatalogService {
     return fallback;
   }
 
+  private remoteSearchCache = new Map<string, CatalogItem[]>();
+
+  async searchRemoteProviders(query: string): Promise<CatalogItem[]> {
+    const trimmed = query.trim().toLowerCase();
+    if (trimmed.length < 2 || !isTauri) {
+      return [];
+    }
+
+    if (this.remoteSearchCache.has(trimmed)) {
+      return this.remoteSearchCache.get(trimmed)!;
+    }
+
+    try {
+      const [flatpakResults, aurResults] = await Promise.allSettled([
+        invokeTauri<any[]>("flatpak_search", { query: trimmed }),
+        invokeTauri<any[]>("aur_search", { query: trimmed }),
+      ]);
+
+      const items: CatalogItem[] = [];
+      const seenIds = new Set<string>();
+
+      if (flatpakResults.status === "fulfilled" && Array.isArray(flatpakResults.value)) {
+        for (const fp of flatpakResults.value.slice(0, 5)) {
+          if (!seenIds.has(fp.id.toLowerCase())) {
+            seenIds.add(fp.id.toLowerCase());
+            items.push({
+              id: fp.id,
+              display_name: fp.name || fp.id,
+              summary: fp.description || "",
+              description: fp.description || "",
+              repository: "flathub",
+              version: fp.version || "stable",
+              is_installed: Boolean(fp.is_installed),
+              installed_version: fp.is_installed ? fp.version : null,
+              is_application: true,
+              category: "Utilities",
+              subcategories: [],
+              icon_name: fp.id,
+              icon_path: null,
+              launchable: fp.id,
+              homepage: null,
+              license: null,
+              download_size: null,
+              installed_size: null,
+              dependencies: [],
+              screenshots: [],
+              developer: null,
+              metadata_source: "flatpak",
+            });
+          }
+        }
+      }
+
+      if (aurResults.status === "fulfilled" && Array.isArray(aurResults.value)) {
+        for (const aur of aurResults.value.slice(0, 5)) {
+          if (!seenIds.has(aur.name.toLowerCase())) {
+            seenIds.add(aur.name.toLowerCase());
+            items.push({
+              id: aur.name,
+              display_name: aur.name,
+              summary: aur.description || "",
+              description: aur.description || "",
+              repository: "aur",
+              version: aur.version || "latest",
+              is_installed: Boolean(aur.is_installed),
+              installed_version: aur.installed_version || null,
+              is_application: true,
+              category: "Utilities",
+              subcategories: [],
+              icon_name: aur.name,
+              icon_path: null,
+              launchable: `${aur.name}.desktop`,
+              homepage: aur.url || null,
+              license: aur.license ? (Array.isArray(aur.license) ? aur.license.join(", ") : aur.license) : null,
+              download_size: null,
+              installed_size: null,
+              dependencies: aur.depends || [],
+              screenshots: [],
+              developer: aur.maintainer || null,
+              metadata_source: "aur",
+            });
+          }
+        }
+      }
+
+      this.remoteSearchCache.set(trimmed, items);
+      return items;
+    } catch {
+      return [];
+    }
+  }
+
   async getItems(filter: CatalogQueryFilter = {}): Promise<CatalogPageResponse> {
     if (isTauri) {
       try {
         const res = await invokeTauri<CatalogPageResponse>("pacman_get_catalog_items", {
           filter,
         });
-
-        // Multi-source search integration (Phase 25)
-        if (filter.search_query && (filter.page ?? 0) === 0 && (filter.is_application_only ?? true)) {
-          const q = filter.search_query.trim();
-          try {
-            const [flatpakResults, aurResults] = await Promise.allSettled([
-              invokeTauri<any[]>("flatpak_search", { query: q }),
-              invokeTauri<any[]>("aur_search", { query: q }),
-            ]);
-
-            const existingIds = new Set(res.items.map((i) => i.id.toLowerCase()));
-
-            if (flatpakResults.status === "fulfilled" && Array.isArray(flatpakResults.value)) {
-              for (const fp of flatpakResults.value.slice(0, 5)) {
-                if (!existingIds.has(fp.id.toLowerCase())) {
-                  existingIds.add(fp.id.toLowerCase());
-                  res.items.push({
-                    id: fp.id,
-                    display_name: fp.name || fp.id,
-                    summary: fp.description || "",
-                    description: fp.description || "",
-                    repository: "flathub",
-                    version: fp.version || "stable",
-                    is_installed: Boolean(fp.is_installed),
-                    installed_version: fp.is_installed ? fp.version : null,
-                    is_application: true,
-                    category: "Utilities",
-                    subcategories: [],
-                    icon_name: fp.id,
-                    icon_path: null,
-                    launchable: fp.id,
-                    homepage: null,
-                    license: null,
-                    download_size: null,
-                    installed_size: null,
-                    dependencies: [],
-                    screenshots: [],
-                    developer: null,
-                    metadata_source: "flatpak",
-                  });
-                }
-              }
-            }
-
-            if (aurResults.status === "fulfilled" && Array.isArray(aurResults.value)) {
-              for (const aur of aurResults.value.slice(0, 5)) {
-                if (!existingIds.has(aur.name.toLowerCase())) {
-                  existingIds.add(aur.name.toLowerCase());
-                  res.items.push({
-                    id: aur.name,
-                    display_name: aur.name,
-                    summary: aur.description || "",
-                    description: aur.description || "",
-                    repository: "aur",
-                    version: aur.version || "latest",
-                    is_installed: Boolean(aur.is_installed),
-                    installed_version: aur.installed_version || null,
-                    is_application: true,
-                    category: "Utilities",
-                    subcategories: [],
-                    icon_name: aur.name,
-                    icon_path: null,
-                    launchable: `${aur.name}.desktop`,
-                    homepage: aur.url || null,
-                    license: aur.license ? aur.license.join(", ") : null,
-                    download_size: null,
-                    installed_size: null,
-                    dependencies: aur.depends || [],
-                    screenshots: [],
-                    developer: aur.maintainer || null,
-                    metadata_source: "aur",
-                  });
-                }
-              }
-            }
-          } catch (multiErr) {
-            console.warn("[CatalogService] Multi-source search error:", multiErr);
-          }
-        }
 
         for (const item of res.items) {
           this.itemCache.set(item.id, item);

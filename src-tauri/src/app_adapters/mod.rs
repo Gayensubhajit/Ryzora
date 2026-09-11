@@ -1030,6 +1030,9 @@ pub struct AppProviderSource {
     pub is_installed: bool,
 }
 
+static RESOLVE_PROVIDERS_CACHE: std::sync::LazyLock<std::sync::RwLock<std::collections::HashMap<String, Vec<AppProviderSource>>>> =
+    std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
 /// Dynamically discovers authentic installation sources for an application.
 /// Cross-queries Pacman ALPM, AUR RPC v5, and Flathub metadata.
 /// Never fabricates or hardcodes IDs. If no reliable match exists, provider = absent.
@@ -1037,6 +1040,13 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
     let pkg_trimmed = package_id.trim();
     if pkg_trimmed.is_empty() {
         return Vec::new();
+    }
+
+    let cache_key = pkg_trimmed.to_lowercase();
+    if let Ok(cache) = RESOLVE_PROVIDERS_CACHE.read() {
+        if let Some(cached) = cache.get(&cache_key) {
+            return cached.clone();
+        }
     }
 
     // Parallel resolution across Pacman, AUR, and Flatpak
@@ -1142,6 +1152,10 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
     }
     if let Some(f) = flatpak_match {
         results.push(f);
+    }
+
+    if let Ok(mut cache) = RESOLVE_PROVIDERS_CACHE.write() {
+        cache.insert(cache_key, results.clone());
     }
 
     results
