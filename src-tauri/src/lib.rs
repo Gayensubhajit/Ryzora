@@ -160,7 +160,7 @@ pub fn run() {
             app_adapters::pacman_get_package_details,
             app_adapters::pacman_list_installed_packages,
             app_adapters::pacman_install_package,
-            app_adapters::pacman_uninstall_package, app_adapters::resolve_desktop_app_icon,
+            app_adapters::pacman_uninstall_package, app_adapters::resolve_desktop_app_icon, app_adapters::launch_desktop_app, app_adapters::get_installed_package_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

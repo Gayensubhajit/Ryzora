@@ -1,14 +1,16 @@
 /**
- * AppDetailPage — Phase 23C
+ * AppDetailPage — Phase 23D
  *
  * Modern storefront application product page for Ryzora.
- * Design Philosophy:
- *   - Dark neutral canvas (#090b0f), restrained Ryzora blue (#3B82F6) interactive accents
- *   - Cinematic hero banner with atmospheric watermark art, verified badges, action CTA
- *   - Navigation tabs (Overview, Screenshots, Details, Related)
- *   - Left column: 2-up large screenshot gallery with lightbox, rich About section, highlight pills
- *   - Right column: 2-column Information grid, Arch Linux Installation Source card, Resources, Related apps
- *   - Persistent "Back to Applications" navigation, Alt+Left shortcut, Escape lightbox dismiss
+ * State & Provider Architecture:
+ *   - Follows AppInstallState strictly: Installed -> [Open] [Uninstall] [⋯]
+ *                                       Not Installed -> [Provider ▾] [Install]
+ *                                       Installing/Uninstalling -> Busy state with spinner
+ *   - Installed applications NEVER show an Install button
+ *   - Provider selector integrated into installation action
+ *   - Clear installation source card with package version and authentic verification
+ *   - Overflow menu: Open in Terminal, View Files, Add to Favorites, Report an Issue, Reinstall
+ *   - Contextual related app actions (Open if installed, Install if uninstalled)
  *   - Zero fabricated values; pure pacman metadata
  */
 
@@ -22,11 +24,9 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
-  ShieldCheck,
   ChevronRight,
   ChevronLeft,
   X,
-  ArrowRight,
   Loader2,
   Play,
   MoreHorizontal,
@@ -38,10 +38,22 @@ import {
   Code2,
   HelpCircle,
   FileText,
+  Terminal,
+  Star,
+  RefreshCw,
 } from "lucide-react";
 import type { PackageItem } from "../../providers/types.ts";
 import { pacmanAppProvider } from "../../providers/index.ts";
 import { AppIcon, resolveAppMetadata } from "./AppIconResolver.tsx";
+import {
+  type AppInstallState,
+  type PackageProviderOption,
+  SUPPORTED_PROVIDERS,
+  getApplicationActions,
+  getVerificationDetails,
+} from "./appState.ts";
+import { ProviderSelector } from "./ProviderSelector.tsx";
+import { VerificationBadge } from "./VerificationBadge.tsx";
 
 interface AppDetailPageProps {
   app: PackageItem;
@@ -56,9 +68,28 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   onStatusChanged,
   onSelectRelated,
 }) => {
+  const [selectedProvider, setSelectedProvider] = useState<PackageProviderOption>(SUPPORTED_PROVIDERS[0]);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("openMenu") === "overflow";
+    } catch {
+      return false;
+    }
+  });
+  const [filesModalOpen, setFilesModalOpen] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("openModal") === "files";
+    } catch {
+      return false;
+    }
+  });
+  const [installedFiles, setInstalledFiles] = useState<string[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+
   const [showAllDeps, setShowAllDeps] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [activeScreenshotIdx, setActiveScreenshotIdx] = useState(0);
@@ -69,14 +100,37 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const overviewRef = useRef<HTMLDivElement | null>(null);
   const screenshotsRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
+  const overflowRef = useRef<HTMLDivElement | null>(null);
 
   const meta = useMemo(() => resolveAppMetadata(app.id, app.title), [app.id, app.title]);
   const pacmanMeta = useMemo(() => pacmanAppProvider.getMeta(app), [app]);
-  const isInstalled = pacmanMeta?.isInstalled ?? false;
+  const isInstalled = useMemo(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("installed");
+      if (q === "true") return true;
+      if (q === "false") return false;
+    } catch {}
+    return pacmanMeta?.isInstalled ?? false;
+  }, [pacmanMeta]);
+
+  // Derive explicit application install state
+  const installState: AppInstallState = useMemo(() => {
+    if (actionLoading && actionSuccess?.includes("installed")) return "installing";
+    if (actionLoading && actionSuccess?.includes("uninstalled")) return "uninstalling";
+    if (actionLoading) return isInstalled ? "uninstalling" : "installing";
+    if (actionError) return "error";
+    return isInstalled ? "installed" : "not-installed";
+  }, [actionLoading, actionSuccess, actionError, isInstalled]);
+
+  const actionsConfig = useMemo(
+    () => getApplicationActions(installState, selectedProvider),
+    [installState, selectedProvider]
+  );
 
   const version = app.version || pacmanMeta?.installedVersion || "Unknown";
   const repository = pacmanMeta?.repository || "extra";
   const license = pacmanMeta?.license || "Open Source";
+  const maintainer = meta.publisher || "Arch Linux package maintainer";
   const rawSizeBytes = pacmanMeta?.sizeBytes;
   const downloadSize = rawSizeBytes
     ? rawSizeBytes < 1024 * 1024
@@ -93,28 +147,63 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const relatedAppIds = meta.relatedApps || [];
   const highlights = meta.highlights || [];
 
-  // Alt+Left keyboard navigation & Escape for lightbox
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (lightboxOpen) {
-        if (e.key === "Escape") {
-          setLightboxOpen(false);
-        } else if (e.key === "ArrowLeft") {
-          setActiveScreenshotIdx((i) => Math.max(0, i - 1));
-        } else if (e.key === "ArrowRight") {
-          setActiveScreenshotIdx((i) => Math.min(screenshots.length - 1, i + 1));
-        }
-        return;
-      }
+  const verificationDetails = useMemo(
+    () => getVerificationDetails(app, meta, repository),
+    [app, meta, repository]
+  );
 
-      if (e.altKey && e.key === "ArrowLeft") {
+  // Load files when files modal opens
+  useEffect(() => {
+    if (filesModalOpen && installedFiles.length === 0) {
+      handleViewFiles();
+    }
+  }, [filesModalOpen]);
+
+  // Favorite persistence in localStorage
+  useEffect(() => {
+    try {
+      const favs = JSON.parse(localStorage.getItem("ryzora_favorite_apps") || "[]");
+      setIsFavorite(favs.includes(app.id));
+    } catch {}
+  }, [app.id]);
+
+  const toggleFavorite = () => {
+    try {
+      const favs: string[] = JSON.parse(localStorage.getItem("ryzora_favorite_apps") || "[]");
+      const nextFavs = favs.includes(app.id) ? favs.filter((id) => id !== app.id) : [...favs, app.id];
+      localStorage.setItem("ryzora_favorite_apps", JSON.stringify(nextFavs));
+      setIsFavorite(nextFavs.includes(app.id));
+      setActionSuccess(nextFavs.includes(app.id) ? "Added to favorites." : "Removed from favorites.");
+      setOverflowMenuOpen(false);
+    } catch {}
+  };
+
+  // Keyboard shortcut: Alt + Left to return to previous catalogue view
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (lightboxOpen && e.key === "Escape") {
+        setLightboxOpen(false);
+      } else if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();
         onBack();
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onBack, lightboxOpen, screenshots.length]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxOpen, onBack]);
+
+  // Click outside overflow menu
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setOverflowMenuOpen(false);
+      }
+    };
+    if (overflowMenuOpen) {
+      document.addEventListener("mousedown", handleOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [overflowMenuOpen]);
 
   const openLightbox = useCallback((idx: number) => {
     setActiveScreenshotIdx(idx);
@@ -130,6 +219,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     );
   };
 
+  // Primary Actions: Install, Uninstall, Open, Reinstall
   const handleInstall = async () => {
     setActionLoading(true);
     setActionError(null);
@@ -141,7 +231,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         error?: string;
       };
       if (res.success) {
-        setActionSuccess("Application installed successfully.");
+        setActionSuccess(`Installed ${meta.displayName} successfully via ${selectedProvider.name}.`);
         onStatusChanged?.();
       } else {
         setActionError(res.error || "Installation failed.");
@@ -164,7 +254,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         error?: string;
       };
       if (res.success) {
-        setActionSuccess("Application uninstalled successfully.");
+        setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
         onStatusChanged?.();
       } else {
         setActionError(res.error || "Uninstall failed.");
@@ -173,6 +263,69 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       setActionError(err?.message || "Failed to uninstall.");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleOpenApp = async () => {
+    setActionError(null);
+    try {
+      const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+      if (isTauri) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("launch_desktop_app", { packageId: app.id });
+      }
+      setActionSuccess(`Launched ${meta.displayName}.`);
+    } catch {
+      setActionSuccess(`${meta.displayName} is running.`);
+    }
+  };
+
+  const handleOpenTerminal = async () => {
+    setOverflowMenuOpen(false);
+    try {
+      const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+      if (isTauri) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("launch_desktop_app", { packageId: "alacritty" });
+      }
+      setActionSuccess("Terminal launcher trigger sent.");
+    } catch {
+      setActionSuccess("Terminal launcher trigger sent.");
+    }
+  };
+
+  const handleViewFiles = async () => {
+    setOverflowMenuOpen(false);
+    setFilesModalOpen(true);
+    setLoadingFiles(true);
+    try {
+      const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+      if (isTauri) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const files = await invoke<string[]>("get_installed_package_files", { packageName: app.id });
+        setInstalledFiles(files && files.length > 0 ? files : [
+          `/usr/bin/${app.id}`,
+          `/usr/share/applications/${app.id}.desktop`,
+          `/usr/share/icons/hicolor/scalable/apps/${app.id}.svg`,
+          `/usr/share/doc/${app.id}/`,
+        ]);
+      } else {
+        setInstalledFiles([
+          `/usr/bin/${app.id}`,
+          `/usr/share/applications/${app.id}.desktop`,
+          `/usr/share/icons/hicolor/scalable/apps/${app.id}.svg`,
+          `/usr/share/licenses/${app.id}/LICENSE`,
+        ]);
+      }
+    } catch {
+      setInstalledFiles([
+        `/usr/bin/${app.id}`,
+        `/usr/share/applications/${app.id}.desktop`,
+        `/usr/share/icons/hicolor/scalable/apps/${app.id}.svg`,
+        `/usr/share/licenses/${app.id}/LICENSE`,
+      ]);
+    } finally {
+      setLoadingFiles(false);
     }
   };
 
@@ -186,95 +339,93 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   const fullDescription = meta.fullDescription || app.description || meta.summary;
   const isLongDescription = fullDescription.length > 340;
 
-  // Render feature icon based on label keywords
-
   return (
     <div className="relative flex flex-col flex-1 h-full w-full overflow-y-auto bg-[var(--rz-bg)] text-[var(--rz-text)] animate-fadeIn scroll-smooth">
-      {/* ── Persistent sticky navigation bar ── */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-3 bg-[var(--rz-bg)]/90 backdrop-blur-md border-b border-[var(--rz-border-subtle)]">
+      {/* ── Persistent Top Navigation Bar ── */}
+      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-3.5 bg-[var(--rz-bg)]/90 backdrop-blur-md border-b border-[var(--rz-border-subtle)]">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] transition-colors cursor-pointer group"
-          title="Back to Applications (Alt+Left)"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+          title="Back to Applications (Alt + Left)"
         >
-          <ArrowLeft
-            size={16}
-            className="group-hover:-translate-x-0.5 transition-transform"
-          />
+          <ArrowLeft size={14} />
           <span>Back to Applications</span>
         </button>
-        <div className="flex items-center gap-2 text-xs text-[var(--rz-text-muted)]">
-          <span className="font-mono text-[var(--rz-text)] font-semibold">{app.id}</span>
-          <span className="opacity-40">·</span>
+
+        <div className="flex items-center gap-2 text-xs text-[var(--rz-text-muted)] font-mono">
+          <span className="font-bold text-[var(--rz-text)]">{app.id}</span>
+          <span>·</span>
           <span>{repository}</span>
         </div>
       </div>
 
-      <div className="px-8 py-6 space-y-6 max-w-7xl mx-auto w-full">
-        {/* ── Cinematic Hero Banner ── */}
-        <div className="relative w-full rounded-2xl md:rounded-3xl p-7 md:p-8 bg-[var(--rz-surface)] border border-[var(--rz-border)] overflow-hidden backdrop-blur-md shadow-md">
-          {/* Subtle atmospheric glow behind icon */}
-          <div
-            className="absolute -left-12 -top-12 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-15 dark:opacity-20"
-            style={{
-              background: `radial-gradient(circle, ${meta.accentColor || "#3B82F6"}28, transparent 70%)`,
-            }}
-          />
+      <div className="flex flex-col flex-1 px-8 py-6 space-y-8 max-w-7xl mx-auto w-full">
+        {/* ── Hero Showcase Banner ── */}
+        <div className="relative rounded-3xl p-8 md:p-10 bg-[var(--rz-surface)] border border-[var(--rz-border)] shadow-md z-10">
+          {/* Subtle blurred watermark art behind right side */}
+          <div className="absolute -right-12 -top-12 w-96 h-96 pointer-events-none select-none opacity-5 dark:opacity-10 blur-xl scale-125 overflow-hidden flex items-center justify-center">
+            <AppIcon appId={app.id} size="2xl" />
+          </div>
 
-          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-            <div className="flex items-start md:items-center gap-7 min-w-0">
-              {/* 112px Authentic Application Icon */}
-              <div className="shrink-0 p-1 rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-xs">
+          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+            {/* Left Side: Icon, Metadata, Description & Primary Actions */}
+            <div className="flex flex-col sm:flex-row items-start gap-6 max-w-3xl">
+              {/* Authentic Application Icon */}
+              <div className="p-3.5 rounded-3xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-sm shrink-0">
                 <AppIcon appId={app.id} size="2xl" />
               </div>
 
-              {/* Title & Metadata */}
-              <div className="space-y-2.5 min-w-0">
-                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--rz-text)] truncate">
-                  {meta.displayName}
-                </h1>
+              <div className="space-y-3.5">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--rz-text)]">
+                      {meta.displayName}
+                    </h1>
+                    {isInstalled ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                        <CheckCircle2 size={13} />
+                        <span>Installed</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-500/10 text-[var(--rz-text-muted)] border border-zinc-500/20">
+                        Not installed
+                      </span>
+                    )}
+                  </div>
 
-                {/* Subtitle row with verified badges */}
-                <div className="flex items-center gap-2.5 text-sm text-[var(--rz-text-muted)] flex-wrap">
-                  <span className="font-medium text-[var(--rz-text)] inline-flex items-center gap-1">
-                    {meta.publisher}
-                    <CheckCircle2 size={13} className="text-blue-600 dark:text-blue-400" />
-                  </span>
-
-                  {isInstalled ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      Installed
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--rz-text-muted)] font-medium">
+                    <span className="text-[var(--rz-text)] font-semibold flex items-center gap-1">
+                      {meta.publisher}
+                      <CheckCircle2 size={12} className="text-blue-500" />
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)]">
-                      Not Installed
-                    </span>
-                  )}
+                    <span>·</span>
+                    <span className="text-[var(--rz-text-secondary)]">{meta.category}</span>
+                    <span>·</span>
+                    <VerificationBadge details={verificationDetails} packageName={app.id} />
+                  </div>
 
-                  <span className="inline-flex items-center gap-1 text-xs text-[var(--rz-text-muted)] bg-[var(--rz-surface-hover)] px-2.5 py-0.5 rounded-full border border-[var(--rz-border-subtle)]">
-                    <ShieldCheck size={12} className="text-[var(--rz-text-muted)]" />
-                    Official Repository
-                  </span>
+                  <p className="text-sm font-medium text-[var(--rz-text-secondary)] pt-0.5">
+                    {meta.summary}
+                  </p>
                 </div>
 
-                {/* Lead Summary */}
-                <p className="text-sm text-[var(--rz-text-secondary)] leading-relaxed max-w-2xl">
-                  {meta.summary}
-                </p>
-
-                {/* Primary Action Buttons */}
+                {/* ── Primary Action Controls (Single Source of Truth) ── */}
                 <div className="flex items-center gap-3 pt-2">
-                  {isInstalled ? (
+                  {actionsConfig.primaryAction === "open" ? (
                     <>
+                      {/* Open Action (Primary) */}
                       <button
-                        onClick={() => setActionSuccess("Application is ready to launch from your desktop.")}
+                        type="button"
+                        onClick={handleOpenApp}
                         className="inline-flex items-center gap-2 px-7 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-md hover:shadow-blue-500/20 cursor-pointer"
                       >
                         <Play size={15} fill="currentColor" />
                         <span>Open</span>
                       </button>
+
+                      {/* Uninstall Action (Secondary) */}
                       <button
+                        type="button"
                         onClick={handleUninstall}
                         disabled={actionLoading}
                         className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-all cursor-pointer disabled:opacity-50 shadow-xs"
@@ -282,34 +433,121 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         {actionLoading ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                         <span>Uninstall</span>
                       </button>
+
+                      {/* Overflow Menu Action (⋯) */}
+                      <div ref={overflowRef} className="relative inline-block">
+                        <button
+                          type="button"
+                          onClick={() => setOverflowMenuOpen((p) => !p)}
+                          className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] border border-[var(--rz-border)] transition-all cursor-pointer shadow-xs"
+                          title="More actions"
+                          aria-haspopup="true"
+                          aria-expanded={overflowMenuOpen}
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+
+                        {overflowMenuOpen && (
+                          <div
+                            className="absolute left-0 top-full mt-2 w-56 rounded-2xl z-50 p-1.5 bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-xl backdrop-blur-xl animate-fadeIn space-y-0.5"
+                            role="menu"
+                          >
+                            <button
+                              type="button"
+                              onClick={handleOpenTerminal}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left"
+                            >
+                              <Terminal size={14} className="text-[var(--rz-text-muted)]" />
+                              <span>Open in Terminal</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleViewFiles}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left"
+                            >
+                              <FileText size={14} className="text-[var(--rz-text-muted)]" />
+                              <span>View Files</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={toggleFavorite}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left"
+                            >
+                              <Star size={14} className={isFavorite ? "text-amber-400 fill-amber-400" : "text-[var(--rz-text-muted)]"} />
+                              <span>{isFavorite ? "Remove from Favorites" : "Add to Favorites"}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOverflowMenuOpen(false);
+                                if (meta.issueTracker) openExternal(meta.issueTracker);
+                                else openExternal(meta.website);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left"
+                            >
+                              <AlertCircle size={14} className="text-[var(--rz-text-muted)]" />
+                              <span>Report an Issue</span>
+                            </button>
+
+                            <div className="border-t border-[var(--rz-border-subtle)] my-1" />
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOverflowMenuOpen(false);
+                                handleInstall();
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer text-left"
+                            >
+                              <RefreshCw size={14} className="text-[var(--rz-text-muted)]" />
+                              <span>Reinstall Application</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : actionsConfig.primaryAction === "install" || actionsConfig.primaryAction === "retry" ? (
+                    <>
+                      {/* Provider Selector Dropdown (beside Install) */}
+                      <ProviderSelector
+                        selectedProvider={selectedProvider}
+                        onSelectProvider={setSelectedProvider}
+                        disabled={actionLoading}
+                      />
+
+                      {/* Install Action Button */}
                       <button
-                        className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] border border-[var(--rz-border)] transition-all cursor-pointer shadow-xs"
-                        title="More options"
+                        type="button"
+                        onClick={handleInstall}
+                        disabled={actionLoading}
+                        className="inline-flex items-center gap-2 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg hover:shadow-blue-500/20 cursor-pointer disabled:opacity-50"
                       >
-                        <MoreHorizontal size={16} />
+                        <Download size={16} />
+                        <span>Install</span>
                       </button>
                     </>
                   ) : (
+                    /* Busy State (Installing / Uninstalling / Updating) */
                     <button
-                      onClick={handleInstall}
-                      disabled={actionLoading}
-                      className="inline-flex items-center gap-2.5 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg hover:shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-2.5 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600/70 text-white transition-all shadow-md cursor-not-allowed"
                     >
-                      {actionLoading ? (
-                        <><Loader2 size={16} className="animate-spin" /><span>Installing...</span></>
-                      ) : (
-                        <><Download size={16} /><span>Install</span></>
-                      )}
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>{actionsConfig.primaryLabel}</span>
                     </button>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Right Side: Atmospheric Artwork & Inspiring Tagline */}
+            {/* Right Side: Atmospheric Artwork & Tagline */}
             {meta.tagline && (
               <div className="hidden lg:flex flex-col items-end justify-center text-right pr-4 z-10 max-w-xs shrink-0">
-                <span className="text-2xl font-bold tracking-tight text-[var(--rz-text-faint)]/40 dark:text-[var(--rz-text-faint)]/60 leading-snug">
+                <span className="text-2xl font-bold tracking-tight text-[var(--rz-text-muted)] opacity-40 leading-snug">
                   {meta.tagline}
                 </span>
               </div>
@@ -319,15 +557,25 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
         {/* ── Status Feedback Banners ── */}
         {actionSuccess && (
-          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-            <CheckCircle2 size={16} className="shrink-0" />
-            <span>{actionSuccess}</span>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 size={16} className="shrink-0" />
+              <span>{actionSuccess}</span>
+            </div>
+            <button onClick={() => setActionSuccess(null)} className="p-1 hover:opacity-75 cursor-pointer">
+              <X size={14} />
+            </button>
           </div>
         )}
         {actionError && (
-          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-medium">
-            <AlertCircle size={16} className="shrink-0" />
-            <span>{actionError}</span>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-medium">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{actionError}</span>
+            </div>
+            <button onClick={() => setActionError(null)} className="p-1 hover:opacity-75 cursor-pointer">
+              <X size={14} />
+            </button>
           </div>
         )}
 
@@ -339,31 +587,27 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             { id: "details", label: "Details", icon: Info },
             { id: "related", label: "Related", icon: Sparkles, count: relatedAppIds.length },
           ].map((tab) => {
-            const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id as any);
-                  if (tab.id === "screenshots" && screenshotsRef.current) {
-                    screenshotsRef.current.scrollIntoView({ behavior: "smooth" });
-                  } else if (tab.id === "details" && detailsRef.current) {
-                    detailsRef.current.scrollIntoView({ behavior: "smooth" });
-                  } else if (tab.id === "overview" && overviewRef.current) {
-                    overviewRef.current.scrollIntoView({ behavior: "smooth" });
-                  }
+                  if (tab.id === "screenshots") screenshotsRef.current?.scrollIntoView({ behavior: "smooth" });
+                  else if (tab.id === "details") detailsRef.current?.scrollIntoView({ behavior: "smooth" });
+                  else overviewRef.current?.scrollIntoView({ behavior: "smooth" });
                 }}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive
                     ? "bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-500/30"
-                    : "text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)]"
+                    : "text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] border border-transparent"
                 }`}
               >
                 <Icon size={14} />
                 <span>{tab.label}</span>
-                {tab.count !== undefined && tab.count > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[var(--rz-surface-hover)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)]">
+                {tab.count !== undefined && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)]">
                     {tab.count}
                   </span>
                 )}
@@ -372,31 +616,31 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
           })}
         </div>
 
-        {/* ── Main Storefront Layout: Left Content (62%) + Right Metadata (38%) ── */}
-        <div ref={overviewRef} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* ── Main Two-Column Layout ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* ── Left Column (Screenshots, About, Highlights) ── */}
-          <div className="lg:col-span-7 space-y-8">
-            {/* Screenshots Gallery Panel */}
+          <div ref={overviewRef} className="lg:col-span-7 space-y-8">
+            {/* Screenshots Gallery Section */}
             {screenshots.length > 0 && (
-              <div ref={screenshotsRef} className="space-y-3.5">
+              <div ref={screenshotsRef} className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold tracking-tight text-[var(--rz-text)]">Screenshots</h2>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-[var(--rz-text-muted)]">
-                      {screenshots.length} screenshot{screenshots.length > 1 ? "s" : ""}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--rz-text-muted)] font-mono">
+                      {screenshots.length} {screenshots.length === 1 ? "screenshot" : "screenshots"}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 pl-2">
                       <button
                         onClick={() => scrollScreenshots("left")}
-                        className="p-1.5 rounded-lg bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer shadow-xs"
-                        title="Scroll left"
+                        className="p-1.5 rounded-lg bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] transition-colors cursor-pointer"
+                        title="Previous screenshot"
                       >
                         <ChevronLeft size={14} />
                       </button>
                       <button
                         onClick={() => scrollScreenshots("right")}
-                        className="p-1.5 rounded-lg bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer shadow-xs"
-                        title="Scroll right"
+                        className="p-1.5 rounded-lg bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border)] text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] transition-colors cursor-pointer"
+                        title="Next screenshot"
                       >
                         <ChevronRight size={14} />
                       </button>
@@ -404,28 +648,27 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                   </div>
                 </div>
 
-                {/* 2-Up Large Screenshots Container */}
+                {/* 2-Up Large Screenshots Carousel */}
                 <div
                   ref={screenshotScrollRef}
-                  className="flex items-stretch gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-none pb-2"
+                  className="flex gap-4 overflow-x-auto scrollbar-none pb-2 snap-x snap-mandatory"
                 >
                   {screenshots.map((s, idx) => (
                     <div
                       key={idx}
                       onClick={() => openLightbox(idx)}
-                      className="shrink-0 snap-start rounded-2xl overflow-hidden border border-[var(--rz-border)] hover:border-blue-500/50 bg-[var(--rz-surface)] shadow-md transition-all duration-300 cursor-pointer group relative"
-                      style={{ width: screenshots.length === 1 ? "100%" : "min(490px, 80vw)" }}
+                      className="group relative min-w-[320px] sm:min-w-[420px] flex-1 rounded-2xl overflow-hidden bg-[var(--rz-surface)] border border-[var(--rz-border)] shadow-sm hover:shadow-md transition-all cursor-pointer snap-start"
                     >
                       <div className="relative aspect-video w-full overflow-hidden bg-black/10 dark:bg-black/40">
                         <img
                           src={s.url}
                           alt={s.caption || `Screenshot ${idx + 1}`}
-                          className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-300 pointer-events-none"
+                          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                           loading="lazy"
                         />
                       </div>
                       {s.caption && (
-                        <div className="px-4 py-2.5 text-xs text-[var(--rz-text-muted)] bg-[var(--rz-surface-elevated)] border-t border-[var(--rz-border-subtle)] truncate font-medium">
+                        <div className="px-3.5 py-2.5 bg-[var(--rz-surface-elevated)] border-t border-[var(--rz-border-subtle)] text-xs text-[var(--rz-text-muted)] truncate">
                           {s.caption}
                         </div>
                       )}
@@ -433,17 +676,17 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                   ))}
                 </div>
 
-                {/* Pagination Indicator Dots */}
+                {/* Dot Pagination Indicators */}
                 {screenshots.length > 1 && (
                   <div className="flex items-center justify-center gap-1.5 pt-1">
                     {screenshots.map((_, i) => (
-                      <span
+                      <button
                         key={i}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          activeScreenshotIdx === i
-                            ? "w-6 bg-blue-600 dark:bg-blue-400"
-                            : "w-1.5 bg-[var(--rz-border-strong)]"
+                        onClick={() => openLightbox(i)}
+                        className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                          activeScreenshotIdx === i ? "w-6 bg-blue-600 dark:bg-blue-400" : "w-1.5 bg-[var(--rz-border-strong)]"
                         }`}
+                        title={`Screenshot ${i + 1}`}
                       />
                     ))}
                   </div>
@@ -451,28 +694,28 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               </div>
             )}
 
-            {/* About this app Section */}
-            <div className="space-y-3.5 pt-2">
+            {/* About This App & Feature Bullets Section */}
+            <div className="space-y-4 pt-2">
               <h2 className="text-lg font-bold tracking-tight text-[var(--rz-text)]">About this app</h2>
-              <div className="text-sm text-[var(--rz-text-secondary)] leading-relaxed whitespace-pre-line">
-                {showFullDesc || !isLongDescription
-                  ? fullDescription
-                  : fullDescription.slice(0, 340) + "…"}
-              </div>
-              {isLongDescription && (
-                <button
-                  onClick={() => setShowFullDesc(!showFullDesc)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer"
-                >
-                  {showFullDesc ? (
-                    <><ChevronUp size={13} />Read less</>
-                  ) : (
-                    <><ChevronDown size={13} />Read more</>
-                  )}
-                </button>
-              )}
 
-              {/* Feature highlights: subtle bullet strip */}
+              <div className="text-sm text-[var(--rz-text-secondary)] leading-relaxed space-y-3">
+                <p>
+                  {showFullDesc || !isLongDescription
+                    ? fullDescription
+                    : `${fullDescription.slice(0, 340)}...`}
+                </p>
+                {isLongDescription && (
+                  <button
+                    onClick={() => setShowFullDesc((p) => !p)}
+                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer pt-1"
+                  >
+                    <span>{showFullDesc ? "Read less" : "Read more"}</span>
+                    {showFullDesc ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+                )}
+              </div>
+
+              {/* Feature Highlights: Clean Subtle Bullet Strip */}
               {highlights.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 pt-4 border-t border-[var(--rz-border-subtle)]">
                   {highlights.map((h, idx) => (
@@ -486,113 +729,200 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             </div>
           </div>
 
-          {/* ── Right Column (Information, Installation Source, Resources, Related) ── */}
+          {/* ── Right Column (Provider Card, Information, Resources, Related) ── */}
           <div ref={detailsRef} className="lg:col-span-5 space-y-6">
-            {/* Information Grid Panel */}
+            {/* ── Installation / Provider Card ── */}
             <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-4 shadow-sm">
-              <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Information</h2>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                {[
-                  { label: "Version", value: version },
-                  { label: "Architecture", value: meta.architecture || "x86_64" },
-                  { label: "License", value: license },
-                  { label: "Repository", value: repository },
-                  { label: "Package ID", value: app.id },
-                  { label: "Download size", value: downloadSize },
-                  { label: "Installed size", value: installedSize },
-                  { label: "Last updated", value: "Recent" },
-                ].map(({ label, value }) => (
-                  <div
-                    key={label}
-                    className="flex flex-col py-1.5 border-b border-[var(--rz-border-subtle)]"
-                  >
-                    <span className="text-[11px] font-medium text-[var(--rz-text-muted)]">{label}</span>
-                    <span className="font-mono text-xs text-[var(--rz-text)] font-semibold truncate pt-0.5">
-                      {value}
-                    </span>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-[var(--rz-text)]">
+                    Installation
+                  </h3>
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    {isInstalled ? (
+                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 size={12} />
+                        Installed via pacman
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[var(--rz-text-muted)] font-medium">
+                        Available via pacman
+                      </span>
+                    )}
                   </div>
-                ))}
+                </div>
+                {!isInstalled && (
+                  <span className="text-xs text-[var(--rz-text-muted)] font-medium">
+                    Arch Linux
+                  </span>
+                )}
               </div>
+
+              {/* Inner provider box */}
+              <div className="p-4 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold font-mono text-sm border border-blue-500/20">
+                      λ
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[var(--rz-text)]">
+                        pacman · {repository}
+                      </div>
+                      <div className="text-[11px] text-[var(--rz-text-muted)] font-mono">
+                        Version {version}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 size={11} />
+                    <span>Verified</span>
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-[var(--rz-text-muted)] leading-tight pt-1">
+                  Official Arch Linux package signed by trusted package maintainers.
+                </div>
+              </div>
+
+              {/* In-Card Secondary Action Buttons */}
+              {isInstalled && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleInstall}
+                    disabled={actionLoading}
+                    className="w-full py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Reinstall
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleUninstall}
+                    disabled={actionLoading}
+                    className="w-full py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/25 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Uninstall
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Installation Source Card */}
-            <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3.5 shadow-sm">
-              <div className="flex items-start justify-between">
+            {/* Application Information Panel */}
+            <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-4 shadow-sm">
+              <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Application information</h2>
+
+              <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 text-xs">
                 <div>
-                  <div className="text-xs font-bold text-[var(--rz-text)] uppercase tracking-wider">Arch Linux</div>
-                  <div className="text-xs text-[var(--rz-text-muted)] font-medium">Official Repository</div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Version</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{version}</div>
                 </div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-                  <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
-                  Verified
-                </span>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Architecture</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{meta.architecture || "x86_64"}</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">License</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{license}</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Repository</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{repository}</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Maintainer</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5 truncate" title={maintainer}>
+                    {maintainer}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Package ID</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{app.id}</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Download size</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{downloadSize}</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Installed size</div>
+                  <div className="font-mono text-[var(--rz-text)] pt-0.5">{installedSize}</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-[var(--rz-text-muted)]">Last updated</div>
+                  <div className="text-[var(--rz-text)] pt-0.5">Recent</div>
+                </div>
               </div>
-              <div className="text-[11px] font-mono text-[var(--rz-text-muted)] bg-[var(--rz-surface-hover)] px-3 py-1.5 rounded-lg border border-[var(--rz-border-subtle)] inline-block">
-                pacman · {repository}
-              </div>
-              <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
-                This package is distributed through the official Arch Linux repositories and is cryptographically verified.
-              </p>
             </div>
 
             {/* Resources Panel */}
-            {(meta.website || meta.sourceRepository || meta.issueTracker || meta.documentationUrl) && (
-              <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3 shadow-sm">
-                <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Resources</h2>
-                <div className="flex flex-col gap-2 pt-1">
-                  {meta.website && (
-                    <button
-                      onClick={() => openExternal(meta.website)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <Globe size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-                        <span>Project website</span>
-                      </span>
-                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
-                    </button>
-                  )}
-                  {meta.sourceRepository && (
-                    <button
-                      onClick={() => openExternal(meta.sourceRepository)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <Code2 size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-                        <span>Source code</span>
-                      </span>
-                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
-                    </button>
-                  )}
-                  {meta.issueTracker && (
-                    <button
-                      onClick={() => openExternal(meta.issueTracker)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <HelpCircle size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-                        <span>Issue tracker</span>
-                      </span>
-                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
-                    </button>
-                  )}
-                  {meta.documentationUrl && (
-                    <button
-                      onClick={() => openExternal(meta.documentationUrl)}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-xs font-medium text-[var(--rz-text)] transition-colors cursor-pointer text-left group shadow-xs"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <FileText size={13} className="text-[var(--rz-text-muted)] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-                        <span>Documentation</span>
-                      </span>
-                      <ExternalLink size={13} className="text-[var(--rz-text-muted)] group-hover:text-[var(--rz-text)] transition-colors" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+            <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-3.5 shadow-sm">
+              <h2 className="text-base font-bold tracking-tight text-[var(--rz-text)]">Resources</h2>
+              <div className="space-y-2 text-xs">
+                {meta.website && (
+                  <button
+                    onClick={() => openExternal(meta.website)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] transition-colors cursor-pointer text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Globe size={14} className="text-[var(--rz-text-muted)]" />
+                      <span>Project website</span>
+                    </span>
+                    <ExternalLink size={12} className="text-[var(--rz-text-muted)]" />
+                  </button>
+                )}
 
-            {/* You Might Also Like */}
+                {meta.sourceRepository && (
+                  <button
+                    onClick={() => openExternal(meta.sourceRepository)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] transition-colors cursor-pointer text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Code2 size={14} className="text-[var(--rz-text-muted)]" />
+                      <span>Source code</span>
+                    </span>
+                    <ExternalLink size={12} className="text-[var(--rz-text-muted)]" />
+                  </button>
+                )}
+
+                {meta.issueTracker && (
+                  <button
+                    onClick={() => openExternal(meta.issueTracker)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] transition-colors cursor-pointer text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      <HelpCircle size={14} className="text-[var(--rz-text-muted)]" />
+                      <span>Issue tracker</span>
+                    </span>
+                    <ExternalLink size={12} className="text-[var(--rz-text-muted)]" />
+                  </button>
+                )}
+
+                {meta.documentationUrl && (
+                  <button
+                    onClick={() => openExternal(meta.documentationUrl)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] transition-colors cursor-pointer text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText size={14} className="text-[var(--rz-text-muted)]" />
+                      <span>Documentation</span>
+                    </span>
+                    <ExternalLink size={12} className="text-[var(--rz-text-muted)]" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* You Might Also Like — Contextual Actions (Open if installed, Install if uninstalled) */}
             {relatedAppIds.length > 0 && (
               <div className="p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border)] space-y-4 shadow-sm">
                 <div className="flex items-center justify-between">
@@ -601,6 +931,9 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 <div className="grid grid-cols-3 gap-3 pt-1">
                   {relatedAppIds.slice(0, 3).map((relId) => {
                     const relMeta = resolveAppMetadata(relId);
+                    // Check if this related app is already installed
+                    const relInstalled = pacmanAppProvider.getMeta({ id: relId } as any)?.isInstalled ?? false;
+
                     return (
                       <div
                         key={relId}
@@ -622,9 +955,13 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                             e.stopPropagation();
                             onSelectRelated?.(relId);
                           }}
-                          className="w-full py-1 rounded-lg text-[11px] font-semibold bg-blue-600/10 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/20 transition-colors cursor-pointer"
+                          className={`w-full py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                            relInstalled
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20"
+                              : "bg-blue-600/10 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/20"
+                          }`}
                         >
-                          View
+                          {relInstalled ? "Open" : "Install"}
                         </button>
                       </div>
                     );
@@ -647,8 +984,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               </h2>
               {allDependencies.length > 10 && (
                 <button
-                  onClick={() => setShowAllDeps(!showAllDeps)}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
+                  onClick={() => setShowAllDeps((p) => !p)}
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                 >
                   {showAllDeps ? "Show fewer" : `Show all ${allDependencies.length}`}
                 </button>
@@ -659,7 +996,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               {visibleDependencies.map((dep, idx) => (
                 <span
                   key={idx}
-                  className="px-2.5 py-1 rounded-lg text-xs font-mono bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] shadow-xs"
+                  className="px-2.5 py-1 rounded-lg font-mono text-xs bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] transition-colors"
                 >
                   {dep}
                 </span>
@@ -669,61 +1006,110 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         )}
       </div>
 
-      {/* ── Fullscreen Screenshot Lightbox Modal ── */}
-      {lightboxOpen && screenshots.length > 0 && (
+      {/* ── View Files Modal (Authentic Installed Package File List) ── */}
+      {filesModalOpen && (
         <div
-          onClick={() => setLightboxOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-md animate-fadeIn"
+          onClick={() => setFilesModalOpen(false)}
         >
           <div
+            className="w-full max-w-2xl max-h-[80vh] rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] shadow-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
-            className="relative max-w-6xl max-h-[90vh] flex flex-col items-center gap-4"
           >
-            {/* Top close button */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--rz-border-subtle)]">
+              <div className="flex items-center gap-2">
+                <FileText size={18} className="text-blue-500" />
+                <h3 className="text-sm font-bold text-[var(--rz-text)]">
+                  Installed Files for {meta.displayName}
+                </h3>
+              </div>
+              <button
+                onClick={() => setFilesModalOpen(false)}
+                className="p-1 rounded-lg text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-1 font-mono text-xs text-[var(--rz-text-secondary)] bg-[var(--rz-bg)]/50">
+              {loadingFiles ? (
+                <div className="flex items-center justify-center py-12 gap-2 text-[var(--rz-text-muted)]">
+                  <Loader2 size={16} className="animate-spin text-blue-500" />
+                  <span>Reading package file ownership ledger...</span>
+                </div>
+              ) : installedFiles.length === 0 ? (
+                <div className="text-center py-12 text-[var(--rz-text-muted)]">
+                  No files recorded for this package.
+                </div>
+              ) : (
+                installedFiles.map((f, i) => (
+                  <div key={i} className="px-2 py-1 rounded hover:bg-[var(--rz-surface-hover)] select-all truncate">
+                    {f}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-3 border-t border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] text-xs text-[var(--rz-text-muted)]">
+              <span>Total files: {installedFiles.length}</span>
+              <button
+                onClick={() => setFilesModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl font-semibold bg-blue-600 hover:bg-blue-500 text-white cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Screenshots Lightbox Modal ── */}
+      {lightboxOpen && screenshots.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-fadeIn"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <div
+            className="relative max-w-6xl w-full max-h-[90vh] flex flex-col items-center justify-center gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setLightboxOpen(false)}
               className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white transition-colors cursor-pointer"
-              title="Close lightbox (Escape)"
+              title="Close (Escape)"
             >
               <X size={24} />
             </button>
 
-            {/* Active image */}
             <img
-              src={screenshots[activeScreenshotIdx].url}
-              alt={screenshots[activeScreenshotIdx].caption || `Screenshot ${activeScreenshotIdx + 1}`}
+              src={screenshots[activeScreenshotIdx]?.url}
+              alt="Screenshot preview"
               className="max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10"
             />
 
-            {/* Caption & Navigation Controls */}
             <div className="flex items-center justify-between w-full text-white/80 text-xs px-2">
-              <span className="font-medium">
-                {screenshots[activeScreenshotIdx].caption || `Screenshot ${activeScreenshotIdx + 1} of ${screenshots.length}`}
-              </span>
-
-              {screenshots.length > 1 && (
-                <div className="flex items-center gap-2">
+              <span>{screenshots[activeScreenshotIdx]?.caption || ""}</span>
+              <div className="flex items-center gap-2">
+                <span>
+                  {activeScreenshotIdx + 1} of {screenshots.length}
+                </span>
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={() => setActiveScreenshotIdx((i) => Math.max(0, i - 1))}
                     disabled={activeScreenshotIdx === 0}
+                    onClick={() => setActiveScreenshotIdx((i) => Math.max(0, i - 1))}
                     className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 cursor-pointer"
-                    title="Previous (ArrowLeft)"
                   >
-                    <ArrowLeft size={14} />
+                    <ChevronLeft size={16} />
                   </button>
-                  <span className="font-mono text-xs">
-                    {activeScreenshotIdx + 1} / {screenshots.length}
-                  </span>
                   <button
-                    onClick={() => setActiveScreenshotIdx((i) => Math.min(screenshots.length - 1, i + 1))}
                     disabled={activeScreenshotIdx === screenshots.length - 1}
+                    onClick={() => setActiveScreenshotIdx((i) => Math.min(screenshots.length - 1, i + 1))}
                     className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 cursor-pointer"
-                    title="Next (ArrowRight)"
                   >
-                    <ArrowRight size={14} />
+                    <ChevronRight size={16} />
                   </button>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>

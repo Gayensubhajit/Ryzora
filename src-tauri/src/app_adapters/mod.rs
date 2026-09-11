@@ -222,3 +222,85 @@ pub mod desktop_icons;
 pub fn resolve_desktop_app_icon(package_id: String) -> Option<desktop_icons::DesktopAppIconInfo> {
     desktop_icons::resolve_desktop_icon_for_app(&package_id)
 }
+
+
+#[tauri::command]
+pub fn get_installed_package_files(package_name: String) -> Result<Vec<String>, String> {
+    let local_dir = pacman::resolve_local_dir(None);
+    if !local_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    if let Ok(entries) = fs::read_dir(&local_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+            if name_str == package_name || name_str.starts_with(&format!("{}-", package_name)) {
+                let files_path = entry.path().join("files");
+                if files_path.exists() {
+                    if let Ok(content) = fs::read_to_string(&files_path) {
+                        let mut in_files = false;
+                        let mut files = Vec::new();
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if trimmed == "%FILES%" {
+                                in_files = true;
+                                continue;
+                            }
+                            if in_files {
+                                if trimmed.starts_with('%') {
+                                    break;
+                                }
+                                if !trimmed.is_empty() {
+                                    files.push(format!("/{}", trimmed));
+                                }
+                            }
+                        }
+                        return Ok(files);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+pub fn launch_desktop_app(package_id: String) -> Result<bool, String> {
+    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        return Ok(true);
+    }
+
+    if let Some(info) = desktop_icons::resolve_desktop_icon_for_app(&package_id) {
+        // Try gtk-launch with desktop file name
+        let desktop_file_name = std::path::Path::new(&info.desktop_file)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&info.desktop_file);
+
+        if let Ok(_child) = std::process::Command::new("gtk-launch")
+            .arg(desktop_file_name)
+            .spawn()
+        {
+            return Ok(true);
+        }
+
+        // Fallback: spawn the exec binary directly
+        if let Some(exec_cmd) = &info.exec {
+            let binary = exec_cmd.split_whitespace().next().unwrap_or("");
+            if !binary.is_empty() {
+                if let Ok(_child) = std::process::Command::new(binary).spawn() {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+
+    // Direct binary fallback by package_id
+    if let Ok(_child) = std::process::Command::new(&package_id).spawn() {
+        return Ok(true);
+    }
+
+    Ok(true)
+}

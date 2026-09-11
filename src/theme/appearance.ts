@@ -59,7 +59,12 @@ export function loadSavedAppearance(): {
     };
   }
 
-  const mode = (localStorage.getItem(STORAGE_KEYS.MODE) as AppearanceMode) || "dark";
+  let qTheme: AppearanceMode | null = null;
+  try {
+    const q = new URLSearchParams(window.location.search).get("theme");
+    if (q === "light" || q === "dark" || q === "system") qTheme = q as AppearanceMode;
+  } catch {}
+  const mode = qTheme || (localStorage.getItem(STORAGE_KEYS.MODE) as AppearanceMode) || "dark";
   const accent = (localStorage.getItem(STORAGE_KEYS.ACCENT) as AccentColor) || "blue";
 
   const reduceTransparency =
