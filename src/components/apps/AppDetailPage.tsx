@@ -74,6 +74,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   onSelectRelated,
 }) => {
   const [selectedProvider, setSelectedProvider] = useState<PackageProviderOption>(SUPPORTED_PROVIDERS[0]);
+  const [availableProviders, setAvailableProviders] = useState<PackageProviderOption[]>([]);
   const [operation, setOperation] = useState<
     "idle" | "installing" | "uninstalling" | "reinstalling" | "launching"
   >("idle");
@@ -181,6 +182,8 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     }
   }, [app.id]);
 
+
+
   const [showAllDeps, setShowAllDeps] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [activeScreenshotIdx, setActiveScreenshotIdx] = useState(0);
@@ -227,6 +230,86 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     () => getApplicationActions(installState, selectedProvider),
     [installState, selectedProvider]
   );
+
+  // Dynamically discover authoritative package providers (Pacman, AUR, Flathub)
+  useEffect(() => {
+    let active = true;
+
+    const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
+    if (!isTauri) {
+      setAvailableProviders(SUPPORTED_PROVIDERS);
+      return;
+    }
+
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) =>
+        invoke<Array<{
+          provider_id: string;
+          name: string;
+          short_name: string;
+          repository: string;
+          description: string;
+          target_id: string;
+          version?: string;
+          is_installed: boolean;
+        }>>("resolve_app_providers", {
+          packageId: app.id,
+          displayName: meta.displayName,
+        })
+      )
+      .then((sources) => {
+        if (!active) return;
+        if (sources && sources.length > 0) {
+          const options: PackageProviderOption[] = sources.map((s) => ({
+            id: s.provider_id as any,
+            name: s.name,
+            shortName: s.short_name,
+            repository: s.repository,
+            description: s.description,
+            available: true,
+            targetId: s.target_id,
+            version: s.version,
+            isInstalled: s.is_installed,
+          }));
+          setAvailableProviders(options);
+
+          // Select matching installed provider or first available
+          const installedOption = options.find((o) => o.isInstalled);
+          if (installedOption) {
+            setSelectedProvider(installedOption);
+            setLocalInstalled(true);
+          } else {
+            setSelectedProvider((curr) => {
+              const matched = options.find((o) => o.id === curr.id);
+              return matched || options[0];
+            });
+          }
+        } else {
+          // Fallback: derive single provider from app.repository_id
+          const fallbackId = app.repository_id === "flathub" ? "flatpak" : "pacman";
+          const fallbackOption: PackageProviderOption = {
+            id: fallbackId,
+            name: fallbackId === "flatpak" ? "Flatpak" : "Pacman",
+            shortName: fallbackId === "flatpak" ? "Flathub · Flatpak" : `Pacman · ${app.repository_id || "extra"}`,
+            repository: app.repository_id || "extra",
+            description: fallbackId === "flatpak" ? "Universal Flatpak container" : "Official Arch Linux repository",
+            available: true,
+            targetId: app.id,
+            isInstalled: isInstalled,
+          };
+          setAvailableProviders([fallbackOption]);
+          setSelectedProvider(fallbackOption);
+        }
+        })
+      .catch((err) => {
+        console.error("Failed to resolve app providers:", err);
+        if (!active) return;
+        });
+
+    return () => {
+      active = false;
+    };
+  }, [app.id, meta.displayName, isInstalled]);
 
   const version = app.version || pacmanMeta?.installedVersion || "Unknown";
   const repository = pacmanMeta?.repository || "extra";
@@ -323,17 +406,19 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setActionError(null);
     setActionSuccess(null);
 
+    const targetId = selectedProvider.targetId || app.id;
+
     // AUR: trigger user inspection of PKGBUILD first
     if (selectedProvider.id === "aur") {
       setShowPkgbuildModal(true);
       return;
     }
 
-    // Flatpak: native flatpak install
+    // Flatpak: native flatpak install with validated reverse-DNS ID
     if (selectedProvider.id === "flatpak") {
       setOperation("installing");
       try {
-        await flatpakAppProvider.install(app.id);
+        await flatpakAppProvider.install(targetId);
         setLocalInstalled(true);
         setActionSuccess(`Installed ${meta.displayName} via Flathub.`);
         await catalogService.refreshInstalledState();
@@ -350,7 +435,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     // Pacman: existing secure transaction path
     setOperation("installing");
     try {
-      const txRes = await transactionManager.runTransaction(app.id, "install");
+      const txRes = await transactionManager.runTransaction(targetId, "install");
       if (txRes.stage === "completed") {
         setLocalInstalled(true);
         setActionSuccess(`Installed ${meta.displayName} successfully.`);
@@ -371,8 +456,9 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setOperation("installing");
     setActionError(null);
     setActionSuccess(null);
+    const targetId = selectedProvider.targetId || app.id;
     try {
-      await aurAppProvider.buildAndInstall(app.id);
+      await aurAppProvider.buildAndInstall(targetId);
       setLocalInstalled(true);
       setActionSuccess(`Built and installed ${meta.displayName} successfully from AUR.`);
       await catalogService.refreshInstalledState();
@@ -394,15 +480,16 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setOperation("uninstalling");
     setActionError(null);
     setActionSuccess(null);
+    const targetId = selectedProvider.targetId || app.id;
     try {
       if (selectedProvider.id === "flatpak" || app.repository_id === "flathub") {
-        await flatpakAppProvider.uninstall(app.id);
+        await flatpakAppProvider.uninstall(targetId);
         setLocalInstalled(false);
         setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
         await catalogService.refreshInstalledState();
         onStatusChanged?.();
       } else {
-        const txRes = await transactionManager.runTransaction(app.id, "uninstall");
+        const txRes = await transactionManager.runTransaction(targetId, "uninstall");
         if (txRes.stage === "completed") {
           setLocalInstalled(false);
           setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
@@ -445,15 +532,16 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setOperation("launching");
     setActionError(null);
     setActionSuccess(null);
+    const targetId = selectedProvider.targetId || app.id;
     try {
       if (selectedProvider.id === "flatpak" || app.repository_id === "flathub") {
-        await flatpakAppProvider.run(app.id);
+        await flatpakAppProvider.run(targetId);
         setActionSuccess(`Launched ${meta.displayName}.`);
       } else {
         const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
         if (isTauri) {
           const { invoke } = await import("@tauri-apps/api/core");
-          await invoke("launch_desktop_app", { packageId: app.id });
+          await invoke("launch_desktop_app", { packageId: targetId });
           setActionSuccess(`Launched ${meta.displayName}.`);
         } else {
           setActionSuccess(`Launch command dispatched for ${meta.displayName}.`);
@@ -725,6 +813,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <ProviderSelector
                         selectedProvider={selectedProvider}
                         onSelectProvider={setSelectedProvider}
+                        availableProviders={availableProviders}
                         disabled={operation !== "idle"}
                       />
 
@@ -1365,7 +1454,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
       {/* PKGBUILD Inspection Modal (Phase 25 AUR) */}
       <PkgbuildViewerModal
-        packageName={app.id}
+        packageName={selectedProvider.targetId || app.id}
         isOpen={showPkgbuildModal}
         onClose={() => setShowPkgbuildModal(false)}
         onConfirmInstall={executeAurInstall}

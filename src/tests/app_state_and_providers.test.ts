@@ -67,20 +67,18 @@ describe("Phase 23D — App State, Provider Selection & Storefront Actions", () 
     assert.equal(errorState.isBusy, false);
   });
 
-  it("Provider Model 1: Pacman is the only selectable/actionable provider currently", () => {
+  it("Provider Model 1: Pacman, AUR, and Flatpak are supported and actionable", () => {
     const pacman = SUPPORTED_PROVIDERS.find((p) => p.id === "pacman");
     assert.ok(pacman, "Pacman provider must exist");
     assert.equal(pacman.available, true, "Pacman must be actionable");
 
     const aur = SUPPORTED_PROVIDERS.find((p) => p.id === "aur");
     assert.ok(aur, "AUR provider must exist in list");
-    assert.equal(aur.available, false, "AUR must NOT be actionable yet");
-    assert.equal(aur.statusNote, "Coming soon");
+    assert.equal(aur.available, true, "AUR must be actionable in Phase 25");
 
     const flatpak = SUPPORTED_PROVIDERS.find((p) => p.id === "flatpak");
     assert.ok(flatpak, "Flatpak provider must exist in list");
-    assert.equal(flatpak.available, false, "Flatpak must NOT be actionable yet");
-    assert.equal(flatpak.statusNote, "Coming soon");
+    assert.equal(flatpak.available, true, "Flatpak must be actionable in Phase 25");
   });
 
   it("Verification 1: Official Arch packages are verified through official repository", () => {
@@ -121,10 +119,9 @@ describe("Phase 23D — App State, Provider Selection & Storefront Actions", () 
 });
 
 describe("Phase 23E — Real Package Transactions, Application Launch & Navigation", () => {
-  it("Phase 23E - 1: Non-pacman providers cannot be installed and are rejected", () => {
-    const stagedProviders = SUPPORTED_PROVIDERS.filter((p) => p.id !== "pacman");
-    for (const p of stagedProviders) {
-      assert.equal(p.available, false, `Staged provider '${p.name}' must not be available`);
+  it("Phase 25 - 1: All registered providers in SUPPORTED_PROVIDERS are actionable", () => {
+    for (const p of SUPPORTED_PROVIDERS) {
+      assert.equal(p.available, true, `Provider '${p.name}' must be available`);
     }
   });
 

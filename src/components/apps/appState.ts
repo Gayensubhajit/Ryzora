@@ -28,6 +28,9 @@ export interface PackageProviderOption {
   repository: string;
   description: string;
   available: boolean;
+  targetId: string;
+  version?: string;
+  isInstalled?: boolean;
   statusNote?: string;
 }
 
@@ -39,6 +42,7 @@ export const SUPPORTED_PROVIDERS: PackageProviderOption[] = [
     repository: "extra",
     description: "Official Arch repo",
     available: true,
+    targetId: "",
   },
   {
     id: "flatpak",
@@ -47,6 +51,7 @@ export const SUPPORTED_PROVIDERS: PackageProviderOption[] = [
     repository: "Flathub",
     description: "Universal Flatpak sandbox",
     available: true,
+    targetId: "",
   },
   {
     id: "aur",
@@ -55,6 +60,7 @@ export const SUPPORTED_PROVIDERS: PackageProviderOption[] = [
     repository: "AUR",
     description: "Arch User Repository (Unprivileged)",
     available: true,
+    targetId: "",
   },
 ];
 

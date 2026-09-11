@@ -315,3 +315,87 @@ pub fn get_flatpak_cleanup_info(app_id: &str) -> FlatpakCleanupInfo {
         system_app_path,
     }
 }
+
+/// Validates whether an ID matches reverse-DNS Flatpak application ID requirements
+/// (contains at least 2 periods, valid characters, no spaces, e.g. org.kde.amarok).
+pub fn is_valid_flatpak_id(id: &str) -> bool {
+    let parts: Vec<&str> = id.split('.').collect();
+    if parts.len() < 3 {
+        return false;
+    }
+    parts.iter().all(|part| {
+        !part.is_empty()
+            && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    })
+}
+
+/// Dynamically discovers an authentic Flathub match for a given package name or query.
+/// Never guesses or fabricates Flatpak IDs.
+pub fn find_flathub_match(query: &str, _display_name: Option<&str>) -> Option<FlatpakAppInfo> {
+    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    if !has_flatpak {
+        return None;
+    }
+
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // 1. If query is already a valid reverse-DNS Flatpak ID, verify it directly
+    if is_valid_flatpak_id(trimmed) {
+        if let Ok(Some(app)) = get_flatpak_app_info(trimmed) {
+            return Some(app);
+        }
+    }
+
+    // 2. Search Flathub using the package query
+    if let Ok(results) = search_flathub_apps(trimmed) {
+        let query_lower = trimmed.to_lowercase();
+        let target_suffix = format!(".{}", query_lower);
+
+        for app in results {
+            // Must be a valid reverse-DNS Flatpak ID (contains >= 2 dots)
+            if !is_valid_flatpak_id(&app.id) {
+                continue;
+            }
+
+            let id_lower = app.id.to_lowercase();
+            let name_lower = app.name.to_lowercase();
+
+            // Authentic verification criteria:
+            // a) Reverse-DNS ID ends with .<query> (e.g. org.kde.amarok, org.videolan.vlc, org.mozilla.firefox)
+            let id_suffix_matches = id_lower.ends_with(&target_suffix);
+            // b) Or reverse-DNS ID contains .<query>. (e.g. com.spotify.Client)
+            let id_domain_matches = id_lower.contains(&format!(".{}.", query_lower))
+                || id_lower.starts_with(&format!("{}.", query_lower));
+            // c) Or exact app name match AND the query appears in the ID
+            let exact_name_match = name_lower == query_lower && id_lower.contains(&query_lower);
+
+            if id_suffix_matches || id_domain_matches || exact_name_match {
+                return Some(app);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_flatpak_id() {
+        assert!(is_valid_flatpak_id("org.kde.amarok"));
+        assert!(is_valid_flatpak_id("com.spotify.Client"));
+        assert!(is_valid_flatpak_id("org.videolan.VLC"));
+        assert!(is_valid_flatpak_id("org.blender.Blender"));
+        assert!(!is_valid_flatpak_id("amarok"));
+        assert!(!is_valid_flatpak_id("spotify"));
+        assert!(!is_valid_flatpak_id("vlc"));
+        assert!(!is_valid_flatpak_id("com."));
+        assert!(!is_valid_flatpak_id(".."));
+        assert!(!is_valid_flatpak_id("org..amarok"));
+    }
+}

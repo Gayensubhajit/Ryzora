@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check, Package } from "lucide-react";
+import { ChevronDown, Check, Circle, Package } from "lucide-react";
 import {
   type PackageProviderOption,
   SUPPORTED_PROVIDERS,
@@ -8,12 +8,14 @@ import {
 interface ProviderSelectorProps {
   selectedProvider: PackageProviderOption;
   onSelectProvider: (provider: PackageProviderOption) => void;
+  availableProviders?: PackageProviderOption[];
   disabled?: boolean;
 }
 
 export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
   selectedProvider,
   onSelectProvider,
+  availableProviders,
   disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(() => {
@@ -39,6 +41,27 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
     };
   }, [isOpen]);
 
+  const providersList = availableProviders && availableProviders.length > 0
+    ? availableProviders
+    : SUPPORTED_PROVIDERS;
+
+  // Single provider: render static source pill with NO dropdown caret
+  if (providersList.length <= 1) {
+    const single = providersList[0] || selectedProvider;
+    return (
+      <div className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] text-[var(--rz-text)] shadow-xs">
+        <Package size={14} className="text-blue-500 dark:text-blue-400" />
+        <span className="font-semibold">{single.shortName}</span>
+        {single.version && (
+          <span className="text-[11px] text-[var(--rz-text-muted)] font-mono">
+            {single.version}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Multiple providers: render interactive selector dropdown
   return (
     <div ref={containerRef} className="relative inline-block text-left">
       <button
@@ -73,13 +96,13 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
           </div>
 
           <div className="space-y-1 mt-1">
-            {SUPPORTED_PROVIDERS.map((provider) => {
+            {providersList.map((provider) => {
               const isSelected = selectedProvider.id === provider.id;
-              const isActionable = provider.available;
+              const isActionable = provider.available !== false;
 
               return (
                 <button
-                  key={provider.id}
+                  key={`${provider.id}-${provider.targetId}`}
                   type="button"
                   disabled={!isActionable}
                   onClick={() => {
@@ -99,6 +122,11 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
                 >
                   <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-1.5">
+                      {isSelected ? (
+                        <Check size={13} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                      ) : (
+                        <Circle size={13} className="text-[var(--rz-text-muted)] shrink-0 opacity-40" />
+                      )}
                       <span className="text-xs font-bold text-[var(--rz-text)]">
                         {provider.shortName}
                       </span>
@@ -108,14 +136,15 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[var(--rz-text-muted)] pt-0.5 leading-tight">
+                    {provider.version && (
+                      <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400 pl-5 pt-0.5">
+                        {provider.version}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-[var(--rz-text-muted)] pl-5 pt-0.5 leading-tight">
                       {provider.description}
                     </p>
                   </div>
-
-                  {isSelected && (
-                    <Check size={14} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                  )}
                 </button>
               );
             })}

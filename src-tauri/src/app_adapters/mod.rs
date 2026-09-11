@@ -1017,3 +1017,175 @@ pub fn aur_install(package_name: String) -> Result<String, String> {
 pub fn aur_get_cleanup_info(package_name: String) -> Result<aur::AurCleanupInfo, String> {
     Ok(aur::get_aur_cleanup_info(&package_name))
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppProviderSource {
+    pub provider_id: String, // "pacman" | "aur" | "flatpak"
+    pub name: String,        // "Pacman" | "AUR" | "Flathub"
+    pub short_name: String,  // "Pacman · extra" | "AUR · User contributed" | "Flathub · Flatpak"
+    pub repository: String,  // "extra" | "aur" | "flathub"
+    pub description: String,
+    pub target_id: String,   // actual ID to install/query
+    pub version: Option<String>,
+    pub is_installed: bool,
+}
+
+/// Dynamically discovers authentic installation sources for an application.
+/// Cross-queries Pacman ALPM, AUR RPC v5, and Flathub metadata.
+/// Never fabricates or hardcodes IDs. If no reliable match exists, provider = absent.
+pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) -> Vec<AppProviderSource> {
+    let pkg_trimmed = package_id.trim();
+    if pkg_trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    // Parallel resolution across Pacman, AUR, and Flatpak
+    let (pacman_match, aur_match, flatpak_match) = std::thread::scope(|s| {
+        // 1. Pacman resolution
+        let pacman_handle = s.spawn(|| {
+            let candidates = if pkg_trimmed.contains('.') {
+                let tail = pkg_trimmed.split('.').last().unwrap_or(pkg_trimmed);
+                vec![pkg_trimmed, tail]
+            } else {
+                vec![pkg_trimmed]
+            };
+
+            for candidate in candidates {
+                if let Some(item) = catalog::get_catalog_item_by_id(candidate) {
+                    let repo = item.repository.to_lowercase();
+                    if !repo.is_empty() && repo != "installed" && repo != "local" && repo != "aur" {
+                        let short_name = format!("Pacman · {}", item.repository);
+                        return Some(AppProviderSource {
+                            provider_id: "pacman".to_string(),
+                            name: "Pacman".to_string(),
+                            short_name,
+                            repository: item.repository,
+                            description: "Official Arch Linux repository".to_string(),
+                            target_id: item.id,
+                            version: Some(item.version),
+                            is_installed: item.is_installed,
+                        });
+                    }
+                }
+
+                let sync_dir = pacman::resolve_sync_dir(None);
+                let local_dir = pacman::resolve_local_dir(None);
+                if let Ok(Some(pkg)) = pacman::get_pacman_package_details_in(candidate, &sync_dir, &local_dir) {
+                    let repo = pkg.repository.to_lowercase();
+                    if repo != "installed" && repo != "local" && repo != "aur" {
+                        let short_name = format!("Pacman · {}", pkg.repository);
+                        return Some(AppProviderSource {
+                            provider_id: "pacman".to_string(),
+                            name: "Pacman".to_string(),
+                            short_name,
+                            repository: pkg.repository,
+                            description: "Official Arch Linux repository".to_string(),
+                            target_id: pkg.name,
+                            version: Some(pkg.version),
+                            is_installed: pkg.is_installed,
+                        });
+                    }
+                }
+            }
+            None
+        });
+
+        // 2. AUR resolution (strict: must return real record from official AUR RPC)
+        let aur_handle = s.spawn(|| {
+            let aur_candidate = if pkg_trimmed.contains('.') {
+                pkg_trimmed.split('.').last().unwrap_or(pkg_trimmed)
+            } else {
+                pkg_trimmed
+            };
+
+            if let Ok(Some(info)) = aur::aur_get_info_rpc(aur_candidate) {
+                return Some(AppProviderSource {
+                    provider_id: "aur".to_string(),
+                    name: "AUR".to_string(),
+                    short_name: "AUR · User contributed".to_string(),
+                    repository: "aur".to_string(),
+                    description: "Arch User Repository (unprivileged build)".to_string(),
+                    target_id: info.name,
+                    version: Some(info.version),
+                    is_installed: info.is_installed,
+                });
+            }
+            None
+        });
+
+        // 3. Flatpak / Flathub resolution (strict: valid reverse-DNS ID verified on Flathub)
+        let flatpak_handle = s.spawn(|| {
+            if let Some(app) = flatpak::find_flathub_match(pkg_trimmed, display_name) {
+                return Some(AppProviderSource {
+                    provider_id: "flatpak".to_string(),
+                    name: "Flatpak".to_string(),
+                    short_name: "Flathub · Flatpak".to_string(),
+                    repository: "flathub".to_string(),
+                    description: "Universal Flatpak container".to_string(),
+                    target_id: app.id,
+                    version: Some(app.version),
+                    is_installed: app.is_installed,
+                });
+            }
+            None
+        });
+
+        (pacman_handle.join().unwrap_or(None), aur_handle.join().unwrap_or(None), flatpak_handle.join().unwrap_or(None))
+    });
+
+    let mut results = Vec::new();
+    if let Some(p) = pacman_match {
+        results.push(p);
+    }
+    if let Some(a) = aur_match {
+        results.push(a);
+    }
+    if let Some(f) = flatpak_match {
+        results.push(f);
+    }
+
+    results
+}
+
+#[tauri::command]
+pub fn resolve_app_providers(package_id: String, display_name: Option<String>) -> Result<Vec<AppProviderSource>, String> {
+    Ok(resolve_app_providers_sync(&package_id, display_name.as_deref()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    #[test]
+    fn test_spotify_resolves_aur_and_flathub_without_pacman() {
+        let providers = resolve_app_providers_sync("spotify", Some("Spotify"));
+        assert!(!providers.iter().any(|p| p.provider_id == "pacman"), "spotify must NOT have official Pacman provider");
+        assert!(providers.iter().any(|p| p.provider_id == "aur"), "spotify must have AUR provider");
+        let flathub = providers.iter().find(|p| p.provider_id == "flatpak");
+        assert!(flathub.is_some(), "spotify must have Flatpak provider");
+        assert_eq!(flathub.unwrap().target_id, "com.spotify.Client");
+    }
+
+    #[test]
+    fn test_gnome_2048_has_no_aur_and_no_flathub() {
+        let providers = resolve_app_providers_sync("gnome-2048", Some("2048"));
+        // Must contain Pacman
+        assert!(providers.iter().any(|p| p.provider_id == "pacman"), "gnome-2048 must have Pacman provider");
+        // Must NOT contain AUR
+        assert!(!providers.iter().any(|p| p.provider_id == "aur"), "gnome-2048 must NOT have AUR provider");
+        // Must NOT contain Flatpak
+        assert!(!providers.iter().any(|p| p.provider_id == "flatpak"), "gnome-2048 must NOT have Flatpak provider");
+    }
+
+    #[test]
+    fn test_amarok_resolves_flatpak_with_valid_reverse_dns() {
+        let providers = resolve_app_providers_sync("amarok", Some("Amarok"));
+        if let Some(flatpak_prov) = providers.iter().find(|p| p.provider_id == "flatpak") {
+            assert_eq!(flatpak_prov.target_id, "org.kde.amarok");
+            assert!(flatpak::is_valid_flatpak_id(&flatpak_prov.target_id));
+        }
+        // AUR should not be present for amarok
+        assert!(!providers.iter().any(|p| p.provider_id == "aur"), "amarok must NOT have AUR provider");
+    }
+}

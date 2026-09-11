@@ -17,6 +17,7 @@ use crate::app_adapters::pacman::{resolve_local_dir, resolve_sync_dir, list_inst
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AurPackageInfo {
     pub name: String,
+    pub package_base: Option<String>,
     pub version: String,
     pub description: String,
     pub url: Option<String>,
@@ -57,6 +58,7 @@ struct AurRpcResponse {
 #[serde(rename_all = "PascalCase")]
 struct AurRpcRecord {
     name: String,
+    package_base: Option<String>,
     version: String,
     description: Option<String>,
     #[serde(rename = "URL")]
@@ -145,6 +147,7 @@ pub fn aur_search_rpc(query: &str) -> Result<Vec<AurPackageInfo>, String> {
 
         list.push(AurPackageInfo {
             name: r.name,
+            package_base: r.package_base,
             version: r.version,
             description: r.description.unwrap_or_default(),
             url: r.url,
@@ -204,6 +207,7 @@ pub fn aur_get_info_rpc(name: &str) -> Result<Option<AurPackageInfo>, String> {
 
     Ok(Some(AurPackageInfo {
         name: r.name,
+        package_base: r.package_base,
         version: r.version,
         description: r.description.unwrap_or_default(),
         url: r.url,
@@ -219,26 +223,49 @@ pub fn aur_get_info_rpc(name: &str) -> Result<Option<AurPackageInfo>, String> {
     }))
 }
 
-/// Retrieves the raw PKGBUILD script for an AUR package.
+/// Retrieves the raw PKGBUILD script for an AUR package or official Arch package.
+/// Checks official AUR cgit if it is an authentic AUR package, or Arch Linux GitLab packaging.
 pub fn aur_get_pkgbuild(name: &str) -> Result<String, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("Package name cannot be empty".to_string());
     }
 
-    let encoded = percent_encoding::utf8_percent_encode(trimmed, percent_encoding::NON_ALPHANUMERIC).to_string();
-    let url = format!("https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h={}", encoded);
+    // 1. If it is a real AUR package, retrieve via AUR cgit using package_base
+    if let Ok(Some(info)) = aur_get_info_rpc(trimmed) {
+        let pkgbase = info.package_base.as_deref().unwrap_or(trimmed);
+        let encoded = percent_encoding::utf8_percent_encode(pkgbase, percent_encoding::NON_ALPHANUMERIC).to_string();
+        let url = format!("https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h={}", encoded);
 
-    let resp = ureq::get(&url)
+        if let Ok(resp) = ureq::get(&url)
+            .set("User-Agent", "Ryzora/0.1.0")
+            .timeout(std::time::Duration::from_secs(6))
+            .call()
+        {
+            if let Ok(content) = resp.into_string() {
+                return Ok(content);
+            }
+        }
+    }
+
+    // 2. If not found in AUR, check official Arch Linux GitLab packaging
+    let gl_encoded = percent_encoding::utf8_percent_encode(trimmed, percent_encoding::NON_ALPHANUMERIC).to_string();
+    let gitlab_url = format!(
+        "https://gitlab.archlinux.org/archlinux/packaging/packages/{}/-/raw/main/PKGBUILD",
+        gl_encoded
+    );
+
+    if let Ok(gl_resp) = ureq::get(&gitlab_url)
         .set("User-Agent", "Ryzora/0.1.0")
         .timeout(std::time::Duration::from_secs(6))
         .call()
-        .map_err(|e| format!("Failed to download PKGBUILD for '{}': {}", name, e))?;
+    {
+        if let Ok(content) = gl_resp.into_string() {
+            return Ok(content);
+        }
+    }
 
-    let content = resp.into_string()
-        .map_err(|e| format!("Failed to read PKGBUILD text: {}", e))?;
-
-    Ok(content)
+    Err(format!("PKGBUILD for '{}' was not found in AUR or official Arch Linux packaging.", trimmed))
 }
 
 /// Lists all installed packages on the system that do NOT belong to official sync repositories.
@@ -289,6 +316,7 @@ pub fn list_installed_foreign_packages() -> Result<Vec<AurPackageInfo>, String> 
             let inst_ver = p.installed_version.unwrap_or(ver);
             foreign.push(AurPackageInfo {
                 name: p.name,
+                package_base: None,
                 version: p.version,
                 description: p.description,
                 url: p.url,
