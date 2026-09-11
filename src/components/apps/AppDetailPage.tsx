@@ -555,22 +555,13 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
 
             {/* Installation Source Card */}
             <div className="p-6 rounded-2xl bg-surface-elevated/40 border border-white/[0.08] space-y-3.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {/* Clean Arch Linux Logo Geometry */}
-                  <div className="w-8 h-8 rounded-lg bg-blue-600/15 border border-blue-500/25 flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="12 2 2 22 22 22" />
-                      <line x1="7" y1="16" x2="17" y2="16" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white uppercase tracking-wider">Arch Linux</div>
-                    <div className="text-xs text-foreground-muted font-medium">Official Repository</div>
-                  </div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white uppercase tracking-wider">Arch Linux</div>
+                  <div className="text-xs text-foreground-muted font-medium">Official Repository</div>
                 </div>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <CheckCircle2 size={12} className="text-emerald-400" />
                   Verified
                 </span>
               </div>

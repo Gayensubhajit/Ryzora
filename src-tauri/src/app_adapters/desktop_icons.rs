@@ -112,6 +112,18 @@ fn get_desktop_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+fn is_decorative_theme(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.contains("candy")
+        || lower.contains("beauty")
+        || lower.contains("sweet")
+        || lower.contains("papirus")
+        || lower.contains("garuda")
+        || lower.contains("cyber")
+        || lower.contains("neon")
+        || lower.contains("cute")
+}
+
 fn get_icon_theme_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -124,18 +136,25 @@ fn get_icon_theme_dirs() -> Vec<PathBuf> {
 
     let data_dirs = get_xdg_data_dirs();
 
-    // 1. Freedesktop Canonical: hicolor theme in all XDG data dirs.
-    // Applications install their canonical, authentic icons into hicolor.
+    // 1. Freedesktop standard fallback base: hicolor theme in all XDG data dirs.
+    // Applications install their canonical upstream artwork into hicolor.
     for base in &data_dirs {
         add(PathBuf::from(base).join("icons").join("hicolor"));
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        add(PathBuf::from(&home).join(".local/share/icons/hicolor"));
     }
 
     // 2. Standard application pixmaps location (/usr/share/pixmaps).
     add(PathBuf::from("/usr/share/pixmaps"));
 
-    // 3. Fallback standard system themes (locolor, Adwaita, breeze)
-    // EXPLICITLY EXCLUDE user decorative/custom icon themes like BeautyLine, candy-icons, Sweet, etc.
-    for theme in &["locolor", "Adwaita", "breeze"] {
+    // 3. Standard desktop environment neutral themes (locolor, Adwaita, breeze, gnome)
+    // Strict requirement: NEVER include decorative user themes (Candy, BeautyLine, etc.)
+    for theme in &["locolor", "Adwaita", "breeze", "gnome"] {
+        if is_decorative_theme(theme) {
+            continue;
+        }
         for base in &data_dirs {
             add(PathBuf::from(base).join("icons").join(theme));
         }
@@ -336,13 +355,82 @@ fn find_desktop_entry(package_id: &str) -> Option<(PathBuf, DesktopEntry)> {
 // Icon Theme Lookup
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn resolve_icon_file(icon_name: &str) -> Option<PathBuf> {
-    // Absolute path — check directly
+fn find_application_provided_icon(icon_name: &str, pkg_id: &str) -> Option<PathBuf> {
+    let extensions = ["svg", "png", "xpm"];
+    let bases = [
+        format!("/usr/share/{}", pkg_id),
+        format!("/usr/lib/{}", pkg_id),
+        format!("/opt/{}", pkg_id),
+    ];
+
+    for base_str in &bases {
+        let base = Path::new(base_str);
+        if !base.exists() {
+            continue;
+        }
+        for ext in &extensions {
+            let c1 = base.join(format!("{}.{}", icon_name, ext));
+            if c1.exists() {
+                return Some(c1);
+            }
+            let c2 = base.join(format!("{}.{}", pkg_id, ext));
+            if c2.exists() {
+                return Some(c2);
+            }
+        }
+        for sub in &["icons", "browser/chrome/icons/default", "resources/app/resources/linux"] {
+            let sub_dir = base.join(sub);
+            if !sub_dir.exists() {
+                continue;
+            }
+            for ext in &extensions {
+                let c = sub_dir.join(format!("{}.{}", icon_name, ext));
+                if c.exists() {
+                    return Some(c);
+                }
+                for sz in &["default256", "default128", "default64", "default48"] {
+                    let c_sz = sub_dir.join(format!("{}.{}", sz, ext));
+                    if c_sz.exists() {
+                        return Some(c_sz);
+                    }
+                }
+            }
+        }
+    }
+
+    // Direct /usr/share/pixmaps check
+    let pixmaps = Path::new("/usr/share/pixmaps");
+    if pixmaps.exists() {
+        for ext in &extensions {
+            let c = pixmaps.join(format!("{}.{}", icon_name, ext));
+            if c.exists() {
+                return Some(c);
+            }
+            if icon_name != pkg_id {
+                let c_pkg = pixmaps.join(format!("{}.{}", pkg_id, ext));
+                if c_pkg.exists() {
+                    return Some(c_pkg);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_icon_file(icon_name: &str, pkg_id: &str) -> Option<PathBuf> {
+    // 1. Absolute path specified in desktop entry — use directly
     let path = Path::new(icon_name);
     if path.is_absolute() && path.exists() {
         return Some(path.to_path_buf());
     }
 
+    // 2. Application-provided canonical artwork
+    if let Some(app_icon) = find_application_provided_icon(icon_name, pkg_id) {
+        return Some(app_icon);
+    }
+
+    // 3. Freedesktop icon theme lookup (preferring hicolor, then standard DE themes)
     let theme_dirs = get_icon_theme_dirs();
     let extensions = ["svg", "png", "xpm"];
     let size_dirs = [
@@ -372,7 +460,7 @@ fn resolve_icon_file(icon_name: &str) -> Option<PathBuf> {
             continue;
         }
 
-        // size/apps/icon.ext  and  apps/scalable/icon.ext patterns
+        // size/apps/icon.ext and apps/scalable/icon.ext patterns
         for size in &size_dirs {
             for subdir in &app_subdirs {
                 for ext in &extensions {
@@ -382,7 +470,6 @@ fn resolve_icon_file(icon_name: &str) -> Option<PathBuf> {
                     }
                 }
             }
-            // apps/size/icon.ext variant
             for ext in &extensions {
                 let c = theme_dir.join("apps").join(size).join(format!("{}.{}", icon_name, ext));
                 if c.exists() {
@@ -391,7 +478,7 @@ fn resolve_icon_file(icon_name: &str) -> Option<PathBuf> {
             }
         }
 
-        // Flat root (some themes)
+        // Flat root
         for ext in &extensions {
             let c = theme_dir.join(format!("{}.{}", icon_name, ext));
             if c.exists() {
@@ -541,21 +628,32 @@ pub fn resolve_desktop_icon_for_app(package_id: &str) -> Option<DesktopAppInfo> 
     let startup_wm_class = entry.as_ref().and_then(|e| e.startup_wm_class.clone());
     let categories = entry.as_ref().map(|e| e.categories.clone()).unwrap_or_default();
 
-    // Step 2: Determine icon name (alias hint > desktop Icon= > package ID)
-    let icon_name = icon_hint
+    // Step 2: Determine icon name (.desktop Icon= field > alias hint > package ID)
+    let icon_name = icon_field
+        .clone()
         .filter(|h| !h.is_empty())
-        .map(|h| h.to_string())
-        .or_else(|| icon_field.clone())
+        .or_else(|| icon_hint.filter(|h| !h.is_empty()).map(|h| h.to_string()))
         .or_else(|| Some(pkg_lower.clone()));
 
-    // Step 3: Resolve icon file via theme lookup
-    let icon_file = icon_name.as_deref().and_then(resolve_icon_file).or_else(|| {
-        if icon_name.as_deref() != Some(pkg_lower.as_str()) {
-            resolve_icon_file(&pkg_lower)
-        } else {
+    // Step 3: Resolve icon file (Application-provided > Canonical hicolor > Standard Freedesktop)
+    let icon_file = icon_name
+        .as_deref()
+        .and_then(|n| resolve_icon_file(n, &pkg_lower))
+        .or_else(|| {
+            if let Some(hint) = icon_hint {
+                if Some(hint) != icon_name.as_deref() {
+                    return resolve_icon_file(hint, &pkg_lower);
+                }
+            }
             None
-        }
-    });
+        })
+        .or_else(|| {
+            if icon_name.as_deref() != Some(pkg_lower.as_str()) {
+                resolve_icon_file(&pkg_lower, &pkg_lower)
+            } else {
+                None
+            }
+        });
 
     // Step 4: Load the icon
     let (icon_path, icon_svg_content, icon_data_uri) = match icon_file.as_ref() {
@@ -664,5 +762,15 @@ mod tests {
     #[test]
     fn test_icon_theme_dirs_not_empty() {
         assert!(!get_icon_theme_dirs().is_empty());
+    }
+    #[test]
+    fn test_firefox_canonical_resolution_no_decorative() {
+        if let Some(info) = resolve_desktop_icon_for_app("firefox") {
+            if let Some(ref path) = info.icon_path {
+                assert!(!path.contains("BeautyLine"), "Resolved BeautyLine icon: {}", path);
+                assert!(!path.contains("candy-icons"), "Resolved candy-icons icon: {}", path);
+                assert!(path.contains("hicolor") || path.contains("firefox") || path.contains("pixmaps"), "Unexpected path: {}", path);
+            }
+        }
     }
 }

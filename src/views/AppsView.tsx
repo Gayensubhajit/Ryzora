@@ -68,6 +68,18 @@ export const AppsView: React.FC = () => {
     loadApps();
   }, []);
 
+  useEffect(() => {
+    try {
+      const targetAppId = new URLSearchParams(window.location.search).get("app");
+      if (targetAppId && packages.length > 0) {
+        const found = packages.find(p => p.id.toLowerCase() === targetAppId.toLowerCase());
+        if (found) {
+          setSelectedApp(found);
+        }
+      }
+    } catch {}
+  }, [packages]);
+
   // Scroll position preservation
   const gridScrollRef = useRef<number>(0);
   const gridRef = useRef<HTMLDivElement | null>(null);

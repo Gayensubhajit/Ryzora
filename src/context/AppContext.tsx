@@ -339,7 +339,13 @@ function evaluateClientCompatibility(
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loadingSystem, setLoadingSystem] = useState<boolean>(true);
-  const [activeCategory, setActiveCategory] = useState<CategoryId>("discover");
+  const [activeCategory, setActiveCategory] = useState<CategoryId>(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("view");
+      if (q) return q as CategoryId;
+    } catch {}
+    return "discover";
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem("ryzora_sidebar_collapsed");
     return saved !== null ? saved === "true" : false;

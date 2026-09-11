@@ -33,6 +33,7 @@ export interface AppMetadata {
 
 export const KNOWN_APPS: Record<string, AppMetadata> = {
   firefox: {
+    iconUrl: "/assets/apps/firefox/icon.svg",
     displayName: "Firefox",
     publisher: "Mozilla",
     category: "Internet",
@@ -75,6 +76,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   chromium: {
+    iconUrl: "/assets/apps/chromium/icon.png",
     displayName: "Chromium",
     publisher: "The Chromium Authors",
     category: "Internet",
@@ -117,6 +119,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   "visual-studio-code-bin": {
+    iconUrl: "/assets/apps/visual-studio-code-bin/icon.png",
     displayName: "VS Code",
     publisher: "Microsoft",
     category: "Development",
@@ -159,6 +162,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   code: {
+    iconUrl: "/assets/apps/code/icon.png",
     displayName: "Code (OSS)",
     publisher: "Arch Linux / Community",
     category: "Development",
@@ -191,6 +195,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   discord: {
+    iconUrl: "/assets/apps/discord/icon.png",
     displayName: "Discord",
     publisher: "Discord Inc.",
     category: "Internet",
@@ -212,6 +217,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   steam: {
+    iconUrl: "/assets/apps/steam/icon.png",
     displayName: "Steam",
     publisher: "Valve Corporation",
     category: "Games",
@@ -338,6 +344,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   "obs-studio": {
+    iconUrl: "/assets/apps/obs-studio/icon.svg",
     displayName: "OBS Studio",
     publisher: "OBS Project",
     category: "Multimedia",
@@ -457,6 +464,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   spotify: {
+    iconUrl: "/assets/apps/spotify/icon.png",
     displayName: "Spotify",
     publisher: "Spotify AB",
     category: "Multimedia",
@@ -588,6 +596,7 @@ export const KNOWN_APPS: Record<string, AppMetadata> = {
     isCuratedApp: true,
   },
   "telegram-desktop": {
+    iconUrl: "/assets/apps/telegram-desktop/icon.png",
     displayName: "Telegram Desktop",
     publisher: "Telegram FZ-LLC",
     category: "Internet",
