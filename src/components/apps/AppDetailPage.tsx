@@ -45,6 +45,8 @@ import {
 import type { PackageItem } from "../../providers/types.ts";
 import { pacmanAppProvider, flatpakAppProvider, aurAppProvider } from "../../providers/index.ts";
 import { PkgbuildViewerModal } from "./PkgbuildViewerModal.tsx";
+import { UninstallCleanupModal } from "./UninstallCleanupModal.tsx";
+import { formatBytes } from "../../services/cleanupService.ts";
 import { catalogService } from "../../services/catalogService.ts";
 import { transactionManager, type TransactionStage } from "../../services/transactionManager.ts";
 import { AppIcon, resolveAppMetadata } from "./AppIconResolver.tsx";
@@ -525,36 +527,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     setShowUninstallConfirm(true);
   };
 
-  const executeUninstall = async () => {
-    setShowUninstallConfirm(false);
-    setOperation("uninstalling");
-    setActionError(null);
-    setActionSuccess(null);
-    const targetId = selectedProvider.targetId || app.id;
-    try {
-      if (selectedProvider.id === "flatpak" || app.repository_id === "flathub") {
-        await flatpakAppProvider.uninstall(targetId);
-        setLocalInstalled(false);
-        setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
-        await catalogService.refreshInstalledState();
-        onStatusChanged?.();
-      } else {
-        const txRes = await transactionManager.runTransaction(targetId, "uninstall");
-        if (txRes.stage === "completed") {
-          setLocalInstalled(false);
-          setActionSuccess(`Uninstalled ${meta.displayName} successfully.`);
-          await catalogService.refreshInstalledState();
-          onStatusChanged?.();
-        } else if (txRes.stage === "failed") {
-          setActionError(txRes.message || txRes.error || "Uninstall failed.");
-        }
-      }
-    } catch (err: any) {
-      const msg = typeof err === "string" ? err : (err?.message || "Failed to uninstall package.");
-      setActionError(msg);
-    } finally {
-      setOperation("idle");
-    }
+  const handleCleanupSuccess = async (reclaimedBytes: number, _msg: string) => {
+    setLocalInstalled(false);
+    const reclaimedStr = reclaimedBytes > 0 ? ` Reclaimed ${formatBytes(reclaimedBytes)}.` : "";
+    setActionSuccess(`Uninstalled ${meta.displayName} successfully.${reclaimedStr}`);
+    await catalogService.refreshInstalledState();
+    onStatusChanged?.();
   };
 
   const handleReinstall = async () => {
@@ -1508,53 +1486,15 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         )}
       </div>
 
-            {/* ── Uninstall Confirmation Modal ── */}
-      {showUninstallConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-md animate-fadeIn"
-          onClick={() => setShowUninstallConfirm(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] p-6 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
-                <Trash2 size={20} />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-[var(--rz-text)]">
-                  Uninstall {meta.displayName}?
-                </h3>
-                <p className="text-xs text-[var(--rz-text-muted)]">
-                  Package <span className="font-mono text-[var(--rz-text)]">{app.id}</span>
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
-              This will remove {meta.displayName} and its installed components from your Arch Linux system via the pacman package manager.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowUninstallConfirm(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={executeUninstall}
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-colors cursor-pointer shadow-sm shadow-rose-600/30"
-              >
-                Confirm Uninstall
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Uninstall & Safe Cleanup Modal (Phase 26) ── */}
+      <UninstallCleanupModal
+        packageId={selectedProvider.targetId || app.id}
+        displayName={meta.displayName}
+        providerId={selectedProvider.id}
+        isOpen={showUninstallConfirm}
+        onClose={() => setShowUninstallConfirm(false)}
+        onSuccess={handleCleanupSuccess}
+      />
 
       {/* ── View Files Modal (Authentic Installed Package File List) ── */}
       {filesModalOpen && (

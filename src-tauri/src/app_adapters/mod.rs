@@ -8,6 +8,7 @@ pub mod transaction;
 pub mod catalog;
 pub mod aur;
 pub mod flatpak;
+pub mod cleanup;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -321,7 +322,7 @@ pub fn pacman_start_transaction(
     }
 
     let op = operation.to_lowercase();
-    if op != "install" && op != "uninstall" && op != "reinstall" {
+    if op != "install" && op != "uninstall" && op != "reinstall" && op != "uninstall-deps" {
         return Err(format!("Unsupported transaction operation '{}'. Must be install, uninstall, or reinstall", op));
     }
 
@@ -549,6 +550,9 @@ fn run_transaction_worker(
             }
             "uninstall" => {
                 c.arg("-R").arg("--noconfirm").arg(&package_name);
+            }
+            "uninstall-deps" => {
+                c.arg("-Rs").arg("--noconfirm").arg(&package_name);
             }
             _ => unreachable!(),
         }
@@ -1040,6 +1044,29 @@ pub async fn aur_install(package_name: String) -> Result<String, String> {
 #[tauri::command]
 pub fn aur_get_cleanup_info(package_name: String) -> Result<aur::AurCleanupInfo, String> {
     Ok(aur::get_aur_cleanup_info(&package_name))
+}
+
+#[tauri::command]
+pub async fn pacman_inspect_cleanup(
+    package_id: String,
+    provider: String,
+) -> Result<cleanup::AppCleanupPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cleanup::inspect_app_cleanup(&package_id, &provider)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pacman_execute_cleanup(
+    request: cleanup::AppCleanupExecutionRequest,
+) -> Result<cleanup::AppCleanupExecutionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cleanup::execute_app_cleanup(request)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

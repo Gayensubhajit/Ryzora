@@ -189,6 +189,9 @@ pub fn run() {
             app_adapters::aur_install,
             app_adapters::aur_get_cleanup_info,
             app_adapters::resolve_app_providers,
+            // Safe Cleanup & Storage (Phase 26)
+            app_adapters::pacman_inspect_cleanup,
+            app_adapters::pacman_execute_cleanup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

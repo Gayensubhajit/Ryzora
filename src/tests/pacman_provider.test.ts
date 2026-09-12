@@ -1,4 +1,5 @@
 import { catalogService } from "../services/catalogService.ts";
+import { formatBytes, inspectAppCleanup, executeAppCleanup } from "../services/cleanupService.ts";
 /**
  * Phase 23A — Pacman App Provider & Engine Integration Tests
  */
@@ -227,5 +228,43 @@ describe("Phase 23A — Pacman App Provider", () => {
     assert.equal((pkg as any).repository, "aur");
     assert.equal((pkg as any).metadata_source, "aur");
     assert.equal(pkg.repository_id, "aur");
+  });
+
+  it("Phase 26 - 1: formatBytes formats byte sizes accurately without guesswork", () => {
+    assert.equal(formatBytes(undefined), "Not available");
+    assert.equal(formatBytes(null), "Not available");
+    assert.equal(formatBytes(0), "0 B");
+    assert.equal(formatBytes(1024), "1 KB");
+    assert.equal(formatBytes(1024 * 1024 * 1.5), "1.5 MB");
+    assert.equal(formatBytes(1024 * 1024 * 1024 * 1.21), "1.21 GB");
+  });
+
+  it("Phase 26 - 2: inspectAppCleanup provides structured preview with zero arbitrary estimates", async () => {
+    const preview = await inspectAppCleanup("blender", "pacman");
+    assert.equal(preview.package_id, "blender");
+    assert.equal(preview.provider_id, "pacman");
+    assert.ok(Array.isArray(preview.unused_dependencies));
+    assert.ok(Array.isArray(preview.package_cache_items));
+    assert.ok(Array.isArray(preview.conflicts));
+    assert.equal(typeof preview.total_unused_dependencies_bytes, "number");
+    assert.equal(typeof preview.total_package_cache_bytes, "number");
+  });
+
+  it("Phase 26 - 3: executeAppCleanup returns structured result and reclaimed byte accounting", async () => {
+    const res = await executeAppCleanup({
+      package_id: "blender",
+      provider_id: "pacman",
+      remove_package: true,
+      remove_unused_dependencies: false,
+      clean_package_cache: true,
+      clean_app_cache: false,
+      clean_app_config: false,
+      clean_aur_build: false,
+      clean_flatpak_data: false,
+    });
+    assert.equal(res.success, true);
+    assert.equal(res.package_removed, true);
+    assert.equal(typeof res.total_bytes_reclaimed, "number");
+    assert.ok(Array.isArray(res.errors));
   });
 });
