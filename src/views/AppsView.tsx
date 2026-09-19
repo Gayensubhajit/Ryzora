@@ -78,6 +78,12 @@ export const AppsView: React.FC = () => {
   const [catalogStatus, setCatalogStatus] = useState<CatalogStatus | null>(null);
   const [refreshingCatalog, setRefreshingCatalog] = useState<boolean>(false);
   const [selectedApp, setSelectedApp] = useState<PackageItem | null>(null);
+  const catalogueItemsRef = useRef(catalogueItems);
+  const storefrontPackagesRef = useRef(storefrontPackages);
+  const selectedAppRef = useRef(selectedApp);
+  catalogueItemsRef.current = catalogueItems;
+  storefrontPackagesRef.current = storefrontPackages;
+  selectedAppRef.current = selectedApp;
   const [appHistory, setAppHistory] = useState<PackageItem[]>([]);
 
   // Scroll preservation
@@ -121,6 +127,13 @@ export const AppsView: React.FC = () => {
             return [...curr, ...toAdd];
           });
           setTotalCatalogueCount((prev) => prev + remoteItems.length);
+          prefetchIconsForPage(
+            remoteItems.map((ri) => ({
+              id: ri.id,
+              icon_name: ri.icon_name,
+              icon_path: ri.icon_path,
+            }))
+          );
         }
       }).catch(() => {});
     }, 250); // 150ms local + 250ms = 400ms debounced remote search
@@ -286,19 +299,34 @@ export const AppsView: React.FC = () => {
         setCatalogueItems(mapped);
         setTotalCatalogueCount(res.total_count);
       } else {
-        // In other views: update is_installed in-place without rebuilding or layout shift
-        const updateInPlace = (list: PackageItem[]) =>
-          list.map((pkg) => {
-            const meta = pacmanAppProvider.getMeta(pkg);
-            if (meta) {
-              (pkg as any).is_installed = meta.isInstalled;
-              (pkg as any).installed_version = meta.installedVersion;
-            }
-            return pkg;
-          });
+        // The provider metadata cache describes the previous catalog result.
+        // Re-read each visible item after the ALPM refresh so an app which was
+        // just removed cannot remain actionable as "installed".
+        const refreshItems = async (items: PackageItem[]) =>
+          Promise.all(
+            items.map(async (pkg) => {
+              const item = await catalogService.getItemDetails(pkg.id);
+              return item ? catalogService.catalogItemToPackageItem(item) : pkg;
+            })
+          );
 
-        setCatalogueItems((prev) => updateInPlace(prev));
-        setStorefrontPackages((prev) => updateInPlace(prev));
+        const [catalogue, storefront] = await Promise.all([
+          refreshItems(catalogueItemsRef.current),
+          refreshItems(storefrontPackagesRef.current),
+        ]);
+        setCatalogueItems(catalogue);
+        setStorefrontPackages(storefront);
+
+      }
+
+      // AppDetailPage receives a separate selected item rather than an item
+      // from either list, so refresh it explicitly as well.
+      const currentSelected = selectedAppRef.current;
+      if (currentSelected) {
+        const item = await catalogService.getItemDetails(currentSelected.id);
+        if (item) {
+          setSelectedApp(catalogService.catalogItemToPackageItem(item));
+        }
       }
     } catch (err) {
       console.warn("[AppsView] Failed to refresh installed status:", err);

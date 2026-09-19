@@ -855,14 +855,28 @@ fn find_appstream_cached_icon(icon_filename: &str, icons_dir: &Path) -> Option<S
         return None;
     }
 
-    let subdirs = ["archlinux-arch-extra", "archlinux-arch-core", "archlinux-arch-multilib"];
+    let subdirs = ["archlinux-arch-extra", "archlinux-arch-core", "archlinux-arch-multilib", "archlinux"];
     let sizes = ["128x128", "64x64", "48x48"];
+    let stem = Path::new(icon_filename)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(icon_filename);
 
     for sub in subdirs {
         for sz in sizes {
-            let candidate = icons_dir.join(sub).join(sz).join(icon_filename);
+            let dir = icons_dir.join(sub).join(sz);
+            if !dir.exists() {
+                continue;
+            }
+            let candidate = dir.join(icon_filename);
             if candidate.is_file() {
                 return Some(candidate.to_string_lossy().to_string());
+            }
+            for ext in &["jxl", "png", "svg"] {
+                let cand_ext = dir.join(format!("{}.{}", stem, ext));
+                if cand_ext.is_file() {
+                    return Some(cand_ext.to_string_lossy().to_string());
+                }
             }
         }
     }
