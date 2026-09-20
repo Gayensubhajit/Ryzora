@@ -759,7 +759,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         <span>Reinstalling…</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-500/10 text-[var(--rz-text-muted)] border border-zinc-500/20">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)]">
                         Not installed
                       </span>
                     )}
@@ -789,7 +789,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                       <button
                         type="button"
                         onClick={handleOpenApp}
-                        className="inline-flex items-center gap-2 px-7 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-md hover:shadow-blue-500/20 cursor-pointer"
+                        className="inline-flex items-center gap-2 px-7 py-2.5 rounded-xl font-semibold text-sm bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all shadow-md hover:shadow-[var(--rz-accent)]/20 cursor-pointer"
                       >
                         <Play size={15} fill="currentColor" />
                         <span>Open</span>
@@ -897,7 +897,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         type="button"
                         onClick={handleInstall}
                         disabled={operation !== "idle"}
-                        className="inline-flex items-center gap-2 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg hover:shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-8 py-2.5 rounded-xl font-semibold text-sm bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all shadow-lg hover:shadow-[var(--rz-accent)]/20 cursor-pointer disabled:opacity-50"
                       >
                         <Download size={16} />
                         <span>Install</span>
@@ -908,7 +908,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                     <button
                       type="button"
                       disabled
-                      className="inline-flex items-center gap-2.5 px-8 py-2.5 rounded-xl font-semibold text-sm bg-blue-600/70 text-white transition-all shadow-md cursor-not-allowed"
+                      className="inline-flex items-center gap-2.5 px-8 py-2.5 rounded-xl font-semibold text-sm bg-[var(--rz-accent)]/70 text-white transition-all shadow-md cursor-not-allowed"
                     >
                       <Loader2 size={16} className="animate-spin" />
                       <span>
@@ -1312,7 +1312,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 ) : loadingProviders ? (
                   <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]/60 text-[var(--rz-text-muted)]">
                     <div className="flex items-center gap-2.5">
-                      <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-[var(--rz-text-muted)] shrink-0" />
                       <div>
                         <div className="font-medium">AUR</div>
                         <div className="text-[11px]">User contributed</div>
@@ -1349,7 +1349,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                 ) : loadingProviders ? (
                   <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]/60 text-[var(--rz-text-muted)]">
                     <div className="flex items-center gap-2.5">
-                      <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-[var(--rz-text-muted)] shrink-0" />
                       <div>
                         <div className="font-medium">Flathub</div>
                         <div className="text-[11px]">Flatpak sandbox</div>
@@ -1498,7 +1498,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                         <div className="text-[10px] text-[var(--rz-text-muted)] truncate w-full pt-0.5 mb-2.5">
                           {relMeta.category}
                         </div>
-                        <span className="w-full py-1 rounded-lg text-[11px] font-semibold bg-blue-600/10 text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white border border-blue-500/20 transition-all text-center">
+                        <span className="w-full py-1 rounded-lg text-[11px] font-semibold bg-[var(--rz-accent-muted)] text-[var(--rz-accent)] group-hover:bg-[var(--rz-accent)] group-hover:text-white border border-[var(--rz-accent)]/20 transition-all text-center">
                           View
                         </span>
                       </button>
@@ -1586,7 +1586,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
                   <span>Reading package file ownership ledger...</span>
                 </div>
               ) : filesError ? (
-                <div className="text-center py-12 text-zinc-400 font-sans text-xs px-6">
+                <div className="text-center py-12 text-[var(--rz-text-muted)] font-sans text-xs px-6">
                   {filesError}
                 </div>
               ) : installedFiles.length === 0 ? (
@@ -1606,7 +1606,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               <span>Total files: {installedFiles.length}</span>
               <button
                 onClick={() => setFilesModalOpen(false)}
-                className="px-4 py-1.5 rounded-xl font-semibold bg-blue-600 hover:bg-blue-500 text-white cursor-pointer"
+                className="px-4 py-1.5 rounded-xl font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white cursor-pointer"
               >
                 Close
               </button>

@@ -23,6 +23,7 @@ export const LockScreenDetailView: React.FC = () => {
     activeLockscreen,
     applyLockscreen,
     deactivateLockscreen,
+    refreshActiveLockscreen,
     deactivateAndUninstallLockscreen,
     testLockscreen,
     hostCapabilities,
@@ -193,24 +194,20 @@ export const LockScreenDetailView: React.FC = () => {
   const isSddmActive = isSddmApplied && sddmRuntimeStatus?.active === true;
   const isSddmOverridden = isSddmApplied && sddmRuntimeStatus?.is_overridden === true;
 
-  const isActiveForTarget =
-    selectedTarget === "quickshell"
-      ? isQuickshellActive
-      : selectedTarget === "sddm"
-      ? isSddmActive
-      : isQuickshellActive && isSddmActive;
+
 
   const isTargetOverridden =
     (selectedTarget === "sddm" || selectedTarget === "both") && isSddmOverridden;
 
-  const handleApply = async () => {
+  const handleApply = async (targetOverride?: "quickshell" | "sddm" | "both") => {
     setIsApplying(true);
+    const targetToApply = targetOverride || selectedTarget;
     try {
       const fullConfig = {
         ...customConfig,
         variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
       };
-      await applyLockscreen(selectedPackage.id, selectedTarget, fullConfig);
+      await applyLockscreen(selectedPackage.id, targetToApply, fullConfig);
     } catch {
       // toast is handled in AppContext
     } finally {
@@ -218,10 +215,18 @@ export const LockScreenDetailView: React.FC = () => {
     }
   };
 
-  const handleDeactivate = async () => {
+  const handleDeactivate = async (targetOverride?: "quickshell" | "sddm" | "both") => {
     setIsApplying(true);
+    const targetToDeactivate =
+      targetOverride ||
+      (isQuickshellActive && isSddmActive
+        ? "both"
+        : isQuickshellActive
+        ? "quickshell"
+        : "sddm");
     try {
-      await deactivateLockscreen(selectedTarget);
+      await deactivateLockscreen(targetToDeactivate);
+      await refreshActiveLockscreen();
     } catch {
       // toast is handled in AppContext
     } finally {
@@ -229,13 +234,22 @@ export const LockScreenDetailView: React.FC = () => {
     }
   };
 
-  const handleTest = async () => {
+  const handleTest = async (targetOverride?: "quickshell" | "sddm") => {
     try {
       const fullConfig = {
         ...customConfig,
         variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
       };
-      const res = await testLockscreen(selectedPackage.id, selectedTarget, fullConfig);
+      const targetToTest =
+        targetOverride ||
+        (isQuickshellActive && !isSddmActive
+          ? "quickshell"
+          : !isQuickshellActive && isSddmActive
+          ? "sddm"
+          : selectedTarget === "sddm"
+          ? "sddm"
+          : "quickshell");
+      const res = await testLockscreen(selectedPackage.id, targetToTest, fullConfig);
       if (res) {
         setLastTestResult(res);
       }
@@ -245,10 +259,25 @@ export const LockScreenDetailView: React.FC = () => {
   };
 
   const handleUninstall = async () => {
+    setIsApplying(true);
     try {
-      await deactivateAndUninstallLockscreen(selectedPackage.id, selectedTarget);
+      const activeTarget =
+        isQuickshellActive && isSddmActive
+          ? "both"
+          : isQuickshellActive
+          ? "quickshell"
+          : isSddmActive
+          ? "sddm"
+          : undefined;
+
+      const success = await deactivateAndUninstallLockscreen(selectedPackage.id, activeTarget);
+      if (success) {
+        await refreshActiveLockscreen();
+      }
     } catch {
       // toast is handled in AppContext
+    } finally {
+      setIsApplying(false);
     }
   };
 
@@ -316,7 +345,7 @@ export const LockScreenDetailView: React.FC = () => {
         onSelectTarget={setSelectedTarget}
         isSessionLockSupported={isSessionLockSupported}
         isLoginScreenSupported={isLoginScreenSupported}
-        isActive={isActiveForTarget}
+        isActive={isQuickshellActive || isSddmActive}
         activeTargets={{ quickshell: isQuickshellActive, sddm: isSddmActive }}
         installedTargets={{ quickshell: hasUserFiles, sddm: hasSddmFiles }}
         onApply={handleApply}

@@ -30,7 +30,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredPackage }) => {
 
       {/* FEATURED badge */}
       <div className="absolute top-4 left-5">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--accent)]/90 text-white text-[11px] font-semibold uppercase tracking-widest shadow-lg">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--rz-accent)] text-white text-[11px] font-semibold uppercase tracking-widest shadow-lg">
           <Sparkles className="w-3 h-3" />
           Featured
         </span>
@@ -88,7 +88,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredPackage }) => {
             </div>
 
             <button
-              className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-black hover:bg-white/90 transition-colors shadow-md"
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-colors shadow-md cursor-pointer"
               onClick={(e) => { e.stopPropagation(); setSelectedPackage(featuredPackage); }}
             >
               View Details

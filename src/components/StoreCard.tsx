@@ -12,6 +12,10 @@ import {
   Lock,
   Layout,
   Package as PackageIcon,
+  MoreHorizontal,
+  Play,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { PackageItem } from "../types";
@@ -54,9 +58,18 @@ function getCategoryIcon(cat: string) {
 }
 
 export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
-  const { setSelectedPackage, installedPackages } = useApp();
+  const {
+    setSelectedPackage,
+    installedPackages,
+    activeLockscreen,
+    testLockscreen,
+    deactivateLockscreen,
+    uninstallPackage,
+    deactivateAndUninstallLockscreen,
+  } = useApp();
   const [imgError, setImgError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [showOverflow, setShowOverflow] = useState(false);
 
   useEffect(() => {
     setImgError(false);
@@ -68,6 +81,17 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
     isInstalled && installedRecord
       ? parseFloat(packageItem.version) > parseFloat(installedRecord.version)
       : false;
+  const isQsActive = Boolean(
+    activeLockscreen?.quickshell &&
+    (activeLockscreen.quickshell === packageItem.id ||
+      activeLockscreen.quickshell === packageItem.id.replace(/^lockscreen-(qylock-)?/, ""))
+  );
+  const isSddmActive = Boolean(
+    activeLockscreen?.sddm &&
+    (activeLockscreen.sddm === packageItem.id ||
+      activeLockscreen.sddm === packageItem.id.replace(/^lockscreen-(qylock-)?/, ""))
+  );
+  const isActive = isQsActive || isSddmActive;
 
   const handleClick = () => setSelectedPackage(packageItem);
 
@@ -206,12 +230,92 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
           )}
         </div>
 
-        {/* Top-Right Installation State Badge */}
-        <div className="absolute top-2.5 right-2.5 z-10">
+        {/* Top-Right Installation State Badge & Quick Overflow Action */}
+        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5">
           <InstalledBadge
             isInstalled={isInstalled}
             isUpdateAvailable={isUpdateAvailable}
           />
+          {isInstalled && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowOverflow(!showOverflow);
+                }}
+                className="p-1 rounded-lg bg-black/60 hover:bg-black/80 text-white/80 hover:text-white border border-white/15 backdrop-blur-md transition-all shadow-xs cursor-pointer select-none"
+                aria-label="Package options"
+                title="Options"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </button>
+
+              {showOverflow && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-36 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {(packageItem.supports_session_lock || packageItem.supports_login_screen || packageItem.category?.toLowerCase().includes("lock")) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowOverflow(false);
+                        const targetToTest = isQsActive && !isSddmActive
+                          ? "quickshell"
+                          : !isQsActive && isSddmActive
+                          ? "sddm"
+                          : undefined;
+                        testLockscreen(packageItem.id, targetToTest);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
+                    >
+                      <Play className="w-3 h-3 text-[var(--rz-text-muted)]" />
+                      <span>Test</span>
+                    </button>
+                  )}
+
+                  {isActive && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowOverflow(false);
+                        const targetToDeactivate = isQsActive && isSddmActive
+                          ? "both"
+                          : isQsActive
+                          ? "quickshell"
+                          : "sddm";
+                        deactivateLockscreen(targetToDeactivate);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                    >
+                      <RotateCcw className="w-3 h-3 text-amber-500" />
+                      <span>{isQsActive && !isSddmActive ? "Deactivate Session" : !isQsActive && isSddmActive ? "Deactivate Login" : "Deactivate"}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowOverflow(false);
+                      if (isActive) {
+                        deactivateAndUninstallLockscreen(packageItem.id);
+                      } else {
+                        uninstallPackage(packageItem.id);
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                  >
+                    <Trash2 className="w-3 h-3 text-rose-500" />
+                    <span>Uninstall</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

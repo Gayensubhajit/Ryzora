@@ -445,14 +445,14 @@ export const PackageDetailModal: React.FC = () => {
                         {installedRecord?.files && installedRecord.files.length > 0 ? (
                           installedRecord.files.map((f, idx) => (
                             <div key={idx} className="flex items-center justify-between">
-                              <span className="text-zinc-300 truncate">{f.target}</span>
-                              <span className="text-[10px] text-zinc-500 font-mono">
+                              <span className="text-[var(--rz-text)] truncate">{f.target}</span>
+                              <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">
                                 {f.sha256.slice(0, 8)}...
                               </span>
                             </div>
                           ))
                         ) : (
-                          <div className="text-zinc-500">No tracked files listed</div>
+                          <div className="text-[var(--rz-text-muted)]">No tracked files listed</div>
                         )}
                       </div>
                     </div>
@@ -487,7 +487,7 @@ export const PackageDetailModal: React.FC = () => {
                 )}
 
                 {uninstallResult && (
-                  <div className="p-3 rounded bg-zinc-900 border border-emerald-500/40 space-y-2">
+                  <div className="p-3 rounded bg-[var(--rz-surface-elevated)] border border-emerald-500/40 space-y-2">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Uninstall Completed Successfully</span>
@@ -550,7 +550,7 @@ export const PackageDetailModal: React.FC = () => {
                         <div className="text-[10px] text-[var(--text-muted)]">To Replace</div>
                       </div>
                       <div className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                        <div className="text-zinc-400 font-mono font-bold text-sm">
+                        <div className="text-[var(--rz-text-secondary)] font-mono font-bold text-sm">
                           {updatePlan.unchanged.length}
                         </div>
                         <div className="text-[10px] text-[var(--text-muted)]">Unchanged</div>
@@ -564,11 +564,11 @@ export const PackageDetailModal: React.FC = () => {
                       <div className="max-h-40 overflow-y-auto rounded bg-black/40 border border-[var(--border-subtle)] p-2 font-mono text-[11px] space-y-1.5">
                         {updatePlan.details.map((d, idx) => (
                           <div key={idx} className="flex items-center justify-between gap-2">
-                            <span className="text-zinc-300 truncate">{d.target}</span>
+                            <span className="text-[var(--rz-text)] truncate">{d.target}</span>
                             <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold shrink-0 ${
                               d.action === "create" ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40" :
                               d.action === "replace" ? "bg-sky-950/60 text-sky-400 border border-sky-800/40" :
-                              d.action === "unchanged" ? "bg-zinc-800/60 text-zinc-400 border border-zinc-700/40" :
+                              d.action === "unchanged" ? "bg-zinc-800/60 text-[var(--rz-text-secondary)] border border-zinc-700/40" :
                               d.action === "conflict" || d.action === "obsolete_retain" ? "bg-amber-950/60 text-amber-400 border border-amber-800/40" :
                               "bg-rose-950/60 text-rose-400 border border-rose-800/40"
                             }`}>
@@ -611,7 +611,7 @@ export const PackageDetailModal: React.FC = () => {
                 )}
 
                 {updateResult && (
-                  <div className="p-3 rounded bg-zinc-900 border border-emerald-500/40 space-y-2">
+                  <div className="p-3 rounded bg-[var(--rz-surface-elevated)] border border-emerald-500/40 space-y-2">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Update Applied Successfully!</span>
@@ -668,13 +668,13 @@ export const PackageDetailModal: React.FC = () => {
                     {plan.files_to_create.length > 0 && (
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text)]">
-                          <FilePlus className="w-3.5 h-3.5 text-[#6fd6a5]" />
+                          <FilePlus className="w-3.5 h-3.5 text-[var(--rz-status-success, #10b981)]" />
                           <span>Create ({plan.files_to_create.length})</span>
                         </div>
                         <div className="rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] divide-y divide-[var(--rz-border-subtle)] overflow-hidden font-mono text-xs shadow-xs">
                           {plan.files_to_create.map((path, idx) => (
                             <div key={idx} className="p-2.5 flex items-center gap-2 text-[var(--rz-text)]">
-                              <span className="text-[#6fd6a5] font-bold">+</span>
+                              <span className="text-[var(--rz-status-success, #10b981)] font-bold">+</span>
                               <span className="truncate">{path}</span>
                             </div>
                           ))}
@@ -686,13 +686,13 @@ export const PackageDetailModal: React.FC = () => {
                     {plan.files_to_replace.length > 0 && (
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--rz-text)]">
-                          <FileEdit className="w-3.5 h-3.5 text-[#e5b85c]" />
+                          <FileEdit className="w-3.5 h-3.5 text-[var(--rz-status-warning, #f59e0b)]" />
                           <span>Replace / Modify ({plan.files_to_replace.length})</span>
                         </div>
                         <div className="rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] divide-y divide-[var(--rz-border-subtle)] overflow-hidden font-mono text-xs shadow-xs">
                           {plan.files_to_replace.map((path, idx) => (
                             <div key={idx} className="p-2.5 flex items-center gap-2 text-[var(--rz-text)]">
-                              <span className="text-[#e5b85c] font-bold">~</span>
+                              <span className="text-[var(--rz-status-warning, #f59e0b)] font-bold">~</span>
                               <span className="truncate">{path}</span>
                             </div>
                           ))}
@@ -725,7 +725,7 @@ export const PackageDetailModal: React.FC = () => {
                       <span>Safety & Backup Option</span>
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded-[5px] border ${
                         createSnapshot
-                          ? "bg-[rgba(111,214,165,0.10)] text-[#6fd6a5] border-emerald-400/20"
+                          ? "bg-emerald-500/10 text-[var(--rz-status-success, #10b981)] border-emerald-400/20"
                           : "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)]"
                       }`}>
                         {createSnapshot ? "Snapshot: Enabled" : "Snapshot: Skipped"}
@@ -766,10 +766,10 @@ export const PackageDetailModal: React.FC = () => {
                       {plan.dependency_report && (
                         <span className={`text-[10px] font-mono px-2 py-0.5 rounded-[6px] border ${
                           plan.dependency_report.resolved
-                            ? "bg-[rgba(111,214,165,0.10)] text-[#6fd6a5] border-emerald-400/20"
+                            ? "bg-emerald-500/10 text-[var(--rz-status-success, #10b981)] border-emerald-400/20"
                             : plan.dependency_report.missing_required.length === 0
-                            ? "bg-[rgba(230,184,92,0.10)] text-[#e5b85c] border-amber-400/20"
-                            : "bg-rose-500/10 text-[#ef7474] border-rose-500/20"
+                            ? "bg-amber-500/10 text-[var(--rz-status-warning, #f59e0b)] border-amber-400/20"
+                            : "bg-rose-500/10 text-[var(--rz-status-error, #ef4444)] border-rose-500/20"
                         }`}>
                           {plan.dependency_report.resolved
                             ? "DAG Resolved"
@@ -833,13 +833,13 @@ export const PackageDetailModal: React.FC = () => {
                     )}
 
                     {plan.dependency_report?.missing_optional && plan.dependency_report.missing_optional.length > 0 && plan.dependency_report.missing_required.length === 0 && (
-                      <div className="p-2.5 rounded-[8px] bg-amber-400/10 border border-amber-400/20 text-[#e5b85c] text-xs">
+                      <div className="p-2.5 rounded-[8px] bg-amber-400/10 border border-amber-400/20 text-[var(--rz-status-warning, #f59e0b)] text-xs">
                         Optional component(s) not installed: <span className="font-mono">{plan.dependency_report.missing_optional.join(", ")}</span>. You can continue safely with available components.
                       </div>
                     )}
 
                     {plan.conflicts.length > 0 && (
-                      <div className="p-2.5 rounded-[8px] bg-rose-500/10 border border-rose-500/20 text-[#ef7474] text-xs font-mono">
+                      <div className="p-2.5 rounded-[8px] bg-rose-500/10 border border-rose-500/20 text-[var(--rz-status-error, #ef4444)] text-xs font-mono">
                         Conflicts: {plan.conflicts.join("; ")}
                       </div>
                     )}
@@ -1019,16 +1019,16 @@ export const PackageDetailModal: React.FC = () => {
                       <div className="text-[13px] font-semibold text-[var(--rz-text)] truncate flex items-center gap-1.5">
                         {selectedPackage.trust_tier === "official" ? (
                           <>
-                            <Sparkles className="w-3.5 h-3.5 text-[#e5b85c]" />
-                            <span className="text-[#e5b85c]">Official</span>
+                            <Sparkles className="w-3.5 h-3.5 text-[var(--rz-status-warning, #f59e0b)]" />
+                            <span className="text-[var(--rz-status-warning, #f59e0b)]">Official</span>
                           </>
                         ) : selectedPackage.trust_tier === "verified" ? (
                           <>
-                            <ShieldCheck className="w-3.5 h-3.5 text-[#7aa2ff]" />
-                            <span className="text-[#7aa2ff]">Verified</span>
+                            <ShieldCheck className="w-3.5 h-3.5 text-[var(--rz-accent, #38bdf8)]" />
+                            <span className="text-[var(--rz-accent, #38bdf8)]">Verified</span>
                           </>
                         ) : selectedPackage.trust_tier === "untrusted" ? (
-                          <span className="text-[#ef7474]">Untrusted</span>
+                          <span className="text-[var(--rz-status-error, #ef4444)]">Untrusted</span>
                         ) : (
                           <span className="text-[var(--rz-text-secondary)]">Community</span>
                         )}
@@ -1039,13 +1039,13 @@ export const PackageDetailModal: React.FC = () => {
                       <div className="text-[11px] font-medium text-[var(--rz-text-muted)]">CI moderation</div>
                       <div className="text-[13px] font-semibold text-[var(--rz-text)] truncate">
                         {selectedPackage.moderation_status === "approved" ? (
-                          <span className="text-[#6fd6a5]">Approved</span>
+                          <span className="text-[var(--rz-status-success, #10b981)]">Approved</span>
                         ) : selectedPackage.moderation_status === "flagged" ? (
-                          <span className="text-[#ef7474]">Flagged</span>
+                          <span className="text-[var(--rz-status-error, #ef4444)]">Flagged</span>
                         ) : selectedPackage.moderation_status === "deprecated" ? (
                           <span className="text-[var(--rz-text-muted)]">Deprecated</span>
                         ) : (
-                          <span className="text-[#e5b85c]">Pending Review</span>
+                          <span className="text-[var(--rz-status-warning, #f59e0b)]">Pending Review</span>
                         )}
                       </div>
                     </div>
@@ -1061,11 +1061,11 @@ export const PackageDetailModal: React.FC = () => {
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded-[6px] border ${
                           selectedPackage.integrity_status === "verified"
-                            ? "text-[#6fd6a5] border-emerald-400/20 bg-[rgba(111,214,165,0.10)]"
+                            ? "text-[var(--rz-status-success, #10b981)] border-emerald-400/20 bg-emerald-500/10"
                             : selectedPackage.integrity_status === "corrupted"
-                            ? "text-[#ef7474] border-rose-400/20 bg-rose-500/10"
+                            ? "text-[var(--rz-status-error, #ef4444)] border-rose-400/20 bg-rose-500/10"
                             : selectedPackage.integrity_status === "pending_download"
-                            ? "text-[#7aa2ff] border-sky-400/20 bg-[rgba(88,132,235,0.10)]"
+                            ? "text-[var(--rz-accent, #38bdf8)] border-sky-400/20 bg-sky-500/10"
                             : "text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]"
                         }`}
                       >
@@ -1087,15 +1087,15 @@ export const PackageDetailModal: React.FC = () => {
 
                     <ul className="space-y-1.5 text-xs text-[var(--rz-text-secondary)] pt-1">
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-[#6fd6a5] shrink-0" />
+                        <Check className="w-3.5 h-3.5 text-[var(--rz-status-success, #10b981)] shrink-0" />
                         <span className="text-[var(--rz-text)]">Zero shell scripts — purely declarative configuration files</span>
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-[#6fd6a5] shrink-0" />
+                        <Check className="w-3.5 h-3.5 text-[var(--rz-status-success, #10b981)] shrink-0" />
                         <span className="text-[var(--rz-text)]">No root privileges required — strictly user-level ~/.config changes</span>
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-[#6fd6a5] shrink-0" />
+                        <Check className="w-3.5 h-3.5 text-[var(--rz-status-success, #10b981)] shrink-0" />
                         <span className="text-[var(--rz-text)]">
                           {createSnapshot
                             ? "Automatic verified snapshot before file modification"
@@ -1115,15 +1115,15 @@ export const PackageDetailModal: React.FC = () => {
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded-[6px] border ${
                           selectedPackage.cryptographic_status === "official_verified"
-                            ? "text-[#e5b85c] border-amber-400/20 bg-[rgba(230,184,92,0.10)]"
+                            ? "text-[var(--rz-status-warning, #f59e0b)] border-amber-400/20 bg-amber-500/10"
                             : selectedPackage.cryptographic_status === "author_verified"
-                            ? "text-[#7aa2ff] border-sky-400/20 bg-[rgba(88,132,235,0.10)]"
+                            ? "text-[var(--rz-accent, #38bdf8)] border-sky-400/20 bg-sky-500/10"
                             : selectedPackage.cryptographic_status === "self_signed_unvetted"
                             ? "text-purple-300 border-purple-500/20 bg-purple-500/10"
                             : selectedPackage.cryptographic_status === "invalid_signature" ||
                               selectedPackage.cryptographic_status === "revoked_key" ||
                               selectedPackage.cryptographic_status === "official_impersonation"
-                            ? "text-[#ef7474] border-rose-500/20 bg-rose-500/10"
+                            ? "text-[var(--rz-status-error, #ef4444)] border-rose-500/20 bg-rose-500/10"
                             : "text-[var(--rz-text-secondary)] border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)]"
                         }`}
                       >
@@ -1551,18 +1551,18 @@ export const PackageDetailModal: React.FC = () => {
           {/* Left: Compatibility Status */}
           <div className="flex items-center gap-2 text-xs">
             {hasMissingRequiredDeps ? (
-              <span className="inline-flex items-center gap-1.5 text-[#e98a91] font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ef7474]" />
+              <span className="inline-flex items-center gap-1.5 text-[var(--rz-status-error, #f43f5e)] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--rz-status-error, #ef4444)]" />
                 Missing required dependency{firstMissingDep ? `: ${firstMissingDep}` : ""}
               </span>
             ) : compat.level === "Compatible" ? (
-              <span className="inline-flex items-center gap-1.5 text-[#6fd6a5] font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#6fd6a5]" />
+              <span className="inline-flex items-center gap-1.5 text-[var(--rz-status-success, #10b981)] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--rz-status-success, #10b981)]" />
                 Compatible with your system
               </span>
             ) : compat.level === "MissingDependencies" ? (
-              <span className="inline-flex items-center gap-1.5 text-[#e5b85c] font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e5b85c]" />
+              <span className="inline-flex items-center gap-1.5 text-[var(--rz-status-warning, #f59e0b)] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--rz-status-warning, #f59e0b)]" />
                 {compat.summary_label}
               </span>
             ) : (

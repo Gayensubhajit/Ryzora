@@ -11,6 +11,8 @@ import {
   MoreHorizontal,
   Play,
   RotateCcw,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { PackageItem } from "../../types";
 import { formatDownloads } from "../catalogue/catalogueUtils";
@@ -35,9 +37,9 @@ interface ProductHeroProps {
   isActive?: boolean;
   activeTargets?: { quickshell: boolean; sddm: boolean };
   installedTargets?: { quickshell: boolean; sddm: boolean };
-  onApply?: () => void;
-  onDeactivate?: () => void;
-  onTest?: () => void;
+  onApply?: (target?: "quickshell" | "sddm" | "both") => void;
+  onDeactivate?: (target?: "quickshell" | "sddm" | "both") => void;
+  onTest?: (target?: "quickshell" | "sddm") => void;
   onUninstall?: () => void;
   isApplying?: boolean;
   isOverridden?: boolean;
@@ -72,6 +74,9 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
 }) => {
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
+  const [showApplyMenu, setShowApplyMenu] = useState(false);
+  const [showTestMenu, setShowTestMenu] = useState(false);
+  const [activeSubmenu, setActiveSubmenu] = useState<"none" | "test" | "deactivate">("none");
 
   const canTargetQs = Boolean(packageItem.supports_session_lock && isSessionLockSupported);
   const canTargetSddm = Boolean(packageItem.supports_login_screen && isLoginScreenSupported);
@@ -118,12 +123,22 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
     }
   };
 
-  const targetSummary =
-    selectedTarget === "both"
-      ? "Session + Login"
-      : selectedTarget === "sddm"
-      ? "Login Screen"
-      : "Session Lock";
+  const isQsActive = Boolean(activeTargets?.quickshell);
+  const isSddmActive = Boolean(activeTargets?.sddm);
+  const bothActive = isQsActive && isSddmActive;
+
+  const activeSummary = bothActive
+    ? "Session + Login"
+    : isQsActive
+    ? "Session Lock"
+    : isSddmActive
+    ? "Login Screen"
+    : selectedTarget === "both"
+    ? "Session + Login"
+    : selectedTarget === "sddm"
+    ? "Login Screen"
+    : "Session Lock";
+
 
   const applyLabel =
     selectedTarget === "both"
@@ -381,7 +396,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               )}
             </button>
           ) : !isActive ? (
-            /* STATE 2: INSTALLED BUT NOT ACTIVE -> [ Apply ] + [ ⋯ ] */
+            /* STATE 2: INSTALLED BUT NOT ACTIVE -> Target-Aware [ Apply ▾ ] + [ ⋯ ] */
             <div className="space-y-2.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 py-0.5">
                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -389,27 +404,133 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isApplying}
-                  onClick={onApply}
-                  className="flex-1 py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
-                >
-                  {isApplying ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Applying...</span>
-                    </>
-                  ) : (
-                    <span>{applyLabel}</span>
-                  )}
-                </button>
+                {installedTargets.quickshell && installedTargets.sddm ? (
+                  /* Both targets installed -> [ Apply ▾ ] dropdown */
+                  <div className="relative flex-1">
+                    <button
+                      type="button"
+                      disabled={isApplying}
+                      onClick={() => setShowApplyMenu(!showApplyMenu)}
+                      className="w-full py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
+                      title="Select target to apply"
+                    >
+                      {isApplying ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Applying...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Apply</span>
+                          <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+                        </>
+                      )}
+                    </button>
+
+                    {showApplyMenu && (
+                      <div
+                        className="absolute left-0 bottom-full mb-2 w-56 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowApplyMenu(false);
+                            onApply?.("quickshell");
+                          }}
+                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                        >
+                          <span>Apply to Session</span>
+                          <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowApplyMenu(false);
+                            onApply?.("sddm");
+                          }}
+                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                        >
+                          <span>Apply to Login Screen</span>
+                          <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
+                        </button>
+                        <div className="my-1 border-t border-[var(--rz-border-subtle)]" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowApplyMenu(false);
+                            onApply?.("both");
+                          }}
+                          className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-[var(--rz-accent)] hover:bg-[var(--rz-accent)]/10 flex items-center justify-between transition-colors cursor-pointer text-left"
+                        >
+                          <span>Apply to Both</span>
+                          <span className="text-[10px] text-[var(--rz-accent)] font-medium">Session + Login</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : installedTargets.quickshell && !installedTargets.sddm ? (
+                  /* Single target: Session Lock only */
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={() => onApply?.("quickshell")}
+                    className="flex-1 py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    {isApplying ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <span>Apply to Session</span>
+                    )}
+                  </button>
+                ) : !installedTargets.quickshell && installedTargets.sddm ? (
+                  /* Single target: Login Screen only */
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={() => onApply?.("sddm")}
+                    className="flex-1 py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    {isApplying ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <span>Apply to Login Screen</span>
+                    )}
+                  </button>
+                ) : (
+                  /* Fallback button */
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={() => onApply?.(selectedTarget)}
+                    className="flex-1 py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    {isApplying ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <span>{applyLabel}</span>
+                    )}
+                  </button>
+                )}
 
                 {onUninstall && (
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setShowOverflow(!showOverflow)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowOverflow(!showOverflow);
+                        setActiveSubmenu("none");
+                      }}
                       className="p-2.5 rounded-xl border border-[var(--rz-border-strong)] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
                       aria-label="More options"
                       title="More options"
@@ -419,18 +540,78 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
 
                     {showOverflow && (
                       <div
-                        className="absolute right-0 bottom-full mb-2 w-36 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
+                        className="absolute right-0 bottom-full mb-2 w-56 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {onTest && (
+                          installedTargets.quickshell && installedTargets.sddm ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setActiveSubmenu(activeSubmenu === "test" ? "none" : "test")}
+                                className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
+                                  <span>Test</span>
+                                </div>
+                                <ChevronRight className={`w-3.5 h-3.5 text-[var(--rz-text-muted)] transition-transform ${activeSubmenu === "test" ? "rotate-90" : ""}`} />
+                              </button>
+                              {activeSubmenu === "test" && (
+                                <div className="pl-4 pr-1 py-1 space-y-0.5 bg-[var(--rz-surface)] rounded-lg my-1 border border-[var(--rz-border-subtle)]">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowOverflow(false);
+                                      setActiveSubmenu("none");
+                                      onTest("quickshell");
+                                    }}
+                                    className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                                  >
+                                    <span>Test Session Lock</span>
+                                    <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowOverflow(false);
+                                      setActiveSubmenu("none");
+                                      onTest("sddm");
+                                    }}
+                                    className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                                  >
+                                    <span>Test Login Screen</span>
+                                    <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowOverflow(false);
+                                onTest(installedTargets.quickshell ? "quickshell" : "sddm");
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
+                            >
+                              <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
+                              <span>Test</span>
+                            </button>
+                          )
+                        )}
+
+                        <div className="my-1 border-t border-[var(--rz-border-subtle)]" />
                         <button
                           type="button"
                           onClick={() => {
                             setShowOverflow(false);
+                            setActiveSubmenu("none");
                             setShowUninstallConfirm(true);
                           }}
-                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                          className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                           <span>Uninstall</span>
                         </button>
                       </div>
@@ -440,29 +621,79 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               </div>
             </div>
           ) : (
-            /* STATE 3: INSTALLED + ACTIVE -> [ Test ] + [ ⋯ ] (with Deactivate & Uninstall) */
+            /* STATE 3: INSTALLED + ACTIVE -> [ Test ] + [ ⋯ ] (with Target-Aware Submenus) */
             <div className="space-y-2.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 py-0.5">
                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Active for {targetSummary}</span>
+                <span>Active for {activeSummary}</span>
               </div>
 
               <div className="flex items-center gap-2">
                 {onTest && (
-                  <button
-                    type="button"
-                    onClick={onTest}
-                    className="flex-1 py-2.5 px-4 rounded-xl text-xs font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
-                    title="Launch isolated lockscreen test"
-                  >
-                    <span>Test</span>
-                  </button>
+                  bothActive ? (
+                    /* Both active -> [ Test ▾ ] dropdown */
+                    <div className="relative flex-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowTestMenu(!showTestMenu)}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
+                        title="Choose lockscreen target to test"
+                      >
+                        <span>Test</span>
+                        <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+                      </button>
+
+                      {showTestMenu && (
+                        <div
+                          className="absolute left-0 bottom-full mb-2 w-52 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowTestMenu(false);
+                              onTest("quickshell");
+                            }}
+                            className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                          >
+                            <span>Test Session Lock</span>
+                            <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowTestMenu(false);
+                              onTest("sddm");
+                            }}
+                            className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                          >
+                            <span>Test Login Screen</span>
+                            <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Single active -> direct test */
+                    <button
+                      type="button"
+                      onClick={() => onTest(isQsActive ? "quickshell" : "sddm")}
+                      className="flex-1 py-2.5 px-4 rounded-xl text-xs font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
+                      title={isQsActive ? "Test Session Lock (Hyprland)" : "Test Login Screen (SDDM)"}
+                    >
+                      <span>Test</span>
+                    </button>
+                  )
                 )}
 
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setShowOverflow(!showOverflow)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowOverflow(!showOverflow);
+                      setActiveSubmenu("none");
+                    }}
                     className="p-2.5 rounded-xl border border-[var(--rz-border-strong)] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
                     aria-label="More options"
                     title="More options"
@@ -472,38 +703,148 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
 
                   {showOverflow && (
                     <div
-                      className="absolute right-0 bottom-full mb-2 w-40 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
+                      className="absolute right-0 bottom-full mb-2 w-56 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      {/* Option 1: Test */}
                       {onTest && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowOverflow(false);
-                            onTest();
-                          }}
-                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
-                        >
-                          <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
-                          <span>Test</span>
-                        </button>
+                        bothActive ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setActiveSubmenu(activeSubmenu === "test" ? "none" : "test")}
+                              className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
+                                <span>Test</span>
+                              </div>
+                              <ChevronRight className={`w-3.5 h-3.5 text-[var(--rz-text-muted)] transition-transform ${activeSubmenu === "test" ? "rotate-90" : ""}`} />
+                            </button>
+
+                            {activeSubmenu === "test" && (
+                              <div className="pl-4 pr-1 py-1 space-y-0.5 bg-[var(--rz-surface)] rounded-lg my-1 border border-[var(--rz-border-subtle)]">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowOverflow(false);
+                                    setActiveSubmenu("none");
+                                    onTest("quickshell");
+                                  }}
+                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                                >
+                                  <span>Test Session Lock</span>
+                                  <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowOverflow(false);
+                                    setActiveSubmenu("none");
+                                    onTest("sddm");
+                                  }}
+                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                                >
+                                  <span>Test Login Screen</span>
+                                  <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowOverflow(false);
+                              onTest(isQsActive ? "quickshell" : "sddm");
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
+                          >
+                            <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
+                            <span>Test</span>
+                          </button>
+                        )
                       )}
 
+                      {/* Option 2: Deactivate */}
                       {onDeactivate && (
-                        <button
-                          type="button"
-                          disabled={isApplying}
-                          onClick={() => {
-                            setShowOverflow(false);
-                            onDeactivate();
-                          }}
-                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
-                          <span>Deactivate</span>
-                        </button>
+                        bothActive ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isApplying}
+                              onClick={() => setActiveSubmenu(activeSubmenu === "deactivate" ? "none" : "deactivate")}
+                              className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-500/10 flex items-center justify-between transition-colors cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-2">
+                                <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
+                                <span>Deactivate</span>
+                              </div>
+                              <ChevronRight className={`w-3.5 h-3.5 text-amber-500 transition-transform ${activeSubmenu === "deactivate" ? "rotate-90" : ""}`} />
+                            </button>
+
+                            {activeSubmenu === "deactivate" && (
+                              <div className="pl-4 pr-1 py-1 space-y-0.5 bg-[var(--rz-surface)] rounded-lg my-1 border border-[var(--rz-border-subtle)]">
+                                <button
+                                  type="button"
+                                  disabled={isApplying}
+                                  onClick={() => {
+                                    setShowOverflow(false);
+                                    setActiveSubmenu("none");
+                                    onDeactivate("quickshell");
+                                  }}
+                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                                >
+                                  <span>Deactivate Session Lock</span>
+                                  <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isApplying}
+                                  onClick={() => {
+                                    setShowOverflow(false);
+                                    setActiveSubmenu("none");
+                                    onDeactivate("sddm");
+                                  }}
+                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                                >
+                                  <span>Deactivate Login Screen</span>
+                                  <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
+                                </button>
+                                <div className="my-0.5 border-t border-[var(--rz-border-subtle)]" />
+                                <button
+                                  type="button"
+                                  disabled={isApplying}
+                                  onClick={() => {
+                                    setShowOverflow(false);
+                                    setActiveSubmenu("none");
+                                    onDeactivate("both");
+                                  }}
+                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold text-amber-500 hover:bg-amber-500/10 flex items-center justify-between transition-colors cursor-pointer text-left"
+                                >
+                                  <span>Deactivate Both</span>
+                                  <span className="text-[10px] text-amber-500 font-mono">All</span>
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isApplying}
+                            onClick={() => {
+                              setShowOverflow(false);
+                              onDeactivate(isQsActive ? "quickshell" : "sddm");
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
+                            <span>{isQsActive ? "Deactivate Session Lock" : "Deactivate Login Screen"}</span>
+                          </button>
+                        )
                       )}
 
+                      {/* Option 3: Uninstall */}
                       {onUninstall && (
                         <>
                           <div className="my-1 border-t border-[var(--rz-border-subtle)]" />
@@ -511,9 +852,10 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                             type="button"
                             onClick={() => {
                               setShowOverflow(false);
+                              setActiveSubmenu("none");
                               setShowUninstallConfirm(true);
                             }}
-                            className="w-full px-3 py-2 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                            className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
                           >
                             <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                             <span>Uninstall</span>
@@ -547,14 +889,14 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
         </div>
       </div>
 
-      {/* ── Clean Uninstall Confirmation Dialog ── */}
+      {/* ── Safe Active / Clean Uninstall Confirmation Dialog ── */}
       {showUninstallConfirm && onUninstall && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150"
           onClick={() => setShowUninstallConfirm(false)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] p-6 shadow-2xl space-y-4"
+            className="w-full max-w-md rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 text-rose-500 font-semibold text-sm">
@@ -562,26 +904,94 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               <span>Uninstall {packageItem.title}?</span>
             </div>
 
-            <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
-              Theme files and configuration for <strong>{packageItem.title}</strong> will be cleanly removed from your system.
-            </p>
+            {isQsActive || isSddmActive ? (
+              <>
+                <div className="space-y-2">
+                  <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
+                    This lock screen is currently active for:
+                  </p>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--rz-border-subtle)]">
-              <button
-                type="button"
-                onClick={() => setShowUninstallConfirm(false)}
-                className="px-3.5 py-1.5 rounded-lg border border-[var(--rz-border-strong)] text-xs text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmUninstall}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-xs"
-              >
-                Uninstall
-              </button>
-            </div>
+                  <div className="p-3 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] space-y-2">
+                    {isQsActive && (
+                      <div className="flex items-center gap-2 text-xs font-medium text-[var(--rz-text)]">
+                        <Check className="w-4 h-4 text-emerald-500 stroke-[2.5]" />
+                        <span>Session Lock</span>
+                        <span className="text-[11px] text-[var(--rz-text-muted)] font-mono ml-auto">Hyprland · Wayland</span>
+                      </div>
+                    )}
+                    {isSddmActive && (
+                      <div className="flex items-center gap-2 text-xs font-medium text-[var(--rz-text)]">
+                        <Check className="w-4 h-4 text-emerald-500 stroke-[2.5]" />
+                        <span>Login Screen</span>
+                        <span className="text-[11px] text-[var(--rz-text-muted)] font-mono ml-auto">SDDM</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
+                    Before uninstalling, Ryzora will deactivate the active target{bothActive ? "s" : ""} and restore the previous system lock configuration.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--rz-border-subtle)]">
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={() => setShowUninstallConfirm(false)}
+                    className="px-3.5 py-1.5 rounded-lg border border-[var(--rz-border-strong)] text-xs text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={handleConfirmUninstall}
+                    className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isApplying ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Deactivating & Uninstalling...</span>
+                      </>
+                    ) : (
+                      <span>Deactivate & Uninstall</span>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
+                  Theme files and configuration for <strong>{packageItem.title}</strong> will be cleanly removed from your system.
+                </p>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--rz-border-subtle)]">
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={() => setShowUninstallConfirm(false)}
+                    className="px-3.5 py-1.5 rounded-lg border border-[var(--rz-border-strong)] text-xs text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isApplying}
+                    onClick={handleConfirmUninstall}
+                    className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isApplying ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Uninstalling...</span>
+                      </>
+                    ) : (
+                      <span>Uninstall</span>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

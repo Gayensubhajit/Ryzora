@@ -1660,7 +1660,15 @@ pub fn uninstall_package_in(
 
     let state_dir = home_dir.join(".local/share/ryzora/state");
     let active_state = get_active_lockscreen_state_in(&state_dir);
-    if active_state.quickshell.as_deref() == Some(package_id) || active_state.sddm.as_deref() == Some(package_id) {
+    let slug = package_id
+        .strip_prefix("lockscreen-qylock-")
+        .or_else(|| package_id.strip_prefix("lockscreen-"))
+        .unwrap_or(package_id);
+    if active_state.quickshell.as_deref() == Some(package_id)
+        || active_state.quickshell.as_deref() == Some(slug)
+        || active_state.sddm.as_deref() == Some(package_id)
+        || active_state.sddm.as_deref() == Some(slug)
+    {
         return Err(format!(
             "Cannot uninstall active package '{}'. Please deactivate it first to restore system defaults safely.",
             package_id
@@ -3486,20 +3494,19 @@ pub fn apply_lockscreen_target_in_with_config(
             let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
         }
 
-        // Apply hypridle integration: generate config, write drop-in, reload service
-        match crate::hypridle::apply_hypridle_integration(home) {
-            Ok((source_hash, lock_path)) => {
-                let source_path = home.join(crate::hypridle::HYPRIDLE_SOURCE_PATH);
-                state.hypridle_override = true;
-                state.hypridle_source_hash = Some(source_hash);
-                state.hypridle_source_path = Some(source_path.display().to_string());
-                state.hypridle_ryzora_config = Some(home.join(crate::hypridle::HYPRIDLE_RYZORA_CONFIG).display().to_string());
-                state.lock_wrapper_path = Some(lock_path.display().to_string());
+        // Apply verified Phase 2 / Phase 3 transactional session lock integration
+        let restart_service = std::env::var("RYZORA_SYSTEM_ROOT").is_err();
+        match crate::integration::session_lock::enable_session_lock(home, restart_service) {
+            Ok(status) => {
+                state.hypridle_override = status.dropin_active;
+                state.hypridle_source_hash = status.audit_native_config_hash;
+                state.hypridle_source_path = Some(status.native_config_path.display().to_string());
+                state.hypridle_ryzora_config = Some(status.overlay_config_path.display().to_string());
+                state.lock_wrapper_path = Some(status.dropin_path.display().to_string());
             }
             Err(e) => {
-                // Non-fatal: log but continue — session lock files are applied even without hypridle
-                eprintln!("Ryzora: Warning: hypridle integration failed: {}", e);
-                eprintln!("Ryzora: The lockscreen package is applied but the lock shortcut still uses the system default.");
+                // Non-fatal if native hypridle is not present (or in headless/test sandbox without hypridle)
+                eprintln!("Ryzora: Warning: session lock integration skipped or failed: {}", e);
             }
         }
 
@@ -3608,12 +3615,13 @@ pub fn deactivate_lockscreen_target_in(
 
         // Deactivate hypridle integration: remove drop-in and generated config, reload service
         if state.hypridle_override {
-            match crate::hypridle::deactivate_hypridle_integration(home) {
-                Ok(()) => {
-                    eprintln!("Ryzora: Hypridle integration removed, original config restored.");
+            let restart_service = std::env::var("RYZORA_SYSTEM_ROOT").is_err();
+            match crate::integration::session_lock::disable_session_lock(home, restart_service) {
+                Ok(_report) => {
+                    eprintln!("Ryzora: Session lock integration removed, original config restored.");
                 }
                 Err(e) => {
-                    eprintln!("Ryzora: Warning: could not cleanly remove hypridle integration: {}", e);
+                    eprintln!("Ryzora: Warning: could not cleanly remove session lock integration: {}", e);
                 }
             }
             state.hypridle_override = false;
@@ -3923,16 +3931,35 @@ pub fn deactivate_and_uninstall_lockscreen_target_in(
 ) -> Result<UninstallResult, String> {
     let state = get_active_lockscreen_state_in(state_dir);
 
+    let slug = package_id
+        .strip_prefix("lockscreen-qylock-")
+        .or_else(|| package_id.strip_prefix("lockscreen-"))
+        .unwrap_or(package_id);
+
     // 1. If active, deactivate first to restore original system state
-    let is_qs_active = state.quickshell.as_deref() == Some(package_id);
-    let is_sddm_active = state.sddm.as_deref() == Some(package_id);
+    let is_qs_active = state.quickshell.as_deref() == Some(package_id)
+        || state.quickshell.as_deref() == Some(slug);
+    let is_sddm_active = state.sddm.as_deref() == Some(package_id)
+        || state.sddm.as_deref() == Some(slug);
 
     if is_qs_active && is_sddm_active {
-        let _ = deactivate_lockscreen_target_in("both", home, state_dir);
+        deactivate_lockscreen_target_in("both", home, state_dir)
+            .map_err(|e| format!("Failed to deactivate active lockscreen before uninstall: {}", e))?;
     } else if is_qs_active {
-        let _ = deactivate_lockscreen_target_in("quickshell", home, state_dir);
+        deactivate_lockscreen_target_in("quickshell", home, state_dir)
+            .map_err(|e| format!("Failed to deactivate active session lock before uninstall: {}", e))?;
     } else if is_sddm_active {
-        let _ = deactivate_lockscreen_target_in("sddm", home, state_dir);
+        deactivate_lockscreen_target_in("sddm", home, state_dir)
+            .map_err(|e| format!("Failed to deactivate active login screen before uninstall: {}", e))?;
+    }
+
+    // Verify authoritative deactivation succeeded before deleting any package files
+    let state_after = get_active_lockscreen_state_in(state_dir);
+    if is_qs_active && (state_after.quickshell.as_deref() == Some(package_id) || state_after.quickshell.as_deref() == Some(slug)) {
+        return Err("Deactivation verification failed: Session lock remains active. Refusing to uninstall.".to_string());
+    }
+    if is_sddm_active && (state_after.sddm.as_deref() == Some(package_id) || state_after.sddm.as_deref() == Some(slug)) {
+        return Err("Deactivation verification failed: Login screen remains active. Refusing to uninstall.".to_string());
     }
 
     // 2. If SDDM target was installed, clean /usr/share/sddm/themes/ryzora-<slug>

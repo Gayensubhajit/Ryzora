@@ -59,6 +59,9 @@ pub struct SessionLockStatus {
 /// Helper to reload daemon and restart hypridle.service in the user systemd manager,
 /// validating that both commands succeed and the service transitions to active.
 pub fn reload_and_restart_hypridle() -> Result<(), IntegrationError> {
+    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        return Ok(());
+    }
     // 1. systemctl --user daemon-reload
     let reload_out = Command::new("systemctl")
         .args(["--user", "daemon-reload"])
@@ -119,6 +122,9 @@ pub fn reload_and_restart_hypridle() -> Result<(), IntegrationError> {
 
 /// Checks whether hypridle.service is currently active in user systemd.
 pub fn is_hypridle_service_active() -> bool {
+    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        return true;
+    }
     Command::new("systemctl")
         .args(["--user", "is-active", "hypridle.service"])
         .output()
@@ -231,15 +237,24 @@ where
 
     let marker = format!("# Ryzora-Managed-Integration: {}", INTEGRATION_ID);
 
+    // Canonical lock command: prioritize user Dusky lock script if present, otherwise /usr/bin/hyprlock
+    let dusky_script = home.join("user_scripts/hyprlock/lock.sh");
+    let lock_cmd = if dusky_script.is_file() {
+        dusky_script.display().to_string()
+    } else {
+        "/usr/bin/hyprlock".to_string()
+    };
+
     // Artifact 1: Overlay hypridle configuration dynamically sourcing the native config
     let overlay_content = format!(
         "{}\n\
         source = {}\n\n\
         general {{\n\
-            lock_cmd = /usr/bin/hyprlock\n\
+            lock_cmd = {}\n\
         }}\n",
         marker,
-        native_config.display()
+        native_config.display(),
+        lock_cmd
     );
 
     // Artifact 2: Systemd user drop-in redirecting ExecStart
@@ -598,6 +613,9 @@ mod tests {
             eprintln!("Skipping live test: native config not present");
             return;
         }
+
+        // Ensure host starts clean before beginning test sequence
+        let _ = disable_session_lock(&home, true);
 
         let baseline_hash = "9d117906fb409c9f707a7d1408dbf8c6006e0c804b83194e9ce9b041a1b8c402";
         let native_bytes_initial = fs::read(&native_conf).unwrap();
