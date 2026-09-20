@@ -8,6 +8,9 @@
 //! - No shims, no wrappers in `~/.local/bin/hyprlock`, no snapshots, no Quickshell coupling.
 //! - Baseline SHA-256 is an audit metadata field only; native config is user-owned and
 //!   its modification never blocks rollback.
+//! - Strict error handling: validates daemon-reload, service restart, and active state.
+//! - Transactional rollback if service activation fails after artifact writing.
+//! - Truly idempotent disable: repeated disables succeed cleanly.
 
 use super::filesystem::calculate_sha256;
 use super::lifecycle::{apply_integration, disable_integration, PlannedArtifact, PlannedIntegration};
@@ -26,9 +29,24 @@ pub const OVERLAY_CONFIG_REL: &str = ".config/ryzora/session-lock/hypridle.conf"
 pub const DROPIN_REL: &str = ".config/systemd/user/hypridle.service.d/zz-ryzora-session-lock.conf";
 pub const DROPIN_DIR_REL: &str = ".config/systemd/user/hypridle.service.d";
 
+/// High-level discrete state of the session lock integration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionLockIntegrationState {
+    /// Fully active: manifest exists, drop-in exists, and hypridle service is running.
+    Active,
+    /// Disabled: no manifest exists and no drop-in exists on disk.
+    Disabled,
+    /// Degraded: manifest is enabled but drop-in or service is inactive.
+    Degraded,
+    /// Conflict: unowned drop-in exists without an active Ryzora manifest.
+    Conflict,
+}
+
 /// Status report for the Hyprland session lock integration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionLockStatus {
+    pub state: SessionLockIntegrationState,
     pub enabled: bool,
     pub dropin_active: bool,
     pub service_active: bool,
@@ -38,29 +56,64 @@ pub struct SessionLockStatus {
     pub audit_native_config_hash: Option<String>,
 }
 
-/// Helper to reload and restart hypridle.service in the user systemd manager.
-fn reload_and_restart_hypridle() -> Result<(), IntegrationError> {
-    // 1. daemon-reload
-    let reload = Command::new("systemctl")
+/// Helper to reload daemon and restart hypridle.service in the user systemd manager,
+/// validating that both commands succeed and the service transitions to active.
+pub fn reload_and_restart_hypridle() -> Result<(), IntegrationError> {
+    // 1. systemctl --user daemon-reload
+    let reload_out = Command::new("systemctl")
         .args(["--user", "daemon-reload"])
-        .output();
-    if let Err(e) = reload {
+        .output()
+        .map_err(|e| {
+            IntegrationError::IoError(format!("Failed to execute 'systemctl --user daemon-reload': {}", e))
+        })?;
+
+    if !reload_out.status.success() {
+        let err_msg = String::from_utf8_lossy(&reload_out.stderr).trim().to_string();
         return Err(IntegrationError::IoError(format!(
-            "Failed to execute 'systemctl --user daemon-reload': {}",
-            e
+            "systemctl --user daemon-reload failed (code {:?}): {}",
+            reload_out.status.code(),
+            if err_msg.is_empty() { String::from_utf8_lossy(&reload_out.stdout).trim().to_string() } else { err_msg }
         )));
     }
 
-    // 2. restart hypridle.service (only if user systemd session is active)
-    let _ = Command::new("systemctl")
+    // 2. systemctl --user restart hypridle.service
+    let restart_out = Command::new("systemctl")
         .args(["--user", "restart", "hypridle.service"])
-        .output();
+        .output()
+        .map_err(|e| {
+            IntegrationError::IoError(format!("Failed to execute 'systemctl --user restart hypridle.service': {}", e))
+        })?;
+
+    if !restart_out.status.success() {
+        let err_msg = String::from_utf8_lossy(&restart_out.stderr).trim().to_string();
+        return Err(IntegrationError::IoError(format!(
+            "systemctl --user restart hypridle.service failed (code {:?}): {}",
+            restart_out.status.code(),
+            if err_msg.is_empty() { String::from_utf8_lossy(&restart_out.stdout).trim().to_string() } else { err_msg }
+        )));
+    }
+
+    // 3. Verify hypridle.service is active
+    let is_active_out = Command::new("systemctl")
+        .args(["--user", "is-active", "hypridle.service"])
+        .output()
+        .map_err(|e| {
+            IntegrationError::IoError(format!("Failed to query 'systemctl --user is-active hypridle.service': {}", e))
+        })?;
+
+    let active_str = String::from_utf8_lossy(&is_active_out.stdout).trim().to_string();
+    if active_str != "active" {
+        return Err(IntegrationError::VerificationFailed(format!(
+            "hypridle.service failed to transition to active state after restart; current state is '{}'",
+            active_str
+        )));
+    }
 
     Ok(())
 }
 
 /// Checks whether hypridle.service is currently active in user systemd.
-fn is_hypridle_service_active() -> bool {
+pub fn is_hypridle_service_active() -> bool {
     Command::new("systemctl")
         .args(["--user", "is-active", "hypridle.service"])
         .output()
@@ -104,7 +157,18 @@ pub fn get_status(home: &Path) -> SessionLockStatus {
     let service_active = is_hypridle_service_active();
     let audit_hash = manifest.and_then(|m| m.metadata.get("audit_native_config_hash").cloned());
 
+    let state = if enabled && dropin_active && service_active {
+        SessionLockIntegrationState::Active
+    } else if !enabled && !dropin_active {
+        SessionLockIntegrationState::Disabled
+    } else if enabled && (!dropin_active || !service_active) {
+        SessionLockIntegrationState::Degraded
+    } else {
+        SessionLockIntegrationState::Conflict
+    };
+
     SessionLockStatus {
+        state,
         enabled,
         dropin_active,
         service_active,
@@ -116,6 +180,11 @@ pub fn get_status(home: &Path) -> SessionLockStatus {
 }
 
 /// Enables the reversible session lock integration using Phase 1 Core.
+///
+/// Invariants:
+/// - Pre-flight check: Rejects if foreign/user drop-ins exist.
+/// - Sourcing: Overlay dynamically sources native config.
+/// - Transactional Rollback: If service reload/verification fails, artifacts are safely removed.
 pub fn enable_session_lock(home: &Path, restart_service: bool) -> Result<SessionLockStatus, IntegrationError> {
     let native_config = home.join(NATIVE_CONFIG_REL);
     let overlay_config = home.join(OVERLAY_CONFIG_REL);
@@ -202,21 +271,53 @@ pub fn enable_session_lock(home: &Path, restart_service: bool) -> Result<Session
 
     // Reload service if requested (and in real environment)
     if restart_service {
-        let _ = reload_and_restart_hypridle();
+        if let Err(restart_err) = reload_and_restart_hypridle() {
+            // Service restart or verification failed: rollback artifacts atomically
+            let _ = disable_integration(INTEGRATION_ID, home);
+            return Err(IntegrationError::VerificationFailed(format!(
+                "Failed to activate hypridle.service: {}. Transaction rolled back.",
+                restart_err
+            )));
+        }
     }
 
     Ok(get_status(home))
 }
 
 /// Disables the reversible session lock integration using Phase 1 Core.
+///
+/// Invariants:
+/// - Truly idempotent: repeated disables succeed cleanly.
+/// - Native config is NEVER modified, deleted, or used to block rollback.
+/// - Restores native systemd unit and verifies active state.
 pub fn disable_session_lock(home: &Path, restart_service: bool) -> Result<DisableReport, IntegrationError> {
-    // 1. Reversibly disable through Phase 1 Core
-    // Invariant: Native config hash is NOT checked. Native config remains user-owned and untouched.
-    let report = disable_integration(INTEGRATION_ID, home)?;
+    let manifest_exists = load_manifest(INTEGRATION_ID, home).is_ok();
 
-    // 2. Reload and restart service to restore native systemd unit
+    let report = if manifest_exists {
+        // Reversibly disable through Phase 1 Core
+        disable_integration(INTEGRATION_ID, home)?
+    } else {
+        // Idempotent: already disabled, no artifacts to remove
+        DisableReport {
+            integration_id: INTEGRATION_ID.to_string(),
+            removed_artifacts: Vec::new(),
+            preserved_artifacts: Vec::new(),
+            missing_artifacts: Vec::new(),
+            removed_directories: Vec::new(),
+            preserved_directories: Vec::new(),
+            errors: Vec::new(),
+            fully_reverted: true,
+        }
+    };
+
+    // Reload and restart service to restore native systemd unit
     if restart_service {
-        let _ = reload_and_restart_hypridle();
+        if let Err(restart_err) = reload_and_restart_hypridle() {
+            return Err(IntegrationError::IoError(format!(
+                "Artifacts were removed, but restoring native hypridle.service failed: {}",
+                restart_err
+            )));
+        }
     }
 
     Ok(report)
@@ -262,6 +363,7 @@ mod tests {
 
         // 1. Initial status before enable
         let status_before = get_status(&home);
+        assert_eq!(status_before.state, SessionLockIntegrationState::Disabled);
         assert!(!status_before.enabled);
         assert!(!status_before.dropin_active);
 
@@ -308,7 +410,7 @@ mod tests {
             IntegrationError::ConflictError(msg) => {
                 assert!(msg.contains("Foreign or user-created drop-in detected"));
             }
-            _ => panic!("Expected RollbackRefused, got {:?}", err),
+            _ => panic!("Expected ConflictError, got {:?}", err),
         }
 
         // Clean up
@@ -358,7 +460,7 @@ mod tests {
     }
 
     #[test]
-    fn test_disable_twice_idempotence() {
+    fn test_disable_twice_is_truly_idempotent() {
         let home = test_home("twice_idempotent");
         setup_native_env(&home);
 
@@ -366,9 +468,10 @@ mod tests {
         let rep1 = disable_session_lock(&home, false).unwrap();
         assert!(rep1.fully_reverted);
 
-        // Disabling again handles missing manifest gracefully
-        let rep2 = disable_session_lock(&home, false);
-        assert!(rep2.is_err(), "Second disable on non-existent manifest returns error cleanly");
+        // Disabling again succeeds cleanly (truly idempotent)
+        let rep2 = disable_session_lock(&home, false).unwrap();
+        assert!(rep2.fully_reverted);
+        assert_eq!(rep2.removed_artifacts.len(), 0);
 
         let _ = fs::remove_dir_all(&home);
     }
@@ -390,13 +493,16 @@ mod tests {
 
         // 1. Initial host status
         let initial_status = get_status(&home);
+        assert_eq!(initial_status.state, SessionLockIntegrationState::Disabled);
         assert!(!initial_status.enabled);
         assert!(!initial_status.dropin_active);
 
-        // 2. Enable integration on live system
+        // 2. Enable integration on live system (with full reload/restart validation)
         let enabled_status = enable_session_lock(&home, true).unwrap();
+        assert_eq!(enabled_status.state, SessionLockIntegrationState::Active);
         assert!(enabled_status.enabled);
         assert!(enabled_status.dropin_active);
+        assert!(enabled_status.service_active);
         assert!(home.join(OVERLAY_CONFIG_REL).exists());
         assert!(home.join(DROPIN_REL).exists());
 
@@ -436,6 +542,9 @@ mod tests {
         // Final check: native config remains completely identical
         let native_bytes_final = fs::read(&native_conf).unwrap();
         assert_eq!(calculate_sha256(&native_bytes_final), baseline_hash, "Native config must remain byte-for-byte identical after disable");
-    }
 
+        // 4. Test idempotence on live system
+        let rep_repeat = disable_session_lock(&home, true).unwrap();
+        assert!(rep_repeat.fully_reverted);
+    }
 }

@@ -61,7 +61,14 @@ export interface DisableReport {
   fully_reverted: boolean;
 }
 
+export type SessionLockIntegrationState =
+  | 'active'
+  | 'disabled'
+  | 'degraded'
+  | 'conflict';
+
 export interface SessionLockStatus {
+  state: SessionLockIntegrationState;
   enabled: boolean;
   dropin_active: boolean;
   service_active: boolean;

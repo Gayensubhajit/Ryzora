@@ -162,6 +162,7 @@ describe('Phase 1 — Ryzora Reversible Integration Core Contract', () => {
     IntegrationManager.setInvoker(async <T>(cmd: string): Promise<T> => {
       invokedCmd = cmd;
       return {
+        state: 'active',
         enabled: true,
         dropin_active: true,
         service_active: true,
@@ -186,6 +187,7 @@ describe('Phase 1 — Ryzora Reversible Integration Core Contract', () => {
       invokedCmd = cmd;
       invokedArgs = args;
       return {
+        state: 'active',
         enabled: true,
         dropin_active: true,
         service_active: true,
