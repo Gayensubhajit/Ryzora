@@ -76,6 +76,11 @@ pub fn reload_and_restart_hypridle() -> Result<(), IntegrationError> {
         )));
     }
 
+    // Reset failed counter to prevent transient rate limits from blocking restart
+    let _ = Command::new("systemctl")
+        .args(["--user", "reset-failed", "hypridle.service"])
+        .output();
+
     // 2. systemctl --user restart hypridle.service
     let restart_out = Command::new("systemctl")
         .args(["--user", "restart", "hypridle.service"])
@@ -186,6 +191,18 @@ pub fn get_status(home: &Path) -> SessionLockStatus {
 /// - Sourcing: Overlay dynamically sources native config.
 /// - Transactional Rollback: If service reload/verification fails, artifacts are safely removed.
 pub fn enable_session_lock(home: &Path, restart_service: bool) -> Result<SessionLockStatus, IntegrationError> {
+    enable_session_lock_with_reloader(home, restart_service, reload_and_restart_hypridle)
+}
+
+/// Enables the reversible session lock integration with customizable reloader (for testing).
+pub fn enable_session_lock_with_reloader<F>(
+    home: &Path,
+    restart_service: bool,
+    reloader: F,
+) -> Result<SessionLockStatus, IntegrationError>
+where
+    F: Fn() -> Result<(), IntegrationError>,
+{
     let native_config = home.join(NATIVE_CONFIG_REL);
     let overlay_config = home.join(OVERLAY_CONFIG_REL);
     let dropin = home.join(DROPIN_REL);
@@ -271,7 +288,7 @@ pub fn enable_session_lock(home: &Path, restart_service: bool) -> Result<Session
 
     // Reload service if requested (and in real environment)
     if restart_service {
-        if let Err(restart_err) = reload_and_restart_hypridle() {
+        if let Err(restart_err) = reloader() {
             // Service restart or verification failed: rollback artifacts atomically
             let _ = disable_integration(INTEGRATION_ID, home);
             return Err(IntegrationError::VerificationFailed(format!(
@@ -291,6 +308,18 @@ pub fn enable_session_lock(home: &Path, restart_service: bool) -> Result<Session
 /// - Native config is NEVER modified, deleted, or used to block rollback.
 /// - Restores native systemd unit and verifies active state.
 pub fn disable_session_lock(home: &Path, restart_service: bool) -> Result<DisableReport, IntegrationError> {
+    disable_session_lock_with_reloader(home, restart_service, reload_and_restart_hypridle)
+}
+
+/// Disables the reversible session lock integration with customizable reloader (for testing).
+pub fn disable_session_lock_with_reloader<F>(
+    home: &Path,
+    restart_service: bool,
+    reloader: F,
+) -> Result<DisableReport, IntegrationError>
+where
+    F: Fn() -> Result<(), IntegrationError>,
+{
     let manifest_exists = load_manifest(INTEGRATION_ID, home).is_ok();
 
     let report = if manifest_exists {
@@ -312,7 +341,7 @@ pub fn disable_session_lock(home: &Path, restart_service: bool) -> Result<Disabl
 
     // Reload and restart service to restore native systemd unit
     if restart_service {
-        if let Err(restart_err) = reload_and_restart_hypridle() {
+        if let Err(restart_err) = reloader() {
             return Err(IntegrationError::IoError(format!(
                 "Artifacts were removed, but restoring native hypridle.service failed: {}",
                 restart_err
@@ -472,6 +501,65 @@ mod tests {
         let rep2 = disable_session_lock(&home, false).unwrap();
         assert!(rep2.fully_reverted);
         assert_eq!(rep2.removed_artifacts.len(), 0);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_enable_service_failure_triggers_transactional_rollback() {
+        let home = test_home("rollback_on_failure");
+        let native_conf = setup_native_env(&home);
+        let native_before = fs::read_to_string(&native_conf).unwrap();
+
+        let err = enable_session_lock_with_reloader(&home, true, || {
+            Err(IntegrationError::IoError("simulated systemctl reload failure".to_string()))
+        }).unwrap_err();
+
+        match err {
+            IntegrationError::VerificationFailed(msg) => {
+                assert!(msg.contains("simulated systemctl reload failure"));
+                assert!(msg.contains("Transaction rolled back"));
+            }
+            _ => panic!("Expected VerificationFailed, got {:?}", err),
+        }
+
+        // Verify that artifacts were completely rolled back
+        assert!(!home.join(OVERLAY_CONFIG_REL).exists(), "Overlay config must be rolled back");
+        assert!(!home.join(DROPIN_REL).exists(), "Dropin config must be rolled back");
+        assert!(load_manifest(INTEGRATION_ID, &home).is_err(), "Manifest must not exist after rollback");
+
+        // Native config must be completely untouched
+        let native_after = fs::read_to_string(&native_conf).unwrap();
+        assert_eq!(native_before, native_after);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_disable_service_failure_surfaces_error() {
+        let home = test_home("disable_service_failure");
+        setup_native_env(&home);
+
+        // Enable first without restart
+        enable_session_lock(&home, false).unwrap();
+        assert!(home.join(OVERLAY_CONFIG_REL).exists());
+
+        // Now disable with simulated service restart failure
+        let err = disable_session_lock_with_reloader(&home, true, || {
+            Err(IntegrationError::IoError("simulated systemctl restart failure".to_string()))
+        }).unwrap_err();
+
+        match err {
+            IntegrationError::IoError(msg) => {
+                assert!(msg.contains("Artifacts were removed, but restoring native hypridle.service failed"));
+                assert!(msg.contains("simulated systemctl restart failure"));
+            }
+            _ => panic!("Expected IoError, got {:?}", err),
+        }
+
+        // Artifacts were removed from disk even if service restoration errored
+        assert!(!home.join(OVERLAY_CONFIG_REL).exists());
+        assert!(!home.join(DROPIN_REL).exists());
 
         let _ = fs::remove_dir_all(&home);
     }
