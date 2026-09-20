@@ -136,6 +136,7 @@ pub enum IntegrationError {
     AlreadyActive(String),
     AlreadyDisabled(String),
     VerificationFailed(String),
+    RollbackFailed(String),
 }
 
 impl fmt::Display for IntegrationError {
@@ -149,6 +150,7 @@ impl fmt::Display for IntegrationError {
             IntegrationError::AlreadyActive(id) => write!(f, "Integration already active: {}", id),
             IntegrationError::AlreadyDisabled(id) => write!(f, "Integration already disabled: {}", id),
             IntegrationError::VerificationFailed(msg) => write!(f, "Integration verification failed: {}", msg),
+            IntegrationError::RollbackFailed(msg) => write!(f, "Integration rollback failed: {}", msg),
         }
     }
 }
