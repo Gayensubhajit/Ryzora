@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { StoreCard } from "../components/StoreCard";
 import { PackageCard } from "../components/PackageCard";
 import { CategoryId } from "../types";
+import { deduplicateStorefrontPackages } from "../components/catalogue/catalogueUtils";
 
 // ── Category metadata ────────────────────────────────────────────────────────
 const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
@@ -211,13 +212,14 @@ export const CategoryView: React.FC = () => {
       return matchesCategory && matchesSearch && matchesDesktop && matchesSubFilter;
     });
 
-    return [...list].sort((a, b) => {
+    const sorted = [...list].sort((a, b) => {
       if (sortBy === "rating")    return b.rating - a.rating;
       if (sortBy === "downloads") return b.downloads - a.downloads;
       if (sortBy === "name")      return a.title.localeCompare(b.title);
       if (sortBy === "newest")    return compareSemver(b.version, a.version);
       return 0;
     });
+    return deduplicateStorefrontPackages(sorted);
   }, [packages, activeCategory, searchQuery, desktopFilter, sortBy, subFilter]);
 
   // ── Store grid (art-forward, dense) ───────────────────────────────────────

@@ -11,6 +11,7 @@ import { FilterPanel } from "../components/catalogue/FilterPanel";
 import {
   getPackageSubtype,
   isLoginScreen,
+  deduplicateStorefrontPackages,
 } from "../components/catalogue/catalogueUtils";
 
 type ActiveTab = CategoryId | "all";
@@ -304,7 +305,7 @@ export const DiscoverView: React.FC = () => {
       return bScore - aScore || b.downloads - a.downloads;
     });
 
-    return list;
+    return deduplicateStorefrontPackages(list);
   }, [
     packages,
     activeTab,

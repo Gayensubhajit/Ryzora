@@ -355,7 +355,7 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
           </div>
 
           <div className="flex items-center gap-3 shrink-0 font-mono text-[11px] sm:text-xs">
-            {packageItem.rating > 0 && (
+            {packageItem.rating > 0 && (packageItem.rating_count ?? 0) > 0 && (
               <span className="flex items-center gap-1 text-[var(--rz-text)] font-semibold">
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 {packageItem.rating.toFixed(1)}

@@ -141,3 +141,23 @@ export function getConciseCompatibility(pkg: PackageItem, currentWm?: string): {
 
   return { label: "✓ Universal" };
 }
+
+/**
+ * Deduplicates visually identical SilentSDDM packages for storefront presentation.
+ * Upstream SilentSDDM provides both default.jpg and smoky.jpg with identical SHA-256 content.
+ * Keeps the primary 'Default (Smoky)' card and omits duplicate cards in storefront grids,
+ * while preserving both underlying catalog identities for CAS and backend resolution.
+ */
+export function deduplicateStorefrontPackages(packages: PackageItem[]): PackageItem[] {
+  const seenSilentSddmHashes = new Set<string>();
+  return packages.filter((pkg) => {
+    if (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-")) {
+      const hash = pkg.content_hash || pkg.id;
+      if (seenSilentSddmHashes.has(hash)) {
+        return false;
+      }
+      seenSilentSddmHashes.add(hash);
+    }
+    return true;
+  });
+}

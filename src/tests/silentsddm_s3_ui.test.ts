@@ -184,3 +184,61 @@ test("S3-UI 7: Wallpaper install request mapping matches UpstreamWallpaperInstal
     }
   }
 });
+
+test("S3-UI 8: Storefront deduplication preserves 6 catalog IDs but renders 5 visually distinct cards", async () => {
+  const { deduplicateStorefrontPackages } = await import("../components/catalogue/catalogueUtils.ts");
+  const allLockscreens = await packageEngine.discoverByCategory("lockscreens");
+  const silentItems = allLockscreens.filter((p) => p.lockscreen?.provider === "silentsddm");
+
+  // Underlying catalog has exactly 6 items
+  assert.strictEqual(silentItems.length, 6);
+
+  // Content hashes show default.jpg and smoky.jpg share SHA-256
+  const hashes = silentItems.map((p) => p.content_hash);
+  const uniqueHashes = new Set(hashes);
+  assert.strictEqual(uniqueHashes.size, 5, "Expected exactly 5 unique content hashes among 6 entries");
+
+  // Deduplicated storefront list renders exactly 5 items
+  const dedupedSilent = deduplicateStorefrontPackages(silentItems);
+  assert.strictEqual(dedupedSilent.length, 5, "Storefront should render exactly 5 visually unique cards");
+
+  // The kept duplicate card is 'Default (Smoky)'
+  const defaultCard = dedupedSilent.find((p) => p.id === "silentsddm-default");
+  assert.ok(defaultCard, "Default (Smoky) card must be preserved");
+  assert.strictEqual(defaultCard.title, "SilentSDDM · Default (Smoky)");
+
+  // The duplicate smoky card is not present in storefront
+  const smokyCard = dedupedSilent.find((p) => p.id === "silentsddm-smoky");
+  assert.strictEqual(smokyCard, undefined, "Redundant smoky card must be omitted from storefront");
+});
+
+test("S3-UI 9: Detail view target architecture omits Quickshell and shows SDDM login screen only", async () => {
+  const allLockscreens = await packageEngine.discoverByCategory("lockscreens");
+  const silentItems = allLockscreens.filter((p) => p.lockscreen?.provider === "silentsddm");
+
+  for (const pkg of silentItems) {
+    const canTargetQs = Boolean(pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell);
+    const canTargetSddm = Boolean(pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm);
+
+    // SilentSDDM must NOT support Quickshell session lock
+    assert.strictEqual(canTargetQs, false, `${pkg.id} must not target Quickshell`);
+    // SilentSDDM MUST support SDDM login screen
+    assert.strictEqual(canTargetSddm, true, `${pkg.id} must target SDDM`);
+  }
+});
+
+test("S3-UI 10: Zero rating (rating_count === 0) hides star rating in UI contract", async () => {
+  const allLockscreens = await packageEngine.discoverByCategory("lockscreens");
+  const silentItems = allLockscreens.filter((p) => p.lockscreen?.provider === "silentsddm");
+
+  for (const pkg of silentItems) {
+    // Unfabricated metrics check
+    assert.strictEqual(pkg.rating, 0);
+    assert.strictEqual(pkg.rating_count, 0);
+    assert.strictEqual(pkg.downloads, 0);
+
+    // UI contract: hasRating must be false when rating_count is 0
+    const hasRating = (pkg.rating ?? 0) > 0 && (pkg.rating_count !== undefined ? pkg.rating_count > 0 : true);
+    assert.strictEqual(hasRating, false, `${pkg.id} must not trigger star rating rendering`);
+  }
+});

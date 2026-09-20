@@ -238,13 +238,23 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
           {/* Author & Rating Single-Line Header */}
           <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--rz-text-secondary)] pt-1 border-t border-[var(--rz-border-subtle)]">
             <span className="font-medium text-[var(--rz-text)]">{packageItem.author.name}</span>
-            <span>·</span>
-            <span className="flex items-center gap-1 font-medium">
-              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span>{packageItem.rating > 0 ? packageItem.rating.toFixed(1) : "4.9"}</span>
-            </span>
+            {(packageItem.rating ?? 0) > 0 && (packageItem.rating_count ?? 0) > 0 && (
+              <>
+                <span>·</span>
+                <span className="flex items-center gap-1 font-medium">
+                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  <span>{packageItem.rating.toFixed(1)}</span>
+                </span>
+              </>
+            )}
             <span>·</span>
             <span>{formatDownloads(packageItem.downloads)} downloads</span>
+            {packageItem.lockscreen?.provenance?.license && (
+              <>
+                <span>·</span>
+                <span>Asset license: {packageItem.lockscreen.provenance.license}</span>
+              </>
+            )}
             <span>·</span>
             <span className="flex items-center gap-1 text-[var(--rz-text-muted)]">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />

@@ -298,15 +298,17 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
           </div>
 
           <div className="flex items-center gap-2 text-[var(--text-faint)] text-[10.5px]">
-            <div className="flex items-center gap-0.5">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-              <span className="text-[var(--text-muted)] font-medium">
-                {packageItem.rating ? packageItem.rating.toFixed(1) : "4.9"}
-              </span>
-            </div>
+            {(packageItem.rating ?? 0) > 0 && (packageItem.rating_count ?? 0) > 0 && (
+              <div className="flex items-center gap-0.5">
+                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                <span className="text-[var(--text-muted)] font-medium">
+                  {packageItem.rating.toFixed(1)}
+                </span>
+              </div>
+            )}
 
             <div className="flex items-center gap-0.5">
-              <span>{packageItem.downloads ? (packageItem.downloads / 1000).toFixed(0) : "14"}k</span>
+              <span>{packageItem.downloads ? `${(packageItem.downloads / 1000).toFixed(0)}k` : "0 downloads"}</span>
             </div>
           </div>
         </div>
