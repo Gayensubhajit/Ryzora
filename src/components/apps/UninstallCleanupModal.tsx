@@ -76,10 +76,22 @@ export const UninstallCleanupModal: React.FC<UninstallCleanupModalProps> = ({
     setLoading(true);
     setError(null);
     setIsAdvanced(false);
+    setRemovePackage(true);
+    setRemoveUnusedDeps(false);
+    setCleanPackageCache(false);
+    setCleanAppCache(false);
+    setCleanAppConfig(false);
+    setCleanAurBuild(false);
+    setCleanFlatpakData(false);
 
     inspectAppCleanup(packageId, providerId)
       .then((data) => {
         setPreview(data);
+        // The catalog may have displayed a stale installed state. Never offer
+        // a destructive operation when ALPM/Flatpak says it is already gone.
+        if (!data.is_installed) {
+          setRemovePackage(false);
+        }
         setLoading(false);
       })
       .catch((err) => {
@@ -209,6 +221,16 @@ export const UninstallCleanupModal: React.FC<UninstallCleanupModalProps> = ({
             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 flex items-start gap-2.5">
               <AlertTriangle size={18} className="shrink-0 mt-0.5" />
               <p>{error}</p>
+            </div>
+          ) : !preview?.is_installed ? (
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-start gap-2.5">
+              <CheckCircle2 size={18} className="shrink-0 mt-0.5 text-emerald-500" />
+              <div>
+                <p className="font-bold">Already uninstalled</p>
+                <p className="mt-1 text-[11px] leading-relaxed opacity-90">
+                  {displayName} is no longer installed. Close this dialog to refresh the application state.
+                </p>
+              </div>
             </div>
           ) : preview?.conflicts && preview.conflicts.length > 0 ? (
             /* Conflict Warning Banner */
@@ -576,7 +598,12 @@ export const UninstallCleanupModal: React.FC<UninstallCleanupModalProps> = ({
           <button
             type="button"
             disabled={executing}
-            onClick={onClose}
+            onClick={() => {
+              if (preview && !preview.is_installed) {
+                onSuccess(0, `${displayName} is already uninstalled.`);
+              }
+              onClose();
+            }}
             className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] border border-[var(--rz-border)] transition-colors cursor-pointer disabled:opacity-50"
           >
             Cancel
@@ -587,6 +614,7 @@ export const UninstallCleanupModal: React.FC<UninstallCleanupModalProps> = ({
             disabled={
               loading ||
               executing ||
+              preview?.is_installed === false ||
               Boolean(preview?.conflicts && preview.conflicts.length > 0) ||
               (!removePackage && !hasOptionalSelected)
             }
@@ -597,6 +625,11 @@ export const UninstallCleanupModal: React.FC<UninstallCleanupModalProps> = ({
               <>
                 <Loader2 size={14} className="animate-spin" />
                 <span>Cleaning up…</span>
+              </>
+            ) : preview?.is_installed === false ? (
+              <>
+                <CheckCircle2 size={14} />
+                <span>Already Uninstalled</span>
               </>
             ) : isAdvanced && hasOptionalSelected ? (
               <>

@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use crate::package_helper::PACKAGE_HELPER_SYSTEM_PATH;
-use crate::app_adapters::transaction::{parse_pacman_line, split_output_lines, TransactionParserState, TransactionProgressEvent};
+use crate::app_adapters::transaction::{parse_flatpak_line, parse_pacman_line, split_output_lines, FlatpakTransactionParserState, TransactionParserState, TransactionProgressEvent};
 
 static ACTIVE_TRANSACTION: AtomicBool = AtomicBool::new(false);
 
@@ -292,6 +292,22 @@ pub fn pacman_uninstall_package(package_name: String) -> Result<serde_json::Valu
         } else {
             format!("pacman exited with status code {:?}", output.status.code())
         };
+
+        // Handle "target not found" race: if Pacman reports target not found,
+        // perform authoritative ALPM check. If package is actually absent, treat as success.
+        let detail_lower = detail.to_ascii_lowercase();
+        if detail_lower.contains("target not found") || detail_lower.contains("was not found") {
+            let (still_installed, _) = pacman::check_installed_status_in(&package_name, &local_dir);
+            if !still_installed {
+                return Ok(serde_json::json!({
+                    "success": true,
+                    "message": format!("Package '{}' is already absent (no-op)", package_name),
+                    "package_name": package_name,
+                    "already_absent": true
+                }));
+            }
+        }
+
         return Err(format!("Uninstallation failed: {}", detail));
     }
 
@@ -700,6 +716,40 @@ fn run_transaction_worker(
             let is_db_lock = err_msg.to_lowercase().contains("lock");
             let is_auth_cancel = err_msg.contains("Request dismissed") || err_msg.to_lowercase().contains("cancelled");
 
+            // Handle "target not found" race for uninstall/uninstall-deps operations
+            let err_lower = err_msg.to_ascii_lowercase();
+            if (op == "uninstall" || op == "uninstall-deps")
+                && (err_lower.contains("target not found") || err_lower.contains("was not found"))
+            {
+                let local_dir = pacman::resolve_local_dir(None);
+                let (still_installed, _) = pacman::check_installed_status_in(&package_name, &local_dir);
+                if !still_installed {
+                    let comp_event = TransactionProgressEvent {
+                        transaction_id: txn_id.clone(),
+                        operation: op.clone(),
+                        target_package: package_name.clone(),
+                        stage: "completed".to_string(),
+                        percentage: Some(100),
+                        download_percentage: Some(100),
+                        install_percentage: Some(100),
+                        current_package: Some(package_name.clone()),
+                        current_package_index: state.total_packages,
+                        total_packages: state.total_packages,
+                        bytes_downloaded_str: None,
+                        bytes_total_str: None,
+                        download_speed: None,
+                        message: format!("Package '{}' is already absent (no-op)", package_name),
+                        raw_line: None,
+                        error: None,
+                        is_db_locked: false,
+                        is_auth_cancelled: false,
+                        is_cached: false,
+                    };
+                    let _ = app.emit("ryzora:transaction_progress", &comp_event);
+                    return;
+                }
+            }
+
             let fail_event = TransactionProgressEvent {
                 transaction_id: txn_id.clone(),
                 operation: op.clone(),
@@ -977,13 +1027,170 @@ pub fn flatpak_run(app_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn flatpak_install(app_id: String) -> Result<String, String> {
-    flatpak::install_flatpak_app(&app_id)
+pub async fn flatpak_install(app_id: String) -> Result<String, String> {
+    let cache_key = app_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || flatpak::install_flatpak_app(&app_id))
+        .await
+        .map_err(|e| e.to_string())??;
+    invalidate_app_provider_cache(&cache_key);
+    Ok(result)
+}
+
+/// Starts a Flatpak operation in the same provider-neutral event stream as
+/// Pacman. The Flatpak-specific worker consumes its CLI's live stdout/stderr;
+/// it does not reuse or emulate ALPM progress.
+#[tauri::command]
+pub fn flatpak_start_transaction(
+    app: tauri::AppHandle,
+    package_name: String,
+    operation: String,
+) -> Result<StartTransactionResponse, String> {
+    let operation = operation.to_ascii_lowercase();
+    if operation != "install" && operation != "uninstall" && operation != "reinstall" {
+        return Err("Unsupported Flatpak transaction operation.".to_string());
+    }
+    // Validate before reserving the global transaction slot, but preserve the
+    // existing remote/scope selection exactly.
+    flatpak::flatpak_transaction_args(&package_name, &operation)?;
+    if ACTIVE_TRANSACTION.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return Err("Another package transaction is currently running in Ryzora. Please wait until it finishes.".to_string());
+    }
+
+    let transaction_id = format!("flatpak-txn-{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let initial = TransactionProgressEvent {
+        transaction_id: transaction_id.clone(),
+        operation: operation.clone(),
+        target_package: package_name.clone(),
+        stage: "preparing".to_string(),
+        percentage: None,
+        download_percentage: None,
+        install_percentage: None,
+        current_package: Some(package_name.clone()),
+        current_package_index: None,
+        total_packages: None,
+        bytes_downloaded_str: None,
+        bytes_total_str: None,
+        download_speed: None,
+        message: format!("Preparing Flatpak {}…", operation),
+        raw_line: Some(format!("flatpak {} {}", operation, package_name)),
+        error: None,
+        is_db_locked: false,
+        is_auth_cancelled: false,
+        is_cached: false,
+    };
+    let _ = app.emit("ryzora:transaction_progress", &initial);
+
+    let worker_app = app.clone();
+    let worker_id = transaction_id.clone();
+    let worker_op = operation.clone();
+    let worker_package = package_name.clone();
+    std::thread::spawn(move || {
+        let _guard = TransactionGuard;
+        run_flatpak_transaction_worker(worker_app, worker_id, worker_op, worker_package);
+    });
+
+    Ok(StartTransactionResponse { success: true, transaction_id, operation, package_name })
+}
+
+fn run_flatpak_transaction_worker(app: tauri::AppHandle, transaction_id: String, operation: String, package_name: String) {
+    let args = match flatpak::flatpak_transaction_args(&package_name, &operation) {
+        Ok(args) => args,
+        Err(error) => {
+            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", error.clone(), Some(error));
+            return;
+        }
+    };
+    let mut command = std::process::Command::new("flatpak");
+    command.args(args).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let message = format!("Failed to start Flatpak: {}", error);
+            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", message.clone(), Some(message));
+            return;
+        }
+    };
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let (Some(stdout), Some(stderr)) = (stdout, stderr) else {
+        let _ = child.kill();
+        emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", "Flatpak output stream was unavailable.".to_string(), Some("Flatpak output stream was unavailable.".to_string()));
+        return;
+    };
+
+    let read_stream = |mut reader: std::process::ChildStdout, app: tauri::AppHandle, transaction_id: String, operation: String, package_name: String| {
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 2048];
+        let mut parser = FlatpakTransactionParserState::new(transaction_id, operation, package_name);
+        let mut throttler = crate::app_adapters::transaction::TransactionThrottler::new(100);
+        let mut logs = Vec::new();
+        while let Ok(read) = reader.read(&mut chunk) {
+            if read == 0 { break; }
+            buffer.extend_from_slice(&chunk[..read]);
+            for line in split_output_lines(&mut buffer) {
+                logs.push(line.clone());
+                if let Some(event) = parse_flatpak_line(&line, &mut parser) {
+                    if throttler.should_emit(&event) { let _ = app.emit("ryzora:transaction_progress", &event); }
+                }
+            }
+        }
+        // Flatpak occasionally terminates a non-newline final status.
+        if !buffer.is_empty() {
+            let line = String::from_utf8_lossy(&buffer).trim().to_string();
+            if !line.is_empty() {
+                logs.push(line.clone());
+                if let Some(event) = parse_flatpak_line(&line, &mut parser) { let _ = app.emit("ryzora:transaction_progress", &event); }
+            }
+        }
+        logs
+    };
+    // stderr is also a progress/status channel for Flatpak. Convert it to the
+    // same concrete reader type through a tiny dedicated thread.
+    let out_app = app.clone(); let out_id = transaction_id.clone(); let out_op = operation.clone(); let out_pkg = package_name.clone();
+    let stdout_thread = std::thread::spawn(move || read_stream(stdout, out_app, out_id, out_op, out_pkg));
+    let err_app = app.clone(); let err_id = transaction_id.clone(); let err_op = operation.clone(); let err_pkg = package_name.clone();
+    let stderr_thread = std::thread::spawn(move || {
+        let mut reader = stderr; let mut buffer = Vec::new(); let mut chunk = [0u8; 2048];
+        let mut parser = FlatpakTransactionParserState::new(err_id, err_op, err_pkg);
+        let mut throttler = crate::app_adapters::transaction::TransactionThrottler::new(100); let mut logs = Vec::new();
+        while let Ok(read) = reader.read(&mut chunk) { if read == 0 { break; } buffer.extend_from_slice(&chunk[..read]); for line in split_output_lines(&mut buffer) { logs.push(line.clone()); if let Some(event) = parse_flatpak_line(&line, &mut parser) { if throttler.should_emit(&event) { let _ = err_app.emit("ryzora:transaction_progress", &event); } } } }
+        if !buffer.is_empty() { let line = String::from_utf8_lossy(&buffer).trim().to_string(); if !line.is_empty() { logs.push(line.clone()); if let Some(event) = parse_flatpak_line(&line, &mut parser) { let _ = err_app.emit("ryzora:transaction_progress", &event); } } }
+        logs
+    });
+    let stdout_logs = stdout_thread.join().unwrap_or_default();
+    let stderr_logs = stderr_thread.join().unwrap_or_default();
+    match child.wait() {
+        Ok(status) if status.success() => {
+            flatpak::invalidate_flatpak_cache();
+            // Refresh the authoritative Flatpak list before signaling success;
+            // this prevents stale provider cache from winning the UI race.
+            let _ = flatpak::get_installed_flatpak_ids();
+            invalidate_app_provider_cache(&package_name);
+            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "completed", format!("Successfully completed Flatpak {}.", operation), None);
+        }
+        Ok(status) => {
+            let logs = if stderr_logs.is_empty() { stdout_logs } else { stderr_logs };
+            let detail = logs.last().cloned().unwrap_or_else(|| format!("Flatpak exited with code {:?}", status.code()));
+            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", detail.clone(), Some(detail));
+        }
+        Err(error) => { let detail = format!("Flatpak process wait error: {}", error); emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", detail.clone(), Some(detail)); }
+    }
+}
+
+fn emit_flatpak_terminal(app: &tauri::AppHandle, transaction_id: &str, operation: &str, package_name: &str, stage: &str, message: String, error: Option<String>) {
+    let event = TransactionProgressEvent { transaction_id: transaction_id.into(), operation: operation.into(), target_package: package_name.into(), stage: stage.into(), percentage: if stage == "completed" { Some(100) } else { None }, download_percentage: None, install_percentage: None, current_package: Some(package_name.into()), current_package_index: None, total_packages: None, bytes_downloaded_str: None, bytes_total_str: None, download_speed: None, raw_line: Some(message.clone()), message, error, is_db_locked: false, is_auth_cancelled: false, is_cached: false };
+    let _ = app.emit("ryzora:transaction_progress", &event);
 }
 
 #[tauri::command]
-pub fn flatpak_uninstall(app_id: String) -> Result<String, String> {
-    flatpak::uninstall_flatpak_app(&app_id)
+pub async fn flatpak_uninstall(app_id: String) -> Result<String, String> {
+    let cache_key = app_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || flatpak::uninstall_flatpak_app(&app_id))
+        .await
+        .map_err(|e| e.to_string())??;
+    invalidate_app_provider_cache(&cache_key);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1062,11 +1269,21 @@ pub async fn pacman_inspect_cleanup(
 pub async fn pacman_execute_cleanup(
     request: cleanup::AppCleanupExecutionRequest,
 ) -> Result<cleanup::AppCleanupExecutionResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let package_id = request.package_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         cleanup::execute_app_cleanup(request)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+
+    // Provider resolution is memoized because it can involve network-backed
+    // sources. A completed uninstall changes its `is_installed` result, so do
+    // not let a stale entry resurrect the removed app in the UI.
+    if result.package_removed {
+        invalidate_app_provider_cache(&package_id);
+    }
+
+    Ok(result)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1083,6 +1300,12 @@ pub struct AppProviderSource {
 
 static RESOLVE_PROVIDERS_CACHE: std::sync::LazyLock<std::sync::RwLock<std::collections::HashMap<String, Vec<AppProviderSource>>>> =
     std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
+fn invalidate_app_provider_cache(package_id: &str) {
+    if let Ok(mut cache) = RESOLVE_PROVIDERS_CACHE.write() {
+        cache.remove(&package_id.trim().to_lowercase());
+    }
+}
 
 /// Dynamically discovers authentic installation sources for an application.
 /// Cross-queries Pacman ALPM, AUR RPC v5, and Flathub metadata.

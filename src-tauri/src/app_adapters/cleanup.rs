@@ -79,6 +79,14 @@ pub struct AppCleanupExecutionResult {
     pub errors: Vec<String>,
 }
 
+/// Pacman reports a second removal of an absent target as an error. Cleanup is
+/// intentionally idempotent: by the time a delayed UI request arrives, that
+/// state still satisfies the requested outcome (the package is absent).
+fn is_package_already_absent_error(stderr: &str) -> bool {
+    let message = stderr.to_ascii_lowercase();
+    message.contains("target not found") || message.contains("package '") && message.contains("was not found")
+}
+
 /// Recursively calculates the exact byte size and file count of a directory.
 /// Follows no symlinks outside the target.
 pub fn calculate_dir_size(dir: &Path) -> (u64, usize) {
@@ -508,7 +516,11 @@ pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCle
                     }
                     Ok(o) => {
                         let err = String::from_utf8_lossy(&o.stderr);
-                        errors.push(format!("Package removal failed: {}", err.trim()));
+                        if is_package_already_absent_error(&err) {
+                            package_removed = true;
+                        } else {
+                            errors.push(format!("Package removal failed: {}", err.trim()));
+                        }
                     }
                     Err(e) => {
                         errors.push(format!("Failed to execute uninstallation: {}", e));
@@ -545,35 +557,34 @@ pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCle
             cache_removed_count += 1;
         } else {
             let helper_path = PathBuf::from(crate::package_helper::PACKAGE_HELPER_SYSTEM_PATH);
-            let res = if helper_path.exists() {
-                Command::new("pkexec")
-                    .arg(crate::package_helper::PACKAGE_HELPER_SYSTEM_PATH)
-                    .arg("clean-cache")
-                    .arg(trimmed)
-                    .stdin(std::process::Stdio::null())
-                    .output()
+            if !helper_path.exists() {
+                errors.push("Package helper is not installed. Cannot clean package cache without authorized helper.".to_string());
             } else {
-                // Fallback direct cleanup of /var/cache/pacman/pkg/$PKG-[0-9]*
-                let script = format!(
-                    r#"for f in /var/cache/pacman/pkg/{}-[0-9]*.pkg.tar.*; do [ -f "$f" ] && rm -f -- "$f"; done"#,
-                    trimmed
-                );
-                Command::new("pkexec")
-                    .args(["bash", "-c", &script])
-                    .stdin(std::process::Stdio::null())
-                    .output()
-            };
+                let supports_clean_cache = fs::read_to_string(&helper_path)
+                    .map(|content| content.contains("clean-cache"))
+                    .unwrap_or(false);
+                if !supports_clean_cache {
+                    errors.push("Installed package helper does not support 'clean-cache' operation. Please update the helper via Ryzora's Polkit-controlled installation mechanism.".to_string());
+                } else {
+                    let res = Command::new("pkexec")
+                        .arg(crate::package_helper::PACKAGE_HELPER_SYSTEM_PATH)
+                        .arg("clean-cache")
+                        .arg(trimmed)
+                        .stdin(std::process::Stdio::null())
+                        .output();
 
-            match res {
-                Ok(o) if o.status.success() => {
-                    cache_removed_count += 1;
-                }
-                Ok(o) => {
-                    let err = String::from_utf8_lossy(&o.stderr);
-                    errors.push(format!("Package cache cleanup failed: {}", err.trim()));
-                }
-                Err(e) => {
-                    errors.push(format!("Failed to clean package cache: {}", e));
+                    match res {
+                        Ok(o) if o.status.success() => {
+                            cache_removed_count += 1;
+                        }
+                        Ok(o) => {
+                            let err = String::from_utf8_lossy(&o.stderr);
+                            errors.push(format!("Package cache cleanup failed: {}", err.trim()));
+                        }
+                        Err(e) => {
+                            errors.push(format!("Failed to clean package cache: {}", e));
+                        }
+                    }
                 }
             }
         }
@@ -674,6 +685,13 @@ mod tests {
         assert_eq!(get_known_app_config_and_cache_subdirs("cursor-bin"), (Some("cursor"), Some("cursor")));
         assert_eq!(get_known_app_config_and_cache_subdirs("alacritty"), (Some("alacritty"), None));
         assert_eq!(get_known_app_config_and_cache_subdirs("unknown-utility"), (None, None));
+    }
+
+    #[test]
+    fn test_absent_package_removal_is_idempotent() {
+        assert!(is_package_already_absent_error("error: target not found: chromium"));
+        assert!(is_package_already_absent_error("error: package 'chromium' was not found"));
+        assert!(!is_package_already_absent_error("error: failed to prepare transaction"));
     }
 
     #[test]

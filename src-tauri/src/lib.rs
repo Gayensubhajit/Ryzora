@@ -26,6 +26,7 @@ pub mod hypridle;
 pub mod ownership;
 pub mod engine;
 pub mod app_adapters;
+pub mod integration;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -192,6 +193,15 @@ pub fn run() {
             // Safe Cleanup & Storage (Phase 26)
             app_adapters::pacman_inspect_cleanup,
             app_adapters::pacman_execute_cleanup,
+            // Reversible Integration Core (Phase 1)
+            integration::integration_list,
+            integration::integration_get,
+            integration::integration_verify,
+            integration::integration_disable,
+            // Reversible Session Lock Integration (Phase 2)
+            integration::session_lock_get_status,
+            integration::session_lock_enable,
+            integration::session_lock_disable,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

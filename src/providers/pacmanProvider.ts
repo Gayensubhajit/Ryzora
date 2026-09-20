@@ -507,6 +507,15 @@ export class PacmanAppProvider implements PackageProvider<PacmanAppMeta> {
     this.metaCache.set(packageId, { ...existing, ...meta });
   }
 
+  /** Invalidates the meta cache for a specific package or all packages. */
+  invalidateMetaCache(packageId?: string): void {
+    if (packageId) {
+      this.metaCache.delete(packageId);
+    } else {
+      this.metaCache.clear();
+    }
+  }
+
   async install(pkg: PackageItem, _target: string): Promise<unknown> {
     if (isTauri) {
       const res = await invokeTauri<any>("pacman_install_package", { packageName: pkg.id });

@@ -191,6 +191,100 @@ pub fn split_output_lines(buffer: &mut Vec<u8>) -> Vec<String> {
     lines
 }
 
+/// State for the Flatpak CLI adapter.  Flatpak redraws its human progress UI
+/// with carriage returns, so it intentionally shares `split_output_lines` with
+/// the Pacman reader rather than relying on `BufRead::lines()`.
+#[derive(Debug, Clone)]
+pub struct FlatpakTransactionParserState {
+    pub transaction_id: String,
+    pub operation: String,
+    pub target_package: String,
+    pub current_stage: String,
+    pub current_package: Option<String>,
+}
+
+impl FlatpakTransactionParserState {
+    pub fn new(transaction_id: String, operation: String, target_package: String) -> Self {
+        Self {
+            transaction_id,
+            operation,
+            target_package,
+            current_stage: "preparing".to_string(),
+            current_package: None,
+        }
+    }
+
+    fn event(&self, stage: &str, percentage: Option<u8>, message: String, raw_line: String) -> TransactionProgressEvent {
+        TransactionProgressEvent {
+            transaction_id: self.transaction_id.clone(),
+            operation: self.operation.clone(),
+            target_package: self.target_package.clone(),
+            stage: stage.to_string(),
+            // Flatpak's percentage is only forwarded when it was present in
+            // its own output.  In particular, no weighted/synthetic overall
+            // percentage is used for preparing, resolving, or installing.
+            percentage,
+            download_percentage: if stage == "downloading" { percentage } else { None },
+            install_percentage: None,
+            current_package: self.current_package.clone(),
+            current_package_index: None,
+            total_packages: None,
+            bytes_downloaded_str: None,
+            bytes_total_str: None,
+            download_speed: None,
+            message,
+            raw_line: Some(raw_line),
+            error: None,
+            is_db_locked: false,
+            is_auth_cancelled: false,
+            is_cached: false,
+        }
+    }
+}
+
+/// Parses a single *actual* Flatpak CLI progress/status update.  The CLI does
+/// not promise a stable machine progress protocol, so unknown lines are kept
+/// as logs and reported as indeterminate rather than guessed percentages.
+pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState) -> Option<TransactionProgressEvent> {
+    let clean = line.trim();
+    if clean.is_empty() {
+        return None;
+    }
+    let lower = clean.to_ascii_lowercase();
+    let stage = if lower.contains("download") || lower.contains("pulling") {
+        "downloading"
+    } else if lower.contains("install") || lower.contains("deploy") || lower.contains("remove") || lower.contains("uninstall") {
+        "installing"
+    } else if lower.contains("finaliz") || lower.contains("complete") {
+        "finalizing"
+    } else if lower.contains("resolv") || lower.contains("looking for") || lower.contains("required runtime") {
+        "resolving"
+    } else {
+        &state.current_stage
+    };
+    let stage_owned = stage.to_string();
+    state.current_stage = stage_owned.clone();
+
+    // A reverse-DNS ref in Flatpak output is provider supplied item identity.
+    // Do not substitute the requested app ID for dependency/runtime lines.
+    if let Some(token) = clean.split_whitespace().find(|token| {
+        let candidate = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_' && c != '-');
+        candidate.matches('.').count() >= 2
+    }) {
+        state.current_package = Some(token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_' && c != '-').to_string());
+    }
+
+    // Only a literal `NN%` written by Flatpak is published as a percentage.
+    let percentage = clean.split_whitespace().find_map(|word| {
+        word.trim_matches(|c: char| c != '%' && !c.is_ascii_digit())
+            .strip_suffix('%')
+            .and_then(|number| number.parse::<u8>().ok())
+            .filter(|number| *number <= 100)
+    });
+
+    Some(state.event(&stage_owned, percentage, clean.to_string(), clean.to_string()))
+}
+
 /// Parses genuine Pacman output lines into structured transaction events.
 pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Option<TransactionProgressEvent> {
     let line_clean = line.trim();

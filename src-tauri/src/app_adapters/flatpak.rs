@@ -95,24 +95,8 @@ pub fn detect_flatpak_status() -> FlatpakStatus {
             }
         });
 
-    let mut remotes = Vec::new();
-    let mut has_flathub = false;
-
-    if let Ok(output) = Command::new("flatpak").arg("remotes").output() {
-        if output.status.success() {
-            let out_str = String::from_utf8_lossy(&output.stdout);
-            for line in out_str.lines().skip(1) {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if let Some(name) = parts.first() {
-                    let r = name.to_string();
-                    if r.to_lowercase() == "flathub" {
-                        has_flathub = true;
-                    }
-                    remotes.push(r);
-                }
-            }
-        }
-    }
+    let remotes = list_flatpak_remote_names();
+    let has_flathub = remotes.iter().any(|name| name.eq_ignore_ascii_case("flathub"));
 
     let installed_apps = list_installed_flatpak_apps().unwrap_or_default();
 
@@ -275,12 +259,8 @@ pub fn run_flatpak_app(app_id: &str) -> Result<(), String> {
 
 /// Installs a Flatpak application from Flathub.
 pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
-    if !app_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
-        return Err("Invalid flatpak application ID".to_string());
-    }
-
     let output = Command::new("flatpak")
-        .args(["install", "-y", "flathub", app_id])
+        .args(flatpak_transaction_args(app_id, "install")?)
         .output()
         .map_err(|e| format!("Failed to invoke flatpak install: {}", e))?;
 
@@ -295,12 +275,8 @@ pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
 
 /// Uninstalls a Flatpak application.
 pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
-    if !app_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
-        return Err("Invalid flatpak application ID".to_string());
-    }
-
     let output = Command::new("flatpak")
-        .args(["uninstall", "-y", app_id])
+        .args(flatpak_transaction_args(app_id, "uninstall")?)
         .output()
         .map_err(|e| format!("Failed to invoke flatpak uninstall: {}", e))?;
 
@@ -311,6 +287,30 @@ pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
 
     invalidate_flatpak_cache();
     Ok(format!("Successfully uninstalled Flatpak application '{}'", app_id))
+}
+
+/// Builds the exact CLI arguments used by both the compatibility commands and
+/// the streamed transaction adapter. Keeping this here preserves the existing
+/// scope/remote selection behaviour while letting the caller consume output in
+/// real time.
+pub fn flatpak_transaction_args(app_id: &str, operation: &str) -> Result<Vec<String>, String> {
+    if !is_valid_flatpak_id(app_id) {
+        return Err("Invalid Flatpak application ID. Select a verified Flathub source before continuing.".to_string());
+    }
+    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    if !has_flatpak {
+        return Err("Flatpak is not installed on this system.".to_string());
+    }
+
+    match operation {
+        "install" | "reinstall" => {
+            let scope = resolve_flathub_install_scope()
+                .ok_or_else(|| "The Flathub remote is not configured for Flatpak.".to_string())?;
+            Ok(vec!["install".into(), scope.into(), "-y".into(), "flathub".into(), app_id.into()])
+        }
+        "uninstall" => Ok(vec!["uninstall".into(), "-y".into(), app_id.into()]),
+        _ => Err(format!("Unsupported Flatpak transaction operation '{}'.", operation)),
+    }
 }
 
 /// Exposes cleanup metadata for Phase 26 storage management.
@@ -342,6 +342,63 @@ pub fn get_flatpak_cleanup_info(app_id: &str) -> FlatpakCleanupInfo {
         user_data_path,
         cache_path,
         system_app_path,
+    }
+}
+
+/// Parses `flatpak remotes --columns=name` output. Newer Flatpak builds print
+/// names with no header; older builds may still emit a `Name` column title.
+fn parse_flatpak_remote_names(stdout: &str) -> Vec<String> {
+    let mut remotes = Vec::new();
+    for line in stdout.lines() {
+        let name = match line.split_whitespace().next() {
+            Some(value) if !value.is_empty() => value,
+            _ => continue,
+        };
+        if name.eq_ignore_ascii_case("name") {
+            continue;
+        }
+        if remotes.iter().any(|existing: &String| existing.eq_ignore_ascii_case(name)) {
+            continue;
+        }
+        remotes.push(name.to_string());
+    }
+    remotes
+}
+
+fn list_flatpak_remote_names_for_scope(scope: &str) -> Vec<String> {
+    Command::new("flatpak")
+        .args(["remotes", scope, "--columns=name"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| parse_flatpak_remote_names(&String::from_utf8_lossy(&output.stdout)))
+        .unwrap_or_default()
+}
+
+fn list_flatpak_remote_names() -> Vec<String> {
+    let mut remotes = list_flatpak_remote_names_for_scope("--user");
+    for name in list_flatpak_remote_names_for_scope("--system") {
+        if !remotes.iter().any(|existing| existing.eq_ignore_ascii_case(&name)) {
+            remotes.push(name);
+        }
+    }
+    remotes
+}
+
+/// Prefer the user Flathub remote so install does not need root. Fall back to
+/// the system remote when that is the only configured Flathub source.
+pub(crate) fn resolve_flathub_install_scope() -> Option<&'static str> {
+    let has_flathub = |scope: &str| {
+        list_flatpak_remote_names_for_scope(scope)
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("flathub"))
+    };
+    if has_flathub("--user") {
+        Some("--user")
+    } else if has_flathub("--system") {
+        Some("--system")
+    } else {
+        None
     }
 }
 
@@ -413,6 +470,18 @@ pub fn find_flathub_match(query: &str, _display_name: Option<&str>) -> Option<Fl
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_flatpak_remote_names_without_header() {
+        let remotes = parse_flatpak_remote_names("flathub\tsystem\n");
+        assert_eq!(remotes, vec!["flathub".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_flatpak_remote_names_skips_column_header() {
+        let remotes = parse_flatpak_remote_names("Name\tOptions\nflathub\tsystem\nfedora\tsystem\n");
+        assert_eq!(remotes, vec!["flathub".to_string(), "fedora".to_string()]);
+    }
 
     #[test]
     fn test_is_valid_flatpak_id() {

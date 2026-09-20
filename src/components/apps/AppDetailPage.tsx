@@ -128,8 +128,12 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     }
   });
   const [localInstalled, setLocalInstalled] = useState<boolean | null>(null);
+  // Guards against a provider lookup that began before an install-state change
+  // completing afterwards and restoring its now-stale `isInstalled` value.
+  const providerResolutionEpoch = useRef(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [stateRefreshError, setStateRefreshError] = useState<string | null>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(() => {
     try {
       return new URLSearchParams(window.location.search).get("openMenu") === "overflow";
@@ -162,6 +166,33 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
     isCached: boolean;
   } | null>(null);
 
+  // Detail pages can be opened from a cached grid item. Verify the install
+  // state directly against ALPM on mount so stale cache data can never expose
+  // Open/Uninstall for a package that has already been removed.
+  useEffect(() => {
+    let active = true;
+
+    catalogService
+      .refreshInstalledState()
+      .then(() => catalogService.getItemDetails(app.id))
+      .then((item) => {
+        if (active) {
+          setLocalInstalled(Boolean(item?.is_installed));
+          setStateRefreshError(null);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setStateRefreshError(`Failed to refresh installation state: ${msg}`);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [app.id]);
+
   useEffect(() => {
     let wasOperating = transactionManager.isPackageOperating(app.id);
     return transactionManager.subscribePackageStatus(app.id, (operating, op) => {
@@ -179,10 +210,13 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
             const item = await catalogService.getItemDetails(app.id);
             if (item) {
               setLocalInstalled(item.is_installed);
+              setStateRefreshError(null);
             }
             onStatusChanged?.();
           })
-          .catch(() => {
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            setStateRefreshError(`Failed to refresh installation state: ${msg}`);
             onStatusChanged?.();
           });
       } else if (operating) {
@@ -279,6 +313,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   // Dynamically discover authoritative package providers (Pacman, AUR, Flathub)
   useEffect(() => {
     let active = true;
+    const resolutionEpoch = providerResolutionEpoch.current;
 
     // Check module cache first (instant sub-millisecond retrieval)
     const cached = appProviderCache.get(app.id);
@@ -318,7 +353,7 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
         })
       )
       .then((sources) => {
-        if (!active) return;
+        if (!active || providerResolutionEpoch.current !== resolutionEpoch) return;
         if (sources && sources.length > 0) {
           const options: PackageProviderOption[] = sources.map((s) => ({
             id: s.provider_id as any,
@@ -471,6 +506,13 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
       setOperation("installing");
       try {
         await flatpakAppProvider.install(targetId);
+        providerResolutionEpoch.current += 1;
+        appProviderCache.delete(app.id);
+        setAvailableProviders((providers) =>
+          providers.map((provider) =>
+            provider.id === "flatpak" ? { ...provider, isInstalled: true } : provider
+          )
+        );
         setLocalInstalled(true);
         setActionSuccess(`Installed ${meta.displayName} via Flathub.`);
         await catalogService.refreshInstalledState();
@@ -528,6 +570,11 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
   };
 
   const handleCleanupSuccess = async (reclaimedBytes: number, _msg: string) => {
+    providerResolutionEpoch.current += 1;
+    appProviderCache.delete(app.id);
+    setAvailableProviders((providers) =>
+      providers.map((provider) => ({ ...provider, isInstalled: false }))
+    );
     setLocalInstalled(false);
     const reclaimedStr = reclaimedBytes > 0 ? ` Reclaimed ${formatBytes(reclaimedBytes)}.` : "";
     setActionSuccess(`Uninstalled ${meta.displayName} successfully.${reclaimedStr}`);
@@ -956,6 +1003,17 @@ export const AppDetailPage: React.FC<AppDetailPageProps> = ({
               <span>{actionError}</span>
             </div>
             <button onClick={() => setActionError(null)} className="p-1 hover:opacity-75 cursor-pointer">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        {stateRefreshError && (
+          <div className="flex items-center justify-between p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 text-xs font-medium">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{stateRefreshError}</span>
+            </div>
+            <button onClick={() => setStateRefreshError(null)} className="p-1 hover:opacity-75 cursor-pointer">
               <X size={14} />
             </button>
           </div>

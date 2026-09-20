@@ -408,6 +408,8 @@ export class CatalogService {
   async refreshInstalledState(): Promise<CatalogStatus> {
     // Wipe item cache so subsequent getItemDetails re-queries authoritative ALPM state
     this.itemCache.clear();
+    // Also invalidate provider meta cache to prevent stale isInstalled values
+    pacmanAppProvider.invalidateMetaCache();
 
     if (isTauri) {
       try {

@@ -321,6 +321,7 @@ export class TransactionManager {
 
       // Perform authoritative ALPM database refresh
       if (stage === "completed") {
+        pacmanAppProvider.invalidateMetaCache(tx.packageName);
         pacmanAppProvider.discover().catch((err) => {
           console.warn("[TransactionManager] Post-transaction refresh failed:", err);
         });
