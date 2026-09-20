@@ -565,6 +565,30 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Manual acceptance test: enables session lock on real host"]
+    fn manual_live_enable() {
+        let home = PathBuf::from(std::env::var("HOME").unwrap());
+        let status = enable_session_lock(&home, true).expect("Failed to enable session lock");
+        println!("=== Ryzora Session Lock ENABLED on live system ===");
+        println!("State: {:?}", status.state);
+        println!("Overlay: {}", status.overlay_config_path.display());
+        println!("Drop-in: {}", status.dropin_path.display());
+        println!("Systemd hypridle active: {}", status.service_active);
+        println!("Ready for lock test: run 'loginctl lock-session'");
+    }
+
+    #[test]
+    #[ignore = "Manual acceptance test: disables session lock on real host"]
+    fn manual_live_disable() {
+        let home = PathBuf::from(std::env::var("HOME").unwrap());
+        let report = disable_session_lock(&home, true).expect("Failed to disable session lock");
+        println!("=== Ryzora Session Lock DISABLED on live system ===");
+        println!("Fully reverted: {}", report.fully_reverted);
+        println!("Removed artifacts: {:?}", report.removed_artifacts);
+        println!("Host returned to native hypridle configuration.");
+    }
+
+    #[test]
     fn test_live_system_enable_verify_disable_revert() {
         let home_str = std::env::var("HOME").unwrap();
         let home = PathBuf::from(&home_str);
