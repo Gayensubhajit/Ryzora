@@ -7,7 +7,6 @@ import { ProductHero } from "../components/detail/ProductHero";
 import { CompatibilityPanel } from "../components/detail/CompatibilityPanel";
 import { DetailTabs } from "../components/detail/DetailTabs";
 import { resolveLockscreenCapabilities } from "../providers/qylockProvider";
-import { StickyActionBar } from "../components/detail/StickyActionBar";
 import { LockScreenCustomizer } from "../components/detail/LockScreenCustomizer";
 
 export const LockScreenDetailView: React.FC = () => {
@@ -20,7 +19,6 @@ export const LockScreenDetailView: React.FC = () => {
     installedPackages,
     installPackage,
     isInstalling,
-    installProgress,
     setToast,
     activeLockscreen,
     applyLockscreen,
@@ -329,6 +327,17 @@ export const LockScreenDetailView: React.FC = () => {
         overriddenBy={sddmRuntimeStatus?.overridden_by}
       />
 
+      {/* ── Compatibility Summary Strip (Directly Below Hero) ── */}
+      <CompatibilityPanel
+        packageItem={selectedPackage}
+        systemInfo={systemInfo}
+        missingDependencies={missingDependencies}
+        selectedTarget={selectedTarget}
+        isSessionLockSupported={isSessionLockSupported}
+        isLoginScreenSupported={isLoginScreenSupported}
+        isGdmActive={isGdmActive}
+      />
+
       {/* ── Interactive Theme Customization & Variants ── */}
       {schema && (
         <LockScreenCustomizer
@@ -341,66 +350,72 @@ export const LockScreenDetailView: React.FC = () => {
         />
       )}
 
-      {/* ── Tested Configuration Readout Banner ── */}
-      {lastTestResult && (
-        <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/25 text-emerald-300 text-xs flex flex-col gap-2 shadow-lg my-3">
-          <div className="flex items-center justify-between">
-            <span className="font-bold flex items-center gap-1.5 text-emerald-400">
-              <Check size={16} strokeWidth={2.5} /> Isolated Test Environment Launched
-            </span>
-            <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase font-semibold">
-              {lastTestResult.target} MODE
-            </span>
-          </div>
-          <div className="text-[11px] text-[var(--rz-text-secondary,#a6aab3)] font-mono truncate">
-            Runtime Sandbox: {lastTestResult.test_runtime_dir}
-          </div>
-          {Object.keys(lastTestResult.tested_config).length > 0 && (
-            <div className="text-[11px] text-emerald-200/90 font-mono bg-emerald-900/30 p-2 rounded-lg border border-emerald-500/20">
-              <span className="font-bold text-emerald-300">Materialized Configuration:</span>{" "}
-              {Object.entries(lastTestResult.tested_config).map(([k, v]) => `${k}=${v}`).join(", ")}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Prominent Compatibility / Safety Model Banner ── */}
-      <CompatibilityPanel
-        packageItem={selectedPackage}
-        systemInfo={systemInfo}
-        missingDependencies={missingDependencies}
-        selectedTarget={selectedTarget}
-        isSessionLockSupported={isSessionLockSupported}
-        isLoginScreenSupported={isLoginScreenSupported}
-        isGdmActive={isGdmActive}
-      />
-
-      {/* ── Technical Detail Tabs ── */}
+      {/* ── Technical Detail Tabs (About, Screenshots, Specs) ── */}
       <DetailTabs
         packageItem={selectedPackage}
         systemInfo={systemInfo}
         selectedTarget={selectedTarget}
       />
 
-      {/* ── Sticky Bottom Action Bar ── */}
-      <StickyActionBar
-        packageItem={selectedPackage}
-        isInstalled={isInstalled}
-        isUpdateAvailable={isUpdateAvailable}
-        isInstalling={isInstalling}
-        installProgress={installProgress}
-        missingDependencies={missingDependencies}
-        selectedTarget={selectedTarget}
-        onInstall={handleInstall}
-        isActive={isActiveForTarget}
-        onApply={handleApply}
-        onDeactivate={handleDeactivate}
-        onTest={isInstalled ? handleTest : undefined}
-        onUninstall={isInstalled ? handleUninstall : undefined}
-        isApplying={isApplying}
-        isOverridden={isTargetOverridden}
-        overriddenBy={sddmRuntimeStatus?.overridden_by}
-      />
+      {/* ── Isolated Test Environment Dedicated Modal ── */}
+      {lastTestResult && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setLastTestResult(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white dark:bg-[var(--rz-surface-elevated)] border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#e5e5e7] dark:border-[var(--rz-border-subtle)]">
+              <div className="flex items-center gap-2 font-semibold text-sm text-[var(--rz-text,#1d1d1f)]">
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                <span>Isolated Test Environment</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLastTestResult(null)}
+                className="text-[var(--rz-text-muted,#86868b)] hover:text-[var(--rz-text,#1d1d1f)] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-surface,#f5f5f7)] border border-[var(--rz-border-subtle,#d2d2d7)]">
+                <span className="text-[var(--rz-text-secondary,#6e6e73)]">Target Mode</span>
+                <span className="font-semibold text-[var(--rz-text,#1d1d1f)] uppercase">{lastTestResult.target}</span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-[var(--rz-surface,#f5f5f7)] border border-[var(--rz-border-subtle,#d2d2d7)] space-y-1">
+                <span className="text-[var(--rz-text-muted,#86868b)] text-[10px] uppercase font-semibold block">Runtime Sandbox</span>
+                <code className="text-[11px] font-mono text-[var(--rz-text,#1d1d1f)] break-all">{lastTestResult.test_runtime_dir}</code>
+              </div>
+
+              {Object.keys(lastTestResult.tested_config).length > 0 && (
+                <div className="p-2.5 rounded-lg bg-[var(--rz-surface,#f5f5f7)] border border-[var(--rz-border-subtle,#d2d2d7)] space-y-1">
+                  <span className="text-[var(--rz-text-muted,#86868b)] text-[10px] uppercase font-semibold block">Materialized Configuration</span>
+                  <div className="text-[11px] font-mono text-[var(--rz-text,#1d1d1f)] space-y-0.5 max-h-28 overflow-y-auto">
+                    {Object.entries(lastTestResult.tested_config).map(([k, v]) => (
+                      <div key={k}>{k} = {String(v)}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-[#e5e5e7] dark:border-[var(--rz-border-subtle)]">
+              <button
+                type="button"
+                onClick={() => setLastTestResult(null)}
+                className="px-4 py-2 rounded-xl bg-[var(--rz-accent,#0071e3)] hover:bg-[#0077ed] text-white text-xs font-semibold cursor-pointer shadow-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Fullscreen Lightbox Image Viewer ── */}
       {showFullscreen && activeImage && (

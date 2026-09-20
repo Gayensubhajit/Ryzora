@@ -4,20 +4,14 @@ import {
   Loader2,
   Check,
   AlertTriangle,
-  Sparkles,
   ShieldCheck,
-  Download,
   Star,
-  Calendar,
-  Lock,
-  Monitor,
   Maximize2,
   Trash2,
   MoreHorizontal,
 } from "lucide-react";
 import { PackageItem } from "../../types";
 import { formatDownloads } from "../catalogue/catalogueUtils";
-import { CreatorHeader } from "./CreatorHeader";
 import { PreviewGallery } from "./PreviewGallery";
 import { MediaPreview } from "../media/MediaPreview";
 
@@ -74,9 +68,10 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   const canTargetSddm = Boolean(packageItem.supports_login_screen && isLoginScreenSupported);
   const isDualTarget = canTargetQs && canTargetSddm;
 
-  const subtype = packageItem.tags?.find((t) =>
-    ["hyprlock", "quickshell", "swaylock", "sddm"].includes(t.toLowerCase())
-  ) || "Lock Screen";
+  const subtype =
+    packageItem.tags?.find((t) =>
+      ["hyprlock", "quickshell", "swaylock", "sddm"].includes(t.toLowerCase())
+    ) || "Lock Screen";
 
   const screenshots =
     packageItem.screenshots && packageItem.screenshots.length > 0
@@ -114,29 +109,57 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
     }
   };
 
+  const installedLabel =
+    selectedTarget === "both"
+      ? "Installed for Session + Login"
+      : selectedTarget === "sddm"
+      ? "Installed for Login Screen"
+      : "Installed for Session Lock";
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(380px,0.85fr)] gap-6 lg:gap-8 p-6 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] shadow-sm">
-      {/* ── Left Column: Media Hero (Dominant Preview) ── */}
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] gap-6 lg:gap-10 p-6 sm:p-8 rounded-2xl bg-[var(--rz-surface,#ffffff)] border border-[var(--rz-border-subtle,#d2d2d7)] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.03)]">
+      {/* ── Left Column: Media Hero (Large Crisp Preview) ── */}
       <div className="flex flex-col gap-3 min-w-0">
-        <div className="relative rounded-xl overflow-hidden border border-[var(--rz-border-subtle)] group">
+        <div className="relative rounded-xl overflow-hidden border border-[var(--rz-border-subtle,#d2d2d7)] bg-[var(--rz-surface-elevated,#f5f5f7)] aspect-video group">
           {/* Main Media Viewer */}
           <MediaPreview
-            poster={activeScreenshotIndex === 0 && (packageItem.preview_poster_url || packageItem.hero_image) ? (packageItem.preview_poster_url || packageItem.hero_image) : activeImage}
-            videoSrc={activeScreenshotIndex === 0 ? (packageItem.preview_video_url || packageItem.preview_video || packageItem.lockscreen?.media.preview_video) : undefined}
-            animatedSrc={activeScreenshotIndex === 0 ? (packageItem.preview_animated || packageItem.lockscreen?.media.preview_animated) : undefined}
-            mediaType={activeScreenshotIndex === 0 ? (packageItem.media_type || (packageItem.preview_video_url || packageItem.preview_video ? "video" : (packageItem.preview_animated ? "animated" : "image"))) : "image"}
+            poster={
+              activeScreenshotIndex === 0 && (packageItem.preview_poster_url || packageItem.hero_image)
+                ? packageItem.preview_poster_url || packageItem.hero_image
+                : activeImage
+            }
+            videoSrc={
+              activeScreenshotIndex === 0
+                ? packageItem.preview_video_url || packageItem.preview_video || packageItem.lockscreen?.media?.preview_video
+                : undefined
+            }
+            animatedSrc={
+              activeScreenshotIndex === 0
+                ? packageItem.preview_animated || packageItem.lockscreen?.media?.preview_animated
+                : undefined
+            }
+            mediaType={
+              activeScreenshotIndex === 0
+                ? packageItem.media_type ||
+                  (packageItem.preview_video_url || packageItem.preview_video
+                    ? "video"
+                    : packageItem.preview_animated
+                    ? "animated"
+                    : "image")
+                : "image"
+            }
             alt={packageItem.title}
             mode="hero"
             aspectRatio="16/9"
-            showBadge={true}
-            className="w-full"
+            showBadge={false}
+            className="w-full h-full object-cover"
           />
 
           {/* Lightbox Trigger */}
           <button
             type="button"
             onClick={onOpenLightbox}
-            className="absolute top-3 right-3 p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white/90 border border-white/10 backdrop-blur-md transition-all shadow-md hover:scale-105 z-20 cursor-pointer"
+            className="absolute top-3 right-3 p-2 rounded-lg bg-black/50 hover:bg-black/75 text-white/90 border border-white/15 backdrop-blur-md transition-all shadow-sm z-20 cursor-pointer"
             aria-label="View fullscreen image"
             title="Expand fullscreen preview"
           >
@@ -145,119 +168,95 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
         </div>
 
         {/* Thumbnail Selector Gallery */}
-        <PreviewGallery
-          screenshots={screenshots}
-          activeIndex={activeScreenshotIndex}
-          onSelect={onSelectScreenshot}
-          title={packageItem.title}
-        />
+        {screenshots.length > 1 && (
+          <PreviewGallery
+            screenshots={screenshots}
+            activeIndex={activeScreenshotIndex}
+            onSelect={onSelectScreenshot}
+            title={packageItem.title}
+          />
+        )}
       </div>
 
-      {/* ── Right Column: Package Identity, Target Selector & Actions ── */}
-      <div className="flex flex-col gap-4 justify-start min-w-0">
-        <div>
-          {/* Breadcrumb / Subtype */}
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--rz-text-secondary)] font-bold">
-              Lock Screens · {subtype}
+      {/* ── Right Column: Apple-Inspired Product Identity & Actions ── */}
+      <div className="flex flex-col justify-between min-w-0 py-1 space-y-5">
+        <div className="space-y-4">
+          {/* Metadata Header */}
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--rz-text-muted,#86868b)]">
+                Lock Screens · {subtype}
+              </span>
+              <span className="text-[11px] text-[var(--rz-text-muted,#86868b)]">·</span>
+              <span className="text-[11px] font-mono text-[var(--rz-text-muted,#86868b)]">
+                v{packageItem.version}
+              </span>
+            </div>
+
+            {/* Title */}
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--rz-text,#1d1d1f)] leading-tight">
+              {packageItem.title}
+            </h1>
+
+            {/* Description */}
+            <p className="text-xs sm:text-sm text-[var(--rz-text-secondary,#6e6e73)] leading-relaxed mt-2 line-clamp-3">
+              {packageItem.description || "A beautifully crafted lock screen experience for your desktop."}
+            </p>
+          </div>
+
+          {/* Author & Rating Single-Line Header */}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--rz-text-secondary,#6e6e73)] pt-1 border-t border-[var(--rz-border-subtle,#e5e5e7)]">
+            <span className="font-medium text-[var(--rz-text,#1d1d1f)]">{packageItem.author.name}</span>
+            <span>·</span>
+            <span className="flex items-center gap-1 font-medium">
+              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>{packageItem.rating > 0 ? packageItem.rating.toFixed(1) : "4.9"}</span>
             </span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] text-[var(--rz-accent-text)]">
-              v{packageItem.version}
+            <span>·</span>
+            <span>{formatDownloads(packageItem.downloads)} downloads</span>
+            <span>·</span>
+            <span className="flex items-center gap-1 text-[var(--rz-text-muted,#86868b)]">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Safe to install · Reversible</span>
             </span>
           </div>
 
-          {/* Title */}
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--rz-text)] leading-tight">
-            {packageItem.title}
-          </h1>
-
-          {/* Trust badges */}
-          <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-            {packageItem.trust_tier === "official" && (
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                Official
-              </span>
-            )}
-            {packageItem.trust_tier === "verified" && (
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-sky-500/20 text-sky-300 border border-sky-400/30 flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-sky-400" />
-                Verified
-              </span>
-            )}
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)]">
-              Qylock Upstream
-            </span>
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-emerald-400" />
-              Safe to install · Reversible
-            </span>
-          </div>
-
-          {/* Author Header */}
-          <CreatorHeader
-            name={packageItem.author.name}
-            avatar={packageItem.author.avatar}
-            verified={packageItem.author.verified}
-            packageCount={12}
-            totalDownloads={packageItem.downloads}
-          />
-
-          {/* Key Metrics */}
-          <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] my-3 text-xs">
-            <div>
-              <span className="text-[10px] text-[var(--rz-text-muted)] block">Downloads</span>
-              <span className="font-bold font-mono text-[var(--rz-text)] flex items-center gap-1 mt-0.5">
-                <Download className="w-3 h-3 text-[var(--rz-text-muted)]" />
-                {formatDownloads(packageItem.downloads)}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-[var(--rz-text-muted)] block">Rating</span>
-              <span className="font-bold font-mono text-[var(--rz-text)] flex items-center gap-1 mt-0.5">
-                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                {packageItem.rating > 0 ? packageItem.rating.toFixed(1) : "N/A"}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-[var(--rz-text-muted)] block">License</span>
-              <span className="font-bold font-mono text-[var(--rz-text)] flex items-center gap-1 mt-0.5 truncate text-[11px]">
-                <Calendar className="w-3 h-3 text-[var(--rz-text-muted)] shrink-0" />
-                GPL-3.0
-              </span>
-            </div>
-          </div>
-
-          {/* ── Installation Targets (Streamlined Two-Option UI) ── */}
-          <div className="p-3.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] mb-3">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--rz-text-muted)] font-bold block mb-2.5">
+          {/* ── Installation Targets ── */}
+          <div className="space-y-2 pt-2">
+            <span className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
               Installation
             </span>
+
             <div className="space-y-1.5">
               {/* Session Lock Option */}
               {canTargetQs && (
                 <div
                   onClick={handleToggleQs}
-                  className={`flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all ${
+                  className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-all ${
                     isDualTarget ? "cursor-pointer" : "cursor-default"
                   } ${
                     isQsChecked
-                      ? "bg-[var(--rz-accent)]/10 border-[var(--rz-accent)]/50 text-[var(--rz-text)]"
-                      : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] opacity-70"
+                      ? "bg-[var(--rz-surface-elevated,#ffffff)] border-[var(--rz-accent,#0071e3)] text-[var(--rz-text,#1d1d1f)] shadow-xs"
+                      : "bg-[var(--rz-surface,#f5f5f7)] border-[var(--rz-border-subtle,#d2d2d7)] text-[var(--rz-text-muted,#86868b)] opacity-75"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                      isQsChecked ? "bg-[var(--rz-accent)] border-[var(--rz-accent)] text-white" : "border-[var(--rz-border-subtle)] bg-[var(--rz-surface)]"
-                    }`}>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                        isQsChecked
+                          ? "bg-[var(--rz-accent,#0071e3)] border-[var(--rz-accent,#0071e3)] text-white"
+                          : "border-[var(--rz-border-subtle,#d2d2d7)] bg-white dark:bg-[var(--rz-surface)]"
+                      }`}
+                    >
                       {isQsChecked && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
-                      <span className="block text-xs font-semibold">Session Lock</span>
-                      <span className="block text-[10px] text-[var(--rz-text-muted)]">Hyprland · Wayland</span>
+                      <span className="block text-xs font-medium">Session Lock</span>
+                      <span className="block text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                        Hyprland · Wayland
+                      </span>
                     </div>
                   </div>
-                  <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 </div>
               )}
 
@@ -265,45 +264,50 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               {canTargetSddm && (
                 <div
                   onClick={handleToggleSddm}
-                  className={`flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all ${
+                  className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-all ${
                     isDualTarget ? "cursor-pointer" : "cursor-default"
                   } ${
                     isSddmChecked
-                      ? "bg-[var(--rz-accent)]/10 border-[var(--rz-accent)]/50 text-[var(--rz-text)]"
-                      : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] opacity-70"
+                      ? "bg-[var(--rz-surface-elevated,#ffffff)] border-[var(--rz-accent,#0071e3)] text-[var(--rz-text,#1d1d1f)] shadow-xs"
+                      : "bg-[var(--rz-surface,#f5f5f7)] border-[var(--rz-border-subtle,#d2d2d7)] text-[var(--rz-text-muted,#86868b)] opacity-75"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                      isSddmChecked ? "bg-[var(--rz-accent)] border-[var(--rz-accent)] text-white" : "border-[var(--rz-border-subtle)] bg-[var(--rz-surface)]"
-                    }`}>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                        isSddmChecked
+                          ? "bg-[var(--rz-accent,#0071e3)] border-[var(--rz-accent,#0071e3)] text-white"
+                          : "border-[var(--rz-border-subtle)] bg-white dark:bg-[var(--rz-surface)]"
+                      }`}
+                    >
                       {isSddmChecked && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
-                      <span className="block text-xs font-semibold">Login Screen</span>
-                      <span className="block text-[10px] text-[var(--rz-text-muted)]">SDDM Greeter</span>
+                      <span className="block text-xs font-medium">Login Screen</span>
+                      <span className="block text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                        SDDM
+                      </span>
                     </div>
                   </div>
-                  <Monitor className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Primary Action Area (Install before, Test/Overflow after) ── */}
-        <div className="pt-2 border-t border-[var(--rz-border-subtle)]">
+        {/* ── Action Section: Install or Installed Status + Test/Overflow ── */}
+        <div className="pt-3 border-t border-[var(--rz-border-subtle,#e5e5e7)] space-y-2">
           {!isInstalled ? (
-            /* 1. NOT INSTALLED: Clear Single Install Action */
+            /* NOT INSTALLED: Single Primary Install Action */
             <button
               type="button"
               disabled={isBlocked || isInstalling || (!canTargetQs && !canTargetSddm)}
               onClick={onInstall}
               className={[
-                "w-full py-3 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-md",
+                "w-full py-2.5 px-5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs",
                 isBlocked
-                  ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
-                  : "bg-[var(--rz-accent,#4f8ff7)] hover:bg-[var(--rz-accent,#4f8ff7)]/90 text-white",
+                  ? "bg-[var(--rz-surface-elevated,#f5f5f7)] text-[var(--rz-text-muted,#86868b)] border border-[var(--rz-border-subtle,#d2d2d7)] cursor-not-allowed opacity-60"
+                  : "bg-[var(--rz-accent,#0071e3)] hover:bg-[#0077ed] active:bg-[#0062c4] text-white",
               ].join(" ")}
             >
               {isInstalling ? (
@@ -317,26 +321,15 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                   <span>Update</span>
                 </>
               ) : (
-                <>
-                  <DownloadCloud className="w-4 h-4" />
-                  <span>Install</span>
-                </>
+                <span>Install</span>
               )}
             </button>
           ) : (
-            /* 2. INSTALLED: [ ✓ Installed ] + [ Test ] + [ ⋯ ] */
+            /* INSTALLED: Subtle Status Text + Secondary Test Button + Overflow */
             <div className="space-y-2.5">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
-                <span className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
-                  <span>
-                    {selectedTarget === "both"
-                      ? "Installed for Session + Login"
-                      : selectedTarget === "sddm"
-                      ? "Installed for Login Screen"
-                      : "Installed for Session Lock"}
-                  </span>
-                </span>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 py-0.5">
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>{installedLabel}</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -344,10 +337,9 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                   <button
                     type="button"
                     onClick={onTest}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-sm"
+                    className="flex-1 py-2 px-4 rounded-xl text-xs font-medium bg-white dark:bg-[var(--rz-surface-elevated)] hover:bg-neutral-100 dark:hover:bg-[var(--rz-surface-hover)] border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] text-[#1d1d1f] dark:text-[var(--rz-text)] transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
                     title="Launch isolated lockscreen test"
                   >
-                    <Lock className="w-3.5 h-3.5" />
                     <span>Test</span>
                   </button>
                 )}
@@ -357,7 +349,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowOverflow(!showOverflow)}
-                      className="p-2.5 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)] transition-all cursor-pointer select-none"
+                      className="p-2 rounded-xl border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] bg-white dark:bg-[var(--rz-surface-elevated)] text-[#6e6e73] dark:text-[var(--rz-text-muted)] hover:text-[#1d1d1f] dark:hover:text-[var(--rz-text)] hover:bg-neutral-100 dark:hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
                       aria-label="More options"
                       title="More options"
                     >
@@ -366,7 +358,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
 
                     {showOverflow && (
                       <div
-                        className="absolute right-0 bottom-full mb-2 w-36 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
+                        className="absolute right-0 bottom-full mb-2 w-36 rounded-xl bg-white dark:bg-[var(--rz-surface-elevated)] border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
@@ -375,7 +367,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                             setShowOverflow(false);
                             setShowUninstallConfirm(true);
                           }}
-                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                          className="w-full px-3 py-2 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2 transition-colors cursor-pointer text-left"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Uninstall</span>
@@ -387,59 +379,60 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               </div>
             </div>
           )}
+
+          {/* Overridden status indicator */}
+          {isOverridden && overriddenBy && (
+            <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-1">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span>
+                Applied, but overridden by <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[10px] font-mono">{overriddenBy}</code>
+              </span>
+            </div>
+          )}
+
+          {/* Blocked indicator */}
+          {isBlocked && (
+            <div className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-medium pt-1">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span>Installation blocked: missing {missingDependencies.join(", ")}</span>
+            </div>
+          )}
         </div>
-
-        {/* Warning if configuration is overridden */}
-        {isOverridden && overriddenBy && (
-          <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
-            <AlertTriangle className="w-3 h-3 shrink-0" />
-            <span>Applied by Ryzora, but overridden by <code className="bg-black/30 px-1 py-0.5 rounded text-amber-200 font-mono text-[10px]">{overriddenBy}</code></span>
-          </div>
-        )}
-
-        {/* Warning if installation is blocked */}
-        {isBlocked && (
-          <div className="flex items-center gap-1.5 text-[11px] text-rose-400 font-medium">
-            <AlertTriangle className="w-3 h-3 shrink-0" />
-            <span>Installation blocked: missing {missingDependencies.join(", ")}</span>
-          </div>
-        )}
       </div>
 
-      {/* ── Uninstall Confirmation Modal ── */}
+      {/* ── Clean Uninstall Confirmation Dialog ── */}
       {showUninstallConfirm && onUninstall && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150"
           onClick={() => setShowUninstallConfirm(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-[var(--rz-bg)] border border-rose-500/30 p-5 shadow-2xl space-y-4"
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-[var(--rz-surface-elevated)] border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2.5 text-rose-400 font-bold text-sm">
+            <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-sm">
               <Trash2 className="w-4 h-4" />
               <span>Uninstall {packageItem.title}?</span>
             </div>
 
-            <p className="text-xs text-[var(--rz-text-secondary)] leading-relaxed">
-              Are you sure you want to uninstall <strong>{packageItem.title}</strong>? All downloaded theme assets and configurations will be cleanly removed.
+            <p className="text-xs text-[var(--rz-text-secondary,#6e6e73)] leading-relaxed">
+              Theme files and configuration for <strong>{packageItem.title}</strong> will be cleanly removed from your system.
             </p>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--rz-border-subtle)]">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#e5e5e7] dark:border-[var(--rz-border-subtle)]">
               <button
                 type="button"
                 onClick={() => setShowUninstallConfirm(false)}
-                className="px-3 py-1.5 rounded-lg border border-[var(--rz-border-subtle)] text-xs text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] text-xs text-[var(--rz-text-secondary,#6e6e73)] hover:text-[var(--rz-text,#1d1d1f)] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmUninstall}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-xs"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Confirm Uninstall</span>
+                Uninstall
               </button>
             </div>
           </div>

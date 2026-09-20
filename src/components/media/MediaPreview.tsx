@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, memo } from "react";
-import { Play, Pause, Volume2, VolumeX, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import {
   determineMediaDisplayState,
   globalVideoLimiter,
@@ -36,7 +36,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted] = useState(true);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isInViewport, setIsInViewport] = useState(false);
@@ -233,29 +233,6 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
     }
   };
 
-  const togglePlay = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) {
-      isIntentionalPauseRef.current = false;
-      attemptPlay();
-    } else {
-      isIntentionalPauseRef.current = true;
-      video.pause();
-      globalVideoLimiter.releasePlayback(video);
-      setIsPlaying(false);
-    }
-  };
-
-  const toggleMute = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = !video.muted;
-    setIsMuted(video.muted);
-  };
-
   const aspectClass =
     aspectRatio === "16/9"
       ? "aspect-video"
@@ -287,6 +264,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
         <video
           ref={videoRef}
           src={finalVideo}
+          poster={finalPoster || undefined}
           muted={isMuted}
           loop
           playsInline
@@ -333,27 +311,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
         </div>
       )}
 
-      {/* Hero Mode Controls Overlay */}
-      {mode === "hero" && hasVideo && (
-        <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={togglePlay}
-            className="p-2 rounded-full backdrop-blur-md bg-black/60 hover:bg-black/80 text-white/90 border border-white/15 transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
-            title={isPlaying ? "Pause preview" : "Play preview"}
-            type="button"
-          >
-            {isPlaying ? <Pause size={14} /> : <Play size={14} className="translate-x-0.5" />}
-          </button>
-          <button
-            onClick={toggleMute}
-            className="p-2 rounded-full backdrop-blur-md bg-black/60 hover:bg-black/80 text-white/90 border border-white/15 transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
-            title={isMuted ? "Unmute" : "Mute"}
-            type="button"
-          >
-            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-          </button>
-        </div>
-      )}
+
     </div>
   );
 });
