@@ -13,6 +13,7 @@ pub mod types;
 pub mod verifier;
 pub mod session_lock;
 pub mod hypridle;
+pub mod sddm;
 
 pub use filesystem::*;
 pub use lifecycle::*;
@@ -80,6 +81,71 @@ pub fn session_lock_enable() -> Result<session_lock::SessionLockStatus, String> 
 pub fn session_lock_disable() -> Result<DisableReport, String> {
     let home = get_effective_home();
     session_lock::disable_session_lock(&home, true).map_err(|e| e.to_string())
+}
+
+/// Gets the host discovery report for SilentSDDM (read-only probe).
+#[tauri::command]
+pub fn silentsddm_get_host_report() -> sddm::discovery::SilentSddmHostReport {
+    sddm::discovery::discover_silentsddm(None)
+}
+
+/// Alias for silentsddm_get_host_report.
+#[tauri::command]
+pub fn silentsddm_host_report() -> sddm::discovery::SilentSddmHostReport {
+    sddm::discovery::discover_silentsddm(None)
+}
+
+/// Validates a custom video or image file path for SilentSDDM.
+#[tauri::command]
+pub fn silentsddm_validate_custom_path(path: String) -> sddm::discovery::CustomVideoValidation {
+    sddm::discovery::validate_custom_video(std::path::Path::new(&path))
+}
+
+/// Installs the SilentSDDM theme engine transactionally.
+#[tauri::command]
+pub fn silentsddm_install_engine() -> Result<sddm::engine::SilentSddmEngineManifest, String> {
+    let home = get_effective_home();
+    sddm::engine::install_engine_transactional_in(&home, None, None)
+        .map_err(|(err, rollback)| format!("{}: {:?}", err, rollback))
+}
+
+/// Uninstalls the SilentSDDM theme engine.
+#[tauri::command]
+pub fn silentsddm_uninstall_engine() -> Result<(), String> {
+    let home = get_effective_home();
+    sddm::engine::uninstall_engine_in(&home, None)
+}
+
+/// Installs an upstream catalog wallpaper into CAS and Ryzora wallpapers directory.
+#[tauri::command]
+pub fn silentsddm_install_wallpaper(
+    req: sddm::assets::UpstreamWallpaperInstallRequest,
+) -> Result<sddm::discovery::CachedAsset, String> {
+    let home = get_effective_home();
+    sddm::assets::install_upstream_wallpaper_in(&home, &req)
+}
+
+/// Uninstalls an upstream catalog wallpaper and cleans up CAS if unreferenced.
+#[tauri::command]
+pub fn silentsddm_uninstall_wallpaper(wallpaper_id: String) -> Result<(), String> {
+    let home = get_effective_home();
+    sddm::assets::uninstall_upstream_wallpaper_in(&home, &wallpaper_id)
+}
+
+/// Imports a custom video or image into Ryzora's managed storage.
+#[tauri::command]
+pub fn silentsddm_import_custom_video(
+    path: String,
+) -> Result<sddm::discovery::CachedAsset, String> {
+    let home = get_effective_home();
+    sddm::assets::import_custom_video_in(&home, std::path::Path::new(&path))
+}
+
+/// Removes a custom video or image from Ryzora's managed storage.
+#[tauri::command]
+pub fn silentsddm_remove_custom_video(custom_id: String) -> Result<(), String> {
+    let home = get_effective_home();
+    sddm::assets::remove_custom_video_in(&home, &custom_id)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

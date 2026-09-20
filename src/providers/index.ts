@@ -16,8 +16,16 @@ export {
   getCatalogueLockScreens,
   RAW_QYLOCK_THEMES,
 } from "./qylockProvider.ts";
+export {
+  silentSddmLockscreenProvider,
+  normalizeSilentSddmWallpaper,
+  SILENTSDDM_UPSTREAM,
+  SILENTSDDM_WALLPAPERS,
+  getDiscoveredSilentSddmWallpapers,
+} from "./silentSddmProvider.ts";
 
 import { qylockLockscreenProvider } from "./qylockProvider.ts";
+import { silentSddmLockscreenProvider } from "./silentSddmProvider.ts";
 import { pacmanAppProvider } from "./pacmanProvider.ts";
 import { flatpakAppProvider } from "./flatpakProvider.ts";
 import { aurAppProvider } from "./aurProvider.ts";
@@ -93,6 +101,7 @@ export const swaylockLockscreenProvider: LockscreenProvider = {
 
 const _lockscreenProviders: Record<string, LockscreenProvider> = {
   qylock: qylockLockscreenProvider,
+  silentsddm: silentSddmLockscreenProvider,
   hyprlock: hyprlockLockscreenProvider,
   swaylock: swaylockLockscreenProvider,
 };
@@ -115,6 +124,9 @@ import { packageEngine } from "../engine/PackageEngine.ts";
 // Qylock is the primary provider — registered first (highest priority)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 packageEngine.register(qylockLockscreenProvider as any);
+// SilentSDDM provider (Phase S1/S2)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+packageEngine.register(silentSddmLockscreenProvider as any);
 // Stub providers for hyprlock/swaylock (discover() returns [])
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 packageEngine.register(hyprlockLockscreenProvider as any);

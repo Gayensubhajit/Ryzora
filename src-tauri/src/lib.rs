@@ -202,6 +202,16 @@ pub fn run() {
             integration::session_lock_get_status,
             integration::session_lock_enable,
             integration::session_lock_disable,
+            // SilentSDDM Integration (Phase S1)
+            integration::silentsddm_get_host_report,
+            integration::silentsddm_host_report,
+            integration::silentsddm_validate_custom_path,
+            integration::silentsddm_install_engine,
+            integration::silentsddm_uninstall_engine,
+            integration::silentsddm_install_wallpaper,
+            integration::silentsddm_uninstall_wallpaper,
+            integration::silentsddm_import_custom_video,
+            integration::silentsddm_remove_custom_video,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

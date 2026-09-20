@@ -366,7 +366,7 @@ export interface LockscreenConfigSchema {
 }
 
 export interface LockscreenManifest {
-  provider: "qylock" | "hyprlock" | "swaylock" | "custom";
+  provider: "qylock" | "hyprlock" | "swaylock" | "silentsddm" | "custom";
   targets: Partial<Record<LockscreenTargetType, LockscreenTargetSpec>>;
   media: LockscreenMediaSpec;
   runtime: LockscreenRuntimeSpec;
@@ -1222,4 +1222,123 @@ export interface LockscreenTestResult {
   test_runtime_dir: string;
   tested_config: Record<string, any>;
   message: string;
+}
+
+
+// ============================================================================
+// SilentSDDM Integration Types (Phase S1)
+// ============================================================================
+
+export interface SilentSddmSemVer {
+  major: number;
+  minor: number;
+  patch: number;
+  raw: string;
+}
+
+export interface SilentSddmTargets {
+  login_screen: boolean;
+  lock_screen: boolean;
+}
+
+export type SilentSddmAssetType = "upstream" | "custom";
+export type SilentSddmMediaType = "image" | "video";
+
+export interface SilentSddmCachedAsset {
+  id: string;
+  filename: string;
+  asset_type: SilentSddmAssetType;
+  media_type: SilentSddmMediaType;
+  sha256: string;
+  size_bytes: number;
+  installed_at: string;
+  upstream_url?: string | null;
+  original_path?: string | null;
+}
+
+export interface SilentSddmManifest {
+  provider: string;
+  upstream_sha: string;
+  version: string;
+  engine_path: string;
+  installed_at: string;
+  active_wallpaper_id?: string | null;
+  active_targets: SilentSddmTargets;
+  sddm_active: boolean;
+  previous_sddm_theme?: string | null;
+}
+
+export interface SilentSddmHostReport {
+  sddm_installed: boolean;
+  sddm_version: SilentSddmSemVer | null;
+  sddm_version_ok: boolean;
+  qt_version: SilentSddmSemVer | null;
+  qt_version_ok: boolean;
+  qt_multimedia_ok: boolean;
+  current_theme: string | null;
+  current_theme_file: string | null;
+  ryzora_owns_sddm: boolean;
+  engine_installed: boolean;
+  engine_path: string | null;
+  engine_version: string | null;
+  engine_owned_by_ryzora: boolean;
+  manifest: SilentSddmManifest | null;
+  cached_wallpapers: SilentSddmCachedAsset[];
+  cached_custom: SilentSddmCachedAsset[];
+  warnings: string[];
+}
+
+export interface SilentSddmCustomVideoValidation {
+  valid: boolean;
+  path: string;
+  filename: string;
+  extension: string;
+  media_type?: SilentSddmMediaType | null;
+  size_bytes?: number | null;
+  error?: string | null;
+}
+
+export interface SilentSddmLicenseInfo {
+  theme: string;
+  asset: string;
+  provenance: string;
+  credit?: string;
+  sourceUrl?: string;
+}
+
+export interface SilentSddmWallpaper {
+  id: string;
+  name: string;
+  filename: string;
+  path: string;
+  type: "image" | "video";
+  posterFilename?: string;
+  posterSha256?: string;
+  posterSizeBytes?: number;
+  sizeBytes: number;
+  sha256: string;
+  downloadUrl: string;
+  posterUrl?: string;
+  license: SilentSddmLicenseInfo;
+}
+
+export interface SilentSddmEngineManifest {
+  engine_id: string;
+  version: string;
+  source_commit: string;
+  archive_sha256: string;
+  installed: boolean;
+  engine_path: string;
+  installed_at: string;
+}
+
+export interface UpstreamWallpaperInstallRequest {
+  id: string;
+  filename: string;
+  media_type: SilentSddmMediaType;
+  sha256: string;
+  size_bytes: number;
+  download_url: string;
+  poster_url?: string | null;
+  poster_sha256?: string | null;
 }
