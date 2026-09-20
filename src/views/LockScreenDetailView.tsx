@@ -131,7 +131,7 @@ export const LockScreenDetailView: React.FC = () => {
   const canSddm = Boolean(selectedPackage.supports_login_screen && isLoginScreenSupported && !isGdmActive);
 
   const [selectedTarget, setSelectedTarget] = useState<"quickshell" | "sddm" | "both">(() => {
-    if (canQs && canSddm) return "quickshell";
+    if (canQs && canSddm) return "both";
     if (canSddm) return "sddm";
     return "quickshell";
   });
@@ -274,7 +274,7 @@ export const LockScreenDetailView: React.FC = () => {
       const res = await installPackage(selectedPackage, shouldSnapshot, selectedTarget);
       if (res && res.success) {
         setToast({
-          message: `${selectedPackage.title} installed successfully. You can now Test or Apply it.`,
+          message: `${selectedPackage.title} installed successfully.`,
           type: "success",
         });
       }

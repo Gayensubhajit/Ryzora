@@ -38,8 +38,8 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
         </div>
       )}
 
-      {/* ── Top Fixed Navigation Bar ── */}
-      <header className="relative z-10 flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-bg)]/95 backdrop-blur-md shrink-0">
+      {/* ── Top Fixed Navigation Bar (Full Width) ── */}
+      <header className="relative z-10 flex items-center justify-between px-6 sm:px-8 lg:px-10 py-3.5 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-bg)]/95 backdrop-blur-md shrink-0">
         <button
           type="button"
           onClick={onClose}
@@ -60,9 +60,9 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
         </button>
       </header>
 
-      {/* ── Scrollable Body ── */}
+      {/* ── Scrollable Body (Full Width Viewport, no artificial gutters) ── */}
       <div className="relative z-10 flex-1 overflow-y-auto min-w-0">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-6">
+        <div className="w-full px-6 sm:px-8 lg:px-10 py-6 space-y-6">
           {children}
         </div>
       </div>
