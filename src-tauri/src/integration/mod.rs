@@ -12,6 +12,7 @@ pub mod manifest;
 pub mod types;
 pub mod verifier;
 pub mod session_lock;
+pub mod hypridle;
 
 pub use filesystem::*;
 pub use lifecycle::*;
