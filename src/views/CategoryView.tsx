@@ -56,6 +56,7 @@ const CATEGORY_SUB_FILTERS: Partial<Record<CategoryId, string[]>> = {
 const CATEGORY_PROVIDERS: Partial<Record<CategoryId, { label: string; url: string }[]>> = {
   lockscreens: [
     { label: "Qylock", url: "https://github.com/Darkkal44/qylock" },
+    { label: "SilentSDDM", url: "https://github.com/uiriansan/SilentSDDM" },
     { label: "Community", url: "https://github.com/Gayensubhajit/Ryzora" },
   ],
   rices: [

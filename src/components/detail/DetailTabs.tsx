@@ -46,6 +46,29 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
   // Compute dynamic files based on selected target
   const getTargetFiles = () => {
     const themeId = packageItem.id;
+    const isSilentSddm = packageItem.lockscreen?.provider === "silentsddm";
+
+    if (isSilentSddm) {
+      const asset = packageItem.lockscreen?.runtime?.assets?.[0] || `${themeId}.jpg`;
+      return [
+        {
+          target: `/usr/share/sddm/themes/ryzora-silent/backgrounds/${asset}`,
+          type: isVideo ? "Video Background Asset" : "Image Background Asset",
+          isSystem: true,
+        },
+        {
+          target: `/usr/share/sddm/themes/ryzora-silent/Main.qml`,
+          type: "SilentSDDM Engine QML",
+          isSystem: true,
+        },
+        {
+          target: `/usr/share/sddm/themes/ryzora-silent/metadata.desktop`,
+          type: "Engine Metadata",
+          isSystem: true,
+        },
+      ];
+    }
+
     const assets = manifest?.runtime.assets || ["Main.qml", "theme.conf", "metadata.desktop"];
 
     if (selectedTarget === "sddm") {

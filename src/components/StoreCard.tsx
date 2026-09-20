@@ -256,7 +256,7 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
                   className="absolute right-0 top-full mt-1.5 w-36 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {(packageItem.supports_session_lock || packageItem.supports_login_screen || packageItem.category?.toLowerCase().includes("lock")) && (
+                  {packageItem.lockscreen?.provider !== "silentsddm" && (packageItem.supports_session_lock || packageItem.supports_login_screen || packageItem.category?.toLowerCase().includes("lock")) && (
                     <button
                       type="button"
                       onClick={(e) => {

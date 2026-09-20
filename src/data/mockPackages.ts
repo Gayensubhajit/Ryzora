@@ -1,11 +1,15 @@
-import { getCatalogueLockScreens } from "../providers/qylockProvider";
+import { getCatalogueLockScreens } from "../providers/qylockProvider.ts";
+import {
+  SILENTSDDM_WALLPAPERS,
+  normalizeSilentSddmWallpaper,
+} from "../providers/silentSddmProvider.ts";
 /**
  * @deprecated TEMPORARY DEVELOPMENT FALLBACK ONLY (Phase 5).
  * The authoritative source of marketplace packages is now the Repository Manager
  * via the `get_catalog_packages` Tauri command reading from `repositories/`.
  * Do not add new packages here.
  */
-import { PackageItem } from "../types";
+import type { PackageItem } from "../types/index.ts";
 
 export const MOCK_PACKAGES: PackageItem[] = [
   {
@@ -491,6 +495,7 @@ export const MOCK_PACKAGES: PackageItem[] = [
     },
   },
   ...getCatalogueLockScreens(),
+  ...SILENTSDDM_WALLPAPERS.map(normalizeSilentSddmWallpaper),
   {
     id: "theme-fluent-dark-gtk",
 

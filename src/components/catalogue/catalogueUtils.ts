@@ -52,6 +52,9 @@ export function getPackageSubtype(pkg: PackageItem): string {
   const title = pkg.title.toLowerCase();
 
   if (pkg.category === "lockscreens" || pkg.package_type === "lockscreen") {
+    if (pkg.lockscreen?.provider === "silentsddm" || allTags.includes("silentsddm")) {
+      return "SilentSDDM";
+    }
     if (pkg.lockscreen?.targets?.quickshell && pkg.lockscreen?.targets?.sddm) {
       return "Quickshell · SDDM";
     }

@@ -1,4 +1,14 @@
 import { getCatalogueLockScreens } from "../providers/qylockProvider";
+import {
+  SILENTSDDM_WALLPAPERS,
+  normalizeSilentSddmWallpaper,
+} from "../providers/silentSddmProvider";
+import { packageEngine } from "../providers/index";
+import { SilentSddmService } from "../services/silentSddmService";
+import type {
+  SilentSddmHostReport,
+  UpstreamWallpaperInstallRequest,
+} from "../types";
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MOCK_PACKAGES } from "../data/mockPackages";
@@ -148,6 +158,8 @@ interface AppContextType {
   deactivateAndUninstallLockscreen: (packageId: string, target?: string) => Promise<boolean>;
   loadRuntimeStatus: () => Promise<LockscreenRuntimeStatus>;
   loadSddmRuntimeStatus: (packageId?: string) => Promise<SddmRuntimeStatus>;
+  silentSddmReport: SilentSddmHostReport | null;
+  loadSilentSddmReport: () => Promise<SilentSddmHostReport | null>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -385,6 +397,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sddmRuntimeStatus, setSddmRuntimeStatus] = useState<SddmRuntimeStatus | null>(null);
   const [systemIntegrationReport, setSystemIntegrationReport] = useState<SystemIntegrationReport | null>(null);
   const [settings, setSettings] = useState<RyzoraSettings | null>(null);
+  const [silentSddmReport, setSilentSddmReport] = useState<SilentSddmHostReport | null>(null);
+
+  const loadSilentSddmReport = useCallback(async (): Promise<SilentSddmHostReport | null> => {
+    try {
+      const rep = await SilentSddmService.getHostReport();
+      setSilentSddmReport(rep);
+      return rep;
+    } catch (e) {
+      console.warn("Failed to load SilentSDDM host report:", e);
+      return null;
+    }
+  }, []);
 
   const loadSettings = async (): Promise<RyzoraSettings> => {
     try {
@@ -762,8 +786,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadInstalledPackages = async () => {
     try {
       const list = await invoke<InstalledPackageRecord[]>("list_installed_packages");
-      setInstalledPackages(list);
-      setInstalledPackageIds(list.map((p) => p.package_id));
+      let sddmInstalled: InstalledPackageRecord[] = [];
+      try {
+        const report = await SilentSddmService.getHostReport();
+        setSilentSddmReport(report);
+        if (report?.cached_wallpapers && report.cached_wallpapers.length > 0) {
+          sddmInstalled = report.cached_wallpapers.map((cw) => ({
+            package_id: cw.id,
+            name: `SilentSDDM · ${cw.filename}`,
+            version: report.engine_version || "1.5.0",
+            package_type: "lockscreen",
+            installed_at: Date.now(),
+            snapshot_id: `silentsddm-${cw.sha256.slice(0, 8)}`,
+            installed_files: [cw.filename],
+            package_source_path: "silentsddm",
+          }));
+        }
+      } catch (err) {
+        console.warn("SilentSDDM host report not available during package listing:", err);
+      }
+      const combined = [...list, ...sddmInstalled];
+      setInstalledPackages(combined);
+      setInstalledPackageIds(combined.map((p) => p.package_id));
     } catch {
       // In browser preview / mock mode without Tauri runtime, provide installed fallback
       const mockInstalled: InstalledPackageRecord[] = [
@@ -803,8 +847,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const mergeCanonicalLockScreens = (basePackages: PackageItem[]): PackageItem[] => {
-    const lockscreens = getCatalogueLockScreens();
+  const mergeCanonicalLockScreens = (
+    basePackages: PackageItem[],
+    customLockscreens?: PackageItem[]
+  ): PackageItem[] => {
+    const lockscreens =
+      customLockscreens && customLockscreens.length > 0
+        ? customLockscreens
+        : [
+            ...getCatalogueLockScreens(),
+            ...SILENTSDDM_WALLPAPERS.map(normalizeSilentSddmWallpaper),
+          ];
     const merged: PackageItem[] = basePackages.map((pkg) => {
       const hasQs = pkg.supports_session_lock ?? Boolean(
         pkg.manifest?.targets?.["quickshell"] ||
@@ -899,13 +952,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loadCatalogPackages = async () => {
     try {
-      const catalog = await invoke<PackageItem[]>("get_catalog_packages");
-      setPackages(mergeCanonicalLockScreens(catalog || []));
-      const repos = await invoke<RepositorySummary[]>("get_repository_info");
+      const [catalog, lockscreens] = await Promise.all([
+        invoke<PackageItem[]>("get_catalog_packages").catch(() => null),
+        packageEngine.discoverByCategory("lockscreens").catch(() => []),
+      ]);
+      setPackages(mergeCanonicalLockScreens(catalog || MOCK_PACKAGES, lockscreens));
+      const repos = await invoke<RepositorySummary[]>("get_repository_info").catch(() => []);
       setRepositories(repos);
     } catch (e) {
       console.warn("Failed to load catalog from RepositoryManager, using fallback in dev/browser", e);
-      setPackages(mergeCanonicalLockScreens(MOCK_PACKAGES));
+      const lockscreens = await packageEngine.discoverByCategory("lockscreens").catch(() => []);
+      setPackages(mergeCanonicalLockScreens(MOCK_PACKAGES, lockscreens));
     }
   };
 
@@ -920,9 +977,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshCatalog = async () => {
     try {
-      const catalog = await invoke<PackageItem[]>("refresh_catalog");
-      setPackages(mergeCanonicalLockScreens(catalog || []));
-      const repos = await invoke<RepositorySummary[]>("get_repository_info");
+      const [catalog, lockscreens] = await Promise.all([
+        invoke<PackageItem[]>("refresh_catalog").catch(() => null),
+        packageEngine.discoverByCategory("lockscreens").catch(() => []),
+      ]);
+      setPackages(mergeCanonicalLockScreens(catalog || [], lockscreens));
+      const repos = await invoke<RepositorySummary[]>("get_repository_info").catch(() => []);
       setRepositories(repos);
     } catch (e) {
       console.warn("Failed to refresh catalog", e);
@@ -931,9 +991,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshRepositories = async () => {
     try {
-      const catalog = await invoke<PackageItem[]>("refresh_catalog");
-      setPackages(mergeCanonicalLockScreens(catalog || []));
-      const repos = await invoke<RepositorySummary[]>("get_repository_info");
+      const [catalog, lockscreens] = await Promise.all([
+        invoke<PackageItem[]>("refresh_catalog").catch(() => null),
+        packageEngine.discoverByCategory("lockscreens").catch(() => []),
+      ]);
+      setPackages(mergeCanonicalLockScreens(catalog || [], lockscreens));
+      const repos = await invoke<RepositorySummary[]>("get_repository_info").catch(() => []);
       setRepositories(repos);
       await loadRepositorySources();
       setToast({ message: "Repositories refreshed", type: "info" });
@@ -1012,6 +1075,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSystemIntegrationReport();
     loadSettings();
     loadRuntimeStatus();
+    loadSilentSddmReport();
   }, []);
 
   useEffect(() => {
@@ -1054,6 +1118,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createSnapshot: boolean = true,
     target?: string
   ): Promise<InstallResult> => {
+    if (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-")) {
+      setIsInstalling(true);
+      setInstallProgress(15);
+      setInstallLogs([`[SilentSDDM] Preparing installation for '${pkg.title}'...`]);
+
+      try {
+        // Step 1: Ensure SilentSDDM engine is installed
+        setInstallProgress(30);
+        let hostReport = await SilentSddmService.getHostReport();
+        if (!hostReport.engine_installed) {
+          setInstallLogs((prev) => [
+            ...prev,
+            `[SilentSDDM] Theme engine missing. Installing engine from pinned release (1.5.0)...`,
+          ]);
+          await SilentSddmService.installEngine();
+          hostReport = await SilentSddmService.getHostReport();
+          setInstallLogs((prev) => [
+            ...prev,
+            `[SilentSDDM] Engine successfully installed at ${hostReport.engine_path || "/usr/share/sddm/themes/ryzora-silent"}.`,
+          ]);
+        }
+
+        // Step 2: Install wallpaper asset
+        setInstallProgress(60);
+        setInstallLogs((prev) => [
+          ...prev,
+          `[SilentSDDM] Downloading and verifying wallpaper asset in CAS...`,
+        ]);
+
+        const wp = SILENTSDDM_WALLPAPERS.find((w) => w.id === pkg.id);
+        if (!wp) {
+          throw new Error(`Wallpaper '${pkg.id}' not found in SilentSDDM catalogue.`);
+        }
+
+        const req: UpstreamWallpaperInstallRequest = {
+          id: wp.id,
+          filename: wp.filename,
+          media_type: wp.type,
+          sha256: wp.sha256,
+          size_bytes: wp.sizeBytes,
+          download_url: wp.downloadUrl,
+          poster_url: wp.posterUrl || null,
+          poster_sha256: wp.posterSha256 || null,
+        };
+
+        const cached = await SilentSddmService.installWallpaper(req);
+        setInstallProgress(100);
+        setInstallLogs((prev) => [
+          ...prev,
+          `✓ '${pkg.title}' installed into SilentSDDM cache (${cached.filename}).`,
+        ]);
+
+        await loadInstalledPackages();
+        await loadSilentSddmReport();
+
+        setToast({
+          message: `Installed ${pkg.title}`,
+          type: "success",
+        });
+
+        setIsInstalling(false);
+        return {
+          success: true,
+          package_id: pkg.id,
+          version: pkg.version || "1.5.0",
+          installed_files: [cached.filename],
+          snapshot_id: `silentsddm-${cached.sha256.slice(0, 8)}`,
+          errors: [],
+          rolled_back: false,
+          selected_target: "sddm",
+        };
+      } catch (e: any) {
+        const errorMsg = e?.message || String(e);
+        setInstallLogs((prev) => [...prev, `[Failed] ${errorMsg}`]);
+        setToast({
+          message: `SilentSDDM install failed: ${errorMsg}`,
+          type: "warning",
+        });
+        setIsInstalling(false);
+        throw e;
+      }
+    }
+
     setIsInstalling(true);
     setInstallProgress(10);
     setInstallLogs([
@@ -1200,6 +1347,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const uninstallPackage = async (packageId: string): Promise<UninstallResult> => {
+    const pkg = packages.find((p) => p.id === packageId);
+    if (pkg?.lockscreen?.provider === "silentsddm" || packageId.startsWith("silentsddm-")) {
+      try {
+        await SilentSddmService.uninstallWallpaper(packageId);
+        await loadInstalledPackages();
+        await loadSilentSddmReport();
+        setToast({
+          message: `Uninstalled ${pkg?.title || packageId}`,
+          type: "info",
+        });
+        return {
+          package_id: packageId,
+          success: true,
+          removed_files: [packageId],
+          already_missing_files: [],
+          conflict_files: [],
+          removed_directories: [],
+          retained_directories: [],
+          rolled_back: false,
+        };
+      } catch (e: any) {
+        console.error("Failed to uninstall SilentSDDM wallpaper:", e);
+        setToast({
+          message: `Uninstall failed: ${e?.message || e}`,
+          type: "warning",
+        });
+        throw e;
+      }
+    }
+
     try {
       const res = await invoke<UninstallResult>("uninstall_package", { packageId });
       await loadInstalledPackages();
@@ -1517,6 +1694,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deactivateAndUninstallLockscreen,
         loadRuntimeStatus,
         loadSddmRuntimeStatus,
+        silentSddmReport,
+        loadSilentSddmReport,
       }}
     >
       {children}

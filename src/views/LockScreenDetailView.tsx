@@ -29,6 +29,8 @@ export const LockScreenDetailView: React.FC = () => {
     hostCapabilities,
     sddmRuntimeStatus,
     loadSddmRuntimeStatus,
+    silentSddmReport,
+    uninstallPackage,
   } = useApp();
 
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
@@ -129,11 +131,28 @@ export const LockScreenDetailView: React.FC = () => {
   const canQs = Boolean(selectedPackage.supports_session_lock && isSessionLockSupported);
   const canSddm = Boolean(selectedPackage.supports_login_screen && isLoginScreenSupported && !isGdmActive);
 
+  const isSilentSddm =
+    selectedPackage?.lockscreen?.provider === "silentsddm" ||
+    selectedPackage?.id.startsWith("silentsddm-");
+
   const [selectedTarget, setSelectedTarget] = useState<"quickshell" | "sddm" | "both">(() => {
+    if (isSilentSddm) return "sddm";
     if (canQs && canSddm) return "both";
     if (canSddm) return "sddm";
     return "quickshell";
   });
+
+  useEffect(() => {
+    if (isSilentSddm) {
+      setSelectedTarget("sddm");
+    } else if (canQs && canSddm) {
+      setSelectedTarget("both");
+    } else if (canSddm) {
+      setSelectedTarget("sddm");
+    } else {
+      setSelectedTarget("quickshell");
+    }
+  }, [selectedPackage?.id, isSilentSddm, canQs, canSddm]);
 
   useEffect(() => {
     if (selectedPackage) {
@@ -156,14 +175,18 @@ export const LockScreenDetailView: React.FC = () => {
     installedRecord?.installed_files?.some((f) => f.includes("/usr/share/sddm"))
   );
 
-  const isInstalledForTarget =
-    !installedRecord
-      ? false
-      : selectedTarget === "quickshell"
-      ? hasUserFiles
-      : selectedTarget === "sddm"
-      ? hasSddmFiles
-      : hasUserFiles && hasSddmFiles;
+  const isInstalledForTarget = isSilentSddm
+    ? Boolean(
+        installedRecord ||
+        silentSddmReport?.cached_wallpapers?.some((w) => w.id === selectedPackage.id)
+      )
+    : !installedRecord
+    ? false
+    : selectedTarget === "quickshell"
+    ? hasUserFiles
+    : selectedTarget === "sddm"
+    ? hasSddmFiles
+    : hasUserFiles && hasSddmFiles;
 
   const isInstalled = isInstalledForTarget;
   const isUpdateAvailable =
@@ -200,6 +223,13 @@ export const LockScreenDetailView: React.FC = () => {
     (selectedTarget === "sddm" || selectedTarget === "both") && isSddmOverridden;
 
   const handleApply = async (targetOverride?: "quickshell" | "sddm" | "both") => {
+    if (isSilentSddm) {
+      setToast({
+        message: "SilentSDDM theme activation will be available in Phase S4. Wallpaper is installed.",
+        type: "info",
+      });
+      return;
+    }
     setIsApplying(true);
     const targetToApply = targetOverride || selectedTarget;
     try {
@@ -261,18 +291,22 @@ export const LockScreenDetailView: React.FC = () => {
   const handleUninstall = async () => {
     setIsApplying(true);
     try {
-      const activeTarget =
-        isQuickshellActive && isSddmActive
-          ? "both"
-          : isQuickshellActive
-          ? "quickshell"
-          : isSddmActive
-          ? "sddm"
-          : undefined;
+      if (isSilentSddm) {
+        await uninstallPackage(selectedPackage.id);
+      } else {
+        const activeTarget =
+          isQuickshellActive && isSddmActive
+            ? "both"
+            : isQuickshellActive
+            ? "quickshell"
+            : isSddmActive
+            ? "sddm"
+            : undefined;
 
-      const success = await deactivateAndUninstallLockscreen(selectedPackage.id, activeTarget);
-      if (success) {
-        await refreshActiveLockscreen();
+        const success = await deactivateAndUninstallLockscreen(selectedPackage.id, activeTarget);
+        if (success) {
+          await refreshActiveLockscreen();
+        }
       }
     } catch {
       // toast is handled in AppContext
@@ -347,10 +381,13 @@ export const LockScreenDetailView: React.FC = () => {
         isLoginScreenSupported={isLoginScreenSupported}
         isActive={isQuickshellActive || isSddmActive}
         activeTargets={{ quickshell: isQuickshellActive, sddm: isSddmActive }}
-        installedTargets={{ quickshell: hasUserFiles, sddm: hasSddmFiles }}
+        installedTargets={{
+          quickshell: isSilentSddm ? false : hasUserFiles,
+          sddm: isSilentSddm ? isInstalled : hasSddmFiles,
+        }}
         onApply={handleApply}
         onDeactivate={handleDeactivate}
-        onTest={isInstalled ? handleTest : undefined}
+        onTest={isInstalled && !isSilentSddm ? handleTest : undefined}
         onUninstall={isInstalled ? handleUninstall : undefined}
         isApplying={isApplying}
         isOverridden={isTargetOverridden}
