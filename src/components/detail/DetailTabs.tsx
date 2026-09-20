@@ -110,8 +110,8 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
 
   return (
     <div className="mt-6 border-t border-[var(--rz-border-subtle)] pt-4">
-      {/* ── Tab Navigation Header ── */}
-      <div className="flex items-center gap-1.5 border-b border-[var(--rz-border-subtle)] pb-2 overflow-x-auto scrollbar-none">
+      {/* ── Tab Navigation Header (Apple Underline Style) ── */}
+      <div className="flex items-center gap-6 border-b border-[var(--rz-border-subtle)] overflow-x-auto scrollbar-none">
         {[
           { id: "overview", label: "Overview", icon: <FileText className="w-3.5 h-3.5" /> },
           { id: "files", label: "Files & Code", icon: <FolderGit2 className="w-3.5 h-3.5" />, badge: targetFiles.length },
@@ -125,22 +125,16 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as TabKey)}
-              className={[
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none shrink-0",
+              className={`relative flex items-center gap-2 pb-3 text-xs font-medium transition-colors cursor-pointer select-none shrink-0 ${
                 isActive
-                  ? "bg-[var(--rz-accent)] text-white shadow-xs"
-                  : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)]",
-              ].join(" ")}
+                  ? "text-[var(--rz-text)] font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--rz-accent)] after:rounded-full"
+                  : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
+              }`}
             >
               {tab.icon}
               <span>{tab.label}</span>
               {typeof tab.badge === "number" && (
-                <span
-                  className={[
-                    "ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono",
-                    isActive ? "bg-white/20 text-white" : "bg-[var(--rz-surface)] text-[var(--rz-text-muted)]",
-                  ].join(" ")}
-                >
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] text-[var(--rz-text-muted)]">
                   {tab.badge}
                 </span>
               )}

@@ -318,6 +318,7 @@ export const LockScreenDetailView: React.FC = () => {
         isLoginScreenSupported={isLoginScreenSupported}
         isActive={isActiveForTarget}
         activeTargets={{ quickshell: isQuickshellActive, sddm: isSddmActive }}
+        installedTargets={{ quickshell: hasUserFiles, sddm: hasSddmFiles }}
         onApply={handleApply}
         onDeactivate={handleDeactivate}
         onTest={isInstalled ? handleTest : undefined}
@@ -364,38 +365,38 @@ export const LockScreenDetailView: React.FC = () => {
           onClick={() => setLastTestResult(null)}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white dark:bg-[var(--rz-surface-elevated)] border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] p-6 shadow-2xl space-y-4"
+            className="w-full max-w-md rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#e5e5e7] dark:border-[var(--rz-border-subtle)]">
-              <div className="flex items-center gap-2 font-semibold text-sm text-[var(--rz-text,#1d1d1f)]">
-                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--rz-border-subtle)]">
+              <div className="flex items-center gap-2 font-semibold text-sm text-[var(--rz-text)]">
+                <Check className="w-4 h-4 text-emerald-500 stroke-[2.5]" />
                 <span>Isolated Test Environment</span>
               </div>
               <button
                 type="button"
                 onClick={() => setLastTestResult(null)}
-                className="text-[var(--rz-text-muted,#86868b)] hover:text-[var(--rz-text,#1d1d1f)] cursor-pointer"
+                className="text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-surface,#f5f5f7)] border border-[var(--rz-border-subtle,#d2d2d7)]">
-                <span className="text-[var(--rz-text-secondary,#6e6e73)]">Target Mode</span>
-                <span className="font-semibold text-[var(--rz-text,#1d1d1f)] uppercase">{lastTestResult.target}</span>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
+                <span className="text-[var(--rz-text-secondary)]">Target Mode</span>
+                <span className="font-semibold text-[var(--rz-text)] uppercase">{lastTestResult.target}</span>
               </div>
 
-              <div className="p-2.5 rounded-lg bg-[var(--rz-surface,#f5f5f7)] border border-[var(--rz-border-subtle,#d2d2d7)] space-y-1">
-                <span className="text-[var(--rz-text-muted,#86868b)] text-[10px] uppercase font-semibold block">Runtime Sandbox</span>
-                <code className="text-[11px] font-mono text-[var(--rz-text,#1d1d1f)] break-all">{lastTestResult.test_runtime_dir}</code>
+              <div className="p-2.5 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] space-y-1">
+                <span className="text-[var(--rz-text-muted)] text-[10px] uppercase font-semibold block">Runtime Sandbox</span>
+                <code className="text-[11px] font-mono text-[var(--rz-text)] break-all">{lastTestResult.test_runtime_dir}</code>
               </div>
 
               {Object.keys(lastTestResult.tested_config).length > 0 && (
-                <div className="p-2.5 rounded-lg bg-[var(--rz-surface,#f5f5f7)] border border-[var(--rz-border-subtle,#d2d2d7)] space-y-1">
-                  <span className="text-[var(--rz-text-muted,#86868b)] text-[10px] uppercase font-semibold block">Materialized Configuration</span>
-                  <div className="text-[11px] font-mono text-[var(--rz-text,#1d1d1f)] space-y-0.5 max-h-28 overflow-y-auto">
+                <div className="p-2.5 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] space-y-1">
+                  <span className="text-[var(--rz-text-muted)] text-[10px] uppercase font-semibold block">Materialized Configuration</span>
+                  <div className="text-[11px] font-mono text-[var(--rz-text)] space-y-0.5 max-h-28 overflow-y-auto">
                     {Object.entries(lastTestResult.tested_config).map(([k, v]) => (
                       <div key={k}>{k} = {String(v)}</div>
                     ))}
@@ -404,11 +405,11 @@ export const LockScreenDetailView: React.FC = () => {
               )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-[#e5e5e7] dark:border-[var(--rz-border-subtle)]">
+            <div className="flex justify-end pt-3 border-t border-[var(--rz-border-subtle)]">
               <button
                 type="button"
                 onClick={() => setLastTestResult(null)}
-                className="px-4 py-2 rounded-xl bg-[var(--rz-accent,#0071e3)] hover:bg-[#0077ed] text-white text-xs font-semibold cursor-pointer shadow-xs"
+                className="px-4 py-2 rounded-xl bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white text-xs font-semibold cursor-pointer shadow-xs"
               >
                 Close
               </button>

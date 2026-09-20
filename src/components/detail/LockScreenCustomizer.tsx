@@ -107,19 +107,19 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
   const isStaticBgActive = currentBgMode === "static";
 
   return (
-    <section className="rounded-2xl border border-[var(--rz-border-subtle,#d2d2d7)] bg-[var(--rz-surface,#ffffff)] text-[var(--rz-text,#1d1d1f)] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.02)] my-6">
+    <section className="rounded-2xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] text-[var(--rz-text)] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.02)] my-6">
       {/* ── Header: Clean & Apple-Like ── */}
-      <div className="px-6 py-4 border-b border-[var(--rz-border-subtle,#e5e5e7)] flex items-center justify-between gap-4 flex-wrap">
+      <div className="px-6 py-4 border-b border-[var(--rz-border-subtle)] flex items-center justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-sm sm:text-base font-semibold text-[var(--rz-text,#1d1d1f)]">
+            <h2 className="text-sm sm:text-base font-semibold text-[var(--rz-text)]">
               Theme Customization
             </h2>
-            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-100 dark:bg-neutral-800 text-[var(--rz-text-secondary,#6e6e73)] border border-neutral-200 dark:border-neutral-700">
+            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)]">
               Upstream ✓
             </span>
           </div>
-          <p className="text-xs text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+          <p className="text-xs text-[var(--rz-text-secondary)] mt-0.5">
             Configure supported runtime parameters for {packageItem.title}.
           </p>
         </div>
@@ -127,7 +127,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
         <button
           type="button"
           onClick={handleResetDefaults}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text-secondary,#6e6e73)] hover:text-[var(--rz-text,#1d1d1f)] bg-white dark:bg-[var(--rz-surface-elevated)] border border-[#d2d2d7] dark:border-[var(--rz-border-subtle)] hover:bg-neutral-100 dark:hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
         >
           <RotateCcw size={12} />
           <span>Reset Defaults</span>
@@ -138,7 +138,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
         {/* ── 1. Theme Variants (if present) ── */}
         {variants.length > 0 && (
           <div className="space-y-2.5">
-            <span className="text-xs font-medium text-[var(--rz-text,#1d1d1f)] block">
+            <span className="text-xs font-medium text-[var(--rz-text)] block">
               Theme Variant
             </span>
 
@@ -154,12 +154,12 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                     onClick={() => onSelectVariant(v.id)}
                     className={`relative p-3 rounded-xl border text-left transition-all cursor-pointer flex gap-3 select-none ${
                       isSelected
-                        ? "bg-white dark:bg-[var(--rz-surface-elevated)] border-[var(--rz-accent,#0071e3)] ring-1 ring-[var(--rz-accent,#0071e3)] shadow-xs"
-                        : "bg-[var(--rz-surface,#f5f5f7)] border-[var(--rz-border-subtle,#d2d2d7)] hover:border-neutral-400 dark:hover:border-neutral-600"
+                        ? "bg-[var(--rz-surface-elevated)] border-[var(--rz-accent)] ring-1 ring-[var(--rz-accent)] shadow-xs"
+                        : "bg-[var(--rz-surface)] border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)]"
                     }`}
                   >
                     {previewImg && (
-                      <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-black/10 bg-neutral-100">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)]">
                         <img
                           src={previewImg}
                           alt={v.name}
@@ -170,18 +170,18 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                     )}
 
                     <div className="flex-1 min-w-0 pr-5">
-                      <h4 className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] truncate">
+                      <h4 className="text-xs font-semibold text-[var(--rz-text)] truncate">
                         {v.name}
                       </h4>
                       {v.description && (
-                        <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5 line-clamp-2 leading-relaxed">
+                        <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5 line-clamp-2 leading-relaxed">
                           {v.description}
                         </p>
                       )}
                     </div>
 
                     {isSelected && (
-                      <div className="absolute top-3 right-3 w-4 h-4 rounded-full bg-[var(--rz-accent,#0071e3)] text-white flex items-center justify-center shadow-xs">
+                      <div className="absolute top-3 right-3 w-4 h-4 rounded-full bg-[var(--rz-accent)] text-white flex items-center justify-center shadow-xs">
                         <Check size={10} strokeWidth={3} />
                       </div>
                     )}
@@ -196,17 +196,17 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Option: themeMode (Apple Segmented Control) */}
           {themeModeSpec && (
-            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#e5e5e7)] bg-[var(--rz-surface-elevated,#f5f5f7)] flex flex-col justify-between gap-3">
+            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
               <div>
-                <span className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
+                <span className="text-xs font-semibold text-[var(--rz-text)] block">
                   {themeModeSpec.label || "Theme Mode"}
                 </span>
-                <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
                   Select light or dark contrast palette for interface elements.
                 </p>
               </div>
 
-              <div className="flex bg-neutral-200/70 dark:bg-neutral-800 p-1 rounded-xl gap-1">
+              <div className="flex bg-[var(--rz-surface)] p-1 rounded-xl gap-1 border border-[var(--rz-border-subtle)]">
                 {themeModeSpec.options?.map((opt) => {
                   const currentVal = currentConfig["themeMode"] ?? themeModeSpec.default;
                   const active = String(currentVal) === String(opt.value);
@@ -218,8 +218,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       onClick={() => handleOptionChange("themeMode", opt.value)}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                         active
-                          ? "bg-white dark:bg-[var(--rz-surface)] text-[var(--rz-text,#1d1d1f)] shadow-xs font-semibold"
-                          : "text-[var(--rz-text-secondary,#6e6e73)] hover:text-[var(--rz-text,#1d1d1f)]"
+                          ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text)] shadow-xs font-semibold"
+                          : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                       }`}
                     >
                       {opt.value === "light" ? <Sun size={13} /> : <Moon size={13} />}
@@ -233,12 +233,12 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
           {/* Option: enableWindup (Clean macOS Switch) */}
           {enableWindupSpec && (
-            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#e5e5e7)] bg-[var(--rz-surface-elevated,#f5f5f7)] flex flex-col justify-between gap-3">
+            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
               <div>
-                <span className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
+                <span className="text-xs font-semibold text-[var(--rz-text)] block">
                   {enableWindupSpec.label || "Windup Animation"}
                 </span>
-                <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
                   {enableWindupSpec.description || "Play mechanical gear train animation during unlock."}
                 </p>
               </div>
@@ -248,8 +248,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                 const isChecked = Boolean(val);
 
                 return (
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-[var(--rz-surface)] border border-[var(--rz-border-subtle,#e5e5e7)]">
-                    <span className="text-xs font-medium text-[var(--rz-text,#1d1d1f)]">
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
+                    <span className="text-xs font-medium text-[var(--rz-text)]">
                       {isChecked ? "Enabled" : "Disabled"}
                     </span>
                     <button
@@ -258,7 +258,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       aria-checked={isChecked}
                       onClick={() => handleOptionChange("enableWindup", !isChecked)}
                       className={`w-10 h-6 rounded-full p-0.5 transition-colors cursor-pointer flex items-center ${
-                        isChecked ? "bg-[var(--rz-accent,#0071e3)] justify-end" : "bg-neutral-300 dark:bg-neutral-700 justify-start"
+                        isChecked ? "bg-[var(--rz-accent)] justify-end" : "bg-[var(--rz-border-strong)] justify-start"
                       }`}
                     >
                       <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
@@ -271,17 +271,17 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
           {/* Option: background_mode (Dynamic wallpaper mode) */}
           {bgModeSpec && (
-            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#e5e5e7)] bg-[var(--rz-surface-elevated,#f5f5f7)] flex flex-col justify-between gap-3">
+            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
               <div>
-                <span className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
+                <span className="text-xs font-semibold text-[var(--rz-text)] block">
                   {bgModeSpec.label || "Background Mode"}
                 </span>
-                <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
                   {bgModeSpec.description || "Controls how dynamic backgrounds transition."}
                 </p>
               </div>
 
-              <div className="flex bg-neutral-200/70 dark:bg-neutral-800 p-1 rounded-xl gap-1">
+              <div className="flex bg-[var(--rz-surface)] p-1 rounded-xl gap-1 border border-[var(--rz-border-subtle)]">
                 {bgModeSpec.options?.map((opt) => {
                   const currentVal = currentConfig["background_mode"] ?? bgModeSpec.default;
                   const active = String(currentVal) === String(opt.value);
@@ -293,8 +293,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       onClick={() => handleOptionChange("background_mode", opt.value)}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                         active
-                          ? "bg-white dark:bg-[var(--rz-surface)] text-[var(--rz-text,#1d1d1f)] shadow-xs font-semibold"
-                          : "text-[var(--rz-text-secondary,#6e6e73)] hover:text-[var(--rz-text,#1d1d1f)]"
+                          ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text)] shadow-xs font-semibold"
+                          : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                       }`}
                     >
                       {opt.value === "time" ? <Clock size={12} /> : opt.value === "random" ? <Shuffle size={12} /> : <ImageIcon size={12} />}
@@ -308,17 +308,17 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
           {/* Option: background_index (Static asset index) */}
           {bgIndexSpec && (
-            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#e5e5e7)] bg-[var(--rz-surface-elevated,#f5f5f7)] flex flex-col justify-between gap-3">
+            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
               <div>
-                <span className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
+                <span className="text-xs font-semibold text-[var(--rz-text)] block">
                   {bgIndexSpec.label || "Static Background Selection"}
                 </span>
-                <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
                   {bgIndexSpec.description || "Active wallpaper when static background mode is selected."}
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-neutral-200/70 dark:bg-neutral-800">
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
                 {bgIndexSpec.options?.map((opt) => {
                   const currentVal = currentConfig["background_index"] ?? bgIndexSpec.default;
                   const active = String(currentVal) === String(opt.value);
@@ -335,8 +335,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       }}
                       className={`py-1.5 px-2 text-xs font-medium rounded-lg transition-all cursor-pointer text-center truncate ${
                         active
-                          ? "bg-white dark:bg-[var(--rz-surface)] text-[var(--rz-text,#1d1d1f)] shadow-xs font-semibold"
-                          : "text-[var(--rz-text-secondary,#6e6e73)] hover:text-[var(--rz-text,#1d1d1f)]"
+                          ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text)] shadow-xs font-semibold"
+                          : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                       }`}
                     >
                       {opt.label}
@@ -349,17 +349,17 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
 
           {/* Option: gameMode */}
           {gameModeSpec && (
-            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle,#e5e5e7)] bg-[var(--rz-surface-elevated,#f5f5f7)] flex flex-col justify-between gap-3">
+            <div className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-3">
               <div>
-                <span className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
+                <span className="text-xs font-semibold text-[var(--rz-text)] block">
                   {gameModeSpec.label || "Login Mode"}
                 </span>
-                <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
                   {gameModeSpec.description || "Select rhythm minigame or direct password authentication."}
                 </p>
               </div>
 
-              <div className="flex bg-neutral-200/70 dark:bg-neutral-800 p-1 rounded-xl gap-1">
+              <div className="flex bg-[var(--rz-surface)] p-1 rounded-xl gap-1 border border-[var(--rz-border-subtle)]">
                 {gameModeSpec.options?.map((opt) => {
                   const currentVal = currentConfig["gameMode"] ?? gameModeSpec.default;
                   const active = String(currentVal) === String(opt.value);
@@ -371,8 +371,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       onClick={() => handleOptionChange("gameMode", opt.value)}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                         active
-                          ? "bg-white dark:bg-[var(--rz-surface)] text-[var(--rz-text,#1d1d1f)] shadow-xs font-semibold"
-                          : "text-[var(--rz-text-secondary,#6e6e73)] hover:text-[var(--rz-text,#1d1d1f)]"
+                          ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text)] shadow-xs font-semibold"
+                          : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
                       }`}
                     >
                       {opt.value === "game" ? <Gamepad2 size={13} /> : <KeyRound size={13} />}
@@ -391,14 +391,14 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
             return (
               <div
                 key={key}
-                className="p-4 rounded-xl border border-[var(--rz-border-subtle,#e5e5e7)] bg-[var(--rz-surface-elevated,#f5f5f7)] flex flex-col justify-between gap-2"
+                className="p-4 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex flex-col justify-between gap-2"
               >
                 <div>
-                  <label className="text-xs font-semibold text-[var(--rz-text,#1d1d1f)] block">
+                  <label className="text-xs font-semibold text-[var(--rz-text)] block">
                     {spec.label}
                   </label>
                   {spec.description && (
-                    <p className="text-[11px] text-[var(--rz-text-secondary,#6e6e73)] mt-0.5">
+                    <p className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
                       {spec.description}
                     </p>
                   )}
@@ -408,7 +408,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                   <select
                     value={String(val)}
                     onChange={(e) => handleOptionChange(key, e.target.value)}
-                    className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-[var(--rz-surface)] border border-[var(--rz-border-subtle,#d2d2d7)] text-[var(--rz-text,#1d1d1f)] focus:outline-none transition-colors cursor-pointer"
+                    className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] focus:outline-none transition-colors cursor-pointer"
                   >
                     {spec.options.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -419,8 +419,8 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                 )}
 
                 {spec.type === "boolean" && (
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-[var(--rz-surface)] border border-[var(--rz-border-subtle,#e5e5e7)]">
-                    <span className="text-xs font-medium text-[var(--rz-text,#1d1d1f)]">
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
+                    <span className="text-xs font-medium text-[var(--rz-text)]">
                       {val ? "Enabled" : "Disabled"}
                     </span>
                     <button
@@ -429,7 +429,7 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
                       aria-checked={Boolean(val)}
                       onClick={() => handleOptionChange(key, !val)}
                       className={`w-10 h-6 rounded-full p-0.5 transition-colors cursor-pointer flex items-center ${
-                        val ? "bg-[var(--rz-accent,#0071e3)] justify-end" : "bg-neutral-300 dark:bg-neutral-700 justify-start"
+                        val ? "bg-[var(--rz-accent)] justify-end" : "bg-[var(--rz-border-strong)] justify-start"
                       }`}
                     >
                       <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
@@ -442,29 +442,29 @@ export const LockScreenCustomizer: React.FC<LockScreenCustomizerProps> = ({
         </div>
 
         {/* ── 3. Technical Materialization Details (Hidden Behind Disclosure) ── */}
-        <div className="pt-2 border-t border-[var(--rz-border-subtle,#e5e5e7)]">
+        <div className="pt-2 border-t border-[var(--rz-border-subtle)]">
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-1.5 text-xs text-[var(--rz-text-muted,#86868b)] hover:text-[var(--rz-text,#1d1d1f)] transition-colors cursor-pointer select-none"
+            className="flex items-center gap-1.5 text-xs text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] transition-colors cursor-pointer select-none"
           >
             <span>{showAdvanced ? "Hide advanced details" : "Advanced details"}</span>
             <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-150 ${showAdvanced ? "rotate-90" : ""}`} />
           </button>
 
           {showAdvanced && (
-            <div className="mt-3 p-3.5 rounded-xl bg-neutral-50 dark:bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle,#e5e5e7)] text-xs font-mono space-y-2 text-[var(--rz-text-secondary,#6e6e73)] animate-in fade-in duration-100">
-              <div className="text-[11px] font-sans font-semibold text-[var(--rz-text,#1d1d1f)]">
+            <div className="mt-3 p-3.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)] text-xs font-mono space-y-2 text-[var(--rz-text-secondary)] animate-in fade-in duration-100">
+              <div className="text-[11px] font-sans font-semibold text-[var(--rz-text)]">
                 Active Runtime Materialization
               </div>
-              <p className="text-[11px] leading-relaxed font-sans text-[var(--rz-text-muted,#86868b)]">
+              <p className="text-[11px] leading-relaxed font-sans text-[var(--rz-text-muted)]">
                 Parameters write directly to <code>theme.conf</code> and <code>ryzora_config.json</code> in <code>~/.local/share/ryzora/lockscreens/</code> during application.
               </p>
-              <div className="space-y-1 pt-1 border-t border-black/5 dark:border-white/5 text-[10.5px]">
+              <div className="space-y-1 pt-1 border-t border-[var(--rz-border-subtle)] text-[10.5px]">
                 {optionEntries.map(([k]) => (
                   <div key={k} className="flex items-center justify-between truncate">
-                    <span className="font-semibold text-[var(--rz-text,#1d1d1f)]">{k} = {String(currentConfig[k] ?? options[k]?.default)}</span>
-                    <span className="text-[var(--rz-text-muted,#86868b)] text-[10px]">{getOptionEffect(k, currentConfig[k] ?? options[k]?.default, packageItem.id)}</span>
+                    <span className="font-semibold text-[var(--rz-text)]">{k} = {String(currentConfig[k] ?? options[k]?.default)}</span>
+                    <span className="text-[var(--rz-text-muted)] text-[10px]">{getOptionEffect(k, currentConfig[k] ?? options[k]?.default, packageItem.id)}</span>
                   </div>
                 ))}
               </div>
