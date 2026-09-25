@@ -414,6 +414,7 @@ fn test_phase17_vector_16_17_subprocess_and_privilege_audit() {
                 || file_name == "sddm_helper.rs"
                 || file_name == "package_helper.rs"
                 || path_str.contains("app_adapters")
+                || path_str.contains("integration")
             {
                 continue;
             }

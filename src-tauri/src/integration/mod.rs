@@ -83,7 +83,56 @@ pub fn session_lock_disable() -> Result<DisableReport, String> {
     session_lock::disable_session_lock(&home, true).map_err(|e| e.to_string())
 }
 
-/// Gets the host discovery report for SilentSDDM (read-only probe).
+// ─────────────────────────────────────────────────────────────────────────────
+// SilentSDDM Non-Blocking Concurrency & Progress Architecture
+// ─────────────────────────────────────────────────────────────────────────────
+
+use std::sync::Mutex;
+use tauri::Emitter;
+
+static SILENTSDDM_MUTEX: Mutex<()> = Mutex::new(());
+
+/// Guard ensuring only one mutating SilentSDDM transaction executes at a time.
+pub struct SilentSddmTxLock;
+
+impl SilentSddmTxLock {
+    pub fn try_acquire() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+        SILENTSDDM_MUTEX.try_lock().map_err(|_| {
+            "Another SilentSDDM transaction is currently in progress. Please wait for it to complete.".to_string()
+        })
+    }
+}
+
+/// Structured progress event payload emitted on `ryzora:silentsddm_stage`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SilentSddmStageEvent {
+    pub package_id: String,
+    pub operation: String,
+    pub stage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+fn emit_silentsddm_stage(
+    app: Option<&tauri::AppHandle>,
+    package_id: &str,
+    operation: &str,
+    stage: &str,
+    detail: Option<&str>,
+) {
+    if let Some(app) = app {
+        let event = SilentSddmStageEvent {
+            package_id: package_id.to_string(),
+            operation: operation.to_string(),
+            stage: stage.to_string(),
+            detail: detail.map(|s| s.to_string()),
+        };
+        let _ = app.emit("ryzora:silentsddm_stage", &event);
+    }
+}
+
+/// Gets the host discovery report for SilentSDDM (read-only probe, fast sync).
 #[tauri::command]
 pub fn silentsddm_get_host_report() -> sddm::discovery::SilentSddmHostReport {
     sddm::discovery::discover_silentsddm(None)
@@ -95,58 +144,400 @@ pub fn silentsddm_host_report() -> sddm::discovery::SilentSddmHostReport {
     sddm::discovery::discover_silentsddm(None)
 }
 
-/// Validates a custom video or image file path for SilentSDDM.
+/// Validates a custom video or image file path for SilentSDDM (read-only probe, fast sync).
 #[tauri::command]
 pub fn silentsddm_validate_custom_path(path: String) -> sddm::discovery::CustomVideoValidation {
     sddm::discovery::validate_custom_video(std::path::Path::new(&path))
 }
 
-/// Installs the SilentSDDM theme engine transactionally.
+/// Validates custom media (photo or video) for SilentSDDM (read-only probe, fast sync).
 #[tauri::command]
-pub fn silentsddm_install_engine() -> Result<sddm::engine::SilentSddmEngineManifest, String> {
-    let home = get_effective_home();
-    sddm::engine::install_engine_transactional_in(&home, None, None)
-        .map_err(|(err, rollback)| format!("{}: {:?}", err, rollback))
+pub fn silentsddm_validate_custom_media(path: String) -> sddm::discovery::CustomMediaValidation {
+    sddm::discovery::validate_custom_media(std::path::Path::new(&path))
 }
 
-/// Uninstalls the SilentSDDM theme engine.
+/// Installs the SilentSDDM theme engine transactionally off the UI thread.
 #[tauri::command]
-pub fn silentsddm_uninstall_engine() -> Result<(), String> {
-    let home = get_effective_home();
-    sddm::engine::uninstall_engine_in(&home, None)
+pub async fn silentsddm_install_engine(
+    app: tauri::AppHandle,
+) -> Result<sddm::engine::SilentSddmEngineManifest, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            "silentsddm-engine",
+            "install",
+            "preparing",
+            Some("Preparing SilentSDDM engine..."),
+        );
+        let home = get_effective_home();
+        emit_silentsddm_stage(
+            Some(&app),
+            "silentsddm-engine",
+            "install",
+            "downloading",
+            Some("Downloading SilentSDDM engine..."),
+        );
+        let res = sddm::engine::install_engine_transactional_in(&home, None, None)
+            .map_err(|(err, rollback)| format!("{}: {:?}", err, rollback))?;
+        emit_silentsddm_stage(
+            Some(&app),
+            "silentsddm-engine",
+            "install",
+            "ready",
+            Some("SilentSDDM engine installed."),
+        );
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
-/// Installs an upstream catalog wallpaper into CAS and Ryzora wallpapers directory.
+/// Uninstalls the SilentSDDM theme engine off the UI thread.
 #[tauri::command]
-pub fn silentsddm_install_wallpaper(
+pub async fn silentsddm_uninstall_engine(
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            "silentsddm-engine",
+            "remove",
+            "preparing",
+            Some("Uninstalling SilentSDDM engine..."),
+        );
+        let home = get_effective_home();
+        sddm::engine::uninstall_engine_in(&home, None)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Installs an upstream catalog wallpaper into CAS and Ryzora wallpapers directory off the UI thread.
+#[tauri::command]
+pub async fn silentsddm_install_wallpaper(
+    app: tauri::AppHandle,
     req: sddm::assets::UpstreamWallpaperInstallRequest,
 ) -> Result<sddm::discovery::CachedAsset, String> {
-    let home = get_effective_home();
-    sddm::assets::install_upstream_wallpaper_in(&home, &req)
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        let home = get_effective_home();
+        let blobs_dir = sddm::assets::get_blobs_dir(&home);
+        let is_cached = blobs_dir.join(&req.sha256).is_file();
+
+        if is_cached {
+            emit_silentsddm_stage(
+                Some(&app),
+                &req.id,
+                "install",
+                "verifying",
+                Some("Verifying cached asset in CAS..."),
+            );
+        } else {
+            emit_silentsddm_stage(
+                Some(&app),
+                &req.id,
+                "install",
+                "downloading",
+                Some("Downloading wallpaper..."),
+            );
+        }
+
+        emit_silentsddm_stage(
+            Some(&app),
+            &req.id,
+            "install",
+            "installing",
+            Some("Installing wallpaper into SilentSDDM..."),
+        );
+
+        let cached = sddm::assets::install_upstream_wallpaper_in(&home, &req)?;
+
+        emit_silentsddm_stage(
+            Some(&app),
+            &req.id,
+            "install",
+            "ready",
+            Some("Installed · Ready"),
+        );
+
+        Ok(cached)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
-/// Uninstalls an upstream catalog wallpaper and cleans up CAS if unreferenced.
+/// Uninstalls an upstream catalog wallpaper and cleans up CAS if unreferenced off the UI thread.
 #[tauri::command]
-pub fn silentsddm_uninstall_wallpaper(wallpaper_id: String) -> Result<(), String> {
-    let home = get_effective_home();
-    sddm::assets::uninstall_upstream_wallpaper_in(&home, &wallpaper_id)
+pub async fn silentsddm_uninstall_wallpaper(
+    app: tauri::AppHandle,
+    wallpaper_id: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            &wallpaper_id,
+            "remove",
+            "preparing",
+            Some("Removing wallpaper..."),
+        );
+        let home = get_effective_home();
+        sddm::assets::uninstall_upstream_wallpaper_in(&home, &wallpaper_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
-/// Imports a custom video or image into Ryzora's managed storage.
+/// Imports a custom video or image into Ryzora's managed storage (legacy alias) off the UI thread.
 #[tauri::command]
-pub fn silentsddm_import_custom_video(
+pub async fn silentsddm_import_custom_video(
+    app: tauri::AppHandle,
     path: String,
 ) -> Result<sddm::discovery::CachedAsset, String> {
-    let home = get_effective_home();
-    sddm::assets::import_custom_video_in(&home, std::path::Path::new(&path))
+    silentsddm_import_custom_media(app, path, None).await
 }
 
-/// Removes a custom video or image from Ryzora's managed storage.
+/// Removes a custom video or image from Ryzora's managed storage (legacy alias) off the UI thread.
 #[tauri::command]
-pub fn silentsddm_remove_custom_video(custom_id: String) -> Result<(), String> {
-    let home = get_effective_home();
-    sddm::assets::remove_custom_video_in(&home, &custom_id)
+pub async fn silentsddm_remove_custom_video(
+    app: tauri::AppHandle,
+    custom_id: String,
+) -> Result<(), String> {
+    silentsddm_remove_custom_media(app, custom_id).await
 }
+
+/// Imports custom media (photo or video) into Ryzora's managed storage off the UI thread.
+#[tauri::command]
+pub async fn silentsddm_import_custom_media(
+    app: tauri::AppHandle,
+    path: String,
+    display_name: Option<String>,
+) -> Result<sddm::discovery::CachedAsset, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        let home = get_effective_home();
+        emit_silentsddm_stage(
+            Some(&app),
+            "custom-import",
+            "import",
+            "verifying",
+            Some("Validating custom media..."),
+        );
+        let res = sddm::assets::import_custom_media_in(
+            &home,
+            std::path::Path::new(&path),
+            display_name.as_deref(),
+        )?;
+        emit_silentsddm_stage(
+            Some(&app),
+            &res.id,
+            "import",
+            "ready",
+            Some("Custom media imported successfully."),
+        );
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Removes custom media from Ryzora's managed storage off the UI thread.
+#[tauri::command]
+pub async fn silentsddm_remove_custom_media(
+    app: tauri::AppHandle,
+    custom_id: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            &custom_id,
+            "remove",
+            "preparing",
+            Some("Removing custom media..."),
+        );
+        let home = get_effective_home();
+        sddm::assets::remove_custom_media_in(&home, &custom_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Launches a native file picker dialog for custom media files (photos or videos) off the UI thread.
+#[tauri::command]
+pub async fn silentsddm_pick_custom_media_file() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Ok(output) = std::process::Command::new("zenity")
+            .args([
+                "--file-selection",
+                "--title=Select Custom Background (Photo or Video)",
+                "--file-filter=Supported Media (*.jpg *.jpeg *.png *.mp4 *.webm *.mkv *.mov *.m4v *.avi) | *.jpg *.jpeg *.png *.mp4 *.webm *.mkv *.mov *.m4v *.avi",
+                "--file-filter=All Files | *",
+            ])
+            .output()
+        {
+            if output.status.success() {
+                let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path_str.is_empty() {
+                    return Ok(Some(path_str));
+                }
+            }
+        } else if let Ok(output) = std::process::Command::new("kdialog")
+            .args([
+                "--getopenfilename",
+                ".",
+                "*.jpg *.jpeg *.png *.mp4 *.webm *.mkv *.mov *.m4v *.avi|Supported Media (*.jpg, *.png, *.mp4...)\n*|All Files",
+            ])
+            .output()
+        {
+            if output.status.success() {
+                let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path_str.is_empty() {
+                    return Ok(Some(path_str));
+                }
+            }
+        }
+        Ok(None)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn silentsddm_get_configuration() -> sddm::config::SilentSddmConfiguration {
+    let home = get_effective_home();
+    sddm::config::load_configuration(&home)
+}
+
+#[tauri::command]
+pub fn silentsddm_save_configuration(
+    config: sddm::config::SilentSddmConfiguration,
+) -> Result<(), String> {
+    let home = get_effective_home();
+    sddm::config::save_configuration(&home, &config)
+}
+
+#[tauri::command]
+pub async fn silentsddm_apply_configuration(
+    app: tauri::AppHandle,
+    config: sddm::config::SilentSddmConfiguration,
+) -> Result<sddm::activation::SilentSddmActivationManifest, String> {
+    let cfg = config.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            &cfg.login_screen.background,
+            "apply",
+            "staging",
+            Some("Preparing SilentSDDM layout & visual configuration..."),
+        );
+        let home = get_effective_home();
+        let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(std::path::PathBuf::from);
+
+        sddm::config::save_configuration(&home, &cfg)?;
+
+        let manifest = sddm::activation::apply_silentsddm_configuration_in(
+            &home,
+            sys_root.as_deref(),
+            &cfg,
+            Some(&app),
+        )?;
+
+        emit_silentsddm_stage(
+            Some(&app),
+            &cfg.login_screen.background,
+            "apply",
+            "completed",
+            Some("SilentSDDM configuration applied."),
+        );
+        Ok(manifest)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn silentsddm_get_activation_manifest() -> Option<sddm::activation::SilentSddmActivationManifest> {
+    let home = get_effective_home();
+    sddm::activation::load_activation_manifest(&home)
+}
+
+#[tauri::command]
+pub async fn silentsddm_apply_wallpaper(
+    app: tauri::AppHandle,
+    asset_id: String,
+) -> Result<sddm::activation::SilentSddmActivationManifest, String> {
+    let aid = asset_id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            &aid,
+            "apply",
+            "staging",
+            Some("Preparing wallpaper configuration..."),
+        );
+        let home = get_effective_home();
+        let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(std::path::PathBuf::from);
+
+        let manifest = sddm::activation::apply_silentsddm_wallpaper_in(
+            &home,
+            sys_root.as_deref(),
+            &aid,
+            Some(&app),
+        )?;
+
+        emit_silentsddm_stage(
+            Some(&app),
+            &aid,
+            "apply",
+            "completed",
+            Some("Wallpaper applied to login screen."),
+        );
+        Ok(manifest)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn silentsddm_deactivate(
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SilentSddmTxLock::try_acquire()?;
+        emit_silentsddm_stage(
+            Some(&app),
+            "silentsddm",
+            "deactivate",
+            "deactivating",
+            Some("Restoring previous login screen configuration..."),
+        );
+        let home = get_effective_home();
+        let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(std::path::PathBuf::from);
+
+        sddm::activation::deactivate_silentsddm_in(
+            &home,
+            sys_root.as_deref(),
+            Some(&app),
+        )?;
+
+        emit_silentsddm_stage(
+            Some(&app),
+            "silentsddm",
+            "deactivate",
+            "completed",
+            Some("Login screen restored."),
+        );
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Comprehensive Unit Tests
@@ -545,5 +936,39 @@ key=value", marker),
         assert_eq!(list.len(), 0);
 
         cleanup(&home);
+    }
+
+    #[test]
+    fn test_silentsddm_tx_lock_prevents_concurrent_mutations() {
+        let guard1 = SilentSddmTxLock::try_acquire();
+        assert!(guard1.is_ok(), "First acquisition should succeed");
+
+        // Concurrent acquisition while guard1 is held must fail
+        let guard2 = SilentSddmTxLock::try_acquire();
+        assert!(guard2.is_err(), "Second concurrent acquisition must be rejected");
+        assert!(
+            guard2.unwrap_err().contains("Another SilentSDDM transaction is currently in progress"),
+            "Error message must specify active transaction"
+        );
+
+        // Dropping guard1 frees the lock
+        drop(guard1);
+        let guard3 = SilentSddmTxLock::try_acquire();
+        assert!(guard3.is_ok(), "Acquisition after release must succeed");
+    }
+
+    #[test]
+    fn test_silentsddm_stage_event_serialization() {
+        let ev = SilentSddmStageEvent {
+            package_id: "silentsddm-ken".to_string(),
+            operation: "install".to_string(),
+            stage: "downloading".to_string(),
+            detail: Some("Downloading wallpaper...".to_string()),
+        };
+        let json = serde_json::to_string(&ev).unwrap();
+        assert!(json.contains(r#""packageId":"silentsddm-ken""#));
+        assert!(json.contains(r#""operation":"install""#));
+        assert!(json.contains(r#""stage":"downloading""#));
+        assert!(json.contains(r#""detail":"Downloading wallpaper...""#));
     }
 }

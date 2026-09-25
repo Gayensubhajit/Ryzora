@@ -8,6 +8,8 @@ import { CategoryHeader } from "../components/catalogue/CategoryHeader";
 import { SubcategoryTabs } from "../components/catalogue/SubcategoryTabs";
 import { FilterBar, SortMode } from "../components/catalogue/FilterBar";
 import { FilterPanel } from "../components/catalogue/FilterPanel";
+import { UploadMediaCard } from "../components/media/UploadMediaCard";
+import { CustomMediaImportModal } from "../components/media/CustomMediaImportModal";
 import {
   getPackageSubtype,
   isLoginScreen,
@@ -18,7 +20,7 @@ type ActiveTab = CategoryId | "all";
 
 /** Per-tab sub-filter pills */
 const TAB_SUB_FILTERS: Partial<Record<ActiveTab, string[]>> = {
-  lockscreens: ["All", "Hyprlock", "Quickshell", "Swaylock", "SDDM"],
+  lockscreens: ["All", "Qylock", "SilentSDDM", "SDDM", "My Media"],
   rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
   themes: ["All", "GTK", "Qt", "Application"],
   wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
@@ -57,12 +59,16 @@ export const DiscoverView: React.FC = () => {
     systemInfo,
     installedPackages,
     repositories,
+    loadSilentSddmReport,
+    loadInstalledPackages,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("all");
   const [subFilter, setSubFilter] = useState<string>("All");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortMode>("recommended");
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [pendingFileOrPath, setPendingFileOrPath] = useState<{ path?: string; file?: File } | null>(null);
 
   // Advanced / Panel filter states
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -119,7 +125,7 @@ export const DiscoverView: React.FC = () => {
   // Available filter options for the current tab
   const availableTypes = useMemo(() => {
     if (activeTab === "lockscreens") {
-      return ["Hyprlock", "Quickshell", "Swaylock", "SDDM"];
+      return ["Qylock", "SilentSDDM", "SDDM", "My Media"];
     }
     return TAB_SUB_FILTERS[activeTab] ? TAB_SUB_FILTERS[activeTab]!.filter((f) => f !== "All") : [];
   }, [activeTab]);
@@ -199,31 +205,23 @@ export const DiscoverView: React.FC = () => {
         if (!matchesGlobalDesktop) return false;
       }
 
-      // 4. Sub-filter pill (All, Hyprlock, Quickshell, Swaylock, SDDM)
+      // 4. Sub-filter pill (All, Qylock, SilentSDDM, SDDM, My Media)
       if (subFilter !== "All") {
         const sf = subFilter.toLowerCase();
         if (activeTab === "lockscreens") {
-          if (sf === "sddm") {
-            const hasSddm = isLoginScreen(pkg) || pkg.lockscreen?.targets?.sddm != null || pkg.tags.some((t) => t.toLowerCase() === "sddm");
+          const isCustomPkg = pkg.tags.includes("custom") || pkg.id.startsWith("custom:");
+          const isSilentSddmPkg = !isCustomPkg && (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-"));
+          const isQylockPkg = !isCustomPkg && !isSilentSddmPkg && (pkg.tags.includes("qylock") || pkg.id.startsWith("qylock-") || pkg.id.startsWith("lockscreen-"));
+          const hasSddm = isLoginScreen(pkg) || pkg.lockscreen?.targets?.sddm != null || pkg.tags.some((t) => t.toLowerCase() === "sddm");
+
+          if (sf === "my media") {
+            if (!isCustomPkg) return false;
+          } else if (sf === "silentsddm") {
+            if (!isSilentSddmPkg) return false;
+          } else if (sf === "qylock") {
+            if (!isQylockPkg) return false;
+          } else if (sf === "sddm") {
             if (!hasSddm) return false;
-          } else if (sf === "hyprlock") {
-            const hasHyprlock =
-              pkg.tags.some((t) => t.toLowerCase() === "hyprlock") ||
-              pkg.title.toLowerCase().includes("hyprlock") ||
-              pkg.lockscreen?.targets?.hyprlock != null;
-            if (!hasHyprlock) return false;
-          } else if (sf === "quickshell") {
-            const hasQuickshell =
-              pkg.tags.some((t) => t.toLowerCase() === "quickshell" || t.toLowerCase() === "qylock") ||
-              pkg.title.toLowerCase().includes("quickshell") ||
-              pkg.lockscreen?.targets?.quickshell != null;
-            if (!hasQuickshell) return false;
-          } else if (sf === "swaylock") {
-            const hasSwaylock =
-              pkg.tags.some((t) => t.toLowerCase() === "swaylock") ||
-              pkg.title.toLowerCase().includes("swaylock") ||
-              pkg.lockscreen?.targets?.swaylock != null;
-            if (!hasSwaylock) return false;
           }
         } else {
           const inTags = pkg.tags.some((t) => t.toLowerCase() === sf);
@@ -473,7 +471,76 @@ export const DiscoverView: React.FC = () => {
           )}
 
           {/* Visual Store Grid: 6 Columns down to 2 Columns */}
-          {filteredPackages.length === 0 ? (
+          {activeTab === "lockscreens" && subFilter === "My Media" ? (
+            <div className="space-y-4 my-2">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--rz-text)]">
+                    My Media
+                  </h2>
+                  <p className="text-[11px] text-[var(--rz-text-muted)]">
+                    Your wallpapers and videos · Stored locally
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingFileOrPath(null);
+                    setUploadModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>＋ Add Wallpaper / Video</span>
+                </button>
+              </div>
+              {filteredPackages.length === 0 ? (
+                <div className="space-y-6">
+                  <div className="store-grid-fluid">
+                    <UploadMediaCard
+                      onFileSelected={(fp) => {
+                        setPendingFileOrPath(fp);
+                        setUploadModalOpen(true);
+                      }}
+                    />
+                  </div>
+                  <div className="py-8 text-center text-xs text-[var(--rz-text-muted)] bg-[var(--rz-surface)] rounded-xl border border-[var(--rz-border-subtle)]">
+                    <p className="font-semibold text-[var(--rz-text)]">No custom wallpapers or videos yet</p>
+                    <p className="text-[11px] text-[var(--rz-text-secondary)] mt-1">
+                      Click "＋ Add Wallpaper / Video" or the card above to import your local images and videos.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="store-grid-fluid">
+                  <UploadMediaCard
+                    onFileSelected={(fp) => {
+                      setPendingFileOrPath(fp);
+                      setUploadModalOpen(true);
+                    }}
+                  />
+                  {filteredPackages.map((pkg) => (
+                    <StoreCard key={pkg.id} packageItem={pkg} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : activeTab === "lockscreens" && subFilter === "SilentSDDM" ? (
+            <div className="space-y-4 my-2">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--rz-text)]">
+                    SilentSDDM Built-in Wallpapers
+                  </h2>
+                  <p className="text-[11px] text-[var(--rz-text-muted)]">Official curated SilentSDDM themes &amp; wallpapers</p>
+                </div>
+              </div>
+              <div className="store-grid-fluid">
+                {filteredPackages.map((pkg) => (
+                  <StoreCard key={pkg.id} packageItem={pkg} />
+                ))}
+              </div>
+            </div>
+          ) : filteredPackages.length === 0 ? (
             <div className="py-16 text-center text-xs text-[var(--rz-text-secondary)] bg-[var(--rz-surface)] rounded-xl border border-[var(--rz-border-subtle)] my-4">
               <p className="font-semibold text-[var(--rz-text)]">
                 No configurations match the selected criteria.
@@ -496,8 +563,32 @@ export const DiscoverView: React.FC = () => {
               {filteredPackages.map((pkg) => (
                 <StoreCard key={pkg.id} packageItem={pkg} />
               ))}
+              {activeTab === "lockscreens" && subFilter === "All" && (
+                <UploadMediaCard
+                  onFileSelected={(fp) => {
+                    setPendingFileOrPath(fp);
+                    setUploadModalOpen(true);
+                  }}
+                />
+              )}
             </div>
           )}
+
+          <CustomMediaImportModal
+            isOpen={uploadModalOpen}
+            onClose={() => {
+              setUploadModalOpen(false);
+              setPendingFileOrPath(null);
+            }}
+            fileOrPath={pendingFileOrPath}
+            onImportSuccess={async (_id) => {
+              setUploadModalOpen(false);
+              setPendingFileOrPath(null);
+              await loadSilentSddmReport();
+              await loadInstalledPackages();
+              setSubFilter("My Media");
+            }}
+          />
         </>
       )}
       </div>

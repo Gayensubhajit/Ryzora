@@ -30,7 +30,16 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
 
   const manifest = packageItem.lockscreen;
   const isVideo = packageItem.media_type === "video";
-  const canTargetQs = Boolean(
+  const isCustomMedia = Boolean(
+    packageItem.tags?.includes("custom") ||
+    packageItem.id.startsWith("custom:")
+  );
+  const isSilentSddm = Boolean(
+    packageItem.lockscreen?.provider === "silentsddm" ||
+    packageItem.id.startsWith("silentsddm-") ||
+    isCustomMedia
+  );
+  const canTargetQs = !isSilentSddm && Boolean(
     packageItem.supports_session_lock || packageItem.lockscreen?.targets?.quickshell
   );
   const canTargetSddm = Boolean(
@@ -52,7 +61,6 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
   // Compute dynamic files based on selected target
   const getTargetFiles = () => {
     const themeId = packageItem.id;
-    const isSilentSddm = packageItem.lockscreen?.provider === "silentsddm";
 
     if (isSilentSddm) {
       const asset = packageItem.lockscreen?.runtime?.assets?.[0] || `${themeId}.jpg`;

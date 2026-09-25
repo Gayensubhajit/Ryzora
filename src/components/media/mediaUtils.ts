@@ -7,6 +7,7 @@ export function normalizeMediaUrl(url?: string): string {
   if (
     url.startsWith("http://") ||
     url.startsWith("https://") ||
+    url.startsWith("asset://") ||
     url.startsWith("/") ||
     url.startsWith("data:") ||
     url.startsWith("blob:")

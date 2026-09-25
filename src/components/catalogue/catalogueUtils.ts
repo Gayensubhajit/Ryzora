@@ -52,6 +52,9 @@ export function getPackageSubtype(pkg: PackageItem): string {
   const title = pkg.title.toLowerCase();
 
   if (pkg.category === "lockscreens" || pkg.package_type === "lockscreen") {
+    if (allTags.includes("custom") || pkg.id.startsWith("custom:")) {
+      return "Custom";
+    }
     if (pkg.lockscreen?.provider === "silentsddm" || allTags.includes("silentsddm")) {
       return "SilentSDDM";
     }
@@ -151,7 +154,9 @@ export function getConciseCompatibility(pkg: PackageItem, currentWm?: string): {
 export function deduplicateStorefrontPackages(packages: PackageItem[]): PackageItem[] {
   const seenSilentSddmHashes = new Set<string>();
   return packages.filter((pkg) => {
-    if (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-")) {
+    // Custom media must never be deduplicated away merely because content matches upstream
+    const isCustom = pkg.tags.includes("custom") || pkg.id.startsWith("custom:");
+    if (!isCustom && (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-"))) {
       const hash = pkg.content_hash || pkg.id;
       if (seenSilentSddmHashes.has(hash)) {
         return false;

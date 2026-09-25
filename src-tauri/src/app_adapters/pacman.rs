@@ -443,7 +443,6 @@ pub fn list_installed_pacman_packages_in(local_dir: &Path) -> Result<Vec<PacmanP
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     fn make_test_desc(name: &str, version: &str, desc: &str, url: &str, license: &str) -> String {
         format!(

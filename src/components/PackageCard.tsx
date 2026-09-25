@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Star, ShieldCheck, Sparkles, MoreHorizontal, Play, RotateCcw, Trash2 } from "lucide-react";
+import { Star, ShieldCheck, Sparkles, MoreHorizontal, RotateCcw, Trash2, Loader2, Check } from "lucide-react";
 import { PackageItem } from "../types";
 import { useApp } from "../context/AppContext";
 import { MediaPreview } from "./media/MediaPreview";
@@ -34,15 +34,17 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
     repositories,
     activeLockscreen,
     systemInfo,
-    testLockscreen,
     deactivateLockscreen,
     uninstallPackage,
     deactivateAndUninstallLockscreen,
+    getPackageTransaction,
   } = useApp();
   const [showOverflow, setShowOverflow] = useState(false);
 
   const installedRecord = installedPackages.find((p) => p.package_id === packageItem.id);
   const isInstalled = !!installedRecord;
+  const tx = getPackageTransaction(packageItem.id);
+  const isCardInstalling = tx?.operation === "install" || tx?.operation === "apply";
   const isUpdateAvailable =
     isInstalled && installedRecord
       ? compareSemver(packageItem.version, installedRecord.version) > 0
@@ -93,9 +95,13 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
     packageItem.media_type ||
     (videoSrc ? "video" : animatedSrc ? "animated" : "image");
 
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
     <div
       onClick={() => setSelectedPackage(packageItem)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className="group flex flex-col rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-elevated)] transition-all duration-200 cursor-pointer overflow-hidden select-none shadow-xs hover:shadow-md"
     >
       {/* Aspect-16:9 Media Preview */}
@@ -107,6 +113,7 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
           mediaType={mediaType}
           alt={packageItem.title}
           mode="card"
+          isHovered={isHovered}
           aspectRatio="16/9"
           showBadge={false}
           className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
@@ -132,6 +139,11 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
               <span>Verified</span>
             </div>
           )}
+          {Boolean(packageItem.tags.includes("custom") || packageItem.id.startsWith("custom:")) && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-purple-600 text-white shadow-xs">
+              CUSTOM
+            </span>
+          )}
           {mediaType === "video" && (
             <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium uppercase backdrop-blur-md bg-black/60 text-white/95 border border-white/10 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
@@ -142,18 +154,19 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
 
         {/* Top-Right: Installation / Active State Badge & Quick Overflow Action */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
-          {isActive ? (
-            <div className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase bg-emerald-500 text-slate-950 shadow-sm flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
-              <span>Active</span>
+          {isCardInstalling ? (
+            <div className="px-2 py-0.5 rounded-full text-[9px] font-mono uppercase bg-[var(--rz-accent)]/20 text-[var(--rz-accent)] border border-[var(--rz-accent)]/40 backdrop-blur-xs font-semibold flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              <span>{tx?.operation === "apply" ? "Applying" : "Installing"}</span>
             </div>
+          ) : isActive ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/90 text-white shadow-md border border-emerald-400/30 flex items-center gap-1 backdrop-blur-md animate-in fade-in duration-200">
+              <Check className="w-3 h-3 stroke-[2.5]" />
+              ACTIVE
+            </span>
           ) : isUpdateAvailable ? (
             <div className="px-2 py-0.5 rounded-full text-[9px] font-mono uppercase bg-amber-500/90 text-slate-950 font-bold shadow-sm">
               Update
-            </div>
-          ) : isInstalled ? (
-            <div className="px-2 py-0.5 rounded-full text-[9px] font-mono uppercase bg-[var(--bg-surface)]/90 text-emerald-400 border border-emerald-500/30 backdrop-blur-xs font-semibold">
-              Installed
             </div>
           ) : packageItem.is_cached ? (
             <div className="px-2 py-0.5 rounded-full text-[9px] font-mono uppercase bg-[var(--bg-surface)]/90 text-[var(--text-muted)] border border-[var(--border-subtle)] backdrop-blur-xs">
@@ -181,25 +194,7 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
                   className="absolute right-0 top-full mt-1.5 w-36 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {(packageItem.supports_session_lock || packageItem.supports_login_screen || packageItem.category?.toLowerCase().includes("lock")) && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowOverflow(false);
-                        const targetToTest = isQsActive && !isSddmActive
-                          ? "quickshell"
-                          : !isQsActive && isSddmActive
-                          ? "sddm"
-                          : undefined;
-                        testLockscreen(packageItem.id, targetToTest);
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
-                    >
-                      <Play className="w-3 h-3 text-[var(--rz-text-muted)]" />
-                      <span>Test</span>
-                    </button>
-                  )}
+
 
                   {isActive && (
                     <button
@@ -269,17 +264,11 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
         {/* Quiet Compatibility & Rating Row */}
         <div className="pt-1.5 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px]">
           <div>
-            {isActive ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[10.5px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                Active Theme
+            {Boolean(packageItem.tags?.includes("custom") || packageItem.id.startsWith("custom:")) ? (
+              <span className="inline-flex items-center gap-1 text-[var(--text-secondary)] font-medium text-[10.5px]">
+                My Media · Local file
               </span>
-            ) : isInstalled && isWorkingThroughTarget ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[10.5px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                Installed
-              </span>
-            ) : compat.level === "Compatible" ? (
+            ) : isActive ? null : isInstalled ? null : compat.level === "Compatible" ? (
               <span className="inline-flex items-center gap-1 text-emerald-400 font-medium text-[10.5px]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 Compatible

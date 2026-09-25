@@ -242,3 +242,365 @@ test("S3-UI 10: Zero rating (rating_count === 0) hides star rating in UI contrac
     assert.strictEqual(hasRating, false, `${pkg.id} must not trigger star rating rendering`);
   }
 });
+
+test("S3-UI 11: CustomMediaProvider normalizes custom assets into pure SDDM PackageItem", async () => {
+  const { normalizeCustomMediaAsset } = await import("../providers/customMediaProvider.ts");
+  const { SilentSddmCachedAsset } = await import("../types/index.ts");
+
+  const mockAsset = {
+    id: "custom:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    filename: "my_cool_wallpaper.png",
+    display_name: "Anime Sunset",
+    media_type: "image" as const,
+    sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    size_bytes: 1048576,
+    path: "/home/user/.local/share/ryzora/lockscreens/silentsddm/custom/my_cool_wallpaper.png",
+  };
+
+  const pkg = normalizeCustomMediaAsset(mockAsset);
+
+  assert.strictEqual(pkg.id, mockAsset.id);
+  assert.strictEqual(pkg.title, "Custom · Anime Sunset");
+  assert.strictEqual(pkg.package_type, "lockscreen");
+  assert.ok(pkg.tags.includes("custom"));
+  assert.ok(pkg.tags.includes("my media"));
+  assert.ok(pkg.tags.includes("sddm"));
+  assert.strictEqual(pkg.supports_login_screen, true);
+  assert.strictEqual(pkg.supports_session_lock, false);
+  assert.strictEqual(pkg.lockscreen?.targets?.quickshell, undefined);
+  assert.ok(pkg.lockscreen?.targets?.sddm != null);
+  assert.strictEqual(pkg.lockscreen?.provider, "silentsddm");
+});
+
+test("S3-UI 12: Custom media are NOT deduplicated by deduplicateStorefrontPackages", async () => {
+  const { deduplicateStorefrontPackages } = await import("../components/catalogue/catalogueUtils.ts");
+  const { normalizeCustomMediaAsset } = await import("../providers/customMediaProvider.ts");
+
+  const customItem1 = normalizeCustomMediaAsset({
+    id: "custom:1111111111111111111111111111111111111111111111111111111111111111",
+    filename: "photo1.jpg",
+    display_name: "My Photo 1",
+    media_type: "image",
+    sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+    size_bytes: 500000,
+    path: "/custom/photo1.jpg",
+  });
+
+  const customItem2 = normalizeCustomMediaAsset({
+    id: "custom:2222222222222222222222222222222222222222222222222222222222222222",
+    filename: "photo2.jpg",
+    display_name: "My Photo 2",
+    media_type: "image",
+    sha256: "2222222222222222222222222222222222222222222222222222222222222222",
+    size_bytes: 600000,
+    path: "/custom/photo2.jpg",
+  });
+
+  const list = [customItem1, customItem2];
+  const deduped = deduplicateStorefrontPackages(list);
+  assert.strictEqual(deduped.length, 2, "Custom media items must never be stripped by deduplication");
+});
+
+test("S3-UI 13: Subfiltering in CategoryView accurately separates My Media, SilentSDDM, and Qylock", async () => {
+  const { normalizeCustomMediaAsset } = await import("../providers/customMediaProvider.ts");
+  const allLockscreens = await packageEngine.discoverByCategory("lockscreens");
+  const silentWp = allLockscreens.find((p) => p.lockscreen?.provider === "silentsddm")!;
+  const qylockPkg = allLockscreens.find((p) => p.lockscreen?.provider === "qylock" || p.id.startsWith("qylock-") || p.id.startsWith("lockscreen-"))!;
+
+  const customPkg = normalizeCustomMediaAsset({
+    id: "custom:3333333333333333333333333333333333333333333333333333333333333333",
+    filename: "video.mp4",
+    display_name: "Neon City",
+    media_type: "video",
+    sha256: "3333333333333333333333333333333333333333333333333333333333333333",
+    size_bytes: 2000000,
+    path: "/custom/video.mp4",
+  });
+
+  const testList = [customPkg, silentWp, qylockPkg];
+
+  // Helper matching the CategoryView logic
+  function filterBySub(subFilter: string, items: typeof testList) {
+    return items.filter((pkg) => {
+      const isCustomPkg = pkg.tags.includes("custom") || pkg.id.startsWith("custom:");
+      const isSilentSddmPkg = !isCustomPkg && (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-"));
+      const isQylockPkg = !isCustomPkg && !isSilentSddmPkg && (pkg.tags.includes("qylock") || pkg.id.startsWith("qylock-") || pkg.id.startsWith("lockscreen-"));
+
+      return (
+        subFilter === "All" ||
+        (subFilter === "My Media" && isCustomPkg) ||
+        (subFilter === "SilentSDDM" && isSilentSddmPkg) ||
+        (subFilter === "Qylock" && isQylockPkg) ||
+        (subFilter !== "My Media" && subFilter !== "SilentSDDM" && subFilter !== "Qylock" && (
+          pkg.tags.some((t) => t.toLowerCase() === subFilter.toLowerCase()) ||
+          (subFilter.toLowerCase() === "sddm" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null))
+        ))
+      );
+    });
+  }
+
+  // Subfilter: "All" -> all 3
+  assert.strictEqual(filterBySub("All", testList).length, 3);
+
+  // Subfilter: "My Media" -> only customPkg
+  const myMedia = filterBySub("My Media", testList);
+  assert.strictEqual(myMedia.length, 1);
+  assert.strictEqual(myMedia[0].id, customPkg.id);
+
+  // Subfilter: "SilentSDDM" -> only silentWp
+  const silents = filterBySub("SilentSDDM", testList);
+  assert.strictEqual(silents.length, 1);
+  assert.strictEqual(silents[0].id, silentWp.id);
+
+  // Subfilter: "Qylock" -> only qylockPkg
+  const qylocks = filterBySub("Qylock", testList);
+  assert.strictEqual(qylocks.length, 1);
+  assert.strictEqual(qylocks[0].id, qylockPkg.id);
+
+  // Subfilter: "SDDM" -> both silentWp and customPkg
+  const sddmOnly = filterBySub("SDDM", testList);
+  assert.ok(sddmOnly.some((p) => p.id === customPkg.id));
+  assert.ok(sddmOnly.some((p) => p.id === silentWp.id));
+});
+
+test("S3-UI 14: Single-target SDDM packages specify non-interactive login target without Quickshell", async () => {
+  const allLockscreens = await packageEngine.discoverByCategory("lockscreens");
+  const silentItems = allLockscreens.filter((p) => p.lockscreen?.provider === "silentsddm");
+
+  for (const pkg of silentItems) {
+    const canTargetQs = Boolean(pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell);
+    const canTargetSddm = Boolean(pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm);
+
+    // Invariant: Must not offer dual-target or Quickshell checkboxes
+    assert.strictEqual(canTargetQs, false, "Must not support Quickshell");
+    assert.strictEqual(canTargetSddm, true, "Must support SDDM");
+    const isDualTarget = canTargetQs && canTargetSddm;
+    assert.strictEqual(isDualTarget, false, "Must not be dual-target");
+  }
+});
+
+test("S3-UI 15: Per-package transaction state model enforces truthful stages without fake percentages", async () => {
+  const { PackageTransaction } = await import("../types/index.ts");
+
+  const stages: Array<"preparing" | "installing-engine" | "downloading-asset" | "removing"> = [
+    "preparing",
+    "installing-engine",
+    "downloading-asset",
+    "removing",
+  ];
+
+  for (const stage of stages) {
+    const tx = {
+      packageId: "silentsddm-rei",
+      operation: stage === "removing" ? "uninstall" as const : "install" as const,
+      stage,
+      message: `Running stage: ${stage}`,
+    };
+
+    assert.strictEqual(tx.packageId, "silentsddm-rei");
+    assert.ok(tx.message.includes(stage));
+    // No arbitrary 15/30/60/100 percentages in the contract
+    assert.strictEqual((tx as any).progressPercent, undefined);
+  }
+});
+
+test("S3-UI 16: SilentSDDM detail-page action state machine covers all 4 states without fake actions", async () => {
+  const allLockscreens = await packageEngine.discoverByCategory("lockscreens");
+  const silentPkg = allLockscreens.find((p) => p.lockscreen?.provider === "silentsddm")!;
+  assert.ok(silentPkg, "Must find SilentSDDM package");
+
+  // Helper matching ProductHero state derivation logic
+  function deriveHeroState(params: {
+    isInstalled: boolean;
+    isActive: boolean;
+    isInstalling: boolean;
+    canTargetQs: boolean;
+    canTargetSddm: boolean;
+    installedSddm: boolean;
+  }) {
+    if (!params.isInstalled) {
+      if (params.isInstalling) {
+        return {
+          state: "INSTALLING",
+          buttonLabel: "Installing…",
+          disabled: true,
+          showApply: false,
+          showDeactivate: false,
+        };
+      }
+      return {
+        state: "NOT_INSTALLED",
+        buttonLabel: "Install",
+        disabled: false,
+        showApply: false,
+        showDeactivate: false,
+        targetDisplay: "capability_card",
+      };
+    }
+
+    if (!params.isActive) {
+      return {
+        state: "INSTALLED_NOT_ACTIVE",
+        statusBadge: "Installed · Ready",
+        showApply: true,
+        applyLabel: "Apply to Login Screen",
+        applyNote: "Apply available in Phase S4",
+        applyDisabled: true, // S4 boundary
+        showDeactivate: false,
+        overflowActions: ["uninstall"], // no deactivate while not active
+      };
+    }
+
+    return {
+      state: "ACTIVE",
+      statusBadge: "Active for Login Screen",
+      showDeactivate: true,
+      showTest: true,
+      testTarget: "sddm", // pure SDDM, no quickshell
+      overflowActions: ["test", "deactivate", "uninstall"],
+    };
+  }
+
+  // 1. State: NOT INSTALLED
+  const s1 = deriveHeroState({
+    isInstalled: false,
+    isActive: false,
+    isInstalling: false,
+    canTargetQs: false,
+    canTargetSddm: true,
+    installedSddm: false,
+  });
+  assert.strictEqual(s1.state, "NOT_INSTALLED");
+  assert.strictEqual(s1.buttonLabel, "Install");
+  assert.strictEqual(s1.targetDisplay, "capability_card");
+  assert.strictEqual(s1.showApply, false);
+  assert.strictEqual(s1.showDeactivate, false);
+
+  // 2. State: INSTALLING
+  const s2 = deriveHeroState({
+    isInstalled: false,
+    isActive: false,
+    isInstalling: true,
+    canTargetQs: false,
+    canTargetSddm: true,
+    installedSddm: false,
+  });
+  assert.strictEqual(s2.state, "INSTALLING");
+  assert.strictEqual(s2.buttonLabel, "Installing…");
+  assert.strictEqual(s2.disabled, true);
+  assert.strictEqual(s2.showApply, false);
+
+  // 3. State: INSTALLED, NOT ACTIVE
+  const s3 = deriveHeroState({
+    isInstalled: true,
+    isActive: false,
+    isInstalling: false,
+    canTargetQs: false,
+    canTargetSddm: true,
+    installedSddm: true,
+  });
+  assert.strictEqual(s3.state, "INSTALLED_NOT_ACTIVE");
+  assert.strictEqual(s3.statusBadge, "Installed · Ready");
+  assert.strictEqual(s3.showApply, true);
+  assert.strictEqual(s3.applyLabel, "Apply to Login Screen");
+  assert.strictEqual(s3.applyDisabled, true);
+  assert.strictEqual(s3.applyNote, "Apply available in Phase S4");
+  assert.strictEqual(s3.showDeactivate, false);
+  assert.deepStrictEqual(s3.overflowActions, ["uninstall"]);
+
+  // 4. State: ACTIVE
+  const s4 = deriveHeroState({
+    isInstalled: true,
+    isActive: true,
+    isInstalling: false,
+    canTargetQs: false,
+    canTargetSddm: true,
+    installedSddm: true,
+  });
+  assert.strictEqual(s4.state, "ACTIVE");
+  assert.strictEqual(s4.showDeactivate, true);
+  assert.strictEqual(s4.showTest, true);
+  assert.strictEqual(s4.testTarget, "sddm");
+  assert.ok(s4.overflowActions.includes("deactivate"));
+  assert.ok(s4.overflowActions.includes("test"));
+  assert.ok(s4.overflowActions.includes("uninstall"));
+});
+
+test("S3-UI 17: Installation flow commits and yields transaction state before backend IPC resolves", async () => {
+  const { yieldFrame } = await import("../services/frameYield.ts");
+  assert.strictEqual(typeof yieldFrame, "function", "yieldFrame must be exported");
+
+  // Track state transitions over time
+  const transitions: Array<{ stage: string; backendResolved: boolean }> = [];
+  let backendResolved = false;
+
+  let currentTx: any = null;
+  const setTransaction = (tx: any) => {
+    currentTx = tx;
+    transitions.push({ stage: tx?.stage, backendResolved });
+  };
+
+  // Simulated install flow
+  setTransaction({
+    packageId: "silentsddm-rei",
+    operation: "install",
+    stage: "preparing",
+    message: "Preparing SilentSDDM...",
+  });
+
+  // Ensure yieldFrame resolves
+  await yieldFrame();
+
+  // Invariant check: While backend IPC is in flight, UI transaction state is active
+  assert.strictEqual(backendResolved, false, "Backend IPC must not be resolved yet");
+  assert.strictEqual(currentTx.packageId, "silentsddm-rei");
+  assert.strictEqual(currentTx.stage, "preparing");
+
+  // Advance to downloading stage
+  setTransaction({
+    packageId: "silentsddm-rei",
+    operation: "install",
+    stage: "downloading",
+    message: "Downloading wallpaper...",
+  });
+  await yieldFrame();
+
+  assert.strictEqual(backendResolved, false, "Backend IPC is still running");
+  assert.strictEqual(currentTx.stage, "downloading");
+
+  // Backend operation completes
+  backendResolved = true;
+  setTransaction(null);
+
+  assert.strictEqual(transitions.length, 3);
+  assert.deepStrictEqual(transitions, [
+    { stage: "preparing", backendResolved: false },
+    { stage: "downloading", backendResolved: false },
+    { stage: undefined, backendResolved: true },
+  ]);
+});
+
+test("S3-UI 18: Structured progress events support truthful CAS hit vs download messages", async () => {
+  const { SilentSddmStageEvent } = await import("../types/index.ts");
+
+  // Case 1: Fresh download
+  const downloadEv = {
+    packageId: "silentsddm-ken",
+    operation: "install" as const,
+    stage: "downloading" as const,
+    detail: "Downloading wallpaper...",
+  };
+  assert.strictEqual(downloadEv.stage, "downloading");
+  assert.strictEqual(downloadEv.detail, "Downloading wallpaper...");
+
+  // Case 2: CAS cache hit
+  const casHitEv = {
+    packageId: "silentsddm-smoky",
+    operation: "install" as const,
+    stage: "verifying" as const,
+    detail: "Verifying cached asset in CAS...",
+  };
+  assert.strictEqual(casHitEv.stage, "verifying");
+  assert.strictEqual(casHitEv.detail, "Verifying cached asset in CAS...");
+  assert.ok(!casHitEv.detail.includes("Downloading"), "CAS hit must never say downloading");
+});

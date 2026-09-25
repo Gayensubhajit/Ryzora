@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, memo } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Film } from "lucide-react";
 import {
   determineMediaDisplayState,
   globalVideoLimiter,
@@ -39,6 +39,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
   const [isMuted] = useState(true);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
   const [isInViewport, setIsInViewport] = useState(false);
 
   const isMountedRef = useRef(true);
@@ -118,6 +119,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
     if (!video) return;
 
     if (isIntentionalPauseRef.current) return;
+    if (mode === "card" && !isHovered) return;
 
     const req = globalVideoLimiter.requestPlayback(video, priority);
     if (!req.allowed) {
@@ -148,7 +150,9 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
     const video = videoRef.current;
     if (!video) return;
 
-    if (isInViewport && !isIntentionalPauseRef.current) {
+    const shouldPlay = isInViewport && !isIntentionalPauseRef.current && (mode === "hero" || isHovered);
+
+    if (shouldPlay) {
       attemptPlay();
     } else {
       globalVideoLimiter.releasePlayback(video);
@@ -157,7 +161,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
       } catch {}
       setIsPlaying(false);
     }
-  }, [isInViewport, hasVideo, priority, attemptPlay]);
+  }, [isInViewport, hasVideo, priority, attemptPlay, mode, isHovered]);
 
   // Window visibility listener: resume when window is focused
   useEffect(() => {
@@ -249,12 +253,20 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
         1. Base Layer: Poster Image (always mounted underneath)
         Ensures zero black/empty flashes while video is buffering or if decode fails.
       */}
-      <img
-        src={hasAnimatedImage ? finalAnimated : finalPoster}
-        alt={alt}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-        loading="lazy"
-      />
+      {(!imgFailed && (finalPoster || (hasAnimatedImage && finalAnimated))) ? (
+        <img
+          src={hasAnimatedImage ? finalAnimated : finalPoster}
+          alt={alt}
+          onError={() => setImgFailed(true)}
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          loading="lazy"
+        />
+      ) : (
+        <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[var(--rz-surface-elevated,#1e1e24)] text-[var(--rz-text-muted,#71717a)] p-4 text-center">
+          <Film className="w-8 h-8 mb-2 opacity-40 stroke-[1.5]" />
+          <span className="text-xs font-medium max-w-[200px] truncate">{alt || "Video preview"}</span>
+        </div>
+      )}
 
       {/* 
         2. Video Player: Mounted on top of poster.
@@ -268,7 +280,6 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
           muted={isMuted}
           loop
           playsInline
-          autoPlay
           preload="metadata"
           onLoadedData={handleLoadedData}
           onCanPlay={handleCanPlay}
@@ -305,9 +316,12 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
 
       {/* Video decode failure notice */}
       {videoError && (
-        <div className="absolute bottom-2.5 right-2.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-black/70 text-white/80 border border-white/10 backdrop-blur-sm">
-          <AlertCircle size={11} className="text-amber-400" />
-          <span>Poster Fallback</span>
+        <div className="absolute bottom-2.5 right-2.5 z-10 flex flex-col items-end gap-0.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--rz-surface-elevated)]/95 text-[var(--rz-text)] border border-[var(--rz-border-strong)] shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
+            <AlertCircle size={12} className="shrink-0" />
+            <span>Video preview unavailable</span>
+          </div>
+          <span className="text-[10px] text-[var(--rz-text-muted)]">Open SDDM Test to preview the original</span>
         </div>
       )}
 

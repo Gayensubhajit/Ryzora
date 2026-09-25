@@ -27,13 +27,23 @@ pub mod ownership;
 pub mod engine;
 pub mod app_adapters;
 pub mod integration;
+pub mod media_server;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("LIBVA_DRIVER_NAME").is_none() {
+            if std::path::Path::new("/usr/lib/dri/iHD_drv_video.so").exists() {
+                std::env::set_var("LIBVA_DRIVER_NAME", "iHD");
+            }
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|_app| {
             app_adapters::catalog::initialize_catalog();
+            media_server::start();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -206,12 +216,23 @@ pub fn run() {
             integration::silentsddm_get_host_report,
             integration::silentsddm_host_report,
             integration::silentsddm_validate_custom_path,
+            integration::silentsddm_validate_custom_media,
             integration::silentsddm_install_engine,
             integration::silentsddm_uninstall_engine,
             integration::silentsddm_install_wallpaper,
             integration::silentsddm_uninstall_wallpaper,
             integration::silentsddm_import_custom_video,
             integration::silentsddm_remove_custom_video,
+            integration::silentsddm_import_custom_media,
+            integration::silentsddm_remove_custom_media,
+            integration::silentsddm_pick_custom_media_file,
+            integration::silentsddm_get_activation_manifest,
+            integration::silentsddm_apply_wallpaper,
+            integration::silentsddm_get_configuration,
+            integration::silentsddm_save_configuration,
+            integration::silentsddm_apply_configuration,
+            integration::silentsddm_deactivate,
+            media_server::get_media_server_port,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ryzora application");

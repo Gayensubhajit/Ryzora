@@ -17,3 +17,6 @@
 pub mod discovery;
 pub mod engine;
 pub mod assets;
+pub mod activation;
+
+pub mod config;

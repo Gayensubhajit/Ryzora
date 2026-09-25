@@ -472,6 +472,78 @@ pub fn restore_sddm_theme(previous_theme_name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Update the background and configuration of an existing Ryzora SDDM theme (e.g. "silent")
+/// without removing or reinstalling the theme engine.
+pub fn set_sddm_theme_background(staging_dir: &Path, slug: &str) -> Result<(), String> {
+    validate_slug(slug)?;
+
+    let staging_str = staging_dir
+        .to_str()
+        .ok_or("Staging path contains invalid UTF-8")?;
+
+    let result = invoke_helper("set_theme_background", &[staging_str, slug])?;
+
+    if !result.success {
+        return Err(format!(
+            "SDDM background update failed (exit {}): {}",
+            result.exit_code, result.output
+        ));
+    }
+
+    // Physical verification: theme must still exist and have Main.qml
+    let dest = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        PathBuf::from(sys_root)
+            .join("usr/share/sddm/themes")
+            .join(format!("ryzora-{}", slug))
+    } else {
+        PathBuf::from(SDDM_THEMES_DIR).join(format!("ryzora-{}", slug))
+    };
+
+    if !dest.join("Main.qml").exists() {
+        return Err("Physical verification failed: Main.qml missing after background update".to_string());
+    }
+    if !dest.join("backgrounds").is_dir() {
+        return Err("Physical verification failed: backgrounds directory missing after update".to_string());
+    }
+
+    Ok(())
+}
+
+/// Restore exact drop-in configuration file byte-for-byte from a staging file
+
+/// Remove a specific background file from a Ryzora SDDM theme backgrounds directory
+pub fn remove_sddm_theme_background(slug: &str, filename: &str) -> Result<(), String> {
+    validate_slug(slug)?;
+    if filename.contains('/') || filename.is_empty() || filename.len() > 128 {
+        return Err(format!("Invalid background filename: {}", filename));
+    }
+
+    let result = invoke_helper("remove_theme_background", &[slug, filename])?;
+    if !result.success {
+        return Err(format!(
+            "Failed to remove theme background (exit {}): {}",
+            result.exit_code, result.output
+        ));
+    }
+    Ok(())
+}
+
+pub fn restore_sddm_conf_exact(staging_file: &Path) -> Result<(), String> {
+    let staging_str = staging_file
+        .to_str()
+        .ok_or("Staging file contains invalid UTF-8")?;
+
+    let result = invoke_helper("restore_conf", &[staging_str])?;
+    if !result.success {
+        return Err(format!(
+            "SDDM exact configuration restoration failed (exit {}): {}",
+            result.exit_code, result.output
+        ));
+    }
+    Ok(())
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SddmConfigEntrySummary {
     pub path: String,
@@ -703,7 +775,6 @@ pub fn get_sddm_runtime_status_in(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Mutex;
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
     use crate::TEST_ENV_MUTEX as ENV_MUTEX;
@@ -771,6 +842,28 @@ case "$OPERATION" in
     mkdir -p "$(dirname "$conf")"
     printf '[Theme]\nCurrent=%s\n' "$theme" > "$conf"
     echo "OK:restored:$theme" ;;
+  set_theme_background)
+    staging="$1"; slug="$2"
+    dest="${SYS}/usr/share/sddm/themes/ryzora-${slug}"
+    [ -d "$dest" ] || { echo "ERROR: theme not installed" >&2; exit 1; }
+    mkdir -p "${dest}/backgrounds"
+    cp -r "${staging}/backgrounds/." "${dest}/backgrounds/"
+    if [ -f "${staging}/configs/ryzora-active.conf" ]; then
+      mkdir -p "${dest}/configs"
+      cp "${staging}/configs/ryzora-active.conf" "${dest}/configs/"
+    fi
+    echo "OK:background_updated:ryzora-$slug" ;;
+  remove_theme_background)
+    slug="$1"; filename="$2"
+    target="${SYS}/usr/share/sddm/themes/ryzora-${slug}/backgrounds/${filename}"
+    rm -f "$target"
+    echo "OK:background_removed:$filename" ;;
+  restore_conf)
+    staging_file="$1"
+    conf="${SYS}/etc/sddm.conf.d/zz-ryzora-theme.conf"
+    mkdir -p "$(dirname "$conf")"
+    cp "$staging_file" "$conf"
+    echo "OK:restored_conf:$conf" ;;
   *) echo "unknown op" >&2; exit 1 ;;
 esac
 "#).unwrap();

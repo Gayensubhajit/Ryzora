@@ -152,6 +152,9 @@ pub struct CachedAsset {
     pub upstream_url: Option<String>,
     /// Only present for custom assets — the original import path (may no longer exist).
     pub original_path: Option<String>,
+    /// Optional user-assigned display name (e.g. "Anime Night")
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -187,6 +190,14 @@ pub struct CustomVideoValidation {
 
 /// Validate that a user-supplied file is an acceptable SilentSDDM background.
 /// Does NOT copy or modify any file.
+pub type CustomMediaType = MediaType;
+pub type CustomMediaValidation = CustomVideoValidation;
+
+/// Validates user-supplied custom media (photo or video).
+pub fn validate_custom_media(path: &Path) -> CustomMediaValidation {
+    validate_custom_video(path)
+}
+
 pub fn validate_custom_video(path: &Path) -> CustomVideoValidation {
     let filename = path
         .file_name()
@@ -237,8 +248,8 @@ pub fn validate_custom_video(path: &Path) -> CustomVideoValidation {
         };
     };
 
-    // Check file exists and is readable
-    let meta = match fs::metadata(path) {
+    // Check file exists, is not a symlink, and is readable
+    let sym_meta = match fs::symlink_metadata(path) {
         Ok(m) => m,
         Err(e) => {
             return CustomVideoValidation {
@@ -253,7 +264,7 @@ pub fn validate_custom_video(path: &Path) -> CustomVideoValidation {
         }
     };
 
-    if !meta.is_file() {
+    if sym_meta.is_symlink() {
         return CustomVideoValidation {
             valid: false,
             path: path.to_path_buf(),
@@ -261,7 +272,44 @@ pub fn validate_custom_video(path: &Path) -> CustomVideoValidation {
             extension: ext,
             media_type: Some(media_type),
             size_bytes: None,
-            error: Some("Path is not a file.".to_string()),
+            error: Some("Custom media cannot be a symlink".to_string()),
+        };
+    }
+
+    if !sym_meta.is_file() {
+        return CustomVideoValidation {
+            valid: false,
+            path: path.to_path_buf(),
+            filename,
+            extension: ext,
+            media_type: Some(media_type),
+            size_bytes: None,
+            error: Some("Path is not a regular file.".to_string()),
+        };
+    }
+
+    let file_size = sym_meta.len();
+    if file_size == 0 {
+        return CustomVideoValidation {
+            valid: false,
+            path: path.to_path_buf(),
+            filename,
+            extension: ext,
+            media_type: Some(media_type),
+            size_bytes: Some(0),
+            error: Some("Custom media file is empty (0 bytes)".to_string()),
+        };
+    }
+
+    if file_size > super::assets::MAX_CUSTOM_FILE_BYTES {
+        return CustomVideoValidation {
+            valid: false,
+            path: path.to_path_buf(),
+            filename,
+            extension: ext,
+            media_type: Some(media_type),
+            size_bytes: Some(file_size),
+            error: Some("File exceeds maximum allowed size of 1 GiB (1,073,741,824 bytes)".to_string()),
         };
     }
 
@@ -271,7 +319,7 @@ pub fn validate_custom_video(path: &Path) -> CustomVideoValidation {
         filename,
         extension: ext,
         media_type: Some(media_type),
-        size_bytes: Some(meta.len()),
+        size_bytes: Some(file_size),
         error: None,
     }
 }
@@ -813,6 +861,7 @@ mod tests {
             installed_at: "2026-09-21T00:00:00Z".to_string(),
             upstream_url: Some("https://raw.githubusercontent.com/...".to_string()),
             original_path: None,
+            display_name: None,
         };
 
         let mut map = std::collections::HashMap::new();

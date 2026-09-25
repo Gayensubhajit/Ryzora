@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
+  Check,
   Sparkles,
   ShieldCheck,
   Sliders,
@@ -13,7 +14,6 @@ import {
   Layout,
   Package as PackageIcon,
   MoreHorizontal,
-  Play,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -62,7 +62,6 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
     setSelectedPackage,
     installedPackages,
     activeLockscreen,
-    testLockscreen,
     deactivateLockscreen,
     uninstallPackage,
     deactivateAndUninstallLockscreen,
@@ -193,10 +192,15 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
 
         {/* Top-Left Media Badges */}
         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+          {(packageItem.package_type as string === 'custom-media' || packageItem.id.startsWith('custom-media-') || packageItem.tags?.includes('custom') || packageItem.id.startsWith('custom:')) && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm backdrop-blur-md bg-purple-600/80 text-white border border-purple-400/40">
+              CUSTOM
+            </span>
+          )}
           {mediaType === "video" && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/65 text-white/95 border border-white/15 flex items-center gap-1.5">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm backdrop-blur-md bg-black/65 text-white/95 border border-white/15 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              Video
+              VIDEO
             </span>
           )}
           {mediaType === "animated" && (
@@ -232,10 +236,17 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
 
         {/* Top-Right Installation State Badge & Quick Overflow Action */}
         <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5">
-          <InstalledBadge
-            isInstalled={isInstalled}
-            isUpdateAvailable={isUpdateAvailable}
-          />
+          {isActive ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/90 text-white shadow-md border border-emerald-400/30 flex items-center gap-1 backdrop-blur-md animate-in fade-in duration-200">
+              <Check className="w-3 h-3 stroke-[2.5]" />
+              ACTIVE
+            </span>
+          ) : !(packageItem.package_type as string === 'custom-media' || packageItem.id.startsWith('custom-media-') || packageItem.tags?.includes('custom') || packageItem.id.startsWith('custom:')) ? (
+            <InstalledBadge
+              isInstalled={isInstalled}
+              isUpdateAvailable={isUpdateAvailable}
+            />
+          ) : null}
           {isInstalled && (
             <div className="relative">
               <button
@@ -256,25 +267,7 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
                   className="absolute right-0 top-full mt-1.5 w-36 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {packageItem.lockscreen?.provider !== "silentsddm" && (packageItem.supports_session_lock || packageItem.supports_login_screen || packageItem.category?.toLowerCase().includes("lock")) && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowOverflow(false);
-                        const targetToTest = isQsActive && !isSddmActive
-                          ? "quickshell"
-                          : !isQsActive && isSddmActive
-                          ? "sddm"
-                          : undefined;
-                        testLockscreen(packageItem.id, targetToTest);
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
-                    >
-                      <Play className="w-3 h-3 text-[var(--rz-text-muted)]" />
-                      <span>Test</span>
-                    </button>
-                  )}
+
 
                   {isActive && (
                     <button
@@ -346,26 +339,43 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
           </p>
         </div>
 
-        {/* Bottom Row: Author + Rating & Downloads */}
+        {/* Bottom Row: Author + Rating & Downloads (or My Media Size for custom) */}
         <div className="mt-3.5 pt-2.5 border-t border-[var(--rz-border-subtle)]/70 flex items-center justify-between text-xs text-[var(--rz-text-muted)]">
-          <div className="flex items-center gap-1.5 truncate max-w-[55%]">
-            <span className="font-semibold text-[var(--rz-text)] truncate">{authorName}</span>
-            <span>·</span>
-            <span className="text-[var(--rz-text-secondary)] truncate">{subtype}</span>
-          </div>
+          {Boolean(packageItem.tags?.includes("custom") || packageItem.id.startsWith("custom:")) ? (
+            <>
+              <div className="flex items-center gap-1.5 truncate max-w-[65%]">
+                <span className="font-semibold text-[var(--rz-text)] truncate">My Media</span>
+                <span>·</span>
+                <span className="text-[var(--rz-text-secondary)] truncate">Local file</span>
+              </div>
+              <div className="shrink-0 font-mono text-[11px] sm:text-xs text-[var(--rz-text-muted)]">
+                {packageItem.package_size_bytes
+                  ? `${(packageItem.package_size_bytes / (1024 * 1024)).toFixed(1)} MB`
+                  : ""}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 truncate max-w-[55%]">
+                <span className="font-semibold text-[var(--rz-text)] truncate">{authorName}</span>
+                <span>·</span>
+                <span className="text-[var(--rz-text-secondary)] truncate">{subtype}</span>
+              </div>
 
-          <div className="flex items-center gap-3 shrink-0 font-mono text-[11px] sm:text-xs">
-            {packageItem.rating > 0 && (packageItem.rating_count ?? 0) > 0 && (
-              <span className="flex items-center gap-1 text-[var(--rz-text)] font-semibold">
-                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                {packageItem.rating.toFixed(1)}
-              </span>
-            )}
-            <span className="flex items-center gap-1 text-[var(--rz-text-secondary)]">
-              <Download className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
-              {formatDownloads(packageItem.downloads)}
-            </span>
-          </div>
+              <div className="flex items-center gap-3 shrink-0 font-mono text-[11px] sm:text-xs">
+                {packageItem.rating > 0 && (packageItem.rating_count ?? 0) > 0 && (
+                  <span className="flex items-center gap-1 text-[var(--rz-text)] font-semibold">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    {packageItem.rating.toFixed(1)}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-[var(--rz-text-secondary)]">
+                  <Download className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
+                  {formatDownloads(packageItem.downloads)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -167,6 +167,174 @@ op_restore_theme() {
     echo "OK:restored:${theme_name}"
 }
 
+
+op_set_theme_background() {
+    local staging_dir="$1"
+    local slug="$2"
+
+    validate_slug "$slug"
+    validate_staging_dir "$staging_dir"
+
+    local dest="${SDDM_THEMES_DIR}/ryzora-${slug}"
+    if [ ! -d "$dest" ]; then
+        die "Theme destination '${dest}' does not exist. Install the theme first."
+    fi
+
+    # Ownership and health verification of existing theme engine
+    if [ ! -f "${dest}/Main.qml" ]; then
+        die "Engine destination '${dest}' is missing Main.qml."
+    fi
+    if [ ! -d "${dest}/components" ]; then
+        die "Engine destination '${dest}' is missing components/."
+    fi
+
+    # Snapshot Main.qml hash before any operations to verify immutability
+    local main_qml_sha_before
+    main_qml_sha_before=$(sha256sum "${dest}/Main.qml" | awk '{print $1}')
+
+    # Strict staging directory allowlist validation
+    while IFS= read -r -d '' item; do
+        if [ -L "$item" ]; then
+            die "Symlink detected in staging: $item"
+        fi
+        local rel="${item#"${staging_dir}"}"
+        rel="${rel#/}"
+        if [ -z "$rel" ]; then
+            continue
+        fi
+
+        if [ -f "$item" ]; then
+            case "$rel" in
+                backgrounds/*)
+                    local bg_name="${rel#backgrounds/}"
+                    if [[ "$bg_name" =~ / ]] || [[ ! "$bg_name" =~ ^[a-zA-Z0-9_.-]{1,128}$ ]]; then
+                        die "Invalid or disallowed background filename in staging: ${bg_name}"
+                    fi
+                    ;;
+                configs/ryzora-active.conf|metadata.desktop|theme.conf)
+                    ;;
+                *)
+                    die "Forbidden file in staging (not allowlisted): ${rel}"
+                    ;;
+            esac
+        elif [ -d "$item" ]; then
+            case "$rel" in
+                backgrounds|configs)
+                    ;;
+                *)
+                    die "Forbidden subdirectory in staging: ${rel}"
+                    ;;
+            esac
+        fi
+    done < <(find "$staging_dir" -print0)
+
+    # Staging must contain at least one allowlisted mutation
+    local has_mutations=false
+
+    # Materialize allowlisted background files: 1. Reuse existing -> 2. Hardlink -> 3. Btrfs CoW reflink -> 4. Copy fallback
+    if [ -d "${staging_dir}/backgrounds" ]; then
+        mkdir -p "${dest}/backgrounds"
+        for bg in "${staging_dir}/backgrounds"/*; do
+            if [ -f "$bg" ]; then
+                local bname
+                bname=$(basename "$bg")
+                local target="${dest}/backgrounds/${bname}"
+                # 1. Reuse existing if already present and byte-for-byte identical
+                if [ -f "$target" ]; then
+                    local sz1 sz2
+                    sz1=$(stat -c%s "$bg" 2>/dev/null || echo 1)
+                    sz2=$(stat -c%s "$target" 2>/dev/null || echo 2)
+                    if [ "$sz1" = "$sz2" ] && cmp -s "$bg" "$target" 2>/dev/null; then
+                        has_mutations=true
+                        continue
+                    fi
+                fi
+                # 2. Hard link -> 3. CoW clone (reflink) -> 4. Standard copy
+                ln "$bg" "$target" 2>/dev/null ||                 cp --reflink=always --no-dereference "$bg" "$target" 2>/dev/null ||                 cp --reflink=auto --no-dereference "$bg" "$target" 2>/dev/null ||                 cp --no-dereference "$bg" "$target"
+                chmod 644 "$target"
+                has_mutations=true
+            fi
+        done
+    fi
+
+    # Copy configs/ryzora-active.conf if present
+    if [ -f "${staging_dir}/configs/ryzora-active.conf" ]; then
+        mkdir -p "${dest}/configs"
+        cp --no-dereference "${staging_dir}/configs/ryzora-active.conf" "${dest}/configs/ryzora-active.conf"
+        chmod 644 "${dest}/configs/ryzora-active.conf"
+        has_mutations=true
+    fi
+
+    # Copy metadata.desktop if present
+    if [ -f "${staging_dir}/metadata.desktop" ]; then
+        cp --no-dereference "${staging_dir}/metadata.desktop" "${dest}/metadata.desktop"
+        chmod 644 "${dest}/metadata.desktop"
+        has_mutations=true
+    fi
+
+    # Copy theme.conf if present
+    if [ -f "${staging_dir}/theme.conf" ]; then
+        cp --no-dereference "${staging_dir}/theme.conf" "${dest}/theme.conf"
+        chmod 644 "${dest}/theme.conf"
+        has_mutations=true
+    fi
+
+    if [ "$has_mutations" = false ]; then
+        die "Staging directory contained no allowlisted mutations"
+    fi
+
+    # Permissions: ensure backgrounds and configs are readable (mode 644 / 755), no exec
+    find "${dest}/backgrounds" -type f -exec chmod a-x,a+r {} + 2>/dev/null || true
+    find "${dest}/backgrounds" -type d -exec chmod 755 {} + 2>/dev/null || true
+    if [ -d "${dest}/configs" ]; then
+        find "${dest}/configs" -type f -exec chmod a-x,a+r {} + 2>/dev/null || true
+        find "${dest}/configs" -type d -exec chmod 755 {} + 2>/dev/null || true
+    fi
+
+    # Verify Main.qml was completely untouched (immutability check)
+    local main_qml_sha_after
+    main_qml_sha_after=$(sha256sum "${dest}/Main.qml" | awk '{print $1}')
+    if [ "$main_qml_sha_before" != "$main_qml_sha_after" ]; then
+        die "Security violation: Main.qml was modified during background update!"
+    fi
+
+    log "Updated background and configuration for theme: ryzora-${slug}"
+    echo "OK:background_updated:ryzora-${slug}"
+}
+
+op_remove_theme_background() {
+    local slug="$1"
+    local filename="$2"
+
+    validate_slug "$slug"
+    if [[ "$filename" =~ / ]] || [[ ! "$filename" =~ ^[a-zA-Z0-9_.-]{1,128}$ ]]; then
+        die "Invalid background filename to remove: ${filename}"
+    fi
+
+    local target="${SDDM_THEMES_DIR}/ryzora-${slug}/backgrounds/${filename}"
+    if [ -f "$target" ]; then
+        rm -f "$target"
+        log "Removed background file: ${target}"
+    fi
+    echo "OK:background_removed:${filename}"
+}
+
+op_restore_conf() {
+    local staging_file="$1"
+    if [[ ! "$staging_file" =~ ^/tmp/ryzora-staging-[a-zA-Z0-9_-]+(/[a-zA-Z0-9_./-]+)?$ ]]; then
+        die "Invalid staging file '${staging_file}': must be under /tmp/ryzora-staging-*/"
+    fi
+    if [ ! -f "$staging_file" ]; then
+        die "Staging file '${staging_file}' does not exist"
+    fi
+    mkdir -p "${SDDM_CONF_DIR}"
+    rm -f "${LEGACY_CONF_FILE}"
+    cp --no-dereference "$staging_file" "${RYZORA_CONF_FILE}"
+    chmod 644 "${RYZORA_CONF_FILE}"
+    log "Restored exact drop-in configuration from: ${staging_file}"
+    echo "OK:restored_conf:${RYZORA_CONF_FILE}"
+}
+
 op_deactivate_theme() {
     rm -f "${RYZORA_CONF_FILE}" "${LEGACY_CONF_FILE}"
     log "Deactivated Ryzora SDDM theme, removed Ryzora configuration files."
@@ -197,6 +365,18 @@ case "$OPERATION" in
     restore_theme)
         [ $# -eq 1 ] || die "restore_theme requires exactly 1 argument: <previous_theme_name>"
         op_restore_theme "$1"
+        ;;
+    set_theme_background)
+        [ $# -eq 2 ] || die "set_theme_background requires exactly 2 arguments: <staging_dir> <theme_slug>"
+        op_set_theme_background "$1" "$2"
+        ;;
+    remove_theme_background)
+        [ $# -eq 2 ] || die "remove_theme_background requires exactly 2 arguments: <theme_slug> <filename>"
+        op_remove_theme_background "$1" "$2"
+        ;;
+    restore_conf)
+        [ $# -eq 1 ] || die "restore_conf requires exactly 1 argument: <staging_file>"
+        op_restore_conf "$1"
         ;;
     deactivate_theme)
         op_deactivate_theme

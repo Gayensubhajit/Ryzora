@@ -5,6 +5,9 @@ import { StoreCard } from "../components/StoreCard";
 import { PackageCard } from "../components/PackageCard";
 import { CategoryId } from "../types";
 import { deduplicateStorefrontPackages } from "../components/catalogue/catalogueUtils";
+import { UploadMediaCard } from "../components/media/UploadMediaCard";
+import { CustomMediaImportModal } from "../components/media/CustomMediaImportModal";
+import { CurrentConfigurationSection } from "../components/sddm/CurrentConfigurationSection";
 
 // ── Category metadata ────────────────────────────────────────────────────────
 const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
@@ -45,7 +48,7 @@ const STORE_GRID_CATEGORIES = new Set<CategoryId>([
 
 /** Per-category sub-filter pills */
 const CATEGORY_SUB_FILTERS: Partial<Record<CategoryId, string[]>> = {
-  lockscreens: ["All", "Hyprlock", "Quickshell", "Swaylock", "SDDM"],
+  lockscreens: ["All", "Qylock", "SilentSDDM", "SDDM", "My Media"],
   rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
   themes: ["All", "GTK", "Qt", "Application"],
   wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
@@ -167,9 +170,11 @@ const LowContentState: React.FC<{
 
 // ── Main view ────────────────────────────────────────────────────────────────
 export const CategoryView: React.FC = () => {
-  const { packages, activeCategory, searchQuery, desktopFilter } = useApp();
+  const { packages, activeCategory, searchQuery, desktopFilter, loadSilentSddmReport, loadInstalledPackages, silentSddmReport, testLockscreen, activeLockscreen, activeSilentSddmManifest } = useApp();
   const [sortBy, setSortBy] = useState<"rating" | "downloads" | "name" | "newest">("downloads");
   const [subFilter, setSubFilter] = useState<string>("All");
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [pendingFileOrPath, setPendingFileOrPath] = useState<{ path?: string; file?: File } | null>(null);
 
   const meta = CATEGORY_META[activeCategory] ?? { title: "Category", subtitle: "Browse packages" };
   const useStoreGrid = STORE_GRID_CATEGORIES.has(activeCategory);
@@ -201,18 +206,51 @@ export const CategoryView: React.FC = () => {
         pkg.supported_desktops.includes("universal") ||
         pkg.supported_desktops.includes(desktopFilter as any);
 
+      const isCustomPkg = pkg.tags.includes("custom") || pkg.id.startsWith("custom:");
+      const isSilentSddmPkg = !isCustomPkg && (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-"));
+      const isQylockPkg = !isCustomPkg && !isSilentSddmPkg && (pkg.tags.includes("qylock") || pkg.id.startsWith("qylock-") || pkg.id.startsWith("lockscreen-"));
+
       const matchesSubFilter =
         subFilter === "All" ||
-        pkg.tags.some((t) => t.toLowerCase() === subFilter.toLowerCase()) ||
-        pkg.supported_desktops.some((d) => d.toLowerCase() === subFilter.toLowerCase()) ||
-        (pkg.components ?? []).some((c) => c.component_type?.toLowerCase().includes(subFilter.toLowerCase())) ||
-        (subFilter.toLowerCase() === "sddm" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null || Boolean(pkg.manifest?.targets?.["sddm"]))) ||
-        (subFilter.toLowerCase() === "quickshell" && (pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell != null || Boolean(pkg.manifest?.targets?.["quickshell"])));
+        (subFilter === "My Media" && isCustomPkg) ||
+        (subFilter === "SilentSDDM" && isSilentSddmPkg) ||
+        (subFilter === "Qylock" && isQylockPkg) ||
+        (subFilter !== "My Media" && subFilter !== "SilentSDDM" && subFilter !== "Qylock" && (
+          pkg.tags.some((t) => t.toLowerCase() === subFilter.toLowerCase()) ||
+          pkg.supported_desktops.some((d) => d.toLowerCase() === subFilter.toLowerCase()) ||
+          (pkg.components ?? []).some((c) => c.component_type?.toLowerCase().includes(subFilter.toLowerCase())) ||
+          (subFilter.toLowerCase() === "sddm" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null || Boolean(pkg.manifest?.targets?.["sddm"]))) ||
+          (subFilter.toLowerCase() === "quickshell" && (pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell != null || Boolean(pkg.manifest?.targets?.["quickshell"])))
+        ));
 
       return matchesCategory && matchesSearch && matchesDesktop && matchesSubFilter;
     });
 
+    const isPkgActive = (pkg: (typeof list)[0]) => {
+      if (activeSilentSddmManifest?.active_asset_id === pkg.id) return true;
+      if (activeLockscreen?.sddm) {
+        if (activeLockscreen.sddm === pkg.id || activeLockscreen.sddm === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
+          return true;
+        }
+      }
+      if (activeLockscreen?.quickshell) {
+        if (activeLockscreen.quickshell === pkg.id || activeLockscreen.quickshell === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     const sorted = [...list].sort((a, b) => {
+      // 1. In Lock Screens, active items are always pinned first
+      if (activeCategory === "lockscreens") {
+        const aActive = isPkgActive(a);
+        const bActive = isPkgActive(b);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+      }
+
+      // 2. Normal secondary sort by chosen criterion
       if (sortBy === "rating")    return b.rating - a.rating;
       if (sortBy === "downloads") return b.downloads - a.downloads;
       if (sortBy === "name")      return a.title.localeCompare(b.title);
@@ -220,7 +258,7 @@ export const CategoryView: React.FC = () => {
       return 0;
     });
     return deduplicateStorefrontPackages(sorted);
-  }, [packages, activeCategory, searchQuery, desktopFilter, sortBy, subFilter]);
+  }, [packages, activeCategory, searchQuery, desktopFilter, sortBy, subFilter, activeLockscreen, activeSilentSddmManifest]);
 
   // ── Store grid (art-forward, dense) ───────────────────────────────────────
   if (useStoreGrid) {
@@ -254,6 +292,23 @@ export const CategoryView: React.FC = () => {
           </div>
         </div>
 
+        {/* Current Wallpaper Header & Configuration Section (Above grid & filters) */}
+        {activeCategory === "lockscreens" && (
+          <CurrentConfigurationSection
+            report={silentSddmReport}
+            onRefresh={async () => {
+              await loadSilentSddmReport();
+              await loadInstalledPackages();
+            }}
+            onChangeWallpaper={(_target) => {
+              setSubFilter("My Media");
+            }}
+            onLaunchTest={(target) => {
+              testLockscreen(undefined, target);
+            }}
+          />
+        )}
+
         {/* Sub-filter pills */}
         {subFilters && (
           <div className="flex items-center gap-1.5 mb-5 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
@@ -264,8 +319,8 @@ export const CategoryView: React.FC = () => {
                 className={[
                   "flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-medium transition-all",
                   subFilter === f
-                    ? "bg-[var(--accent)] text-white"
-                    : "bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]",
+                    ? "bg-[var(--rz-accent)] text-white"
+                    : "bg-[var(--rz-surface)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)] hover:text-[var(--rz-text)]",
                 ].join(" ")}
               >
                 {f}
@@ -274,14 +329,109 @@ export const CategoryView: React.FC = () => {
           </div>
         )}
 
-        {/* Low-content aware grid */}
-        <LowContentState category={activeCategory} count={categoryPackages.length}>
-          <div className="store-grid-fluid">
-            {categoryPackages.map((pkg) => (
-              <StoreCard key={pkg.id} packageItem={pkg} />
-            ))}
+        {/* Grid or Dedicated My Media Section */}
+        {activeCategory === "lockscreens" && subFilter === "My Media" ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  My Media
+                </h2>
+                <p className="text-[11px] text-[var(--text-faint)]">
+                  Your wallpapers and videos · Stored locally
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingFileOrPath(null);
+                  setUploadModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-xs"
+              >
+                <span>＋ Add Wallpaper / Video</span>
+              </button>
+            </div>
+            {categoryPackages.length === 0 ? (
+              <div className="space-y-6">
+                <div className="store-grid-fluid">
+                  <UploadMediaCard
+                    onFileSelected={(fp) => {
+                      setPendingFileOrPath(fp);
+                      setUploadModalOpen(true);
+                    }}
+                  />
+                </div>
+                <div className="py-8 text-center text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] rounded-xl border border-[var(--border-subtle)]">
+                  <p className="font-semibold text-[var(--text-primary)]">No custom wallpapers or videos yet</p>
+                  <p className="text-[11px] text-[var(--text-faint)] mt-1">
+                    Click "＋ Add Wallpaper / Video" or the card above to import your local images and videos.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="store-grid-fluid">
+                <UploadMediaCard
+                  onFileSelected={(fp) => {
+                    setPendingFileOrPath(fp);
+                    setUploadModalOpen(true);
+                  }}
+                />
+                {categoryPackages.map((pkg) => (
+                  <StoreCard key={pkg.id} packageItem={pkg} />
+                ))}
+              </div>
+            )}
           </div>
-        </LowContentState>
+        ) : activeCategory === "lockscreens" && subFilter === "SilentSDDM" ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  SilentSDDM Built-in Wallpapers
+                </h2>
+                <p className="text-[11px] text-[var(--text-faint)]">Official curated SilentSDDM themes &amp; wallpapers</p>
+              </div>
+            </div>
+            <div className="store-grid-fluid">
+              {categoryPackages.map((pkg) => (
+                <StoreCard key={pkg.id} packageItem={pkg} />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <LowContentState category={activeCategory} count={categoryPackages.length + (activeCategory === "lockscreens" && subFilter === "All" ? 1 : 0)}>
+            <div className="store-grid-fluid">
+              {categoryPackages.map((pkg) => (
+                <StoreCard key={pkg.id} packageItem={pkg} />
+              ))}
+              {activeCategory === "lockscreens" && subFilter === "All" && (
+                <UploadMediaCard
+                  onFileSelected={(fp) => {
+                    setPendingFileOrPath(fp);
+                    setUploadModalOpen(true);
+                  }}
+                />
+              )}
+            </div>
+          </LowContentState>
+        )}
+
+        <CustomMediaImportModal
+          isOpen={uploadModalOpen}
+          onClose={() => {
+            setUploadModalOpen(false);
+            setPendingFileOrPath(null);
+          }}
+          fileOrPath={pendingFileOrPath}
+          onImportSuccess={async (_id) => {
+            setUploadModalOpen(false);
+            setPendingFileOrPath(null);
+            await loadSilentSddmReport();
+            await loadInstalledPackages();
+            setSubFilter("My Media");
+          }}
+        />
       </div>
     );
   }

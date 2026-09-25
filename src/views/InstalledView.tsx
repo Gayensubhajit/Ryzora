@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   RefreshCw,
   CheckCircle2,
@@ -21,6 +21,8 @@ export const InstalledView: React.FC = () => {
     getInstalledPackageHistory,
     rollbackSnapshot,
     setToast,
+    activeLockscreen,
+    activeSilentSddmManifest,
   } = useApp();
 
   const [checkingUpdates, setCheckingUpdates] = useState<boolean>(false);
@@ -33,7 +35,32 @@ export const InstalledView: React.FC = () => {
   } | null>(null);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
-  const installedPackages = packages.filter((pkg) => installedPackageIds.includes(pkg.id));
+  const installedPackages = useMemo(() => {
+    const list = packages.filter((pkg) => installedPackageIds.includes(pkg.id));
+
+    const isPkgActive = (pkg: (typeof list)[0]) => {
+      if (activeSilentSddmManifest?.active_asset_id === pkg.id) return true;
+      if (activeLockscreen?.sddm) {
+        if (activeLockscreen.sddm === pkg.id || activeLockscreen.sddm === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
+          return true;
+        }
+      }
+      if (activeLockscreen?.quickshell) {
+        if (activeLockscreen.quickshell === pkg.id || activeLockscreen.quickshell === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    return [...list].sort((a, b) => {
+      const aActive = isPkgActive(a);
+      const bActive = isPkgActive(b);
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return 0;
+    });
+  }, [packages, installedPackageIds, activeLockscreen, activeSilentSddmManifest]);
 
   const handleCheckAllUpdates = async () => {
     setCheckingUpdates(true);

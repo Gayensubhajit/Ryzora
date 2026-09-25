@@ -3,14 +3,23 @@ import {
   SILENTSDDM_WALLPAPERS,
   normalizeSilentSddmWallpaper,
 } from "../providers/silentSddmProvider";
+import { normalizeCustomMediaAsset } from "../providers/customMediaProvider";
 import { packageEngine } from "../providers/index";
 import { SilentSddmService } from "../services/silentSddmService";
+import { yieldFrame } from "../services/frameYield";
 import type {
   SilentSddmHostReport,
   UpstreamWallpaperInstallRequest,
+  PackageTransaction,
+  SilentSddmStageEvent,
+  SilentSddmActivationManifest,
+  SilentSddmCachedAsset,
 } from "../types";
+
+
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { homeDir } from "@tauri-apps/api/path";
 import { MOCK_PACKAGES } from "../data/mockPackages";
 import {
   DependencyResolutionReport,
@@ -78,6 +87,8 @@ interface AppContextType {
   isInstalling: boolean;
   installProgress: number;
   installLogs: string[];
+  packageTransactions: Record<string, PackageTransaction>;
+  getPackageTransaction: (packageId: string) => PackageTransaction | undefined;
   previewInstallation: (packageId: string, target?: string) => Promise<InstallationPlan>;
   resolvePackageDependencies: (packageId: string) => Promise<DependencyResolutionReport>;
   installPackage: (pkg: PackageItem, createSnapshot?: boolean, target?: string) => Promise<InstallResult>;
@@ -138,6 +149,7 @@ interface AppContextType {
   switchRepositoryChannel: (repoId: string, channel: string) => Promise<RepositorySyncStatus>;
   getInstalledPackageHistory: (packageId: string) => Promise<InstalledHistoryEntry[]>;
   activeLockscreen: ActiveLockscreenState;
+  activeSilentSddmManifest: SilentSddmActivationManifest | null;
   applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both", config?: Record<string, any>) => Promise<ActiveLockscreenState>;
   deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
@@ -160,6 +172,7 @@ interface AppContextType {
   loadSddmRuntimeStatus: (packageId?: string) => Promise<SddmRuntimeStatus>;
   silentSddmReport: SilentSddmHostReport | null;
   loadSilentSddmReport: () => Promise<SilentSddmHostReport | null>;
+  loadInstalledPackages: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -349,6 +362,13 @@ function evaluateClientCompatibility(
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Inject absolute home path for local media path resolution
+  React.useEffect(() => {
+    homeDir().then((h) => {
+      (window as any).__RYZORA_HOME__ = h;
+    }).catch(() => {});
+  }, []);
+
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loadingSystem, setLoadingSystem] = useState<boolean>(true);
   const [activeCategory, setActiveCategory] = useState<CategoryId>(() => {
@@ -383,6 +403,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [installProgress, setInstallProgress] = useState<number>(0);
   const [installLogs, setInstallLogs] = useState<string[]>([]);
+  const [packageTransactions, setPackageTransactions] = useState<Record<string, PackageTransaction>>({});
+
+  const getPackageTransaction = useCallback(
+    (packageId: string): PackageTransaction | undefined => {
+      return packageTransactions[packageId];
+    },
+    [packageTransactions]
+  );
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" | "warning" } | null>(null);
   const [hubOverview, setHubOverview] = useState<HubOverview | null>(null);
   const [loadingHub, setLoadingHub] = useState<boolean>(false);
@@ -403,11 +431,127 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const rep = await SilentSddmService.getHostReport();
       setSilentSddmReport(rep);
+      if (rep?.cached_custom && rep.cached_custom.length > 0) {
+        const customPkgs = rep.cached_custom.map(normalizeCustomMediaAsset);
+        setPackages((prev) => {
+          const nonCustom = prev.filter((p) => !p.tags.includes("custom") && !p.id.startsWith("custom:"));
+          return [...nonCustom, ...customPkgs];
+        });
+      }
       return rep;
     } catch (e) {
       console.warn("Failed to load SilentSDDM host report:", e);
       return null;
     }
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let isMounted = true;
+
+    async function setupListener() {
+      if (typeof window === "undefined" || !(window as any).__TAURI_INTERNALS__) {
+        return;
+      }
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        if (!isMounted) return;
+        unlisten = await listen<SilentSddmStageEvent>(
+          "ryzora:silentsddm_stage",
+          (event) => {
+            if (!isMounted || !event.payload) return;
+            const pId = event.payload.packageId || (event.payload as any).package_id;
+            const stage = event.payload.stage;
+            const detail = event.payload.detail;
+            const packageId = pId;
+
+            let msg = detail;
+            if (!msg) {
+              switch (stage) {
+                case "preparing":
+                  msg = "Preparing SilentSDDM...";
+                  break;
+                case "downloading":
+                  msg = "Downloading wallpaper...";
+                  break;
+                case "verifying":
+                  msg = "Verifying cached asset in CAS...";
+                  break;
+                case "installing":
+                  msg = "Installing into SilentSDDM...";
+                  break;
+                case "ready":
+                  msg = "Installed · Ready";
+                  break;
+                case "applying":
+                  msg = "Applying to Login Screen...";
+                  break;
+                case "deactivating":
+                  msg = "Deactivating Login Screen...";
+                  break;
+                default:
+                  msg = `${stage}...`;
+              }
+            }
+
+            setPackageTransactions((prev) => {
+              if (packageId && prev[packageId]) {
+                return {
+                  ...prev,
+                  [packageId]: {
+                    ...prev[packageId],
+                    stage: stage as any,
+                    message: msg,
+                  },
+                };
+              }
+              // If packageId is not exact, update any in-flight apply transaction
+              let matched = false;
+              const next = { ...prev };
+              for (const [id, tx] of Object.entries(next)) {
+                if (tx.operation === "apply") {
+                  next[id] = { ...tx, stage: stage as any, message: msg };
+                  matched = true;
+                }
+              }
+              if (matched) return next;
+              if (packageId === "silentsddm-engine") {
+                let updated = false;
+                const next = { ...prev };
+                for (const [id, tx] of Object.entries(next)) {
+                  if (id.startsWith("silentsddm-") && tx.operation === "install") {
+                    next[id] = {
+                      ...tx,
+                      stage: stage === "ready" ? "installing" : (stage as any),
+                      message: msg,
+                    };
+                    updated = true;
+                  }
+                }
+                return updated ? next : prev;
+              }
+              return prev;
+            });
+
+            if (msg) {
+              setInstallLogs((prev) => [...prev, `[SilentSDDM] ${msg}`]);
+            }
+          }
+        );
+      } catch (err) {
+        console.warn("[AppContext] Failed to attach silentsddm_stage listener:", err);
+      }
+    }
+
+    setupListener();
+
+    return () => {
+      isMounted = false;
+      if (unlisten) {
+        unlisten();
+        unlisten = null;
+      }
+    };
   }, []);
 
   const loadSettings = async (): Promise<RyzoraSettings> => {
@@ -554,12 +698,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     quickshell: null,
     sddm: null,
   });
+  const [activeSilentSddmManifest, setActiveSilentSddmManifest] = useState<SilentSddmActivationManifest | null>(null);
 
   const refreshActiveLockscreen = async (): Promise<ActiveLockscreenState> => {
     try {
-      const state = await invoke<ActiveLockscreenState>("get_active_lockscreen");
-      setActiveLockscreen(state || { quickshell: null, sddm: null });
-      return state || { quickshell: null, sddm: null };
+      const [state, sddmManifest] = await Promise.all([
+        invoke<ActiveLockscreenState>("get_active_lockscreen").catch(() => ({ quickshell: null, sddm: null })),
+        SilentSddmService.getActivationManifest().catch(() => null),
+      ]);
+      const mergedState: ActiveLockscreenState = state || { quickshell: null, sddm: null };
+      if (sddmManifest) {
+        mergedState.sddm = sddmManifest.active_asset_id;
+        mergedState.sddm_theme_path = "/usr/share/sddm/themes/ryzora-silent";
+        setActiveSilentSddmManifest(sddmManifest);
+      } else {
+        setActiveSilentSddmManifest(null);
+      }
+      setActiveLockscreen(mergedState);
+      return mergedState;
     } catch {
       return { quickshell: null, sddm: null };
     }
@@ -570,6 +726,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     target: "quickshell" | "sddm" | "both",
     config?: Record<string, any>
   ): Promise<ActiveLockscreenState> => {
+    if (packageId.startsWith("silentsddm-") || packageId.startsWith("custom:") || (target === "sddm" && packageId.startsWith("silentsddm"))) {
+      setPackageTransactions((prev) => ({
+        ...prev,
+        [packageId]: {
+          packageId,
+          operation: "apply",
+          stage: "applying",
+          message: "Applying…",
+        },
+      }));
+      await yieldFrame();
+      try {
+        await SilentSddmService.applyWallpaper(packageId);
+        const nextState = await refreshActiveLockscreen();
+        await loadSilentSddmReport();
+        setPackageTransactions((prev) => {
+          const next = { ...prev };
+          delete next[packageId];
+          return next;
+        });
+        setToast({
+          message: `Activated ${packageId} for SDDM Login Screen!`,
+          type: "success",
+        });
+        return nextState;
+      } catch (e: any) {
+        setPackageTransactions((prev) => {
+          const next = { ...prev };
+          delete next[packageId];
+          return next;
+        });
+        setToast({
+          message: `Failed to activate lockscreen: ${e?.message || e}`,
+          type: "warning",
+        });
+        throw e;
+      }
+    }
+
     try {
       const state = await invoke<ActiveLockscreenState>("apply_lockscreen", {
         packageId,
@@ -597,6 +792,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     target: "quickshell" | "sddm" | "both"
   ): Promise<ActiveLockscreenState> => {
     try {
+      if (activeSilentSddmManifest && (target === "sddm" || target === "both")) {
+        await SilentSddmService.deactivate();
+        if (target === "both" && activeLockscreen?.quickshell) {
+          await invoke<ActiveLockscreenState>("deactivate_lockscreen", { target: "quickshell" });
+        }
+        const nextState = await refreshActiveLockscreen();
+        await loadSilentSddmReport();
+        setToast({
+          message: `Deactivated ${
+            target === "both" ? "Session Lock & SDDM" : "SDDM Login Screen"
+          }.`,
+          type: "info",
+        });
+        return nextState;
+      }
+
       const state = await invoke<ActiveLockscreenState>("deactivate_lockscreen", {
         target,
       });
@@ -645,6 +856,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deactivateAndUninstallLockscreen = async (packageId: string, target?: string): Promise<boolean> => {
     try {
+      if (packageId.startsWith("silentsddm-") || packageId.startsWith("custom:")) {
+        if (activeSilentSddmManifest?.active_asset_id === packageId || activeLockscreen?.sddm === packageId) {
+          await SilentSddmService.deactivate();
+        }
+        await uninstallPackage(packageId);
+        await refreshActiveLockscreen();
+        setToast({
+          message: "Lockscreen cleanly deactivated and uninstalled.",
+          type: "success",
+        });
+        return true;
+      }
       await invoke("deactivate_and_uninstall_lockscreen", { packageId, target });
       await loadInstalledPackages();
       await refreshActiveLockscreen();
@@ -795,12 +1018,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             package_id: cw.id,
             name: `SilentSDDM · ${cw.filename}`,
             version: report.engine_version || "1.5.0",
-            package_type: "lockscreen",
+            package_type: "lockscreen" as const,
             installed_at: Date.now(),
             snapshot_id: `silentsddm-${cw.sha256.slice(0, 8)}`,
             installed_files: [cw.filename],
             package_source_path: "silentsddm",
           }));
+        }
+        if (report?.cached_custom && report.cached_custom.length > 0) {
+          const customPkgs = report.cached_custom.map(normalizeCustomMediaAsset);
+          setPackages((prev) => {
+            const nonCustom = prev.filter((p) => !p.tags.includes("custom") && !p.id.startsWith("custom:"));
+            return [...nonCustom, ...customPkgs];
+          });
+        }
+        if (report?.cached_custom && report.cached_custom.length > 0) {
+          const customInstalled: InstalledPackageRecord[] = report.cached_custom.map((cc) => ({
+            package_id: cc.id,
+            name: cc.display_name ? `Custom · ${cc.display_name}` : `Custom · ${cc.filename}`,
+            version: "1.0.0",
+            package_type: "lockscreen" as const,
+            installed_at: Date.now(),
+            snapshot_id: `custom-${cc.sha256.slice(0, 8)}`,
+            installed_files: [cc.filename],
+            package_source_path: "silentsddm/custom",
+          }));
+          sddmInstalled = [...sddmInstalled, ...customInstalled];
         }
       } catch (err) {
         console.warn("SilentSDDM host report not available during package listing:", err);
@@ -849,14 +1092,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const mergeCanonicalLockScreens = (
     basePackages: PackageItem[],
-    customLockscreens?: PackageItem[]
+    customLockscreens?: PackageItem[],
+    customAssetsOverride?: SilentSddmCachedAsset[],
+    existingPackagesToPreserve?: PackageItem[]
   ): PackageItem[] => {
+    const customAssets = customAssetsOverride !== undefined ? customAssetsOverride : (silentSddmReport?.cached_custom || []);
+    let customMediaPackages = customAssets.map(normalizeCustomMediaAsset);
+    if (customMediaPackages.length === 0 && existingPackagesToPreserve && existingPackagesToPreserve.length > 0) {
+      customMediaPackages = existingPackagesToPreserve.filter((p) => p.tags.includes("custom") || p.id.startsWith("custom:"));
+    }
     const lockscreens =
       customLockscreens && customLockscreens.length > 0
-        ? customLockscreens
+        ? [...customLockscreens, ...customMediaPackages]
         : [
             ...getCatalogueLockScreens(),
             ...SILENTSDDM_WALLPAPERS.map(normalizeSilentSddmWallpaper),
+            ...customMediaPackages,
           ];
     const merged: PackageItem[] = basePackages.map((pkg) => {
       const hasQs = pkg.supports_session_lock ?? Boolean(
@@ -952,17 +1203,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loadCatalogPackages = async () => {
     try {
-      const [catalog, lockscreens] = await Promise.all([
+      const [catalog, lockscreens, sddmRep] = await Promise.all([
         invoke<PackageItem[]>("get_catalog_packages").catch(() => null),
         packageEngine.discoverByCategory("lockscreens").catch(() => []),
+        SilentSddmService.getHostReport().catch(() => null),
       ]);
-      setPackages(mergeCanonicalLockScreens(catalog || MOCK_PACKAGES, lockscreens));
+      if (sddmRep) {
+        setSilentSddmReport(sddmRep);
+      }
+      setPackages((prev) =>
+        mergeCanonicalLockScreens(
+          catalog || MOCK_PACKAGES,
+          lockscreens,
+          sddmRep?.cached_custom,
+          prev
+        )
+      );
       const repos = await invoke<RepositorySummary[]>("get_repository_info").catch(() => []);
       setRepositories(repos);
     } catch (e) {
       console.warn("Failed to load catalog from RepositoryManager, using fallback in dev/browser", e);
       const lockscreens = await packageEngine.discoverByCategory("lockscreens").catch(() => []);
-      setPackages(mergeCanonicalLockScreens(MOCK_PACKAGES, lockscreens));
+      setPackages((prev) =>
+        mergeCanonicalLockScreens(MOCK_PACKAGES, lockscreens, undefined, prev)
+      );
     }
   };
 
@@ -977,11 +1241,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshCatalog = async () => {
     try {
-      const [catalog, lockscreens] = await Promise.all([
+      const [catalog, lockscreens, sddmRep] = await Promise.all([
         invoke<PackageItem[]>("refresh_catalog").catch(() => null),
         packageEngine.discoverByCategory("lockscreens").catch(() => []),
+        SilentSddmService.getHostReport().catch(() => null),
       ]);
-      setPackages(mergeCanonicalLockScreens(catalog || [], lockscreens));
+      if (sddmRep) {
+        setSilentSddmReport(sddmRep);
+      }
+      setPackages((prev) =>
+        mergeCanonicalLockScreens(catalog || [], lockscreens, sddmRep?.cached_custom, prev)
+      );
       const repos = await invoke<RepositorySummary[]>("get_repository_info").catch(() => []);
       setRepositories(repos);
     } catch (e) {
@@ -991,11 +1261,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshRepositories = async () => {
     try {
-      const [catalog, lockscreens] = await Promise.all([
+      const [catalog, lockscreens, sddmRep] = await Promise.all([
         invoke<PackageItem[]>("refresh_catalog").catch(() => null),
         packageEngine.discoverByCategory("lockscreens").catch(() => []),
+        SilentSddmService.getHostReport().catch(() => null),
       ]);
-      setPackages(mergeCanonicalLockScreens(catalog || [], lockscreens));
+      if (sddmRep) {
+        setSilentSddmReport(sddmRep);
+      }
+      setPackages((prev) =>
+        mergeCanonicalLockScreens(catalog || [], lockscreens, sddmRep?.cached_custom, prev)
+      );
       const repos = await invoke<RepositorySummary[]>("get_repository_info").catch(() => []);
       setRepositories(repos);
       await loadRepositorySources();
@@ -1119,19 +1395,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     target?: string
   ): Promise<InstallResult> => {
     if (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-")) {
+      // Synchronously set transaction state and global installing indicator before any async work
+      setPackageTransactions((prev) => ({
+        ...prev,
+        [pkg.id]: {
+          packageId: pkg.id,
+          operation: "install",
+          stage: "preparing",
+          message: "Preparing SilentSDDM...",
+        },
+      }));
       setIsInstalling(true);
-      setInstallProgress(15);
+      setInstallProgress(0);
       setInstallLogs([`[SilentSDDM] Preparing installation for '${pkg.title}'...`]);
 
+      // Yield browser frames to ensure React commits and paints the installing spinner before native IPC
+      await yieldFrame();
+
       try {
-        // Step 1: Ensure SilentSDDM engine is installed
-        setInstallProgress(30);
         let hostReport = await SilentSddmService.getHostReport();
         if (!hostReport.engine_installed) {
+          setPackageTransactions((prev) => ({
+            ...prev,
+            [pkg.id]: {
+              packageId: pkg.id,
+              operation: "install",
+              stage: "installing-engine",
+              message: "Installing SilentSDDM engine...",
+            },
+          }));
           setInstallLogs((prev) => [
             ...prev,
             `[SilentSDDM] Theme engine missing. Installing engine from pinned release (1.5.0)...`,
           ]);
+          await yieldFrame();
           await SilentSddmService.installEngine();
           hostReport = await SilentSddmService.getHostReport();
           setInstallLogs((prev) => [
@@ -1139,13 +1436,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             `[SilentSDDM] Engine successfully installed at ${hostReport.engine_path || "/usr/share/sddm/themes/ryzora-silent"}.`,
           ]);
         }
-
-        // Step 2: Install wallpaper asset
-        setInstallProgress(60);
-        setInstallLogs((prev) => [
-          ...prev,
-          `[SilentSDDM] Downloading and verifying wallpaper asset in CAS...`,
-        ]);
 
         const wp = SILENTSDDM_WALLPAPERS.find((w) => w.id === pkg.id);
         if (!wp) {
@@ -1163,12 +1453,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           poster_sha256: wp.posterSha256 || null,
         };
 
+        setPackageTransactions((prev) => ({
+          ...prev,
+          [pkg.id]: {
+            packageId: pkg.id,
+            operation: "install",
+            stage: "downloading",
+            message: "Preparing background…",
+          },
+        }));
+        await yieldFrame();
+
         const cached = await SilentSddmService.installWallpaper(req);
-        setInstallProgress(100);
         setInstallLogs((prev) => [
           ...prev,
           `✓ '${pkg.title}' installed into SilentSDDM cache (${cached.filename}).`,
         ]);
+
+        setPackageTransactions((prev) => {
+          const next = { ...prev };
+          delete next[pkg.id];
+          return next;
+        });
 
         await loadInstalledPackages();
         await loadSilentSddmReport();
@@ -1190,6 +1496,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           selected_target: "sddm",
         };
       } catch (e: any) {
+        setPackageTransactions((prev) => {
+          const next = { ...prev };
+          delete next[pkg.id];
+          return next;
+        });
         const errorMsg = e?.message || String(e);
         setInstallLogs((prev) => [...prev, `[Failed] ${errorMsg}`]);
         setToast({
@@ -1348,6 +1659,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const uninstallPackage = async (packageId: string): Promise<UninstallResult> => {
     const pkg = packages.find((p) => p.id === packageId);
+    if (pkg?.tags?.includes("custom") || packageId.startsWith("custom:")) {
+      try {
+        await SilentSddmService.removeCustomMedia(packageId);
+        await loadInstalledPackages();
+        await loadSilentSddmReport();
+        setPackages((prev) => prev.filter((p) => p.id !== packageId));
+        setToast({
+          message: `Removed custom media ${pkg?.title || packageId}`,
+          type: "info",
+        });
+        return {
+          package_id: packageId,
+          success: true,
+          removed_files: [packageId],
+          already_missing_files: [],
+          conflict_files: [],
+          removed_directories: [],
+          retained_directories: [],
+          rolled_back: false,
+        };
+      } catch (e: any) {
+        setToast({
+          message: `Failed to remove custom media: ${e?.message || e}`,
+          type: "warning",
+        });
+        return {
+          package_id: packageId,
+          success: false,
+          error: e?.message || String(e),
+          removed_files: [],
+          already_missing_files: [],
+          conflict_files: [],
+          removed_directories: [],
+          retained_directories: [],
+          rolled_back: false,
+        };
+      }
+    }
     if (pkg?.lockscreen?.provider === "silentsddm" || packageId.startsWith("silentsddm-")) {
       try {
         await SilentSddmService.uninstallWallpaper(packageId);
@@ -1621,6 +1970,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isInstalling,
         installProgress,
         installLogs,
+        packageTransactions,
+        getPackageTransaction,
         previewInstallation,
         resolvePackageDependencies,
         installPackage,
@@ -1674,6 +2025,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         switchRepositoryChannel,
         getInstalledPackageHistory,
         activeLockscreen,
+        activeSilentSddmManifest,
         applyLockscreen,
         deactivateLockscreen,
         refreshActiveLockscreen,
@@ -1696,6 +2048,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadSddmRuntimeStatus,
         silentSddmReport,
         loadSilentSddmReport,
+        loadInstalledPackages,
       }}
     >
       {children}

@@ -3717,13 +3717,20 @@ pub fn launch_lockscreen_test(
     let installed_root = get_ryzora_installed_dir();
 
     if let Some(ref pkg_id) = package_id {
+        let is_silentsddm = pkg_id.starts_with("silentsddm-") || pkg_id.starts_with("custom:");
         let slug = pkg_id
             .strip_prefix("lockscreen-qylock-")
             .or_else(|| pkg_id.strip_prefix("lockscreen-"))
             .unwrap_or(pkg_id);
 
         let mut qs_theme_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(slug);
-        let mut sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        let mut sddm_theme_dir = if is_silentsddm {
+            if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+                PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
+            } else {
+                PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+            }
+        } else if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
             PathBuf::from(sys_root).join("usr/share/sddm/themes").join(format!("ryzora-{}", slug))
         } else {
             PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug))
@@ -3769,7 +3776,9 @@ pub fn launch_lockscreen_test(
             Some("sddm") | Some("login") => true,
             Some("quickshell") | Some("session") => false,
             _ => {
-                if let Some(ref r) = record {
+                if is_silentsddm {
+                    true
+                } else if let Some(ref r) = record {
                     let has_sddm = r.installed_files.iter().any(|f| f.contains("/sddm/themes/"));
                     let has_qs = r.installed_files.iter().any(|f| f.contains("/lockscreens/qylock/"));
                     if has_sddm && !has_qs {
@@ -3883,13 +3892,30 @@ pub fn launch_lockscreen_test(
         })
     } else {
         let state = get_active_lockscreen_state_in(&state_dir);
-        if let Some(ref sddm_pkg) = state.sddm {
-            if state.quickshell.is_none() {
-                let slug = sddm_pkg
-                    .strip_prefix("lockscreen-qylock-")
-                    .or_else(|| sddm_pkg.strip_prefix("lockscreen-"))
-                    .unwrap_or(sddm_pkg);
-                let sddm_theme_dir = PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug));
+        let maybe_sddm_pkg = state.sddm.clone().or_else(|| {
+            crate::integration::sddm::activation::load_activation_manifest(&home)
+                .map(|m| m.active_asset_id)
+        });
+        if let Some(ref sddm_pkg) = maybe_sddm_pkg {
+            if state.quickshell.is_none() || target.as_deref() == Some("sddm") {
+                let is_silentsddm = sddm_pkg.starts_with("silentsddm-") || sddm_pkg.starts_with("custom:");
+                let sddm_theme_dir = if is_silentsddm {
+                    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+                        PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
+                    } else {
+                        PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+                    }
+                } else {
+                    let slug = sddm_pkg
+                        .strip_prefix("lockscreen-qylock-")
+                        .or_else(|| sddm_pkg.strip_prefix("lockscreen-"))
+                        .unwrap_or(sddm_pkg);
+                    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+                        PathBuf::from(sys_root).join("usr/share/sddm/themes").join(format!("ryzora-{}", slug))
+                    } else {
+                        PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug))
+                    }
+                };
                 if sddm_theme_dir.exists() {
                     crate::hypridle::launch_test_sddm_process(&sddm_theme_dir)?;
                     return Ok(LockscreenTestResult {

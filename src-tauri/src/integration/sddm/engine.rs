@@ -412,12 +412,18 @@ pub fn install_engine_transactional_in(
     }
 
     let data_dir = silentsddm_data_dir(home);
-    let staging_base = data_dir.join(".staging_engine");
-    let _ = fs::remove_dir_all(&staging_base);
-    if let Err(e) = fs::create_dir_all(&staging_base) {
-        rollback.fully_reverted = true;
-        return Err((format!("Failed to create staging directory: {}", e), rollback));
-    }
+    // Secure temporary staging directory matching ryzora-staging-* under /tmp
+    let staging_temp = match tempfile::Builder::new()
+        .prefix("ryzora-staging-")
+        .tempdir_in("/tmp")
+    {
+        Ok(t) => t,
+        Err(e) => {
+            rollback.fully_reverted = true;
+            return Err((format!("Failed to create secure staging directory in /tmp: {}", e), rollback));
+        }
+    };
+    let staging_base = staging_temp.path().to_path_buf();
     rollback.removed_staging = false;
 
     // 2. Snapshot existing engine if present (for rollback on upgrade)
@@ -838,5 +844,111 @@ mod tests {
         let res = uninstall_engine_in(home.path(), Some(sys_root.path()));
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("actively using it"));
+    }
+
+    #[test]
+    fn test_engine_staging_directory_under_local_share_rejected_and_tmp_staging_enforced() {
+        // 1. Invariant: Any directory under ~/.local/share/... must fail the staging path validation
+        let home = TestDir::new("fake-home");
+        let local_share_staging = home.path().join(".local/share/ryzora/lockscreens/silentsddm/staging_engine");
+        let path_str = local_share_staging.to_string_lossy();
+        
+        assert!(
+            !helper_staging_path_valid(&path_str),
+            "Staging directory under ~/.local/share/ must be rejected by helper staging requirements"
+        );
+
+        // 2. Invariant: tempfile::Builder with ryzora-staging- in /tmp creates a valid path that passes helper validation
+        let valid_temp = tempfile::Builder::new()
+            .prefix("ryzora-staging-")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let valid_str = valid_temp.path().to_string_lossy();
+        assert!(
+            helper_staging_path_valid(&valid_str),
+            "Temp staging directory in /tmp must strictly pass helper staging requirements"
+        );
+        assert!(valid_str.starts_with("/tmp/ryzora-staging-"));
+    }
+
+    #[test]
+    fn test_real_helper_install_engine_and_uninstall_lifecycle() {
+        use crate::TEST_ENV_MUTEX as ENV_MUTEX;
+        use std::os::unix::fs::PermissionsExt;
+
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+        let home = TestDir::new("engine-test-home");
+        let sys_root = TestDir::new("engine-test-sys");
+        std::env::set_var("RYZORA_SYSTEM_ROOT", sys_root.path());
+
+        // Setup real helper in sys_root
+        let helper_dir = sys_root.path().join("usr/lib/ryzora");
+        fs::create_dir_all(&helper_dir).unwrap();
+        let helper_path = helper_dir.join("ryzora-sddm-helper");
+        let real_helper = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/ryzora-sddm-helper");
+        fs::copy(&real_helper, &helper_path).unwrap();
+        let mut perms = fs::metadata(&helper_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&helper_path, perms).unwrap();
+
+        // Create mock engine archive
+        let archive_path = home.path().join("engine.tar.gz");
+        create_mock_archive(&archive_path, true);
+
+        // 1. Install engine through full install_engine_in pipeline
+        let manifest = install_engine_transactional_in(home.path(), Some(sys_root.path()), Some(&archive_path))
+            .expect("install_engine_in must succeed with real helper and secure /tmp staging");
+        assert_eq!(manifest.engine_id, "silentsddm");
+        assert!(manifest.installed);
+
+        let installed_theme = sys_root.path().join("usr/share/sddm/themes/ryzora-silent");
+        assert!(installed_theme.exists(), "Installed theme must exist in system directory");
+        assert!(installed_theme.join("Main.qml").exists());
+        assert!(!installed_theme.join("backgrounds").exists(), "Backgrounds must be pruned!");
+
+        // Manifest must be recorded
+        let loaded = load_engine_manifest(home.path()).expect("Manifest must be loaded");
+        assert_eq!(loaded.version, ENGINE_VERSION);
+
+        // Ownership status verified owned
+        assert_eq!(
+            check_engine_ownership_in(home.path(), Some(sys_root.path())),
+            EngineOwnershipStatus::VerifiedRyzoraOwned
+        );
+
+        // 2. Uninstall engine
+        uninstall_engine_in(home.path(), Some(sys_root.path())).unwrap();
+        assert!(!installed_theme.exists(), "Installed theme must be removed after uninstall");
+        assert!(load_engine_manifest(home.path()).is_none(), "Manifest must be removed after uninstall");
+        assert_eq!(
+            check_engine_ownership_in(home.path(), Some(sys_root.path())),
+            EngineOwnershipStatus::Absent
+        );
+
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    fn helper_staging_path_valid(dir: &str) -> bool {
+        // Mirrors validate_staging_dir in ryzora-sddm-helper:
+        // ^/tmp/ryzora-staging-[a-zA-Z0-9_-]+(/[a-zA-Z0-9_./-]+)?$
+        if !dir.starts_with("/tmp/ryzora-staging-") {
+            return false;
+        }
+        let rest = &dir["/tmp/ryzora-staging-".len()..];
+        if rest.is_empty() {
+            return false;
+        }
+        let mut parts = rest.split('/');
+        let first_seg = parts.next().unwrap();
+        if first_seg.is_empty() || !first_seg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return false;
+        }
+        for sub in parts {
+            if sub.is_empty() || !sub.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.') {
+                return false;
+            }
+        }
+        true
     }
 }

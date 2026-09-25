@@ -26,6 +26,7 @@ interface ProductHeroProps {
   onInstall: () => void;
   onOpenLightbox: () => void;
   isInstalling: boolean;
+  installStageText?: string;
   isInstalled: boolean;
   isUpdateAvailable: boolean;
   isBlocked: boolean;
@@ -53,6 +54,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   onInstall,
   onOpenLightbox,
   isInstalling,
+  installStageText,
   isInstalled,
   isUpdateAvailable,
   isBlocked,
@@ -75,7 +77,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
   const [showApplyMenu, setShowApplyMenu] = useState(false);
-  const [showTestMenu, setShowTestMenu] = useState(false);
+
   const [activeSubmenu, setActiveSubmenu] = useState<"none" | "test" | "deactivate">("none");
 
   const canTargetQs = Boolean(packageItem.supports_session_lock && isSessionLockSupported);
@@ -229,6 +231,21 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               {packageItem.title}
             </h1>
 
+            {/* Source Unavailable Warning for Custom Media */}
+            {packageItem.source_unavailable && (
+              <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex flex-col gap-1.5 animate-in fade-in">
+                <div className="flex items-center gap-1.5 font-semibold text-amber-400">
+                  <span>Source unavailable</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                  The original source file at <code className="px-1 py-0.5 rounded bg-black/40 font-mono text-[10px] break-all">{packageItem.original_path || "unknown path"}</code> was moved, renamed, or deleted ({packageItem.source_unavailable_reason || "file missing"}).
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-amber-300/80">Use the card menu to Remove or re-import the file.</span>
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             <p className="text-xs sm:text-sm text-[var(--rz-text-secondary)] leading-relaxed mt-2 line-clamp-3">
               {packageItem.description || "A beautifully crafted lock screen experience for your desktop."}
@@ -262,13 +279,32 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             </span>
           </div>
 
-          {/* ── Targets Section: Mode-Aware (Checkboxes BEFORE install, Status Badges AFTER install) ── */}
+          {/* ── Targets Section: Mode-Aware (Capability Card for SDDM-only; Checkboxes for dual-target) ── */}
           <div className="space-y-2 pt-2">
             <span className="text-xs font-semibold text-[var(--rz-text)] block">
-              {!isInstalled ? "Installation" : isActive ? "Targets" : "Installed on"}
+              {!canTargetQs && canTargetSddm ? "Target" : !isInstalled ? "Installation" : isActive ? "Targets" : "Installed on"}
             </span>
 
             <div className="space-y-1.5">
+              {!canTargetQs && canTargetSddm ? (
+                /* Non-interactive capability card for single-target SDDM */
+                <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] text-xs">
+                  <div className="flex items-center gap-3">
+                    <Check className="w-4 h-4 text-emerald-500 stroke-[2.5] shrink-0" />
+                    <div>
+                      <span className="block text-xs font-semibold text-[var(--rz-text)]">Login Screen (SDDM)</span>
+                      <span className="block text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
+                        System space · Admin permission
+                      </span>
+                    </div>
+                  </div>
+                  {isInstalled && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md border bg-[var(--rz-surface)] text-[var(--rz-text-muted)] border-[var(--rz-border-subtle)]">
+                      {activeTargets.sddm ? "Active" : "Installed"}
+                    </span>
+                  )}
+                </div>
+              ) : null}
               {/* Session Lock Row */}
               {canTargetQs && (!isInstalled || isQsChecked) && (
                 <div
@@ -321,8 +357,8 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                 </div>
               )}
 
-              {/* Login Screen Row */}
-              {canTargetSddm && (!isInstalled || isSddmChecked) && (
+              {/* Login Screen Row (Dual Target) */}
+              {canTargetQs && canTargetSddm && (!isInstalled || isSddmChecked) && (
                 <div
                   onClick={handleToggleSddm}
                   className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-all ${
@@ -394,7 +430,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               {isInstalling ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Installing...</span>
+                  <span>{installStageText || "Installing…"}</span>
                 </>
               ) : isUpdateAvailable ? (
                 <>
@@ -410,7 +446,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             <div className="space-y-2.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 py-0.5">
                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Installed</span>
+                <span>Installed · Ready</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -497,22 +533,82 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                     )}
                   </button>
                 ) : !installedTargets.quickshell && installedTargets.sddm ? (
-                  /* Single target: Login Screen only */
-                  <button
-                    type="button"
-                    disabled={isApplying}
-                    onClick={() => onApply?.("sddm")}
-                    className="flex-1 py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
-                  >
-                    {isApplying ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Applying...</span>
-                      </>
-                    ) : (
-                      <span>Apply to Login Screen</span>
+                  /* Single target: Login Screen only (SilentSDDM / Custom Media) -> Test + Apply Dropdown */
+                  <>
+                    {onTest && (
+                      <button
+                        type="button"
+                        onClick={() => onTest("sddm")}
+                        className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs shrink-0"
+                        title="Test on login screen in isolated test mode"
+                      >
+                        <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
+                        <span>Test</span>
+                      </button>
                     )}
-                  </button>
+                    <div className="relative flex-1">
+                      <button
+                        type="button"
+                        disabled={isApplying || isBlocked}
+                        onClick={() => setShowApplyMenu(!showApplyMenu)}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs"
+                      >
+                        {isApplying ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>{installStageText || "Applying…"}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Apply to Login Screen</span>
+                            <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+                          </>
+                        )}
+                      </button>
+
+                      {showApplyMenu && (
+                        <div
+                          className="absolute left-0 bottom-full mb-2 w-56 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowApplyMenu(false);
+                              onApply?.("sddm");
+                            }}
+                            className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                          >
+                            <span>Apply to Login Screen</span>
+                            <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowApplyMenu(false);
+                              onApply?.("sddm");
+                            }}
+                            className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
+                          >
+                            <span>Apply to Lock Screen</span>
+                            <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Lock</span>
+                          </button>
+                          <div className="my-1 border-t border-[var(--rz-border-subtle)]" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowApplyMenu(false);
+                              onApply?.("sddm");
+                            }}
+                            className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-[var(--rz-accent)] hover:bg-[var(--rz-accent)]/10 flex items-center justify-between transition-colors cursor-pointer text-left"
+                          >
+                            <span>Apply to Both Screens</span>
+                            <span className="text-[10px] text-[var(--rz-accent)] font-medium">Full SDDM</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 ) : (
                   /* Fallback button */
                   <button
@@ -553,65 +649,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                         className="absolute right-0 bottom-full mb-2 w-56 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {onTest && (
-                          installedTargets.quickshell && installedTargets.sddm ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setActiveSubmenu(activeSubmenu === "test" ? "none" : "test")}
-                                className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
-                                  <span>Test</span>
-                                </div>
-                                <ChevronRight className={`w-3.5 h-3.5 text-[var(--rz-text-muted)] transition-transform ${activeSubmenu === "test" ? "rotate-90" : ""}`} />
-                              </button>
-                              {activeSubmenu === "test" && (
-                                <div className="pl-4 pr-1 py-1 space-y-0.5 bg-[var(--rz-surface)] rounded-lg my-1 border border-[var(--rz-border-subtle)]">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowOverflow(false);
-                                      setActiveSubmenu("none");
-                                      onTest("quickshell");
-                                    }}
-                                    className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
-                                  >
-                                    <span>Test Session Lock</span>
-                                    <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowOverflow(false);
-                                      setActiveSubmenu("none");
-                                      onTest("sddm");
-                                    }}
-                                    className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
-                                  >
-                                    <span>Test Login Screen</span>
-                                    <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
-                                  </button>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowOverflow(false);
-                                onTest(installedTargets.quickshell ? "quickshell" : "sddm");
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
-                            >
-                              <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
-                              <span>Test</span>
-                            </button>
-                          )
-                        )}
 
-                        <div className="my-1 border-t border-[var(--rz-border-subtle)]" />
                         <button
                           type="button"
                           onClick={() => {
@@ -633,37 +671,34 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
           ) : (
             /* STATE 3: INSTALLED + ACTIVE -> [ Test ] + [ ⋯ ] (with Target-Aware Submenus) */
             <div className="space-y-2.5">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 py-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 py-0.5">
                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Active for {activeSummary}</span>
+                <span>Active · {activeSummary}</span>
               </div>
 
               <div className="flex items-center gap-2">
-                {onTest && (
+                {/* Active state: [ Test ] is the primary CTA, deactivate lives in overflow */}
+                {onTest ? (
                   bothActive ? (
-                    /* Both active -> [ Test ▾ ] dropdown */
                     <div className="relative flex-1">
                       <button
                         type="button"
-                        onClick={() => setShowTestMenu(!showTestMenu)}
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
-                        title="Choose lockscreen target to test"
+                        onClick={() => setShowApplyMenu(!showApplyMenu)}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
+                        title="Test on screen"
                       >
+                        <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
                         <span>Test</span>
-                        <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+                        <ChevronDown className="w-3.5 h-3.5 opacity-60" />
                       </button>
-
-                      {showTestMenu && (
+                      {showApplyMenu && (
                         <div
                           className="absolute left-0 bottom-full mb-2 w-52 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1 z-40 animate-in fade-in zoom-in-95 duration-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"
-                            onClick={() => {
-                              setShowTestMenu(false);
-                              onTest("quickshell");
-                            }}
+                            onClick={() => { setShowApplyMenu(false); onTest("quickshell"); }}
                             className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
                           >
                             <span>Test Session Lock</span>
@@ -671,10 +706,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              setShowTestMenu(false);
-                              onTest("sddm");
-                            }}
+                            onClick={() => { setShowApplyMenu(false); onTest("sddm"); }}
                             className="w-full px-3 py-2 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
                           >
                             <span>Test Login Screen</span>
@@ -684,17 +716,17 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                       )}
                     </div>
                   ) : (
-                    /* Single active -> direct test */
                     <button
                       type="button"
                       onClick={() => onTest(isQsActive ? "quickshell" : "sddm")}
-                      className="flex-1 py-2.5 px-4 rounded-xl text-xs font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-colors cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
-                      title={isQsActive ? "Test Session Lock (Hyprland)" : "Test Login Screen (SDDM)"}
+                      className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
+                      title={`Test on ${isQsActive ? "session lock" : "login screen"}`}
                     >
+                      <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
                       <span>Test</span>
                     </button>
                   )
-                )}
+                ) : null}
 
                 <div className="relative">
                   <button
@@ -716,67 +748,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                       className="absolute right-0 bottom-full mb-2 w-56 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {/* Option 1: Test */}
-                      {onTest && (
-                        bothActive ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setActiveSubmenu(activeSubmenu === "test" ? "none" : "test")}
-                              className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
-                                <span>Test</span>
-                              </div>
-                              <ChevronRight className={`w-3.5 h-3.5 text-[var(--rz-text-muted)] transition-transform ${activeSubmenu === "test" ? "rotate-90" : ""}`} />
-                            </button>
-
-                            {activeSubmenu === "test" && (
-                              <div className="pl-4 pr-1 py-1 space-y-0.5 bg-[var(--rz-surface)] rounded-lg my-1 border border-[var(--rz-border-subtle)]">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowOverflow(false);
-                                    setActiveSubmenu("none");
-                                    onTest("quickshell");
-                                  }}
-                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
-                                >
-                                  <span>Test Session Lock</span>
-                                  <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">Hyprland</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowOverflow(false);
-                                    setActiveSubmenu("none");
-                                    onTest("sddm");
-                                  }}
-                                  className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center justify-between transition-colors cursor-pointer text-left"
-                                >
-                                  <span>Test Login Screen</span>
-                                  <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">SDDM</span>
-                                </button>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowOverflow(false);
-                              onTest(isQsActive ? "quickshell" : "sddm");
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] flex items-center gap-2 transition-colors cursor-pointer text-left"
-                          >
-                            <Play className="w-3.5 h-3.5 text-[var(--rz-text-muted)]" />
-                            <span>Test</span>
-                          </button>
-                        )
-                      )}
-
-                      {/* Option 2: Deactivate */}
+                      {/* Deactivate actions (Test is already the primary CTA) */}
                       {onDeactivate && (
                         bothActive ? (
                           <>
@@ -868,7 +840,7 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                             className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
                           >
                             <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                            <span>Uninstall</span>
+                            <span>{isQsActive || isSddmActive ? "Deactivate & Uninstall" : "Uninstall"}</span>
                           </button>
                         </>
                       )}

@@ -434,6 +434,9 @@ export interface PackageItem {
   preview_animated?: string;
   preview_video_url?: string;
   preview_poster_url?: string;
+  original_path?: string | null;
+  source_unavailable?: boolean;
+  source_unavailable_reason?: string;
   supports_session_lock?: boolean;
   supports_login_screen?: boolean;
   targets?: string[];
@@ -1254,7 +1257,11 @@ export interface SilentSddmCachedAsset {
   installed_at: string;
   upstream_url?: string | null;
   original_path?: string | null;
+  display_name?: string | null;
 }
+
+export type CustomMediaType = SilentSddmMediaType;
+export type SilentSddmCustomMediaValidation = SilentSddmCustomVideoValidation;
 
 export interface SilentSddmManifest {
   provider: string;
@@ -1341,4 +1348,199 @@ export interface UpstreamWallpaperInstallRequest {
   download_url: string;
   poster_url?: string | null;
   poster_sha256?: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Package Transaction States
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PreviousActivationConf {
+  existed: boolean;
+  content: string | null;
+  sha256: string | null;
+}
+
+export interface EngineConfigSnapshot {
+  orig_metadata_desktop: string;
+  active_conf_existed: boolean;
+  orig_active_conf: string | null;
+  bg_already_existed: boolean;
+}
+
+export interface SilentSddmActivationManifest {
+  engine_id: string;
+  active_asset_id: string;
+  active_filename: string;
+  media_type: SilentSddmMediaType;
+  sha256: string;
+  applied_at: string;
+  previous_sddm_theme: string | null;
+  previous_activation_conf: PreviousActivationConf;
+  active_conf_sha256: string;
+  engine_snapshot: EngineConfigSnapshot;
+}
+
+export type PackageTransactionStage =
+  | "preparing"
+  | "downloading"
+  | "verifying"
+  | "installing"
+  | "generating-poster"
+  | "ready"
+  | "installing-engine"
+  | "downloading-asset"
+  | "removing"
+  | "applying"
+  | "deactivating";
+
+export interface PackageTransaction {
+  packageId: string;
+  operation: "install" | "uninstall" | "apply" | "deactivate";
+  stage: PackageTransactionStage;
+  message?: string;
+}
+
+export interface SilentSddmStageEvent {
+  packageId: string;
+  operation: "install" | "remove" | "import" | "apply" | "deactivate";
+  stage:
+    | "preparing"
+    | "downloading"
+    | "verifying"
+    | "installing"
+    | "generating-poster"
+    | "ready"
+    | "applying"
+    | "deactivating"
+    | "completed";
+  detail?: string;
+}
+
+export type SilentSddmLifecycleState =
+  | "not-installed"
+  | "installing"
+  | "installed"
+  | "applying"
+  | "active"
+  | "deactivating"
+  | "uninstalling"
+  | "error";
+
+export interface SilentSddmTargetState {
+  sddm: {
+    installed: boolean;
+    active: boolean;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S4-C: SilentSDDM Configuration & Custom Media Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SilentSddmFillMode = "fill" | "fit" | "stretch";
+
+export type SilentSddmClockPosition =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "center-left"
+  | "center"
+  | "center-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
+export type SilentSddmLoginAreaPosition = "left" | "center" | "right";
+export type SilentSddmAvatarShape = "circle" | "square";
+
+export interface SilentSddmBackgroundSettings {
+  fill_mode: SilentSddmFillMode;
+}
+
+export interface SilentSddmClockSettings {
+  display: boolean;
+  position: SilentSddmClockPosition;
+  align: "left" | "center" | "right";
+  format: string;
+  font_size: number;
+  font_weight: number;
+  color: string;
+}
+
+export interface SilentSddmDateSettings {
+  display: boolean;
+  format: string;
+  font_size: number;
+  color: string;
+  margin_top: number;
+}
+
+export interface SilentSddmMessageSettings {
+  display: boolean;
+  position: SilentSddmClockPosition;
+  align: "left" | "center" | "right";
+  text: string;
+  font_size: number;
+  color: string;
+}
+
+export interface SilentSddmLockScreenSettings {
+  display: boolean;
+  background: string;
+  use_background_color: boolean;
+  background_color: string;
+  blur: number;
+  brightness: number;
+  saturation: number;
+  padding_top: number;
+  padding_right: number;
+  padding_bottom: number;
+  padding_left: number;
+  clock: SilentSddmClockSettings;
+  date: SilentSddmDateSettings;
+  message: SilentSddmMessageSettings;
+}
+
+export interface SilentSddmLoginAreaSettings {
+  position: SilentSddmLoginAreaPosition;
+  margin: number;
+}
+
+export interface SilentSddmAvatarSettings {
+  shape: SilentSddmAvatarShape;
+  active_size: number;
+  inactive_size: number;
+  inactive_opacity: number;
+}
+
+export interface SilentSddmLoginScreenSettings {
+  background: string;
+  use_background_color: boolean;
+  background_color: string;
+  blur: number;
+  brightness: number;
+  saturation: number;
+  login_area: SilentSddmLoginAreaSettings;
+  avatar: SilentSddmAvatarSettings;
+  session_position?: string | null;
+  layout_position?: string | null;
+  keyboard_position?: string | null;
+  power_position?: string | null;
+}
+
+export interface SilentSddmConfiguration {
+  background: SilentSddmBackgroundSettings;
+  lock_screen: SilentSddmLockScreenSettings;
+  login_screen: SilentSddmLoginScreenSettings;
+}
+
+export interface SilentSddmCustomMedia {
+  id: string;
+  filename: string;
+  media_type: SilentSddmMediaType;
+  sha256: string;
+  size_bytes: number;
+  original_path?: string | null;
+  display_name?: string | null;
+  dimensions?: { width: number; height: number };
 }

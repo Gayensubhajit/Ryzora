@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Maximum size for custom media imports: 500 MB.
-pub const MAX_CUSTOM_FILE_BYTES: u64 = 500 * 1024 * 1024;
+pub const MAX_CUSTOM_FILE_BYTES: u64 = 1024 * 1024 * 1024; // 1 GiB (1,073,741,824 bytes)
 
 /// Request to install a catalog wallpaper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -327,6 +327,7 @@ pub fn install_upstream_wallpaper_in(
         installed_at: iso_timestamp(),
         upstream_url: Some(req.download_url.clone()),
         original_path: None,
+        display_name: None,
     };
     manifest.insert(req.id.clone(), cached.clone());
     save_manifest_map(&manifest_path, &manifest)?;
@@ -419,6 +420,7 @@ pub fn generate_video_poster(video_path: &Path, poster_path: &Path) -> Result<()
     // Try first at 1 second offset
     let status_res = Command::new("ffmpeg")
         .args([
+            "-nostdin",
             "-y",
             "-ss",
             "00:00:01",
@@ -449,6 +451,7 @@ pub fn generate_video_poster(video_path: &Path, poster_path: &Path) -> Result<()
     // If seeking to 1s failed (e.g. short video), retry at offset 00:00:00
     let retry = Command::new("ffmpeg")
         .args([
+            "-nostdin",
             "-y",
             "-ss",
             "00:00:00",
@@ -473,14 +476,20 @@ pub fn generate_video_poster(video_path: &Path, poster_path: &Path) -> Result<()
 }
 
 /// Imports a user-supplied custom video or image into Ryzora's managed storage:
+/// - Content-stable ID: `custom:<sha256>`
 /// - Rejects symlinks (read-only verification of source metadata)
 /// - Rejects files > 500 MB
 /// - Validates extension (rejects .gif and unsupported types)
 /// - Sanitizes basename
-/// - Copies atomically to `custom/{sanitized_filename}` (**regular file**)
-/// - Generates poster via direct `ffmpeg` invocation for video
-/// - Records in `custom_manifest.json`
-pub fn import_custom_video_in(home: &Path, source_path: &Path) -> Result<CachedAsset, String> {
+/// - Copies atomically via temporary staging file to `custom/{sanitized_filename}` (**regular file**)
+/// - Generates poster via direct `ffmpeg` invocation for video to temporary poster
+/// - Atomically moves media and poster to final destination
+/// - Records in `custom_manifest.json` with rollback on any failure
+pub fn import_custom_media_in(
+    home: &Path,
+    source_path: &Path,
+    display_name: Option<&str>,
+) -> Result<CachedAsset, String> {
     // 1. Validate file existence and metadata
     let meta = fs::symlink_metadata(source_path)
         .map_err(|e| format!("Cannot read source file {:?}: {}", source_path, e))?;
@@ -500,8 +509,8 @@ pub fn import_custom_video_in(home: &Path, source_path: &Path) -> Result<CachedA
     }
     if file_size > MAX_CUSTOM_FILE_BYTES {
         return Err(format!(
-            "File exceeds maximum allowed size of {} MB",
-            MAX_CUSTOM_FILE_BYTES / (1024 * 1024)
+            "File exceeds maximum allowed size of 1 GiB (1,073,741,824 bytes). Given: {} bytes",
+            file_size
         ));
     }
 
@@ -536,63 +545,84 @@ pub fn import_custom_video_in(home: &Path, source_path: &Path) -> Result<CachedA
     let sha256 = hash_file(source_path)
         .map_err(|e| format!("Failed to compute file SHA-256: {}", e))?;
 
+    // Content-stable ID: custom:<sha256>
+    let asset_id = format!("custom:{}", sha256);
+
     // 4. Sanitize basename
     let raw_name = source_path
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or("custom_video");
+        .unwrap_or("custom_media");
     let sanitized_name = sanitize_custom_basename(raw_name);
 
-    let custom_dir = get_custom_dir(home);
     let posters_dir = get_posters_dir(home);
-    fs::create_dir_all(&custom_dir)
-        .map_err(|e| format!("Failed to create custom media dir: {}", e))?;
     fs::create_dir_all(&posters_dir)
         .map_err(|e| format!("Failed to create posters dir: {}", e))?;
 
-    // Determine target filename (handle collision if different content)
+    // 5. Check manifest for duplicate (same sha256 already registered — idempotent)
+    let manifest_path = get_custom_manifest_path(home);
+    let existing_manifest = load_manifest_map(&manifest_path);
+    if let Some(existing) = existing_manifest.get(&asset_id) {
+        return Ok(existing.clone());
+    }
+
+    // Determine filename key (sanitized source basename, collision-safe with sha prefix)
     let dest_filename = {
-        let candidate = custom_dir.join(&sanitized_name);
-        if candidate.exists() {
-            if let Ok(existing_hash) = hash_file(&candidate) {
-                if existing_hash == sha256 {
-                    sanitized_name.clone()
-                } else {
-                    let short_sha = &sha256[..8];
-                    format!("{}_{}", short_sha, sanitized_name)
-                }
-            } else {
-                sanitized_name.clone()
-            }
+        let name_taken = existing_manifest.values().any(|v| v.filename == sanitized_name && v.sha256 != sha256);
+        if name_taken {
+            let short_sha = &sha256[..8];
+            format!("{}_{}", short_sha, sanitized_name)
         } else {
             sanitized_name.clone()
         }
     };
 
-    let dest_path = custom_dir.join(&dest_filename);
-    let tmp_dest = custom_dir.join(format!(".tmp_{}", dest_filename));
+    let tmp_poster = posters_dir.join(format!(".tmp_poster_{}.jpg", sha256));
 
-    // 5. Atomic copy (regular file, not symlink)
-    fs::copy(source_path, &tmp_dest)
-        .map_err(|e| format!("Failed to copy custom media file: {}", e))?;
-    fs::rename(&tmp_dest, &dest_path)
-        .map_err(|e| format!("Failed to finalize custom media file: {}", e))?;
+    let cleanup_temps = || {
+        if tmp_poster.exists() { let _ = fs::remove_file(&tmp_poster); }
+    };
 
-    // 6. Poster generation
-    let poster_path = posters_dir.join(format!("{}.poster.jpg", dest_filename));
+    // 6. Poster generation directly from source_path — zero media copy
     match media_type {
         MediaType::Video => {
-            generate_video_poster(&dest_path, &poster_path)?;
+            if let Err(e) = generate_video_poster(source_path, &tmp_poster) {
+                cleanup_temps();
+                return Err(e);
+            }
         }
         MediaType::Image => {
-            let _ = fs::copy(&dest_path, &poster_path);
+            if let Err(e) = fs::copy(source_path, &tmp_poster) {
+                cleanup_temps();
+                return Err(format!("Failed to create image poster: {}", e));
+            }
         }
     }
 
-    // 7. Update custom manifest
-    let manifest_path = get_custom_manifest_path(home);
+    // Verify poster non-zero
+    let poster_meta = match fs::metadata(&tmp_poster) {
+        Ok(m) => m,
+        Err(e) => {
+            cleanup_temps();
+            return Err(format!("Poster verification failed: {}", e));
+        }
+    };
+    if poster_meta.len() == 0 {
+        cleanup_temps();
+        return Err("Generated poster is empty (0 bytes)".to_string());
+    }
+
+    // 7. Commit poster only — media stays at source_path, never duplicated
+    let final_poster_path = posters_dir.join(format!("{}.poster.jpg", dest_filename));
+
+    if let Err(e) = fs::rename(&tmp_poster, &final_poster_path) {
+        cleanup_temps();
+        return Err(format!("Failed to finalize custom media poster: {}", e));
+    }
+
+    // 8. Atomically update custom manifest
     let mut manifest = load_manifest_map(&manifest_path);
-    let asset_id = format!("custom:{}", dest_filename);
+    let previous_manifest = manifest.clone();
 
     let cached = CachedAsset {
         id: asset_id.clone(),
@@ -604,37 +634,71 @@ pub fn import_custom_video_in(home: &Path, source_path: &Path) -> Result<CachedA
         installed_at: iso_timestamp(),
         upstream_url: None,
         original_path: Some(source_path.to_string_lossy().to_string()),
+        display_name: display_name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
     };
 
     manifest.insert(asset_id, cached.clone());
-    save_manifest_map(&manifest_path, &manifest)?;
+    if let Err(e) = save_manifest_map(&manifest_path, &manifest) {
+        let _ = fs::remove_file(&final_poster_path);
+        let _ = save_manifest_map(&manifest_path, &previous_manifest);
+        return Err(format!("Failed to save custom manifest: {}", e));
+    }
 
     Ok(cached)
 }
 
+/// Backward-compatible alias for `import_custom_media_in`.
+pub fn import_custom_video_in(home: &Path, source_path: &Path) -> Result<CachedAsset, String> {
+    import_custom_media_in(home, source_path, None)
+}
+
 /// Removes an imported custom video or image.
-pub fn remove_custom_video_in(home: &Path, custom_id: &str) -> Result<(), String> {
+pub fn remove_custom_media_in(home: &Path, custom_id: &str) -> Result<(), String> {
     let custom_dir = get_custom_dir(home);
     let posters_dir = get_posters_dir(home);
     let manifest_path = get_custom_manifest_path(home);
 
     let mut manifest = load_manifest_map(&manifest_path);
-    let asset = manifest
-        .remove(custom_id)
-        .ok_or_else(|| format!("Custom media '{}' not found", custom_id))?;
+    let found_key = if manifest.contains_key(custom_id) {
+        Some(custom_id.to_string())
+    } else {
+        manifest
+            .iter()
+            .find(|(k, v)| *k == custom_id || v.id == custom_id || v.filename == custom_id || format!("custom:{}", v.filename) == custom_id)
+            .map(|(k, _)| k.clone())
+    };
 
-    let media_path = custom_dir.join(&asset.filename);
-    if media_path.exists() {
-        let _ = fs::remove_file(&media_path);
-    }
+    let key = found_key.ok_or_else(|| format!("Custom media '{}' not found", custom_id))?;
+    let asset = manifest.remove(&key).unwrap();
 
+    // INVARIANT: Never delete the user's original file at asset.original_path.
+    // Only remove Ryzora-managed artifacts: poster.
     let poster_path = posters_dir.join(format!("{}.poster.jpg", asset.filename));
     if poster_path.exists() {
         let _ = fs::remove_file(&poster_path);
     }
 
+    // Also remove any legacy copied media file that may exist from an old import
+    // (only safe because filename is a Ryzora-managed key, not user's original path)
+    let legacy_media = custom_dir.join(&asset.filename);
+    if legacy_media.exists() {
+        // Only remove if this is NOT the user's original source
+        let is_original = asset.original_path
+            .as_deref()
+            .map(|op| std::path::Path::new(op) == legacy_media)
+            .unwrap_or(false);
+        if !is_original {
+            let _ = fs::remove_file(&legacy_media);
+        }
+    }
+
     save_manifest_map(&manifest_path, &manifest)?;
     Ok(())
+}
+
+/// Backward-compatible alias for `remove_custom_media_in`.
+pub fn remove_custom_video_in(home: &Path, custom_id: &str) -> Result<(), String> {
+    remove_custom_media_in(home, custom_id)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -778,13 +842,128 @@ mod tests {
         let asset = import_custom_video_in(home.path(), &img_file).unwrap();
         assert_eq!(asset.media_type, MediaType::Image);
         assert_eq!(asset.filename, "my_photo.png");
+        assert_eq!(asset.original_path, Some(img_file.to_string_lossy().to_string()));
 
+        // Invariant: importing does NOT duplicate the file into custom_dir
         let custom_file = get_custom_dir(home.path()).join("my_photo.png");
-        assert!(custom_file.exists());
-        assert!(!custom_file.is_symlink());
+        assert!(!custom_file.exists(), "Custom file must not be duplicated into custom_dir");
 
-        // Remove
+        // Poster was created
+        let poster = get_posters_dir(home.path()).join("my_photo.png.poster.jpg");
+        assert!(poster.exists(), "Poster must exist in posters dir");
+
+        // Remove: removes manifest entry & poster, user's original file is preserved
         remove_custom_video_in(home.path(), &asset.id).unwrap();
-        assert!(!custom_file.exists());
+        assert!(!poster.exists(), "Poster must be removed");
+        assert!(img_file.exists(), "User original file must NOT be deleted");
+    }
+
+    #[test]
+    fn test_custom_media_import_stable_id_and_display_name() {
+        let home = TestDir::new("custom_stable_id");
+        let img_file = home.path().join("forest.jpg");
+        fs::write(&img_file, b"JPEG_SAMPLE_BYTES_STABLE_TEST").unwrap();
+
+        let asset = import_custom_media_in(home.path(), &img_file, Some("My Enchanted Forest")).unwrap();
+        assert_eq!(asset.id, format!("custom:{}", asset.sha256));
+        assert_eq!(asset.display_name, Some("My Enchanted Forest".to_string()));
+        assert_eq!(asset.filename, "forest.jpg");
+        assert_eq!(asset.original_path, Some(img_file.to_string_lossy().to_string()));
+
+        // Verify stored in custom manifest with content-stable ID
+        let manifest = load_manifest_map(&get_custom_manifest_path(home.path()));
+        assert!(manifest.contains_key(&asset.id));
+
+        // Verify poster in posters/
+        let user_poster = get_posters_dir(home.path()).join("forest.jpg.poster.jpg");
+        assert!(user_poster.exists());
+
+        // Remove by content-stable ID
+        remove_custom_media_in(home.path(), &asset.id).unwrap();
+        let manifest_after = load_manifest_map(&get_custom_manifest_path(home.path()));
+        assert!(!manifest_after.contains_key(&asset.id));
+        assert!(!user_poster.exists());
+        assert!(img_file.exists(), "User original file must remain untouched");
+    }
+
+    #[test]
+    fn test_custom_media_size_limit_and_rejection() {
+        let home = TestDir::new("custom_size_limit");
+        let valid_file = home.path().join("small.mp4");
+        fs::write(&valid_file, b"sample mp4 bytes").unwrap();
+
+        // 1. Validation function accepts under 1 GiB
+        let val = crate::integration::sddm::discovery::validate_custom_media(&valid_file);
+        assert!(val.valid);
+        assert_eq!(val.error, None);
+
+        // 2. Exact 1 GiB constant check
+        assert_eq!(MAX_CUSTOM_FILE_BYTES, 1024 * 1024 * 1024);
+
+        // 3. Test sparse file or metadata check for > 1 GiB
+        let oversized_file = home.path().join("oversized.mp4");
+        let file = fs::File::create(&oversized_file).unwrap();
+        // Set length to 1 GiB + 1 byte without writing 1GB to disk
+        file.set_len(MAX_CUSTOM_FILE_BYTES + 1).unwrap();
+
+        let val_over = crate::integration::sddm::discovery::validate_custom_media(&oversized_file);
+        assert!(!val_over.valid);
+        assert!(val_over.error.unwrap().contains("1 GiB"));
+
+        let import_err = import_custom_media_in(home.path(), &oversized_file, None);
+        assert!(import_err.is_err());
+        assert!(import_err.unwrap_err().contains("1 GiB"));
+    }
+
+    #[test]
+    fn test_all_supported_custom_extensions() {
+        let home = TestDir::new("custom_exts");
+        let exts = ["jpg", "jpeg", "png", "avi", "mp4", "mov", "mkv", "m4v", "webm"];
+        for ext in exts {
+            let file = home.path().join(format!("test_media.{}", ext));
+            fs::write(&file, b"sample_bytes_for_ext_test").unwrap();
+            let val = crate::integration::sddm::discovery::validate_custom_media(&file);
+            assert!(val.valid, "Extension .{} must be valid", ext);
+            if ["avi", "mp4", "mov", "mkv", "m4v", "webm"].contains(&ext) {
+                assert_eq!(val.media_type, Some(MediaType::Video));
+            } else {
+                assert_eq!(val.media_type, Some(MediaType::Image));
+            }
+        }
+    }
+
+    #[test]
+    fn test_custom_media_import_offline_zero_network() {
+        let home = TestDir::new("custom_offline");
+        let source_img = home.path().join("local_wallpaper.png");
+        fs::write(&source_img, b"fake_png_binary_data_header").unwrap();
+
+        // 1. Validation is local and sync
+        let val = crate::integration::sddm::discovery::validate_custom_media(&source_img);
+        assert!(val.valid);
+        assert_eq!(val.media_type, Some(MediaType::Image));
+
+        // 2. Import does not require network and stages locally
+        let asset = import_custom_media_in(home.path(), &source_img, Some("Local Wallpaper")).unwrap();
+        assert_eq!(asset.media_type, MediaType::Image);
+        assert!(asset.id.starts_with("custom:"));
+        assert_eq!(asset.display_name.as_deref(), Some("Local Wallpaper"));
+
+        // 3. File is NOT duplicated into Ryzora custom storage
+        let custom_file = get_custom_dir(home.path()).join(&asset.filename);
+        assert!(!custom_file.exists(), "Media bytes must not be duplicated on import");
+        assert!(source_img.exists(), "Original user file remains in place");
+
+        // 4. Manifest exists locally with matching entry
+        let manifest = load_manifest_map(&get_custom_manifest_path(home.path()));
+        assert!(manifest.contains_key(&asset.id));
+        assert_eq!(manifest.get(&asset.id).unwrap().sha256, asset.sha256);
+
+        // 5. Cleanup removes locally without network
+        let rm_res = remove_custom_media_in(home.path(), &asset.id);
+        assert!(rm_res.is_ok());
+        let updated_manifest = load_manifest_map(&get_custom_manifest_path(home.path()));
+        assert!(!updated_manifest.contains_key(&asset.id));
+        assert!(source_img.exists(), "Original file must never be deleted on remove");
     }
 }

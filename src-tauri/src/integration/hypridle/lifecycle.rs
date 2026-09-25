@@ -30,9 +30,11 @@ use serde::{Deserialize, Serialize};
 
 use super::composer::{
     check_canonical_artifact_permission, compose_hypridle_plan, inspect_dropin_directory,
-    CANONICAL_DROPIN_DIR_REL, CANONICAL_DROPIN_REL, CANONICAL_MARKER, CANONICAL_OVERLAY_REL,
-    COMPOSER_FEATURE_ID, COMPOSER_INTEGRATION_ID, LEGACY_DROPIN_REL, LEGACY_MARKER,
+    CANONICAL_DROPIN_REL, CANONICAL_MARKER, CANONICAL_OVERLAY_REL,
+    COMPOSER_FEATURE_ID, COMPOSER_INTEGRATION_ID, LEGACY_DROPIN_REL,
 };
+#[cfg(test)]
+use super::composer::{CANONICAL_DROPIN_DIR_REL, LEGACY_MARKER};
 use super::types::HypridleCompositionRequest;
 use crate::integration::filesystem::{
     atomic_write_artifact, atomic_write_bytes_artifact, calculate_sha256,

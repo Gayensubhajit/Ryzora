@@ -1,6 +1,8 @@
 import type { LockscreenTestResult } from "../types/index.ts";
 import React, { useState, useEffect } from "react";
 import { X, Check } from "lucide-react";
+import { CustomMediaImportModal } from "../components/media/CustomMediaImportModal.tsx";
+import { SilentSddmConfigPanel } from "../components/sddm/SilentSddmConfigPanel.tsx";
 import { useApp } from "../context/AppContext";
 import { ProductDetailShell } from "../components/detail/ProductDetailShell";
 import { ProductHero } from "../components/detail/ProductHero";
@@ -31,6 +33,10 @@ export const LockScreenDetailView: React.FC = () => {
     loadSddmRuntimeStatus,
     silentSddmReport,
     uninstallPackage,
+    getPackageTransaction,
+    activeSilentSddmManifest,
+    loadSilentSddmReport,
+    loadInstalledPackages,
   } = useApp();
 
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
@@ -88,6 +94,22 @@ export const LockScreenDetailView: React.FC = () => {
   };
   const [showFullscreen, setShowFullscreen] = useState(false);
   const [lastTestResult, setLastTestResult] = useState<LockscreenTestResult | null>(null);
+  const [showCustomImportModal, setShowCustomImportModal] = useState(false);
+  const [customImportFile, setCustomImportFile] = useState<{ path?: string; file?: File } | null>(null);
+
+
+
+  const handleCustomImportSuccess = async (_importedId: string) => {
+    setShowCustomImportModal(false);
+    setCustomImportFile(null);
+    setToast({
+      message: "Custom wallpaper imported successfully as Installed · Ready.",
+      type: "success",
+    });
+    await loadSilentSddmReport();
+    await loadInstalledPackages();
+    await loadSddmRuntimeStatus();
+  };
 
   if (!selectedPackage) return null;
 
@@ -131,9 +153,13 @@ export const LockScreenDetailView: React.FC = () => {
   const canQs = Boolean(selectedPackage.supports_session_lock && isSessionLockSupported);
   const canSddm = Boolean(selectedPackage.supports_login_screen && isLoginScreenSupported && !isGdmActive);
 
+  const isCustomPkg = Boolean(
+    selectedPackage?.tags?.includes("custom") || selectedPackage?.id.startsWith("custom:")
+  );
   const isSilentSddm =
     selectedPackage?.lockscreen?.provider === "silentsddm" ||
-    selectedPackage?.id.startsWith("silentsddm-");
+    selectedPackage?.id.startsWith("silentsddm-") ||
+    isCustomPkg;
 
   const [selectedTarget, setSelectedTarget] = useState<"quickshell" | "sddm" | "both">(() => {
     if (isSilentSddm) return "sddm";
@@ -213,8 +239,15 @@ export const LockScreenDetailView: React.FC = () => {
       activeLockscreen.sddm === pkgSlug ||
       activeLockscreen.sddm === `ryzora-${pkgSlug}`);
 
+  const isSilentSddmActive =
+    isSilentSddm &&
+    (activeSilentSddmManifest?.active_asset_id === selectedPackage.id ||
+      activeLockscreen?.sddm === selectedPackage.id);
+
   // Only consider active if the effective SDDM theme resolved on the machine actually matches!
-  const isSddmActive = isSddmApplied && sddmRuntimeStatus?.active === true;
+  const isSddmActive = isSilentSddm
+    ? isSilentSddmActive
+    : (isSddmApplied && sddmRuntimeStatus?.active === true);
   const isSddmOverridden = isSddmApplied && sddmRuntimeStatus?.is_overridden === true;
 
 
@@ -223,13 +256,6 @@ export const LockScreenDetailView: React.FC = () => {
     (selectedTarget === "sddm" || selectedTarget === "both") && isSddmOverridden;
 
   const handleApply = async (targetOverride?: "quickshell" | "sddm" | "both") => {
-    if (isSilentSddm) {
-      setToast({
-        message: "SilentSDDM theme activation will be available in Phase S4. Wallpaper is installed.",
-        type: "info",
-      });
-      return;
-    }
     setIsApplying(true);
     const targetToApply = targetOverride || selectedTarget;
     try {
@@ -292,6 +318,9 @@ export const LockScreenDetailView: React.FC = () => {
     setIsApplying(true);
     try {
       if (isSilentSddm) {
+        if (isSddmActive) {
+          await deactivateLockscreen("sddm");
+        }
         await uninstallPackage(selectedPackage.id);
       } else {
         const activeTarget =
@@ -370,7 +399,8 @@ export const LockScreenDetailView: React.FC = () => {
         onSelectScreenshot={setActiveScreenshotIndex}
         onInstall={handleInstall}
         onOpenLightbox={() => setShowFullscreen(true)}
-        isInstalling={isInstalling}
+        isInstalling={isInstalling || getPackageTransaction(selectedPackage.id)?.operation === "install"}
+        installStageText={getPackageTransaction(selectedPackage.id)?.message}
         isInstalled={isInstalled}
         isUpdateAvailable={isUpdateAvailable}
         isBlocked={false}
@@ -387,7 +417,7 @@ export const LockScreenDetailView: React.FC = () => {
         }}
         onApply={handleApply}
         onDeactivate={handleDeactivate}
-        onTest={isInstalled && !isSilentSddm ? handleTest : undefined}
+        onTest={isInstalled ? handleTest : undefined}
         onUninstall={isInstalled ? handleUninstall : undefined}
         isApplying={isApplying}
         isOverridden={isTargetOverridden}
@@ -404,6 +434,16 @@ export const LockScreenDetailView: React.FC = () => {
         isLoginScreenSupported={isLoginScreenSupported}
         isGdmActive={isGdmActive}
       />
+
+      {/* ── SilentSDDM Layout & Visual Customization ── */}
+      {isSilentSddm && (
+        <div className="mt-8 space-y-6">
+          <SilentSddmConfigPanel
+            onApplied={() => refreshActiveLockscreen()}
+            onTestMode={(t) => handleTest(t)}
+          />
+        </div>
+      )}
 
       {/* ── Interactive Theme Customization & Variants ── */}
       {schema && (
@@ -511,6 +551,15 @@ export const LockScreenDetailView: React.FC = () => {
           </div>
         </div>
       )}
+      <CustomMediaImportModal
+        isOpen={showCustomImportModal}
+        onClose={() => {
+          setShowCustomImportModal(false);
+          setCustomImportFile(null);
+        }}
+        fileOrPath={customImportFile}
+        onImportSuccess={handleCustomImportSuccess}
+      />
     </ProductDetailShell>
   );
 };
