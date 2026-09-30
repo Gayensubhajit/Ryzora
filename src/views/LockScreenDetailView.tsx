@@ -95,7 +95,9 @@ export const LockScreenDetailView: React.FC = () => {
   const [lastTestResult, setLastTestResult] = useState<LockscreenTestResult | null>(null);
   const [showCustomImportModal, setShowCustomImportModal] = useState(false);
   const [customImportFile, setCustomImportFile] = useState<{ path?: string; file?: File } | null>(null);
-  const [activeDetailSection, setActiveDetailSection] = useState<"configuration" | "details" | "compatibility">("configuration");
+  const [activeDetailSection, setActiveDetailSection] = useState<"configuration" | "details" | "compatibility">(
+    () => (selectedPackage?.provider === "silentsddm" || selectedPackage?.configSchema) ? "configuration" : "details"
+  );
 
 
 
