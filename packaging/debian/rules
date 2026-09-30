@@ -24,3 +24,9 @@ override_dh_auto_install:
 				debian/ryzora/usr/share/icons/hicolor/$${size}x$${size}/apps/ryzora.png; \
 		fi \
 	done
+	install -Dm755 src-tauri/resources/ryzora-sddm-helper debian/ryzora/usr/lib/ryzora/ryzora-sddm-helper
+	install -Dm755 src-tauri/resources/ryzora-package-helper debian/ryzora/usr/lib/ryzora/ryzora-package-helper
+	install -Dm644 src-tauri/resources/io.ryzora.sddm.policy debian/ryzora/usr/share/polkit-1/actions/io.ryzora.sddm.policy
+	install -Dm644 src-tauri/resources/io.ryzora.package.policy debian/ryzora/usr/share/polkit-1/actions/io.ryzora.package.policy
+	install -Dm644 src-tauri/resources/io.ryzora.sddm.rules debian/ryzora/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules
+	install -Dm644 src-tauri/resources/io.ryzora.package.rules debian/ryzora/usr/share/polkit-1/rules.d/io.ryzora.package.rules

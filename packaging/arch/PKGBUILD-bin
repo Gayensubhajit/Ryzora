@@ -47,6 +47,26 @@ package() {
         cp -r icons/hicolor "$pkgdir/usr/share/icons/"
     fi
 
+    # Privileged helper scripts and Polkit security policies
+    if [ -f "ryzora-sddm-helper" ]; then
+        install -Dm755 "ryzora-sddm-helper" "$pkgdir/usr/lib/ryzora/ryzora-sddm-helper"
+    fi
+    if [ -f "ryzora-package-helper" ]; then
+        install -Dm755 "ryzora-package-helper" "$pkgdir/usr/lib/ryzora/ryzora-package-helper"
+    fi
+    if [ -f "io.ryzora.sddm.policy" ]; then
+        install -Dm644 "io.ryzora.sddm.policy" "$pkgdir/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+    fi
+    if [ -f "io.ryzora.package.policy" ]; then
+        install -Dm644 "io.ryzora.package.policy" "$pkgdir/usr/share/polkit-1/actions/io.ryzora.package.policy"
+    fi
+    if [ -f "io.ryzora.sddm.rules" ]; then
+        install -Dm644 "io.ryzora.sddm.rules" "$pkgdir/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
+    fi
+    if [ -f "io.ryzora.package.rules" ]; then
+        install -Dm644 "io.ryzora.package.rules" "$pkgdir/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
+    fi
+
     # License and documentation
     if [ -f "LICENSE" ]; then
         install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

@@ -52,6 +52,14 @@ package() {
         fi
     done
 
+    # Privileged helper scripts and Polkit security policies
+    install -Dm755 "src-tauri/resources/ryzora-sddm-helper" "$pkgdir/usr/lib/ryzora/ryzora-sddm-helper"
+    install -Dm755 "src-tauri/resources/ryzora-package-helper" "$pkgdir/usr/lib/ryzora/ryzora-package-helper"
+    install -Dm644 "src-tauri/resources/io.ryzora.sddm.policy" "$pkgdir/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+    install -Dm644 "src-tauri/resources/io.ryzora.package.policy" "$pkgdir/usr/share/polkit-1/actions/io.ryzora.package.policy"
+    install -Dm644 "src-tauri/resources/io.ryzora.sddm.rules" "$pkgdir/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
+    install -Dm644 "src-tauri/resources/io.ryzora.package.rules" "$pkgdir/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
+
     # Documentation & License
     install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"

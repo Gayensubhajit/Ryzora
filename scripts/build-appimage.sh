@@ -63,14 +63,30 @@ cp "$ROOT_DIR/dist-assets/icons/hicolor/512x512/apps/ryzora.png" "$APP_DIR/ryzor
 cp "$ROOT_DIR/dist-assets/icons/hicolor/512x512/apps/ryzora.png" "$APP_DIR/.DirIcon"
 cp -r "$ROOT_DIR/dist-assets/icons/hicolor" "$APP_DIR/usr/share/icons/"
 
-# 3b. Privileged SDDM helper & Polkit policy resources in AppDir
+# 3b. Privileged SDDM & Package helper & Polkit policy resources in AppDir
 mkdir -p "$APP_DIR/usr/lib/ryzora"
 cp "$ROOT_DIR/src-tauri/resources/ryzora-sddm-helper" "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
 chmod 755 "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
+if [ -f "$ROOT_DIR/src-tauri/resources/ryzora-package-helper" ]; then
+    cp "$ROOT_DIR/src-tauri/resources/ryzora-package-helper" "$APP_DIR/usr/lib/ryzora/ryzora-package-helper"
+    chmod 755 "$APP_DIR/usr/lib/ryzora/ryzora-package-helper"
+fi
 
-mkdir -p "$APP_DIR/usr/share/polkit-1/actions"
+mkdir -p "$APP_DIR/usr/share/polkit-1/actions" "$APP_DIR/usr/share/polkit-1/rules.d"
 cp "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
-chmod 644 "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy" 
+chmod 644 "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+if [ -f "$ROOT_DIR/src-tauri/resources/io.ryzora.package.policy" ]; then
+    cp "$ROOT_DIR/src-tauri/resources/io.ryzora.package.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.package.policy"
+    chmod 644 "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.package.policy"
+fi
+if [ -f "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.rules" ]; then
+    cp "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.rules" "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
+    chmod 644 "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
+fi
+if [ -f "$ROOT_DIR/src-tauri/resources/io.ryzora.package.rules" ]; then
+    cp "$ROOT_DIR/src-tauri/resources/io.ryzora.package.rules" "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
+    chmod 644 "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
+fi 
 
 # 4. Create standard AppRun launcher
 echo "[4/5] Writing AppRun launcher..."

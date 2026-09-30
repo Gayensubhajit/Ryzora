@@ -66,6 +66,14 @@ for size in 16 32 48 64 128 256 512; do
     fi
 done
 
+# Privileged helpers and Polkit security policies
+install -Dm755 src-tauri/resources/ryzora-sddm-helper %{buildroot}%{_prefix}/lib/ryzora/ryzora-sddm-helper
+install -Dm755 src-tauri/resources/ryzora-package-helper %{buildroot}%{_prefix}/lib/ryzora/ryzora-package-helper
+install -Dm644 src-tauri/resources/io.ryzora.sddm.policy %{buildroot}%{_datadir}/polkit-1/actions/io.ryzora.sddm.policy
+install -Dm644 src-tauri/resources/io.ryzora.package.policy %{buildroot}%{_datadir}/polkit-1/actions/io.ryzora.package.policy
+install -Dm644 src-tauri/resources/io.ryzora.sddm.rules %{buildroot}%{_datadir}/polkit-1/rules.d/io.ryzora.sddm.rules
+install -Dm644 src-tauri/resources/io.ryzora.package.rules %{buildroot}%{_datadir}/polkit-1/rules.d/io.ryzora.package.rules
+
 # Licenses and docs
 install -Dm644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
 install -Dm644 README.md %{buildroot}%{_docdir}/%{name}/README.md
@@ -82,6 +90,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/io.ryzora.Ryzora.desk
 %{_datadir}/applications/ryzora.desktop
 %{_metainfodir}/io.ryzora.Ryzora.metainfo.xml
 %{_datadir}/icons/hicolor/*/apps/ryzora.*
+%{_prefix}/lib/ryzora/
+%{_datadir}/polkit-1/actions/io.ryzora.*.policy
+%{_datadir}/polkit-1/rules.d/io.ryzora.*.rules
 
 %changelog
 * Wed Sep 30 2026 Subhajit Gayen <subhajitgayen43@gmail.com> - 0.1.0-1
