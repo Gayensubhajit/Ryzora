@@ -326,6 +326,19 @@ fn invoke_helper(operation: &str, args: &[&str]) -> Result<HelperResult, String>
 pub fn install_sddm_theme(staging_dir: &Path, slug: &str) -> Result<(), String> {
     validate_slug(slug)?;
 
+    let dest = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        PathBuf::from(sys_root)
+            .join("usr/share/sddm/themes")
+            .join(format!("ryzora-{}", slug))
+    } else {
+        PathBuf::from(SDDM_THEMES_DIR).join(format!("ryzora-{}", slug))
+    };
+
+    // If destination already exists on disk, remove it first for clean idempotent install/upgrade
+    if dest.exists() {
+        let _ = remove_sddm_theme(slug);
+    }
+
     let staging_str = staging_dir
         .to_str()
         .ok_or("Staging path contains invalid UTF-8")?;
@@ -1068,7 +1081,7 @@ esac
     }
 
     #[test]
-    fn test_double_install_rejected() {
+    fn test_double_install_idempotent_success() {
         let _guard = ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
         let sys_root = TestDir::new("sddm-dbl");
         std::env::set_var("RYZORA_SYSTEM_ROOT", sys_root.path());
@@ -1080,7 +1093,7 @@ esac
         install_sddm_theme(&staging_theme, "dog-samurai").unwrap();
 
         let result = install_sddm_theme(&staging_theme, "dog-samurai");
-        assert!(result.is_err(), "Second install of same slug must be rejected");
+        assert!(result.is_ok(), "Second install of same slug must succeed idempotently (overwrite/upgrade)");
 
         std::env::remove_var("RYZORA_SYSTEM_ROOT");
     }

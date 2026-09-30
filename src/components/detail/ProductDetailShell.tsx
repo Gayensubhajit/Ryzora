@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, X, Minus, Square } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 
 interface ProductDetailShellProps {
   onClose: () => void;
@@ -39,9 +40,10 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
       )}
 
       {/* ── Top Fixed Navigation Bar (Full Width) ── */}
-      <header className="relative z-10 flex items-center justify-between px-6 sm:px-8 lg:px-10 py-3.5 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-bg)]/95 backdrop-blur-md shrink-0">
+      <header className="relative z-10 flex items-center justify-between px-6 sm:px-8 lg:px-10 py-2.5 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-bg)]/95 backdrop-blur-md shrink-0">
         <button
           type="button"
+          data-tauri-drag-region="false"
           onClick={onClose}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-semibold text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)] transition-all cursor-pointer select-none"
           aria-label={`Back to ${categoryLabel}`}
@@ -50,14 +52,59 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
           <span>Back to {categoryLabel}</span>
         </button>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 rounded-lg border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)] transition-colors cursor-pointer select-none"
-          aria-label="Close detail view"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {/* Dedicated draggable spacer — window drag & double-click toggle maximize */}
+        <div
+          className="flex-1 h-full min-w-[20px] cursor-default self-stretch"
+          data-tauri-drag-region
+          onDoubleClick={() => invoke("window_toggle_maximize")}
+        />
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            data-tauri-drag-region="false"
+            onClick={onClose}
+            className="p-1.5 rounded-lg border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)] transition-colors cursor-pointer select-none"
+            title="Close view (Esc)"
+            aria-label="Close detail view"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Client-Side Window Controls */}
+          <div className="flex items-center ml-1 border-l border-[var(--rz-border-subtle)] pl-2 space-x-1">
+            <button
+              type="button"
+              data-tauri-drag-region="false"
+              onClick={() => invoke("window_minimize")}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer"
+              title="Minimize"
+              aria-label="Minimize Window"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              data-tauri-drag-region="false"
+              onClick={() => invoke("window_toggle_maximize")}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer"
+              title="Maximize"
+              aria-label="Maximize Window"
+            >
+              <Square className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              data-tauri-drag-region="false"
+              onClick={() => invoke("window_close")}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+              title="Close"
+              aria-label="Close Window"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </header>
 
       {/* ── Scrollable Body (Full Width Viewport, no artificial gutters) ── */}

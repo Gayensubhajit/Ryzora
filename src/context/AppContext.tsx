@@ -375,13 +375,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loadingSystem, setLoadingSystem] = useState<boolean>(true);
-  const [activeCategory, setActiveCategory] = useState<CategoryId>(() => {
+  const [activeCategory, _setActiveCategory] = useState<CategoryId>(() => {
     try {
       const q = new URLSearchParams(window.location.search).get("view");
       if (q) return q as CategoryId;
     } catch {}
     return "apps";
   });
+
+  const setActiveCategory = useCallback((cat: CategoryId) => {
+    setSelectedPackage(null);
+    _setActiveCategory(cat);
+  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem("ryzora_sidebar_collapsed");
     return saved !== null ? saved === "true" : false;
@@ -730,7 +735,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [authoritativeLockscreen]
   );
 
-  const refreshActiveLockscreen = async (): Promise<ActiveLockscreenState> => {
+  const refreshActiveLockscreen = useCallback(async (): Promise<ActiveLockscreenState> => {
     try {
       const [state, authState, sddmManifest] = await Promise.all([
         invoke<ActiveLockscreenState>("get_active_lockscreen").catch(() => ({ quickshell: null, sddm: null })),
@@ -763,7 +768,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       return { quickshell: null, sddm: null };
     }
-  };
+  }, []);
 
   const applyLockscreen = async (
     packageId: string,

@@ -73,7 +73,8 @@ op_install_theme() {
     local dest="${SDDM_THEMES_DIR}/ryzora-${slug}"
 
     if [ -e "$dest" ]; then
-        die "Theme destination '${dest}' already exists. Run remove_theme first."
+        log "Theme destination '${dest}' already exists. Overwriting."
+        rm -rf "$dest"
     fi
 
     mkdir -p "${SDDM_THEMES_DIR}"
