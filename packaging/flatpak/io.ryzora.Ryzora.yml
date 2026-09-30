@@ -62,3 +62,5 @@ modules:
     sources:
       - type: dir
         path: ../../
+      - cargo-sources.json
+      - npm-sources.json
