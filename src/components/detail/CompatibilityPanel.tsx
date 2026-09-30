@@ -49,23 +49,30 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
     );
   }
 
-  // 2. GDM Display Manager Incompatibility Warning
-  if (isGdmActive && (selectedTarget === "sddm" || selectedTarget === "both" || !isLoginScreenSupported)) {
+  // 2. Display Manager Incompatibility Warning (GDM, PlasmaLogin, or non-SDDM)
+  if (!isLoginScreenSupported && (selectedTarget === "sddm" || selectedTarget === "both")) {
+    const activeDmName = isGdmActive ? "GDM" : (systemReport?.login_manager || "Another display manager");
     return (
       <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-start gap-2.5">
         <Monitor className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-[var(--rz-text)]">
-              Login Screen — Unsupported on GDM
+              Login Screen — SDDM Not Active
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30">
-              Display Manager: GDM
+              Active: {activeDmName}
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-[var(--rz-text-secondary)]">
-            This theme provides an SDDM login greeter. Your system runs GDM (GNOME Display Manager). Ryzora protects your display manager by not installing SDDM themes into GDM.
+            This theme provides an SDDM login greeter. Your system runs <strong>{activeDmName}</strong>. Ryzora protects your display manager by not installing SDDM themes into incompatible display managers.
           </p>
+          <div className="mt-2.5 p-2 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] text-[11px] space-y-1">
+            <span className="font-semibold text-[var(--rz-text)] block">To switch to SDDM on your system:</span>
+            <code className="font-mono text-[10px] text-[var(--rz-accent)] select-all block bg-[var(--rz-surface-elevated)] p-1.5 rounded">
+              sudo pacman -S sddm && sudo systemctl enable --now sddm
+            </code>
+          </div>
         </div>
       </div>
     );

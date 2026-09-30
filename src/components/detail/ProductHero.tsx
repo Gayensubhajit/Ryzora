@@ -309,6 +309,14 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                       ? "SDDM is not your active display manager"
                       : ""}).
                   </p>
+                  {packageItem.supports_login_screen && !isLoginScreenSupported && (
+                    <div className="pt-1.5 mt-1 border-t border-amber-500/20 text-[11px] space-y-1">
+                      <span className="font-semibold text-[var(--rz-text)] block">To enable SDDM login screens:</span>
+                      <code className="block font-mono text-[10px] text-[var(--rz-accent)] bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] p-1.5 rounded select-all">
+                        sudo pacman -S sddm && sudo systemctl enable --now sddm
+                      </code>
+                    </div>
+                  )}
                 </div>
               ) : null}
               {!canTargetQs && canTargetSddm ? (
