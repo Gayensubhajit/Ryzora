@@ -286,6 +286,31 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
             </span>
 
             <div className="space-y-1.5">
+              {!canTargetQs && !canTargetSddm ? (
+                <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/5 text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 text-amber-500 font-semibold">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Incompatible with current environment</span>
+                  </div>
+                  <p className="text-[11px] text-[var(--rz-text-secondary)] leading-relaxed">
+                    This theme provides{" "}
+                    {packageItem.supports_session_lock && packageItem.supports_login_screen
+                      ? "Quickshell (Session Lock) and SDDM (Login Screen)"
+                      : packageItem.supports_session_lock
+                      ? "Quickshell (Session Lock)"
+                      : "SDDM (Login Screen)"}
+                    , but neither is compatible with your active desktop environment ({!isSessionLockSupported && packageItem.supports_session_lock
+                      ? "Quickshell requires Hyprland/Sway with ext-session-lock-v1"
+                      : ""}
+                    {!isSessionLockSupported && packageItem.supports_session_lock && !isLoginScreenSupported && packageItem.supports_login_screen
+                      ? "; "
+                      : ""}
+                    {!isLoginScreenSupported && packageItem.supports_login_screen
+                      ? "SDDM is not your active display manager"
+                      : ""}).
+                  </p>
+                </div>
+              ) : null}
               {!canTargetQs && canTargetSddm ? (
                 /* Non-interactive capability card for single-target SDDM */
                 <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] text-xs">
@@ -421,10 +446,10 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               disabled={isBlocked || isInstalling || (!canTargetQs && !canTargetSddm)}
               onClick={onInstall}
               className={[
-                "w-full py-2.5 px-5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs",
-                isBlocked
+                "w-full py-2.5 px-5 rounded-xl text-xs font-semibold transition-all select-none flex items-center justify-center gap-2 shadow-xs",
+                isBlocked || (!canTargetQs && !canTargetSddm)
                   ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] cursor-not-allowed opacity-60"
-                  : "bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white",
+                  : "bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white cursor-pointer",
               ].join(" ")}
             >
               {isInstalling ? (
@@ -432,6 +457,8 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>{installStageText || "Installing…"}</span>
                 </>
+              ) : !canTargetQs && !canTargetSddm ? (
+                <span>Incompatible with System</span>
               ) : isUpdateAvailable ? (
                 <>
                   <DownloadCloud className="w-4 h-4" />
@@ -862,10 +889,16 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
           )}
 
           {/* Blocked indicator */}
-          {isBlocked && (
-            <div className="flex items-center gap-1.5 text-[11px] text-rose-500 font-medium pt-1">
+          {(isBlocked || (!canTargetQs && !canTargetSddm)) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-amber-500 font-medium pt-1">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span>Installation blocked: missing {missingDependencies.join(", ")}</span>
+              <span>
+                {!canTargetQs && !canTargetSddm
+                  ? "Installation unavailable: no compatible runtime targets detected on this host"
+                  : missingDependencies && missingDependencies.length > 0
+                  ? `Installation blocked: missing ${missingDependencies.join(", ")}`
+                  : "Installation unavailable on current system configuration"}
+              </span>
             </div>
           )}
         </div>

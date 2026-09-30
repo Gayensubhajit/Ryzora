@@ -558,6 +558,8 @@ pub fn generate_installation_plan_target_in_with_trust(
             conflicts.push("Your system uses GDM as its active display manager. SDDM themes cannot be installed into GDM.".to_string());
         } else if active_dm == "lightdm" {
             conflicts.push("Your system uses LightDM as its active display manager. SDDM themes cannot be installed into LightDM.".to_string());
+        } else if active_dm == "plasmalogin" {
+            conflicts.push("Your system uses Plasma Login Manager (plasmalogin) as its active display manager. SDDM themes cannot be installed into Plasma Login Manager.".to_string());
         } else {
             conflicts.push(format!("Your system uses '{}' as its active display manager. SDDM themes cannot be installed into this display manager.", active_dm));
         }

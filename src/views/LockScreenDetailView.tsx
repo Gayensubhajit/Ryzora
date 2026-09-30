@@ -96,7 +96,7 @@ export const LockScreenDetailView: React.FC = () => {
   const [showCustomImportModal, setShowCustomImportModal] = useState(false);
   const [customImportFile, setCustomImportFile] = useState<{ path?: string; file?: File } | null>(null);
   const [activeDetailSection, setActiveDetailSection] = useState<"configuration" | "details" | "compatibility">(
-    () => (selectedPackage?.provider === "silentsddm" || selectedPackage?.configSchema) ? "configuration" : "details"
+    () => (selectedPackage?.lockscreen?.provider === "silentsddm" || Boolean(selectedPackage?.lockscreen?.config_schema)) ? "configuration" : "details"
   );
 
 
@@ -388,7 +388,7 @@ export const LockScreenDetailView: React.FC = () => {
         installStageText={getPackageTransaction(selectedPackage.id)?.message}
         isInstalled={isInstalled}
         isUpdateAvailable={isUpdateAvailable}
-        isBlocked={false}
+        isBlocked={!canQs && !canSddm}
         missingDependencies={missingDependencies}
         selectedTarget={selectedTarget}
         onSelectTarget={setSelectedTarget}

@@ -115,12 +115,14 @@ pub fn detect_display_manager() -> (String, Option<String>, Option<String>) {
             dm_name = "lightdm".to_string();
         } else if svc_lower.contains("greetd") {
             dm_name = "greetd".to_string();
+        } else if svc_lower.contains("plasmalogin") || svc_lower.contains("plasma-login") {
+            dm_name = "plasmalogin".to_string();
         }
     }
 
     // 2. If not found via symlink, check running service status via check_binary & service files
     if dm_name == "none" {
-        for candidate in &["sddm", "gdm", "lightdm", "greetd"] {
+        for candidate in &["sddm", "gdm", "lightdm", "greetd", "plasmalogin"] {
             let svc_path = format!("/usr/lib/systemd/system/{}.service", candidate);
             if Path::new(&svc_path).exists() {
                 let (has_bin, _) = check_binary(candidate);
@@ -395,11 +397,14 @@ pub fn detect_host_capabilities_in(home: &Path) -> HostCapabilities {
 
     // 4. SDDM Login Screen Adapter
     let is_gdm = dm == "gdm";
+    let is_plasmalogin = dm == "plasmalogin";
     let sddm_supported = dm == "sddm";
     let sddm_reason = if is_gdm {
         "Your system uses GDM as its active display manager. SDDM themes cannot be applied to GDM.".to_string()
     } else if dm == "lightdm" {
         "Your system uses LightDM as its active display manager. SDDM themes cannot be applied to LightDM.".to_string()
+    } else if is_plasmalogin {
+        "Your system uses Plasma Login Manager (plasmalogin) as its active display manager. SDDM themes cannot be applied to Plasma Login Manager.".to_string()
     } else if dm != "sddm" {
         "SDDM is not active as your system display manager.".to_string()
     } else {
@@ -1041,7 +1046,7 @@ pub fn detect_system_integration_report_in(home: &Path) -> SystemIntegrationRepo
         if let Ok(content) = fs::read_to_string(&hypridle_conf) {
             for line in content.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with("lock_cmd") {
+                if trimmed.starts_with("lock_cmd") || trimmed.contains("lock_cmd =") || trimmed.contains("lock_cmd=") {
                     evidence.push(format!("hypridle:{}", trimmed));
                     if trimmed.contains("quickshell") || trimmed.contains("lock.sh") {
                         session_lock_provider = "Quickshell".to_string();
