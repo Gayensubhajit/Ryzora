@@ -1,3 +1,8 @@
+# Flathub packaging note:
+# 1. Network is disabled during build in Flathub CI. Pre-generated cargo-sources.json
+#    and npm-sources.json must be generated prior to submission using flatpak-cargo-generator.
+# 2. Privileged operations (SDDM helper) are delegated through org.freedesktop.portal.Flatpak
+#    or deferred to host-installed helper to prevent weakening sandbox security.
 app-id: io.ryzora.Ryzora
 runtime: org.gnome.Platform
 runtime-version: '46'

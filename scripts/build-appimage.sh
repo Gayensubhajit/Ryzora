@@ -25,15 +25,23 @@ mkdir -p "$APP_DIR/usr/share/icons"
 
 # 2. Build or verify release binaries
 echo "[2/5] Verifying / compiling release binaries..."
-if [ ! -f "$ROOT_DIR/src-tauri/target/release/ryzora" ]; then
-    echo "Release binary not found. Building..."
+BIN_PATH=""
+if [ -f "$ROOT_DIR/src-tauri/target/release/ryzora" ]; then
+    BIN_PATH="$ROOT_DIR/src-tauri/target/release/ryzora"
+elif [ -f "$ROOT_DIR/src-tauri/target/debug/ryzora" ]; then
+    echo "Release binary not found, using existing debug binary for AppImage packaging..."
+    BIN_PATH="$ROOT_DIR/src-tauri/target/debug/ryzora"
+elif which cargo >/dev/null 2>&1; then
+    echo "Compiling release binaries..."
     cd "$ROOT_DIR"
     npm run build
     cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+    BIN_PATH="$ROOT_DIR/src-tauri/target/release/ryzora"
+else
+    echo "Error: No compiled ryzora binary found and cargo is not available."
+    exit 1
 fi
-
-# Copy binaries
-cp "$ROOT_DIR/src-tauri/target/release/ryzora" "$APP_DIR/usr/bin/ryzora"
+cp "$BIN_PATH" "$APP_DIR/usr/bin/ryzora"
 chmod 755 "$APP_DIR/usr/bin/ryzora"
 
 if [ -f "$ROOT_DIR/src-tauri/target/release/ryzora-ci" ]; then

@@ -24,11 +24,11 @@ Requires:       gtk3
 Requires:       webkit2gtk4.1
 Requires:       openssl
 Requires:       hicolor-icon-theme
-Recommends:     hyprland
-Recommends:     hyprlock
-Recommends:     waybar
-Recommends:     fastfetch
-Recommends:     kitty
+Suggests:       hyprland
+Suggests:       hyprlock
+Suggests:       waybar
+Suggests:       fastfetch
+Suggests:       kitty
 
 %description
 Ryzora is a universal Linux desktop customization manager and software center.

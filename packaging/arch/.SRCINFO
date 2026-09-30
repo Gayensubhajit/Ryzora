@@ -22,6 +22,6 @@ pkgbase = ryzora
 	provides = ryzora
 	conflicts = ryzora-bin
 	source = ryzora-0.1.0.tar.gz::https://github.com/Gayensubhajit/Ryzora/archive/refs/tags/v0.1.0.tar.gz
-	sha256sums = SKIP
+	sha256sums = f5120df510fd644cab4ff018b8faf037b490a71c59535006de40ce68a1c6cb28
 
 pkgname = ryzora

@@ -24,11 +24,11 @@ Depends: ${shlibs:Depends},
          libwebkit2gtk-4.1-0,
          libssl3,
          hicolor-icon-theme
-Recommends: hyprland,
-            waybar,
-            hyprlock,
-            fastfetch,
-            kitty
+Suggests: hyprland,
+          waybar,
+          hyprlock,
+          fastfetch,
+          kitty
 Description: Universal Linux Desktop Customization Platform
  Ryzora is a universal Linux desktop customization manager and software center.
  It allows users to safely discover, preview, install, configure, and roll back
