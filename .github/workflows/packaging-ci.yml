@@ -1,0 +1,190 @@
+name: Packaging & Distribution CI
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'scripts/build-*.sh'
+      - 'dist-assets/**'
+      - '.github/workflows/packaging-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: packaging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1. Arch Linux: makepkg + pacman install/verify/uninstall
+  arch-package-test:
+    name: Arch Linux (makepkg + pacman)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install Arch Build Dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git cargo rust nodejs npm \
+            gtk3 webkit2gtk-4.1 openssl hicolor-icon-theme desktop-file-utils appstream
+          useradd -m -s /bin/bash builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Fix Workspace Permissions
+        run: chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Validate Desktop Entry & AppStream Metadata
+        run: |
+          desktop-file-validate dist-assets/io.ryzora.Ryzora.desktop
+          appstreamcli validate --no-net dist-assets/io.ryzora.Ryzora.metainfo.xml
+
+      - name: Build Package via makepkg
+        run: |
+          su builder -c "cd packaging/arch && makepkg -sf --noconfirm"
+
+      - name: Test Pacman Installation & Lifecycle
+        run: |
+          cd packaging/arch
+          PKG_FILE=$(ls ryzora-*.pkg.tar.zst | head -n1)
+          pacman -U --noconfirm "$PKG_FILE"
+          which ryzora
+          test -x /usr/bin/ryzora
+          test -f /usr/share/applications/io.ryzora.Ryzora.desktop
+          test -f /usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml
+          pacman -R --noconfirm ryzora
+          ! which ryzora
+
+  # 2. Fedora: rpmbuild + dnf install/verify/remove
+  fedora-rpm-test:
+    name: Fedora RPM (rpmbuild + dnf)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:40
+    steps:
+      - name: Install Fedora Build Dependencies
+        run: |
+          dnf install -y \
+            rpm-build rpmdevtools gcc gcc-c++ make pkgconfig \
+            cargo rust nodejs npm \
+            gtk3-devel webkit2gtk4.1-devel openssl-devel \
+            desktop-file-utils libappstream-glib tar
+
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Prepare Source Tarball for RPM
+        run: |
+          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f 2)
+          mkdir -p /root/rpmbuild/SOURCES
+          tar --transform "s,^\.,Ryzora-${VERSION}," --exclude='./.git' -czf "/root/rpmbuild/SOURCES/ryzora-${VERSION}.tar.gz" .
+
+      - name: Build RPM Package
+        run: |
+          rpmbuild -ba packaging/fedora/ryzora.spec
+
+      - name: Test DNF Installation & Lifecycle
+        run: |
+          RPM_FILE=$(find /root/rpmbuild/RPMS -name "ryzora-*.rpm" | head -n1)
+          dnf install -y "$RPM_FILE"
+          which ryzora
+          test -x /usr/bin/ryzora
+          test -f /usr/share/applications/io.ryzora.Ryzora.desktop
+          dnf remove -y ryzora
+          ! which ryzora
+
+  # 3. Debian/Ubuntu: dpkg-buildpackage + apt/dpkg install/verify/remove
+  debian-deb-test:
+    name: Debian/Ubuntu (dpkg-buildpackage + dpkg)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install Debian Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential debhelper-compat pkg-config \
+            cargo rustc nodejs npm \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libssl-dev
+
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Debian Packaging Directory
+        run: |
+          mkdir -p debian
+          cp packaging/debian/* debian/
+          chmod +x debian/rules
+
+      - name: Build DEB Package
+        run: |
+          dpkg-buildpackage -us -uc -b
+
+      - name: Test DEB Installation & Lifecycle
+        run: |
+          DEB_FILE=$(ls ../ryzora_*.deb | head -n1)
+          sudo dpkg -i "$DEB_FILE" || sudo apt-get -f install -y
+          which ryzora
+          test -x /usr/bin/ryzora
+          test -f /usr/share/applications/io.ryzora.Ryzora.desktop
+          sudo dpkg -r ryzora
+          ! which ryzora
+
+  # 4. Flatpak: Flatpak Builder Manifest Schema & Lint Verification
+  flatpak-test:
+    name: Flatpak (Schema & Manifest Validation)
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-builder-lint:latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Validate Flatpak Manifest Lint
+        run: |
+          flatpak-builder-lint manifest packaging/flatpak/io.ryzora.Ryzora.yml
+          appstream-util validate-relax --nonet dist-assets/io.ryzora.Ryzora.metainfo.xml
+
+  # 5. AppImage: Build via appimagetool and verify launcher
+  appimage-test:
+    name: AppImage (appimagetool + execution test)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libssl-dev fuse
+          sudo modprobe fuse 2>/dev/null || true
+
+      - name: Setup Node & Rust
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install appimagetool
+        run: |
+          curl -sL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract
+          echo "$PWD/squashfs-root/AppRun" > /tmp/appimagetool_path
+          sudo ln -s "$PWD/squashfs-root/AppRun" /usr/local/bin/appimagetool
+
+      - name: Build AppImage
+        run: |
+          ./scripts/build-appimage.sh
+          test -f target/appimage/Ryzora-*-x86_64.AppImage
+
+      - name: Test AppImage Launch (Headless)
+        run: |
+          chmod +x target/appimage/Ryzora-*-x86_64.AppImage
+          target/appimage/Ryzora-*-x86_64.AppImage --appimage-extract
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/ryzora

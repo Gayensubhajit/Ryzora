@@ -80,11 +80,11 @@ packaging/
 ### 3.4 Flatpak (Flathub)
 - **App ID**: `io.ryzora.Ryzora`
 - **Install**: `flatpak install flathub io.ryzora.Ryzora`
-- **Sandbox Configuration**:
+- **Sandbox Configuration & Security Contract**:
   - Wayland / X11 display socket
-  - Network access for catalog browsing and asset retrieval
+  - Network access for community catalog browsing and asset retrieval
   - User dotfile configuration namespaces (`~/.config/hypr`, `~/.config/waybar`, `~/.config/ryzora`)
-  - Polkit system bus access (`org.freedesktop.PolicyKit1`) for privileged SDDM helper communication.
+  - **No Weakened Sandbox Escalation**: Flatpak runs purely in user space. Privileged operations (`ryzora-sddm-helper`) require host installation and are runtime capability-detected; the manifest does not request `--filesystem=host` or arbitrary host command execution.
 
 ### 3.5 AppImage
 - **Format**: Standalone portable ELF binary (`Ryzora-x86_64.AppImage`)

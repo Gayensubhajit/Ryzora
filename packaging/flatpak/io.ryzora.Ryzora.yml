@@ -1,8 +1,12 @@
-# Flathub packaging note:
-# 1. Network is disabled during build in Flathub CI. Pre-generated cargo-sources.json
-#    and npm-sources.json must be generated prior to submission using flatpak-cargo-generator.
-# 2. Privileged operations (SDDM helper) are delegated through org.freedesktop.portal.Flatpak
-#    or deferred to host-installed helper to prevent weakening sandbox security.
+# Ryzora Flatpak Manifest (io.ryzora.Ryzora)
+#
+# Security & Privileged Helper Contract:
+# - Core Ryzora desktop capabilities (rices, themes, dotfiles, lockscreen previews)
+#   run fully unprivileged in user-space.
+# - Privileged system integrations (SDDM display manager configuration) require
+#   the native ryzora-sddm-helper and Polkit policy installed on the host.
+# - The Flatpak sandbox intentionally DOES NOT grant --filesystem=host or arbitrary
+#   host execution; privileged SDDM targets are runtime-detected as host-native only.
 app-id: io.ryzora.Ryzora
 runtime: org.gnome.Platform
 runtime-version: '46'
@@ -22,11 +26,7 @@ finish-args:
   - --share=network
   # Desktop notifications
   - --talk-name=org.freedesktop.Notifications
-  # Polkit authentication access
-  - --system-talk-name=org.freedesktop.PolicyKit1
-  # Portal spawn for external privileged helpers
-  - --talk-name=org.freedesktop.portal.Flatpak
-  # Desktop configuration access (dotfiles management)
+  # Desktop dotfiles configuration management
   - --filesystem=xdg-config/hypr:create
   - --filesystem=xdg-config/waybar:create
   - --filesystem=xdg-config/ryzora:create
@@ -43,12 +43,11 @@ modules:
   - name: ryzora
     buildsystem: simple
     build-commands:
-      # Frontend assets build
+      # In Flathub production, cargo-sources.json and npm-sources.json provide offline vendor sources
       - npm install --offline || npm install
       - npm run build
-      # Tauri Rust backend release build
       - cargo build --manifest-path src-tauri/Cargo.toml --release --locked
-      # Installation
+      # Binary and desktop metadata installation
       - install -Dm755 src-tauri/target/release/ryzora /app/bin/ryzora
       - install -Dm644 dist-assets/io.ryzora.Ryzora.desktop /app/share/applications/io.ryzora.Ryzora.desktop
       - install -Dm644 dist-assets/io.ryzora.Ryzora.metainfo.xml /app/share/metainfo/io.ryzora.Ryzora.metainfo.xml
