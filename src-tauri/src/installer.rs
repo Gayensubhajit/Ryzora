@@ -1278,6 +1278,14 @@ pub fn install_package_target_options_in_with_trust(
         };
         let record_raw = serde_json::to_string_pretty(&record)
             .map_err(|e| format!("Failed to serialize install record: {}", e))?;
+
+        if let Err(e) = fs::create_dir_all(installed_root) {
+            return Err(format!(
+                "Failed to create installed packages directory: {}",
+                e
+            ));
+        }
+
         let record_file = installed_root.join(format!("{}.json", manifest.id));
         fs::write(&record_file, &record_raw)
             .map_err(|e| format!("Failed to write install record: {}", e))?;

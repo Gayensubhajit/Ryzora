@@ -59,51 +59,38 @@ export const ProductDetailShell: React.FC<ProductDetailShellProps> = ({
           onDoubleClick={() => invoke("window_toggle_maximize")}
         />
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Client-Side Window Controls */}
+        <div className="flex items-center space-x-1 shrink-0">
           <button
             type="button"
             data-tauri-drag-region="false"
-            onClick={onClose}
-            className="p-1.5 rounded-lg border border-[var(--rz-border-subtle)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-elevated)] transition-colors cursor-pointer select-none"
-            title="Close view (Esc)"
-            aria-label="Close detail view"
+            onClick={() => invoke("window_minimize")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer"
+            title="Minimize"
+            aria-label="Minimize Window"
+          >
+            <Minus className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            data-tauri-drag-region="false"
+            onClick={() => invoke("window_toggle_maximize")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer"
+            title="Maximize"
+            aria-label="Maximize Window"
+          >
+            <Square className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            data-tauri-drag-region="false"
+            onClick={() => invoke("window_close")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+            title="Close"
+            aria-label="Close Window"
           >
             <X className="w-4 h-4" />
           </button>
-
-          {/* Client-Side Window Controls */}
-          <div className="flex items-center ml-1 border-l border-[var(--rz-border-subtle)] pl-2 space-x-1">
-            <button
-              type="button"
-              data-tauri-drag-region="false"
-              onClick={() => invoke("window_minimize")}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer"
-              title="Minimize"
-              aria-label="Minimize Window"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              data-tauri-drag-region="false"
-              onClick={() => invoke("window_toggle_maximize")}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer"
-              title="Maximize"
-              aria-label="Maximize Window"
-            >
-              <Square className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              data-tauri-drag-region="false"
-              onClick={() => invoke("window_close")}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--rz-text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-              title="Close"
-              aria-label="Close Window"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </header>
 
