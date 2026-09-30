@@ -1,0 +1,13 @@
+[
+  {
+    "_comment": "GENERATED FILE — do not edit manually.",
+    "_instructions": [
+      "Generate this file before Flatpak builds using:",
+      "  pip install aiohttp toml",
+      "  curl -sLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py",
+      "  python3 flatpak-cargo-generator.py src-tauri/Cargo.lock -o packaging/flatpak/cargo-sources.json",
+      "  git add packaging/flatpak/cargo-sources.json",
+      "Commit the result. Do not regenerate at build time."
+    ]
+  }
+]

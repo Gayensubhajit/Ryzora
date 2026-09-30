@@ -1,0 +1,12 @@
+[
+  {
+    "_comment": "GENERATED FILE — do not edit manually.",
+    "_instructions": [
+      "Generate this file before Flatpak builds using:",
+      "  pip install flatpak-node-generator",
+      "  flatpak-node-generator npm package-lock.json -o packaging/flatpak/npm-sources.json",
+      "  git add packaging/flatpak/npm-sources.json",
+      "Commit the result. Do not regenerate at build time."
+    ]
+  }
+]

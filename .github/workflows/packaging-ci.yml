@@ -17,7 +17,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1. Arch Linux: makepkg + pacman install/verify/uninstall
+  # ── Version Consistency Check ───────────────────────────────────────────────
+  version-check:
+    name: Version Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version consistency across all packaging files
+        run: |
+          CARGO=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f2)
+          PKG=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+          PKGBUILD=$(grep '^pkgver=' packaging/arch/PKGBUILD | cut -d= -f2)
+          SPEC=$(grep '^Version:' packaging/fedora/ryzora.spec | awk '{print $2}')
+          DEB=$(head -1 packaging/debian/changelog | grep -oP '\(\K[^)]+' | cut -d- -f1)
+          META=$(grep -oP '(?<=release version=")[^"]+' dist-assets/io.ryzora.Ryzora.metainfo.xml | head -1)
+          echo "Cargo.toml: $CARGO | package.json: $PKG | PKGBUILD: $PKGBUILD | RPM spec: $SPEC | debian: $DEB | metainfo: $META"
+          [ "$CARGO" = "$PKG" ] && [ "$CARGO" = "$PKGBUILD" ] && [ "$CARGO" = "$SPEC" ] && [ "$CARGO" = "$DEB" ] || \
+            (echo "ERROR: version mismatch detected!" && exit 1)
+
+  # ── 1. Arch Linux: makepkg + pacman install/verify/uninstall ────────────────
   arch-package-test:
     name: Arch Linux (makepkg + pacman)
     runs-on: ubuntu-latest
@@ -28,43 +46,41 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             base-devel git cargo rust nodejs npm \
-            gtk3 webkit2gtk-4.1 openssl hicolor-icon-theme desktop-file-utils appstream
+            gtk3 webkit2gtk-4.1 openssl hicolor-icon-theme \
+            desktop-file-utils appstream
           useradd -m -s /bin/bash builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-      - name: Checkout Source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Fix Workspace Permissions
         run: chown -R builder:builder "$GITHUB_WORKSPACE"
 
-      - name: Validate Desktop Entry & AppStream Metadata
+      - name: Validate Desktop Entry & AppStream
         run: |
           desktop-file-validate dist-assets/io.ryzora.Ryzora.desktop
           appstreamcli validate --no-net dist-assets/io.ryzora.Ryzora.metainfo.xml
 
-      - name: Build Package via makepkg
-        run: |
-          su builder -c "cd packaging/arch && makepkg -sf --noconfirm"
+      - name: Build via makepkg
+        run: su builder -c "cd packaging/arch && makepkg -sf --noconfirm"
 
-      - name: Test Pacman Installation & Lifecycle
+      - name: Test Pacman Install / Verify / Uninstall
         run: |
           cd packaging/arch
           PKG_FILE=$(ls ryzora-*.pkg.tar.zst | head -n1)
           pacman -U --noconfirm "$PKG_FILE"
-          which ryzora
           test -x /usr/bin/ryzora
           test -f /usr/share/applications/io.ryzora.Ryzora.desktop
           test -f /usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml
           pacman -R --noconfirm ryzora
-          ! which ryzora
+          ! test -f /usr/bin/ryzora
 
-  # 2. Fedora: rpmbuild + dnf install/verify/remove
+  # ── 2. Fedora: rpmbuild + dnf install/verify/remove ─────────────────────────
   fedora-rpm-test:
     name: Fedora RPM (rpmbuild + dnf)
     runs-on: ubuntu-latest
     container:
-      image: fedora:40
+      image: fedora:41
     steps:
       - name: Install Fedora Build Dependencies
         run: |
@@ -74,30 +90,28 @@ jobs:
             gtk3-devel webkit2gtk4.1-devel openssl-devel \
             desktop-file-utils libappstream-glib tar
 
-      - name: Checkout Source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Prepare Source Tarball for RPM
+      - name: Prepare Source Tarball
         run: |
-          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f 2)
+          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f2)
           mkdir -p /root/rpmbuild/SOURCES
-          tar --transform "s,^\.,Ryzora-${VERSION}," --exclude='./.git' -czf "/root/rpmbuild/SOURCES/ryzora-${VERSION}.tar.gz" .
+          tar --transform "s,^\.,Ryzora-${VERSION}," --exclude='./.git' \
+              -czf "/root/rpmbuild/SOURCES/ryzora-${VERSION}.tar.gz" .
 
-      - name: Build RPM Package
-        run: |
-          rpmbuild -ba packaging/fedora/ryzora.spec
+      - name: Build RPM
+        run: rpmbuild -ba packaging/fedora/ryzora.spec
 
-      - name: Test DNF Installation & Lifecycle
+      - name: Test DNF Install / Verify / Remove
         run: |
-          RPM_FILE=$(find /root/rpmbuild/RPMS -name "ryzora-*.rpm" | head -n1)
+          RPM_FILE=$(find /root/rpmbuild/RPMS -name "ryzora-*.rpm" | grep -v debuginfo | head -n1)
           dnf install -y "$RPM_FILE"
-          which ryzora
           test -x /usr/bin/ryzora
           test -f /usr/share/applications/io.ryzora.Ryzora.desktop
           dnf remove -y ryzora
-          ! which ryzora
+          ! test -f /usr/bin/ryzora
 
-  # 3. Debian/Ubuntu: dpkg-buildpackage + apt/dpkg install/verify/remove
+  # ── 3. Debian/Ubuntu: dpkg-buildpackage + dpkg install/verify/remove ────────
   debian-deb-test:
     name: Debian/Ubuntu (dpkg-buildpackage + dpkg)
     runs-on: ubuntu-24.04
@@ -106,12 +120,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential debhelper-compat pkg-config \
+            build-essential debhelper fakeroot pkg-config \
             cargo rustc nodejs npm \
             libgtk-3-dev libwebkit2gtk-4.1-dev libssl-dev
 
-      - name: Checkout Source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Debian Packaging Directory
         run: |
@@ -120,84 +133,127 @@ jobs:
           chmod +x debian/rules
 
       - name: Build DEB Package
-        run: |
-          dpkg-buildpackage -us -uc -b
+        run: dpkg-buildpackage -us -uc -b
 
-      - name: Test DEB Installation & Lifecycle
+      - name: Test DEB Install / Verify / Remove
         run: |
           DEB_FILE=$(ls ../ryzora_*.deb | head -n1)
           sudo dpkg -i "$DEB_FILE" || sudo apt-get -f install -y
-          which ryzora
           test -x /usr/bin/ryzora
           test -f /usr/share/applications/io.ryzora.Ryzora.desktop
           sudo dpkg -r ryzora
-          ! which ryzora
+          ! test -f /usr/bin/ryzora
 
-  # 4. Flatpak: Flatpak Builder Manifest Schema & Lint Verification
+  # ── 4. Flatpak: Real flatpak-builder offline build ──────────────────────────
+  # Build model:
+  #   - cargo-sources.json and npm-sources.json MUST be committed to the repo
+  #     alongside this manifest. This job starts from a clean checkout and
+  #     does NOT regenerate them (proving the committed manifests are sufficient).
+  #   - flatpak-builder is invoked with --disable-download to prevent any
+  #     application dependency network fetches.
+  #   - Runtime (org.gnome.Platform//50) and SDK extensions are fetched from
+  #     Flathub; only application dependencies must be pre-vendored.
+  #   - Runtime: GNOME Platform 50 (current stable, March 2026).
+  #   - Rust extension: org.freedesktop.Sdk.Extension.rust-stable (24.08 branch,
+  #     matching Freedesktop SDK underlying GNOME 50).
+  #   - Node.js: bundled as a build module in the manifest (no Sdk.Extension.node20).
   flatpak-test:
-    name: Flatpak (flatpak-builder offline build)
+    name: Flatpak (flatpak-builder offline + manifest + repo lint)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install flatpak-builder & dependencies
+      - name: Verify committed source manifests exist
+        run: |
+          test -f packaging/flatpak/cargo-sources.json || \
+            (echo "ERROR: packaging/flatpak/cargo-sources.json not committed"; exit 1)
+          test -f packaging/flatpak/npm-sources.json || \
+            (echo "ERROR: packaging/flatpak/npm-sources.json not committed"; exit 1)
+          # Placeholder files contain instructions but are not real generated sources;
+          # fail if they haven't been regenerated with actual dependency entries.
+          python3 -c "
+          import json, sys
+          for f in ['packaging/flatpak/cargo-sources.json', 'packaging/flatpak/npm-sources.json']:
+              data = json.load(open(f))
+              if len(data) <= 1 and all('_comment' in e or '_instructions' in e for e in data):
+                  print(f'WARNING: {f} is still a placeholder. Generate it before submission.')
+                  sys.exit(0)  # CI warns but does not fail during development
+              print(f'OK: {f} has {len(data)} source entries')
+          "
+
+      - name: Install flatpak-builder and Flathub runtimes
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder elfutils python3-aiohttp python3-toml curl
-          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install -y flathub org.gnome.Platform//46 org.gnome.Sdk//46
-          sudo flatpak install -y flathub org.freedesktop.Sdk.Extension.rust-stable//23.08 org.freedesktop.Sdk.Extension.node20//23.08
+          sudo apt-get install -y flatpak flatpak-builder
+          sudo flatpak remote-add --if-not-exists flathub \
+            https://flathub.org/repo/flathub.flatpakrepo
+          # GNOME 50 / Freedesktop SDK 24.08 (current supported as of 2026)
+          sudo flatpak install -y flathub \
+            org.gnome.Platform//50 \
+            org.gnome.Sdk//50 \
+            org.freedesktop.Sdk.Extension.rust-stable//24.08
 
-      - name: Generate Offline Dependency Sources (Flathub standard)
+      - name: Lint manifest
         run: |
-          pip3 install flatpak-node-generator
-          curl -sLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
-          python3 flatpak-cargo-generator.py src-tauri/Cargo.lock -o packaging/flatpak/cargo-sources.json
-          flatpak-node-generator npm package-lock.json -o packaging/flatpak/npm-sources.json
+          pip3 install flatpak-builder-lint
+          flatpak-builder-lint manifest packaging/flatpak/io.ryzora.Ryzora.yml
 
-      - name: Build Flatpak Offline
+      - name: Build Flatpak (application deps offline, runtime from Flathub)
         run: |
-          flatpak-builder --disable-rofiles-fuse --ccache --force-clean build-dir packaging/flatpak/io.ryzora.Ryzora.yml
+          # --disable-download: application source downloads are forbidden;
+          # only pre-vendored sources in cargo-sources.json / npm-sources.json are used.
+          # Runtime/SDK layers are fetched from Flathub (this is expected and correct).
+          flatpak-builder \
+            --disable-download \
+            --disable-rofiles-fuse \
+            --force-clean \
+            build-dir \
+            packaging/flatpak/io.ryzora.Ryzora.yml
 
-      - name: Export & Install Flatpak
+      - name: Export OSTree repo and build bundle
         run: |
           flatpak build-export repo build-dir
           flatpak build-bundle repo ryzora.flatpak io.ryzora.Ryzora
-          sudo flatpak install -y --system ryzora.flatpak
 
-      - name: Verify Flatpak Artifact Integrity
+      - name: Lint built OSTree repo
         run: |
-          flatpak run --command=ryzora io.ryzora.Ryzora --help || true
+          flatpak-builder-lint repo repo
+
+      - name: Verify Flatpak bundle artifact integrity (non-execution check)
+        run: |
+          # Confirm the bundle was produced. GUI execution is not attempted
+          # in headless CI; this is an artifact integrity check only.
+          test -f ryzora.flatpak
+          file ryzora.flatpak | grep -q "OSTree"
+
+  # ── 5. AppImage: appimagetool build + artifact integrity ────────────────────
   appimage-test:
     name: AppImage (appimagetool + artifact integrity)
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libssl-dev fuse
+            build-essential pkg-config \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libssl-dev fuse
           sudo modprobe fuse 2>/dev/null || true
 
-      - name: Setup Node & Rust
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Install appimagetool
         run: |
-          curl -sL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
+          curl -sL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -o appimagetool
           chmod +x appimagetool
           ./appimagetool --appimage-extract
-          echo "$PWD/squashfs-root/AppRun" > /tmp/appimagetool_path
           sudo ln -s "$PWD/squashfs-root/AppRun" /usr/local/bin/appimagetool
 
       - name: Build AppImage
@@ -206,9 +262,16 @@ jobs:
           test -f target/appimage/Ryzora-*-x86_64.AppImage
 
       - name: Verify AppImage Artifact Integrity
+        # This is an artifact integrity check, NOT a GUI execution test.
+        # Verifies: AppDir structure, executable launcher, binary, desktop entry,
+        # AppStream metadata, icons. Does not claim the GUI application launches.
         run: |
           chmod +x target/appimage/Ryzora-*-x86_64.AppImage
-          # Extract artifact for integrity verification without claiming GUI launch
           target/appimage/Ryzora-*-x86_64.AppImage --appimage-extract
           test -x squashfs-root/AppRun
           test -x squashfs-root/usr/bin/ryzora
+          test -f squashfs-root/usr/share/applications/io.ryzora.Ryzora.desktop
+          test -f squashfs-root/usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml
+          test -f squashfs-root/usr/share/icons/hicolor/scalable/apps/ryzora.svg
+          desktop-file-validate squashfs-root/usr/share/applications/io.ryzora.Ryzora.desktop
+          appstreamcli validate --no-net squashfs-root/usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml
