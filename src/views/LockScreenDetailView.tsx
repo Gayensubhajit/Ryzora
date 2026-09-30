@@ -36,6 +36,9 @@ export const LockScreenDetailView: React.FC = () => {
     getPackageTransaction,
     loadSilentSddmReport,
     loadInstalledPackages,
+    privilegedHelperStatus,
+    setupPrivilegedHelper,
+    isSettingUpHelper,
   } = useApp();
 
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
@@ -407,6 +410,9 @@ export const LockScreenDetailView: React.FC = () => {
         isApplying={isApplying}
         isOverridden={isTargetOverridden}
         overriddenBy={sddmRuntimeStatus?.overridden_by}
+        privilegedHelperInstalled={privilegedHelperStatus?.installed ?? false}
+        onSetupPrivilegedHelper={setupPrivilegedHelper}
+        isSettingUpHelper={isSettingUpHelper}
       />
 
       {/* ── Modular Detail Sections: Configuration vs Details vs Compatibility ── */}

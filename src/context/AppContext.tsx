@@ -1616,6 +1616,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `[Step 4/5] Safely applying configuration to target paths...`,
       ]);
 
+      // Ensure privileged helper is installed before invoking install_package for SDDM
+      const isSddmInstall = target === "sddm" || target === "both" || (!target && (pkg.supports_login_screen || Boolean(pkg.manifest?.targets?.["sddm"])));
+      if (isSddmInstall) {
+        const helperStatus = await checkPrivilegedHelper();
+        if (!helperStatus.installed) {
+          setInstallLogs((prev) => [
+            ...prev,
+            `[Privilege] Ryzora SDDM helper not installed. Setting up system integration via Polkit...`,
+          ]);
+          try {
+            await setupPrivilegedHelper();
+          } catch (setupErr: any) {
+            throw new Error(`Privileged helper setup required for SDDM: ${setupErr?.message || setupErr}`);
+          }
+        }
+      }
+
       const result = await invoke<InstallResult>("install_package", {
         packageId: pkg.id,
         createSnapshot,

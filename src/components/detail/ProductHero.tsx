@@ -45,6 +45,9 @@ interface ProductHeroProps {
   isApplying?: boolean;
   isOverridden?: boolean;
   overriddenBy?: string | null;
+  privilegedHelperInstalled?: boolean;
+  onSetupPrivilegedHelper?: () => void;
+  isSettingUpHelper?: boolean;
 }
 
 export const ProductHero: React.FC<ProductHeroProps> = ({
@@ -73,6 +76,9 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   isApplying = false,
   isOverridden = false,
   overriddenBy = null,
+  privilegedHelperInstalled = true,
+  onSetupPrivilegedHelper,
+  isSettingUpHelper = false,
 }) => {
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
@@ -331,11 +337,24 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                       </span>
                     </div>
                   </div>
-                  {isInstalled && (
+                  {isInstalled ? (
                     <span className="text-[11px] font-medium px-2 py-0.5 rounded-md border bg-[var(--rz-surface)] text-[var(--rz-text-muted)] border-[var(--rz-border-subtle)]">
                       {activeTargets.sddm ? "Active" : "Installed"}
                     </span>
-                  )}
+                  ) : !privilegedHelperInstalled && onSetupPrivilegedHelper ? (
+                    <button
+                      type="button"
+                      disabled={isSettingUpHelper}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetupPrivilegedHelper();
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>{isSettingUpHelper ? "Setting Up…" : "Set Up System Integration"}</span>
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               {/* Session Lock Row */}

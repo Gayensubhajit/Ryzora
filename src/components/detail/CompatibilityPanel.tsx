@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Monitor,
+  ShieldCheck,
 } from "lucide-react";
 import { PackageItem, SystemInfo } from "../../types";
 import { useApp } from "../../context/AppContext";
@@ -29,7 +30,7 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const currentWm = systemInfo?.window_manager?.toLowerCase() || "";
-  const { systemIntegrationReport: systemReport } = useApp();
+  const { systemIntegrationReport: systemReport, privilegedHelperStatus, setupPrivilegedHelper, isSettingUpHelper } = useApp();
   const isMissingDeps = missingDependencies.length > 0;
 
   // 1. Missing Dependencies Warning
@@ -73,6 +74,34 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
               sudo pacman -S sddm && sudo systemctl enable --now sddm
             </code>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2b. Privileged Helper Setup Required for SDDM
+  if (isLoginScreenSupported && privilegedHelperStatus && !privilegedHelperStatus.installed && (selectedTarget === "sddm" || selectedTarget === "both")) {
+    return (
+      <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-start gap-2.5">
+        <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-[var(--rz-text)]">
+              Privileged System Integration Required
+            </span>
+            <button
+              type="button"
+              disabled={isSettingUpHelper}
+              onClick={() => setupPrivilegedHelper()}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all cursor-pointer flex items-center gap-1.5 shrink-0 select-none shadow-xs"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{isSettingUpHelper ? "Setting Up…" : "Set Up System Integration"}</span>
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--rz-text-secondary)]">
+            SDDM login screen themes require Ryzora's privileged helper (<code className="font-mono text-[10px] text-[var(--rz-text)]">/usr/lib/ryzora/ryzora-sddm-helper</code>) to securely copy themes and configure SDDM via Polkit. Click the button above to authorize one-time setup.
+          </p>
         </div>
       </div>
     );
