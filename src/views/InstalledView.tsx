@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   RefreshCw,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { PackageCard } from "../components/PackageCard";
+import { CurrentConfigurationSection } from "../components/sddm/CurrentConfigurationSection";
 import { InstalledHistoryEntry, PackageUpdateStatus } from "../types";
 
 export const InstalledView: React.FC = () => {
@@ -23,6 +24,13 @@ export const InstalledView: React.FC = () => {
     setToast,
     activeLockscreen,
     activeSilentSddmManifest,
+    silentSddmReport,
+    loadSilentSddmReport,
+    loadInstalledPackages,
+    testLockscreen,
+    getLockScreenActivation,
+    refreshActiveLockscreen,
+    authoritativeLockscreen,
   } = useApp();
 
   const [checkingUpdates, setCheckingUpdates] = useState<boolean>(false);
@@ -35,22 +43,16 @@ export const InstalledView: React.FC = () => {
   } | null>(null);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
+  useEffect(() => {
+    refreshActiveLockscreen();
+  }, [refreshActiveLockscreen]);
+
   const installedPackages = useMemo(() => {
     const list = packages.filter((pkg) => installedPackageIds.includes(pkg.id));
 
     const isPkgActive = (pkg: (typeof list)[0]) => {
-      if (activeSilentSddmManifest?.active_asset_id === pkg.id) return true;
-      if (activeLockscreen?.sddm) {
-        if (activeLockscreen.sddm === pkg.id || activeLockscreen.sddm === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
-          return true;
-        }
-      }
-      if (activeLockscreen?.quickshell) {
-        if (activeLockscreen.quickshell === pkg.id || activeLockscreen.quickshell === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
-          return true;
-        }
-      }
-      return false;
+      const act = getLockScreenActivation(pkg.id);
+      return act.sessionLock || act.sddmLogin || act.sddmLock;
     };
 
     return [...list].sort((a, b) => {
@@ -60,7 +62,7 @@ export const InstalledView: React.FC = () => {
       if (!aActive && bActive) return 1;
       return 0;
     });
-  }, [packages, installedPackageIds, activeLockscreen, activeSilentSddmManifest]);
+  }, [packages, installedPackageIds, activeLockscreen, activeSilentSddmManifest, authoritativeLockscreen, getLockScreenActivation]);
 
   const handleCheckAllUpdates = async () => {
     setCheckingUpdates(true);
@@ -169,6 +171,21 @@ export const InstalledView: React.FC = () => {
           <span>All installed packages are up to date.</span>
         </div>
       )}
+
+      {/* ── Control Center: Current Wallpaper ── */}
+      <CurrentConfigurationSection
+        report={silentSddmReport}
+        onRefresh={async () => {
+          await loadSilentSddmReport();
+          await loadInstalledPackages();
+        }}
+        onChangeWallpaper={(_target) => {
+          setActiveCategory("lockscreens");
+        }}
+        onLaunchTest={(target) => {
+          testLockscreen(undefined, target);
+        }}
+      />
 
       {installedPackages.length === 0 ? (
         <div className="p-12 text-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">

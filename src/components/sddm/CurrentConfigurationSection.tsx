@@ -22,7 +22,7 @@ interface CurrentConfigurationSectionProps {
   report: SilentSddmHostReport | null;
   onRefresh?: () => Promise<void>;
   onChangeWallpaper?: (target: "login" | "lock") => void;
-  onLaunchTest?: (target: "sddm") => void;
+  onLaunchTest?: (target: "sddm", configDraft?: SilentSddmConfiguration) => void;
 }
 
 export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionProps> = ({
@@ -35,6 +35,7 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
   const [config, setConfig] = useState<SilentSddmConfiguration | null>(null);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configModalTab, setConfigModalTab] = useState<"login" | "lock">("login");
 
   useEffect(() => {
     let mounted = true;
@@ -155,9 +156,9 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
     }
   };
 
-  const handleTest = () => {
+  const handleTest = (configDraft?: SilentSddmConfiguration) => {
     if (onLaunchTest) {
-      onLaunchTest("sddm");
+      onLaunchTest("sddm", configDraft);
     }
   };
 
@@ -180,7 +181,7 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
               </span>
             </div>
             <p className="text-[11px] text-[var(--rz-text-muted)] mt-0.5">
-              SilentSDDM Greeter Theme · Independent Login and Lock Screen Targets
+              SilentSDDM Theme · Independent SilentSDDM Login Screen and SilentSDDM Lock Screen Targets
             </p>
           </div>
         </div>
@@ -233,7 +234,7 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--rz-accent)]">
-                      Login Screen
+                      SilentSDDM Login Screen
                     </span>
                     <span className="text-[10px] text-[var(--rz-text-muted)]">·</span>
                     <span className="text-[10px] text-[var(--rz-text-muted)] font-medium">
@@ -272,7 +273,7 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
 
               <button
                 type="button"
-                onClick={handleTest}
+                onClick={() => handleTest()}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer flex items-center gap-1 shadow-xs"
                 title="Test Login Screen live in isolated window"
               >
@@ -282,9 +283,12 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
 
               <button
                 type="button"
-                onClick={() => setShowConfigModal(true)}
+                onClick={() => {
+                  setConfigModalTab("login");
+                  setShowConfigModal(true);
+                }}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-                title="Configure layout and visual effects"
+                title="Configure Lock Screen layout and visual effects"
               >
                 <Sliders className="w-3 h-3 text-[var(--rz-text-muted)]" />
                 <span>Configure</span>
@@ -326,7 +330,7 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
-                      Lock Screen
+                      SilentSDDM Lock Screen
                     </span>
                     <span className="text-[10px] text-[var(--rz-text-muted)]">·</span>
                     <span className="text-[10px] text-[var(--rz-text-muted)] font-medium">
@@ -365,7 +369,7 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
 
               <button
                 type="button"
-                onClick={handleTest}
+                onClick={() => handleTest()}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer flex items-center gap-1 shadow-xs"
                 title="Test Lock Screen live in isolated window"
               >
@@ -375,9 +379,12 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
 
               <button
                 type="button"
-                onClick={() => setShowConfigModal(true)}
+                onClick={() => {
+                  setConfigModalTab("lock");
+                  setShowConfigModal(true);
+                }}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-                title="Configure layout and visual effects"
+                title="Configure Lock Screen layout and visual effects"
               >
                 <Sliders className="w-3 h-3 text-[var(--rz-text-muted)]" />
                 <span>Configure</span>
@@ -416,11 +423,12 @@ export const CurrentConfigurationSection: React.FC<CurrentConfigurationSectionPr
             </div>
 
             <SilentSddmConfigPanel
+              initialTab={configModalTab}
               onApplied={async () => {
                 setShowConfigModal(false);
                 if (onRefresh) await onRefresh();
               }}
-              onTestMode={() => handleTest()}
+              onTestMode={(_target, configDraft) => handleTest(configDraft)}
             />
           </div>
         </div>

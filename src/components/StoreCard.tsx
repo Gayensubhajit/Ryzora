@@ -61,7 +61,7 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
   const {
     setSelectedPackage,
     installedPackages,
-    activeLockscreen,
+    getLockScreenActivation,
     deactivateLockscreen,
     uninstallPackage,
     deactivateAndUninstallLockscreen,
@@ -80,16 +80,9 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
     isInstalled && installedRecord
       ? parseFloat(packageItem.version) > parseFloat(installedRecord.version)
       : false;
-  const isQsActive = Boolean(
-    activeLockscreen?.quickshell &&
-    (activeLockscreen.quickshell === packageItem.id ||
-      activeLockscreen.quickshell === packageItem.id.replace(/^lockscreen-(qylock-)?/, ""))
-  );
-  const isSddmActive = Boolean(
-    activeLockscreen?.sddm &&
-    (activeLockscreen.sddm === packageItem.id ||
-      activeLockscreen.sddm === packageItem.id.replace(/^lockscreen-(qylock-)?/, ""))
-  );
+  const activation = getLockScreenActivation(packageItem.id);
+  const isQsActive = activation.sessionLock;
+  const isSddmActive = activation.sddmLogin || activation.sddmLock;
   const isActive = isQsActive || isSddmActive;
 
   const handleClick = () => setSelectedPackage(packageItem);

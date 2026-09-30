@@ -1,6 +1,6 @@
 import type { LockscreenTestResult } from "../types/index.ts";
 import React, { useState, useEffect } from "react";
-import { X, Check } from "lucide-react";
+import { X, Check, Sliders, FileText, ShieldCheck } from "lucide-react";
 import { CustomMediaImportModal } from "../components/media/CustomMediaImportModal.tsx";
 import { SilentSddmConfigPanel } from "../components/sddm/SilentSddmConfigPanel.tsx";
 import { useApp } from "../context/AppContext";
@@ -22,7 +22,7 @@ export const LockScreenDetailView: React.FC = () => {
     installPackage,
     isInstalling,
     setToast,
-    activeLockscreen,
+    getLockScreenActivation,
     applyLockscreen,
     deactivateLockscreen,
     refreshActiveLockscreen,
@@ -34,7 +34,6 @@ export const LockScreenDetailView: React.FC = () => {
     silentSddmReport,
     uninstallPackage,
     getPackageTransaction,
-    activeSilentSddmManifest,
     loadSilentSddmReport,
     loadInstalledPackages,
   } = useApp();
@@ -96,6 +95,7 @@ export const LockScreenDetailView: React.FC = () => {
   const [lastTestResult, setLastTestResult] = useState<LockscreenTestResult | null>(null);
   const [showCustomImportModal, setShowCustomImportModal] = useState(false);
   const [customImportFile, setCustomImportFile] = useState<{ path?: string; file?: File } | null>(null);
+  const [activeDetailSection, setActiveDetailSection] = useState<"configuration" | "details" | "compatibility">("configuration");
 
 
 
@@ -222,32 +222,12 @@ export const LockScreenDetailView: React.FC = () => {
 
   const [isApplying, setIsApplying] = useState(false);
 
-  const pkgSlug = selectedPackage.id
-    .replace(/^lockscreen-qylock-/, "")
-    .replace(/^lockscreen-/, "");
 
-  const isQuickshellActive =
-    Boolean(activeLockscreen?.quickshell) &&
-    (activeLockscreen.quickshell === selectedPackage.id ||
-      activeLockscreen.quickshell === `lockscreen-qylock-${pkgSlug}` ||
-      activeLockscreen.quickshell === pkgSlug);
 
-  const isSddmApplied =
-    Boolean(activeLockscreen?.sddm) &&
-    (activeLockscreen.sddm === selectedPackage.id ||
-      activeLockscreen.sddm === `lockscreen-qylock-${pkgSlug}` ||
-      activeLockscreen.sddm === pkgSlug ||
-      activeLockscreen.sddm === `ryzora-${pkgSlug}`);
-
-  const isSilentSddmActive =
-    isSilentSddm &&
-    (activeSilentSddmManifest?.active_asset_id === selectedPackage.id ||
-      activeLockscreen?.sddm === selectedPackage.id);
-
-  // Only consider active if the effective SDDM theme resolved on the machine actually matches!
-  const isSddmActive = isSilentSddm
-    ? isSilentSddmActive
-    : (isSddmApplied && sddmRuntimeStatus?.active === true);
+  const activation = getLockScreenActivation(selectedPackage.id);
+  const isQuickshellActive = activation.sessionLock;
+  const isSddmActive = activation.sddmLogin || activation.sddmLock;
+  const isSddmApplied = isSddmActive;
   const isSddmOverridden = isSddmApplied && sddmRuntimeStatus?.is_overridden === true;
 
 
@@ -290,9 +270,12 @@ export const LockScreenDetailView: React.FC = () => {
     }
   };
 
-  const handleTest = async (targetOverride?: "quickshell" | "sddm") => {
+  const handleTest = async (
+    targetOverride?: "quickshell" | "sddm",
+    configOverride?: Record<string, any>
+  ) => {
     try {
-      const fullConfig = {
+      const fullConfig = configOverride || {
         ...customConfig,
         variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
       };
@@ -424,45 +407,100 @@ export const LockScreenDetailView: React.FC = () => {
         overriddenBy={sddmRuntimeStatus?.overridden_by}
       />
 
-      {/* ── Compatibility Summary Strip (Directly Below Hero) ── */}
-      <CompatibilityPanel
-        packageItem={selectedPackage}
-        systemInfo={systemInfo}
-        missingDependencies={missingDependencies}
-        selectedTarget={selectedTarget}
-        isSessionLockSupported={isSessionLockSupported}
-        isLoginScreenSupported={isLoginScreenSupported}
-        isGdmActive={isGdmActive}
-      />
+      {/* ── Modular Detail Sections: Configuration vs Details vs Compatibility ── */}
+      <div className="mt-8 space-y-4">
+        {/* Navigation tab bar */}
+        <div className="flex items-center gap-2 border-b border-[var(--rz-border-subtle)] pb-2">
+          {(isSilentSddm || Boolean(schema)) && (
+            <button
+              type="button"
+              onClick={() => setActiveDetailSection("configuration")}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                activeDetailSection === "configuration"
+                  ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-accent)] shadow-xs border border-[var(--rz-border-subtle)]"
+                  : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Configuration</span>
+            </button>
+          )}
 
-      {/* ── SilentSDDM Layout & Visual Customization ── */}
-      {isSilentSddm && (
-        <div className="mt-8 space-y-6">
-          <SilentSddmConfigPanel
-            onApplied={() => refreshActiveLockscreen()}
-            onTestMode={(t) => handleTest(t)}
-          />
+          <button
+            type="button"
+            onClick={() => setActiveDetailSection("details")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              activeDetailSection === "details"
+                ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-accent)] shadow-xs border border-[var(--rz-border-subtle)]"
+                : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Details & Specs</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveDetailSection("compatibility")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              activeDetailSection === "compatibility"
+                ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-accent)] shadow-xs border border-[var(--rz-border-subtle)]"
+                : "text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]"
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Compatibility</span>
+          </button>
         </div>
-      )}
 
-      {/* ── Interactive Theme Customization & Variants ── */}
-      {schema && (
-        <LockScreenCustomizer
-          packageItem={selectedPackage}
-          configSchema={schema}
-          currentConfig={customConfig}
-          selectedVariantId={selectedVariantId}
-          onChangeConfig={handleConfigChange}
-          onSelectVariant={handleSelectVariant}
-        />
-      )}
+        {/* Tab 1: Configuration */}
+        {activeDetailSection === "configuration" && (isSilentSddm || Boolean(schema)) && (
+          <div className="animate-in fade-in duration-150">
+            {isSilentSddm && (
+              <SilentSddmConfigPanel
+                onApplied={() => refreshActiveLockscreen()}
+                onTestMode={(t, draftConfig) => handleTest(t, draftConfig as any)}
+              />
+            )}
+            {!isSilentSddm && schema && (
+              <LockScreenCustomizer
+                packageItem={selectedPackage}
+                configSchema={schema}
+                currentConfig={customConfig}
+                selectedVariantId={selectedVariantId}
+                onChangeConfig={handleConfigChange}
+                onSelectVariant={handleSelectVariant}
+              />
+            )}
+          </div>
+        )}
 
-      {/* ── Technical Detail Tabs (About, Screenshots, Specs) ── */}
-      <DetailTabs
-        packageItem={selectedPackage}
-        systemInfo={systemInfo}
-        selectedTarget={selectedTarget}
-      />
+        {/* Tab 2: Details (Dependencies, Installation, Changelog, Overview) */}
+        {activeDetailSection === "details" && (
+          <div className="animate-in fade-in duration-150">
+            <DetailTabs
+              packageItem={selectedPackage}
+              systemInfo={systemInfo}
+              selectedTarget={selectedTarget}
+            />
+          </div>
+        )}
+
+        {/* Tab 3: Compatibility */}
+        {activeDetailSection === "compatibility" && (
+          <div className="animate-in fade-in duration-150">
+            <CompatibilityPanel
+              packageItem={selectedPackage}
+              systemInfo={systemInfo}
+              missingDependencies={missingDependencies}
+              selectedTarget={selectedTarget}
+              isSessionLockSupported={isSessionLockSupported}
+              isLoginScreenSupported={isLoginScreenSupported}
+              isGdmActive={isGdmActive}
+            />
+          </div>
+        )}
+      </div>
 
       {/* ── Isolated Test Environment Dedicated Modal ── */}
       {lastTestResult && (

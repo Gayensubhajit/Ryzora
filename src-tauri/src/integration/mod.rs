@@ -469,8 +469,10 @@ pub fn silentsddm_get_activation_manifest() -> Option<sddm::activation::SilentSd
 pub async fn silentsddm_apply_wallpaper(
     app: tauri::AppHandle,
     asset_id: String,
+    target: Option<String>,
 ) -> Result<sddm::activation::SilentSddmActivationManifest, String> {
     let aid = asset_id.clone();
+    let tgt = target.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = SilentSddmTxLock::try_acquire()?;
         emit_silentsddm_stage(
@@ -483,10 +485,11 @@ pub async fn silentsddm_apply_wallpaper(
         let home = get_effective_home();
         let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(std::path::PathBuf::from);
 
-        let manifest = sddm::activation::apply_silentsddm_wallpaper_in(
+        let manifest = sddm::activation::apply_silentsddm_wallpaper_target_in(
             &home,
             sys_root.as_deref(),
             &aid,
+            tgt.as_deref(),
             Some(&app),
         )?;
 
@@ -506,7 +509,9 @@ pub async fn silentsddm_apply_wallpaper(
 #[tauri::command]
 pub async fn silentsddm_deactivate(
     app: tauri::AppHandle,
+    target: Option<String>,
 ) -> Result<(), String> {
+    let tgt = target.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = SilentSddmTxLock::try_acquire()?;
         emit_silentsddm_stage(
@@ -519,9 +524,10 @@ pub async fn silentsddm_deactivate(
         let home = get_effective_home();
         let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(std::path::PathBuf::from);
 
-        sddm::activation::deactivate_silentsddm_in(
+        sddm::activation::deactivate_silentsddm_target_in(
             &home,
             sys_root.as_deref(),
+            tgt.as_deref(),
             Some(&app),
         )?;
 

@@ -11,6 +11,7 @@ import type {
   UpstreamWallpaperInstallRequest,
   SilentSddmWallpaper,
   SilentSddmActivationManifest,
+  AuthoritativeLockscreenState,
   SilentSddmConfiguration,
 } from "../types/index.ts";
 import { SILENTSDDM_WALLPAPERS } from "../providers/silentSddmDiscovery.ts";
@@ -135,8 +136,8 @@ export class SilentSddmService {
   /**
    * Applies an installed SilentSDDM wallpaper or custom media to the SDDM login screen.
    */
-  static async applyWallpaper(assetId: string): Promise<SilentSddmActivationManifest> {
-    return invokeTauri<SilentSddmActivationManifest>("silentsddm_apply_wallpaper", { assetId });
+  static async applyWallpaper(assetId: string, target?: "login" | "lock" | "both"): Promise<SilentSddmActivationManifest> {
+    return invokeTauri<SilentSddmActivationManifest>("silentsddm_apply_wallpaper", { assetId, target });
   }
 
   /**
@@ -163,8 +164,12 @@ export class SilentSddmService {
     return invokeTauri<SilentSddmActivationManifest>("silentsddm_apply_configuration", { config });
   }
 
-  static async deactivate(): Promise<void> {
-    return invokeTauri<void>("silentsddm_deactivate");
+  static async deactivate(target?: "login" | "lock" | "both"): Promise<void> {
+    return invokeTauri<void>("silentsddm_deactivate", { target });
+  }
+
+  static async getAuthoritativeLockscreenState(): Promise<AuthoritativeLockscreenState> {
+    return invokeTauri<AuthoritativeLockscreenState>("get_authoritative_lockscreen_state");
   }
 
   /**

@@ -82,6 +82,7 @@ pub fn run() {
             installer::preview_package_update,
             installer::apply_package_update,
             installer::get_active_lockscreen,
+            installer::get_authoritative_lockscreen_state,
             installer::apply_lockscreen,
             installer::deactivate_lockscreen,
             installer::deactivate_and_uninstall_lockscreen,

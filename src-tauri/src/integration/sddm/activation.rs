@@ -61,6 +61,10 @@ pub struct SilentSddmActivationManifest {
     pub active_login_filename: Option<String>,
     #[serde(default)]
     pub staged_backgrounds: Vec<String>,
+    #[serde(default)]
+    pub active_login_asset_id: Option<String>,
+    #[serde(default)]
+    pub active_lock_asset_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -714,6 +718,12 @@ pub fn apply_silentsddm_configuration_in(
         active_lock_filename: Some(lock_filename),
         active_login_filename: Some(login_filename.clone()),
         staged_backgrounds,
+        active_login_asset_id: Some(config.login_screen.background.clone()),
+        active_lock_asset_id: if config.lock_screen.display {
+            Some(config.lock_screen.background.clone())
+        } else {
+            None
+        },
     };
 
     if let Err(e) = save_activation_manifest(home, &manifest) {
@@ -736,11 +746,50 @@ pub fn apply_silentsddm_wallpaper_in(
     asset_id: &str,
     window: Option<&tauri::AppHandle>,
 ) -> Result<SilentSddmActivationManifest, String> {
+    apply_silentsddm_wallpaper_target_in(home, sys_root, asset_id, None, window)
+}
+
+pub fn apply_silentsddm_wallpaper_target_in(
+    home: &Path,
+    sys_root: Option<&Path>,
+    asset_id: &str,
+    target: Option<&str>,
+    window: Option<&tauri::AppHandle>,
+) -> Result<SilentSddmActivationManifest, String> {
     let mut config = super::config::load_configuration(home);
-    config.lock_screen.background = asset_id.to_string();
-    config.login_screen.background = asset_id.to_string();
+    match target.unwrap_or("both") {
+        "login" | "login_screen" | "sddmLogin" => {
+            config.login_screen.background = asset_id.to_string();
+        }
+        "lock" | "lock_screen" | "sddmLock" => {
+            config.lock_screen.background = asset_id.to_string();
+            config.lock_screen.display = true;
+        }
+        _ => {
+            config.lock_screen.background = asset_id.to_string();
+            config.login_screen.background = asset_id.to_string();
+        }
+    }
     let _ = super::config::save_configuration(home, &config);
     apply_silentsddm_configuration_in(home, sys_root, &config, window)
+}
+
+pub fn deactivate_silentsddm_target_in(
+    home: &Path,
+    sys_root: Option<&Path>,
+    target: Option<&str>,
+    window: Option<&tauri::AppHandle>,
+) -> Result<(), String> {
+    match target.unwrap_or("both") {
+        "lock" | "lock_screen" | "sddmLock" => {
+            let mut config = super::config::load_configuration(home);
+            config.lock_screen.display = false;
+            let _ = super::config::save_configuration(home, &config);
+            apply_silentsddm_configuration_in(home, sys_root, &config, window)?;
+            Ok(())
+        }
+        _ => deactivate_silentsddm_in(home, sys_root, window),
+    }
 }
 
 pub fn deactivate_silentsddm_in(

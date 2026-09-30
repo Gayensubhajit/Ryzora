@@ -7,7 +7,6 @@ import { CategoryId } from "../types";
 import { deduplicateStorefrontPackages } from "../components/catalogue/catalogueUtils";
 import { UploadMediaCard } from "../components/media/UploadMediaCard";
 import { CustomMediaImportModal } from "../components/media/CustomMediaImportModal";
-import { CurrentConfigurationSection } from "../components/sddm/CurrentConfigurationSection";
 
 // ── Category metadata ────────────────────────────────────────────────────────
 const CATEGORY_META: Record<CategoryId, { title: string; subtitle: string }> = {
@@ -46,9 +45,13 @@ const STORE_GRID_CATEGORIES = new Set<CategoryId>([
   "fastfetch", "terminal", "bundles",
 ]);
 
+/** Lock Screens navigation taxonomy: Targets (What) & Providers/Engines (Which) */
+const LOCKSCREEN_TARGET_FILTERS = ["All", "Session Lock", "Login Screen", "My Media"] as const;
+const LOCKSCREEN_PROVIDER_FILTERS = ["All Engines", "Qylock", "Hyprlock", "Quickshell", "Swaylock", "SilentSDDM"] as const;
+
 /** Per-category sub-filter pills */
 const CATEGORY_SUB_FILTERS: Partial<Record<CategoryId, string[]>> = {
-  lockscreens: ["All", "Qylock", "SilentSDDM", "SDDM", "My Media"],
+  lockscreens: ["All", "Session Lock", "Login Screen", "My Media"],
   rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
   themes: ["All", "GTK", "Qt", "Application"],
   wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
@@ -170,9 +173,10 @@ const LowContentState: React.FC<{
 
 // ── Main view ────────────────────────────────────────────────────────────────
 export const CategoryView: React.FC = () => {
-  const { packages, activeCategory, searchQuery, desktopFilter, loadSilentSddmReport, loadInstalledPackages, silentSddmReport, testLockscreen, activeLockscreen, activeSilentSddmManifest } = useApp();
+  const { packages, activeCategory, searchQuery, desktopFilter, loadSilentSddmReport, loadInstalledPackages, activeLockscreen, activeSilentSddmManifest, getLockScreenActivation } = useApp();
   const [sortBy, setSortBy] = useState<"rating" | "downloads" | "name" | "newest">("downloads");
   const [subFilter, setSubFilter] = useState<string>("All");
+  const [providerFilter, setProviderFilter] = useState<string>("All Engines");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [pendingFileOrPath, setPendingFileOrPath] = useState<{ path?: string; file?: File } | null>(null);
 
@@ -180,7 +184,7 @@ export const CategoryView: React.FC = () => {
   const useStoreGrid = STORE_GRID_CATEGORIES.has(activeCategory);
   const subFilters = CATEGORY_SUB_FILTERS[activeCategory];
 
-  React.useEffect(() => { setSubFilter("All"); }, [activeCategory]);
+  React.useEffect(() => { setSubFilter("All"); setProviderFilter("All Engines"); }, [activeCategory]);
 
   const categoryPackages = useMemo(() => {
     let list = packages.filter((pkg) => {
@@ -209,36 +213,47 @@ export const CategoryView: React.FC = () => {
       const isCustomPkg = pkg.tags.includes("custom") || pkg.id.startsWith("custom:");
       const isSilentSddmPkg = !isCustomPkg && (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-"));
       const isQylockPkg = !isCustomPkg && !isSilentSddmPkg && (pkg.tags.includes("qylock") || pkg.id.startsWith("qylock-") || pkg.id.startsWith("lockscreen-"));
+      const isHyprlockPkg = pkg.tags?.some((t) => t.toLowerCase().includes("hyprlock")) || pkg.id.includes("hyprlock") || pkg.lockscreen?.targets?.hyprlock != null;
+      const isQuickshellPkg = pkg.tags?.some((t) => t.toLowerCase().includes("quickshell")) || pkg.id.includes("quickshell") || pkg.lockscreen?.targets?.quickshell != null || pkg.supports_session_lock;
+      const isSwaylockPkg = pkg.tags?.some((t) => t.toLowerCase().includes("swaylock")) || pkg.id.includes("swaylock") || pkg.lockscreen?.targets?.swaylock != null;
 
-      const matchesSubFilter =
-        subFilter === "All" ||
-        (subFilter === "My Media" && isCustomPkg) ||
-        (subFilter === "SilentSDDM" && isSilentSddmPkg) ||
-        (subFilter === "Qylock" && isQylockPkg) ||
-        (subFilter !== "My Media" && subFilter !== "SilentSDDM" && subFilter !== "Qylock" && (
+      let matchesSubFilter = true;
+      if (activeCategory === "lockscreens") {
+        // Target / Intent Filter (What the user wants)
+        const matchesTarget =
+          subFilter === "All" ||
+          (subFilter === "My Media" && isCustomPkg) ||
+          (subFilter === "Session Lock" && (pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell != null || isQuickshellPkg || isHyprlockPkg || isSwaylockPkg)) ||
+          (subFilter === "Login Screen" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null || isSilentSddmPkg)) ||
+          // Backward compatibility for legacy pill values
+          (subFilter === "SilentSDDM" && isSilentSddmPkg) ||
+          (subFilter === "Qylock" && isQylockPkg) ||
+          (subFilter === "SDDM" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null || isSilentSddmPkg));
+
+        // Provider / Engine Filter (Which engine provides it)
+        const matchesEngine =
+          providerFilter === "All Engines" ||
+          (providerFilter === "Qylock" && isQylockPkg) ||
+          (providerFilter === "Hyprlock" && isHyprlockPkg) ||
+          (providerFilter === "Quickshell" && isQuickshellPkg) ||
+          (providerFilter === "Swaylock" && isSwaylockPkg) ||
+          (providerFilter === "SilentSDDM" && isSilentSddmPkg);
+
+        matchesSubFilter = matchesTarget && matchesEngine;
+      } else {
+        matchesSubFilter =
+          subFilter === "All" ||
           pkg.tags.some((t) => t.toLowerCase() === subFilter.toLowerCase()) ||
           pkg.supported_desktops.some((d) => d.toLowerCase() === subFilter.toLowerCase()) ||
-          (pkg.components ?? []).some((c) => c.component_type?.toLowerCase().includes(subFilter.toLowerCase())) ||
-          (subFilter.toLowerCase() === "sddm" && (pkg.supports_login_screen || pkg.lockscreen?.targets?.sddm != null || Boolean(pkg.manifest?.targets?.["sddm"]))) ||
-          (subFilter.toLowerCase() === "quickshell" && (pkg.supports_session_lock || pkg.lockscreen?.targets?.quickshell != null || Boolean(pkg.manifest?.targets?.["quickshell"])))
-        ));
+          (pkg.components ?? []).some((c) => c.component_type?.toLowerCase().includes(subFilter.toLowerCase()));
+      }
 
       return matchesCategory && matchesSearch && matchesDesktop && matchesSubFilter;
     });
 
     const isPkgActive = (pkg: (typeof list)[0]) => {
-      if (activeSilentSddmManifest?.active_asset_id === pkg.id) return true;
-      if (activeLockscreen?.sddm) {
-        if (activeLockscreen.sddm === pkg.id || activeLockscreen.sddm === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
-          return true;
-        }
-      }
-      if (activeLockscreen?.quickshell) {
-        if (activeLockscreen.quickshell === pkg.id || activeLockscreen.quickshell === pkg.id.replace(/^lockscreen-(qylock-)?/, "")) {
-          return true;
-        }
-      }
-      return false;
+      const act = getLockScreenActivation(pkg.id);
+      return act.sessionLock || act.sddmLogin || act.sddmLock;
     };
 
     const sorted = [...list].sort((a, b) => {
@@ -258,7 +273,7 @@ export const CategoryView: React.FC = () => {
       return 0;
     });
     return deduplicateStorefrontPackages(sorted);
-  }, [packages, activeCategory, searchQuery, desktopFilter, sortBy, subFilter, activeLockscreen, activeSilentSddmManifest]);
+  }, [packages, activeCategory, searchQuery, desktopFilter, sortBy, subFilter, providerFilter, activeLockscreen, activeSilentSddmManifest]);
 
   // ── Store grid (art-forward, dense) ───────────────────────────────────────
   if (useStoreGrid) {
@@ -292,25 +307,55 @@ export const CategoryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Current Wallpaper Header & Configuration Section (Above grid & filters) */}
-        {activeCategory === "lockscreens" && (
-          <CurrentConfigurationSection
-            report={silentSddmReport}
-            onRefresh={async () => {
-              await loadSilentSddmReport();
-              await loadInstalledPackages();
-            }}
-            onChangeWallpaper={(_target) => {
-              setSubFilter("My Media");
-            }}
-            onLaunchTest={(target) => {
-              testLockscreen(undefined, target);
-            }}
-          />
-        )}
 
-        {/* Sub-filter pills */}
-        {subFilters && (
+
+        {/* Sub-filter navigation (hierarchical for Lock Screens) */}
+        {activeCategory === "lockscreens" ? (
+          <div className="space-y-2.5 mb-6">
+            {/* Primary Target Pills (What the user wants) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
+              {LOCKSCREEN_TARGET_FILTERS.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setSubFilter(f)}
+                  className={[
+                    "flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11.5px] font-semibold transition-all cursor-pointer select-none",
+                    subFilter === f
+                      ? "bg-[var(--rz-accent)] text-white shadow-xs"
+                      : "bg-[var(--rz-surface)] text-[var(--rz-text-muted)] border border-[var(--rz-border-subtle)] hover:border-[var(--rz-border-strong)] hover:text-[var(--rz-text)]",
+                  ].join(" ")}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            {/* Secondary Engine / Provider Filter (Which engine provides it) */}
+            {subFilter !== "My Media" && (
+              <div className="flex items-center gap-2 pt-1 border-t border-[var(--rz-border-subtle)]/60 text-xs overflow-x-auto scrollbar-none">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--rz-text-muted)] shrink-0 pr-1">
+                  Engine:
+                </span>
+                <div className="flex items-center gap-1">
+                  {LOCKSCREEN_PROVIDER_FILTERS.map((ef) => (
+                    <button
+                      key={ef}
+                      onClick={() => setProviderFilter(ef)}
+                      className={[
+                        "px-2.5 py-0.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer select-none",
+                        providerFilter === ef
+                          ? "bg-[var(--rz-surface-elevated)] text-[var(--rz-accent)] font-semibold border border-[var(--rz-accent)]/30"
+                          : "text-[var(--rz-text-muted)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface)]",
+                      ].join(" ")}
+                    >
+                      {ef}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : subFilters ? (
           <div className="flex items-center gap-1.5 mb-5 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
             {subFilters.map((f) => (
               <button
@@ -327,7 +372,7 @@ export const CategoryView: React.FC = () => {
               </button>
             ))}
           </div>
-        )}
+        ) : null}
 
         {/* Grid or Dedicated My Media Section */}
         {activeCategory === "lockscreens" && subFilter === "My Media" ? (

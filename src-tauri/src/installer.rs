@@ -3197,8 +3197,21 @@ pub fn apply_package_update(package_id: String) -> Result<UpdateResult, String> 
 // Lockscreen Activation Engine (Install ≠ Apply Lifecycle)
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct AuthoritativeLockscreenState {
+    pub session_lock: Option<String>,
+    pub sddm_login: Option<String>,
+    pub sddm_lock: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ActiveLockscreenState {
+    #[serde(default)]
+    pub session_lock: Option<String>,
+    #[serde(default)]
+    pub sddm_login: Option<String>,
+    #[serde(default)]
+    pub sddm_lock: Option<String>,
     pub quickshell: Option<String>,
     pub sddm: Option<String>,
     pub quickshell_theme_path: Option<String>,
@@ -3233,15 +3246,127 @@ pub fn get_ryzora_state_dir() -> PathBuf {
     get_ryzora_base_dir().join("state")
 }
 
+pub fn get_authoritative_lockscreen_state_in(
+    home: &Path,
+    state_dir: &Path,
+    sys_root: Option<&Path>,
+) -> AuthoritativeLockscreenState {
+    let raw_state = {
+        let state_file = state_dir.join("active_lockscreen.json");
+        if state_file.exists() {
+            fs::read_to_string(&state_file)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<ActiveLockscreenState>(&raw).ok())
+                .unwrap_or_default()
+        } else {
+            ActiveLockscreenState::default()
+        }
+    };
+
+    // 1. Session lock: Qylock/Hyprlock/Hypridle
+    // Must have quickshell package recorded AND active symlink must exist on host
+    let active_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+    let session_lock = if active_symlink.exists() {
+        raw_state.quickshell.clone()
+    } else {
+        None
+    };
+
+    // 2. SDDM resolution from actual system drop-in / effective resolution
+    let sddm_res = crate::sddm_helper::resolve_effective_sddm_theme_in(sys_root);
+    let (sddm_login, sddm_lock) = match sddm_res.effective_theme.as_deref() {
+        Some("ryzora-silent") => {
+            let manifest = crate::integration::sddm::activation::load_activation_manifest(home);
+            let config = crate::integration::sddm::config::load_configuration(home);
+            let login = manifest
+                .as_ref()
+                .and_then(|m| m.active_login_asset_id.clone().or_else(|| Some(m.active_asset_id.clone())))
+                .or_else(|| Some(config.login_screen.background.clone()));
+            let lock = if config.lock_screen.display {
+                manifest
+                    .as_ref()
+                    .and_then(|m| m.active_lock_asset_id.clone().or_else(|| m.active_lock_filename.clone()))
+                    .or_else(|| Some(config.lock_screen.background.clone()))
+            } else {
+                None
+            };
+            (login, lock)
+        }
+        Some(theme) if theme.starts_with("ryzora-") => {
+            let slug = theme.strip_prefix("ryzora-").unwrap();
+            let pkg_id = format!("lockscreen-qylock-{}", slug);
+            (Some(pkg_id), None)
+        }
+        _ => (None, None),
+    };
+
+    AuthoritativeLockscreenState {
+        session_lock,
+        sddm_login,
+        sddm_lock,
+    }
+}
+
+fn resolve_effective_home(state_dir: &Path) -> PathBuf {
+    if let Some(parent) = state_dir.parent() {
+        if parent.join("mock_home").is_dir() {
+            return parent.join("mock_home");
+        }
+        if parent.file_name().map(|n| n == "ryzora").unwrap_or(false) {
+            if let Some(share) = parent.parent() {
+                if let Some(local) = share.parent() {
+                    if let Some(home) = local.parent() {
+                        if home.is_dir() {
+                            return home.to_path_buf();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    get_home_dir()
+}
+
 pub fn get_active_lockscreen_state_in(state_dir: &Path) -> ActiveLockscreenState {
     let state_file = state_dir.join("active_lockscreen.json");
-    if !state_file.exists() {
-        return ActiveLockscreenState::default();
+    let mut state: ActiveLockscreenState = if !state_file.exists() {
+        ActiveLockscreenState::default()
+    } else {
+        match fs::read_to_string(&state_file) {
+            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+            Err(_) => ActiveLockscreenState::default(),
+        }
+    };
+
+    let home = resolve_effective_home(state_dir);
+    let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(PathBuf::from);
+    let auth = get_authoritative_lockscreen_state_in(&home, state_dir, sys_root.as_deref());
+    state.session_lock = auth.session_lock.clone();
+    state.sddm_login = auth.sddm_login.clone();
+    state.sddm_lock = auth.sddm_lock.clone();
+
+    // Reconcile quickshell and sddm with authoritative reality
+    if state.session_lock.is_none() && state.quickshell.is_some() {
+        let symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
+        if !symlink.exists() {
+            state.quickshell = None;
+        }
     }
-    match fs::read_to_string(&state_file) {
-        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-        Err(_) => ActiveLockscreenState::default(),
+    if let Some(ref login) = auth.sddm_login {
+        state.sddm = Some(login.clone());
+    } else if auth.sddm_login.is_none() && state.sddm.is_some() {
+        state.sddm = None;
     }
+
+    state
+}
+
+#[tauri::command]
+pub fn get_authoritative_lockscreen_state() -> Result<AuthoritativeLockscreenState, String> {
+    let home = get_home_dir();
+    let state_dir = get_ryzora_state_dir();
+    let sys_root = std::env::var("RYZORA_SYSTEM_ROOT").ok().map(PathBuf::from);
+    Ok(get_authoritative_lockscreen_state_in(&home, &state_dir, sys_root.as_deref()))
 }
 
 pub fn save_active_lockscreen_state_in(state_dir: &Path, state: &ActiveLockscreenState) -> Result<(), String> {
@@ -3587,6 +3712,7 @@ pub fn apply_lockscreen_target_in_with_config(
         crate::sddm_helper::activate_sddm_theme(&slug)?;
 
         state.sddm = Some(package_id.to_string());
+        state.sddm_login = Some(package_id.to_string());
         state.sddm_theme_path = Some(sddm_theme_dir.display().to_string());
     }
 
@@ -3649,6 +3775,7 @@ pub fn deactivate_lockscreen_target_in(
         let _ = crate::hypridle::unhook_waybar_lock_trigger(home);
 
         state.quickshell = None;
+        state.session_lock = None;
         state.quickshell_theme_path = None;
     }
 
@@ -3659,6 +3786,7 @@ pub fn deactivate_lockscreen_target_in(
             let _ = crate::sddm_helper::deactivate_sddm_theme();
         }
         state.sddm = None;
+        state.sddm_login = None;
         state.sddm_theme_path = None;
         state.sddm_previous_theme = None;
     }
@@ -3704,6 +3832,63 @@ pub struct LockscreenTestResult {
     pub test_runtime_dir: String,
     pub tested_config: std::collections::HashMap<String, serde_json::Value>,
     pub message: String,
+}
+
+fn materialize_silentsddm_isolated_draft(
+    home: &Path,
+    isolated_dir: &Path,
+    cfg_map: &std::collections::HashMap<String, serde_json::Value>,
+) -> Result<(), String> {
+    let val = serde_json::to_value(cfg_map)
+        .map_err(|e| format!("Failed to serialize draft config map: {}", e))?;
+    let silentsddm_cfg: crate::integration::sddm::config::SilentSddmConfiguration = serde_json::from_value(val)
+        .unwrap_or_else(|_| crate::integration::sddm::config::SilentSddmConfiguration::default());
+
+    let lock_asset = crate::integration::sddm::activation::resolve_asset_file(home, &silentsddm_cfg.lock_screen.background)
+        .map(|(p, fn_str, _, _)| (p, fn_str))
+        .unwrap_or_else(|_| (home.to_path_buf(), silentsddm_cfg.lock_screen.background.clone()));
+
+    let login_asset = if silentsddm_cfg.login_screen.background == silentsddm_cfg.lock_screen.background {
+        lock_asset.clone()
+    } else {
+        crate::integration::sddm::activation::resolve_asset_file(home, &silentsddm_cfg.login_screen.background)
+            .map(|(p, fn_str, _, _)| (p, fn_str))
+            .unwrap_or_else(|_| (home.to_path_buf(), silentsddm_cfg.login_screen.background.clone()))
+    };
+
+    let wallpapers_dir = isolated_dir.join("wallpapers");
+    let _ = fs::create_dir_all(&wallpapers_dir);
+    if lock_asset.0.is_file() {
+        let _ = fs::copy(&lock_asset.0, wallpapers_dir.join(&lock_asset.1));
+    }
+    if login_asset.0.is_file() {
+        let _ = fs::copy(&login_asset.0, wallpapers_dir.join(&login_asset.1));
+    }
+
+    let ini = silentsddm_cfg.to_ini_string(&lock_asset.1, &login_asset.1);
+    let configs_dir = isolated_dir.join("configs");
+    let _ = fs::create_dir_all(&configs_dir);
+    fs::write(configs_dir.join("ryzora-active.conf"), &ini)
+        .map_err(|e| format!("Failed to write isolated ryzora-active.conf: {}", e))?;
+
+    let meta_path = isolated_dir.join("metadata.desktop");
+    if let Ok(meta_content) = fs::read_to_string(&meta_path) {
+        let mut new_lines = Vec::new();
+        let mut has_cfg = false;
+        for line in meta_content.lines() {
+            if line.starts_with("ConfigFile=") {
+                new_lines.push("ConfigFile=configs/ryzora-active.conf".to_string());
+                has_cfg = true;
+            } else {
+                new_lines.push(line.to_string());
+            }
+        }
+        if !has_cfg {
+            new_lines.push("ConfigFile=configs/ryzora-active.conf".to_string());
+        }
+        let _ = fs::write(&meta_path, new_lines.join("\n"));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -3872,8 +4057,12 @@ pub fn launch_lockscreen_test(
             if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
                 let _ = fs::write(&config_json_path, serialized);
             }
-            let theme_conf_path = isolated_test_dir.join("theme.conf");
-            let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
+            if is_silentsddm {
+                let _ = materialize_silentsddm_isolated_draft(&home, &isolated_test_dir, cfg);
+            } else {
+                let theme_conf_path = isolated_test_dir.join("theme.conf");
+                let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
+            }
         }
 
         if is_sddm {
@@ -3896,27 +4085,46 @@ pub fn launch_lockscreen_test(
             crate::integration::sddm::activation::load_activation_manifest(&home)
                 .map(|m| m.active_asset_id)
         });
-        if let Some(ref sddm_pkg) = maybe_sddm_pkg {
-            if state.quickshell.is_none() || target.as_deref() == Some("sddm") {
-                let is_silentsddm = sddm_pkg.starts_with("silentsddm-") || sddm_pkg.starts_with("custom:");
-                let sddm_theme_dir = if is_silentsddm {
-                    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
-                        PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
-                    } else {
-                        PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
-                    }
+        if target.as_deref() == Some("sddm") || maybe_sddm_pkg.is_some() {
+            let sddm_pkg = maybe_sddm_pkg.as_deref().unwrap_or("silentsddm-default");
+            let is_silentsddm = sddm_pkg.starts_with("silentsddm-") || sddm_pkg.starts_with("custom:") || config.as_ref().map(|c| c.contains_key("login_screen") || c.contains_key("lock_screen")).unwrap_or(false);
+            let sddm_theme_dir = if is_silentsddm {
+                if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+                    PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
                 } else {
-                    let slug = sddm_pkg
-                        .strip_prefix("lockscreen-qylock-")
-                        .or_else(|| sddm_pkg.strip_prefix("lockscreen-"))
-                        .unwrap_or(sddm_pkg);
-                    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
-                        PathBuf::from(sys_root).join("usr/share/sddm/themes").join(format!("ryzora-{}", slug))
-                    } else {
-                        PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug))
-                    }
-                };
-                if sddm_theme_dir.exists() {
+                    PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+                }
+            } else {
+                let slug = sddm_pkg
+                    .strip_prefix("lockscreen-qylock-")
+                    .or_else(|| sddm_pkg.strip_prefix("lockscreen-"))
+                    .unwrap_or(sddm_pkg);
+                if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+                    PathBuf::from(sys_root).join("usr/share/sddm/themes").join(format!("ryzora-{}", slug))
+                } else {
+                    PathBuf::from(format!("/usr/share/sddm/themes/ryzora-{}", slug))
+                }
+            };
+            if sddm_theme_dir.exists() {
+                if let Some(ref cfg) = config {
+                    let tmp_test_root = home.join(".local/share/ryzora/tmp/test");
+                    let _ = fs::create_dir_all(&tmp_test_root);
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0);
+                    let isolated_test_dir = tmp_test_root.join(format!("silentsddm-draft-{}", timestamp));
+                    crate::ingestion::copy_dir_all(&sddm_theme_dir, &isolated_test_dir)?;
+                    let _ = materialize_silentsddm_isolated_draft(&home, &isolated_test_dir, cfg);
+                    crate::hypridle::launch_test_sddm_process(&isolated_test_dir)?;
+                    return Ok(LockscreenTestResult {
+                        success: true,
+                        target: "sddm".to_string(),
+                        test_runtime_dir: isolated_test_dir.to_string_lossy().to_string(),
+                        tested_config: config.clone().unwrap_or_default(),
+                        message: "Isolated SDDM draft preview test launched".to_string(),
+                    });
+                } else {
                     crate::hypridle::launch_test_sddm_process(&sddm_theme_dir)?;
                     return Ok(LockscreenTestResult {
                         success: true,
@@ -8689,4 +8897,153 @@ hyprlock
         assert!(json_str.contains("midnight-chrome"));
     }
 
+
+    #[test]
+    fn test_silentsddm_isolated_draft_preview() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+        let sandbox = TestSandbox::new("sddm_draft");
+        let sys_root = sandbox.root.join("sys_root");
+        fs::create_dir_all(sys_root.join("usr/share/sddm/themes/ryzora-silent/configs")).unwrap();
+        fs::write(
+            sys_root.join("usr/share/sddm/themes/ryzora-silent/metadata.desktop"),
+            "[SddmGreeterTheme]\nConfigFile=configs/default.conf\n",
+        ).unwrap();
+        fs::write(
+            sys_root.join("usr/share/sddm/themes/ryzora-silent/Main.qml"),
+            "import QtQuick 2.15\nItem {}\n",
+        ).unwrap();
+
+        std::env::set_var("RYZORA_SYSTEM_ROOT", sys_root.to_str().unwrap());
+
+        let mut draft_cfg = std::collections::HashMap::new();
+        draft_cfg.insert("background".to_string(), serde_json::json!({ "fill_mode": "stretch" }));
+        draft_cfg.insert("login_screen".to_string(), serde_json::json!({
+            "background": "silentsddm-silvia",
+            "use_background_color": false,
+            "background_color": "#000000",
+            "blur": 15,
+            "brightness": 0.2,
+            "saturation": -0.1,
+            "login_area": { "position": "left", "margin": -1 },
+            "avatar": { "shape": "square", "active_size": 140, "inactive_size": 90, "inactive_opacity": 0.4 }
+        }));
+        draft_cfg.insert("lock_screen".to_string(), serde_json::json!({
+            "display": true,
+            "background": "silentsddm-silvia",
+            "use_background_color": false,
+            "background_color": "#000000",
+            "blur": 40,
+            "brightness": -0.3,
+            "saturation": 0.5,
+            "padding_top": 0, "padding_right": 0, "padding_bottom": 0, "padding_left": 0,
+            "clock": { "display": true, "position": "bottom-right", "align": "right", "format": "hh:mm", "font_size": 85, "font_weight": 900, "color": "#FFFFFF" },
+            "date": { "display": true, "format": "dddd, MMMM d", "font_size": 20, "color": "#FFFFFF", "margin_top": 10 },
+            "message": { "display": true, "position": "bottom-center", "text": "Unlock Test", "font_size": 14, "color": "#FFFFFF" }
+        }));
+
+        let result = launch_lockscreen_test(None, Some("sddm".to_string()), Some(draft_cfg))
+            .expect("Draft preview must launch successfully in isolated environment");
+
+        assert!(result.success);
+        assert_eq!(result.target, "sddm");
+        assert!(result.test_runtime_dir.contains("silentsddm-draft"));
+
+        let test_dir = std::path::PathBuf::from(&result.test_runtime_dir);
+        assert!(test_dir.exists(), "Isolated test directory must exist on disk");
+
+        // Verify isolated configs/ryzora-active.conf has the draft changes
+        let conf_content = fs::read_to_string(test_dir.join("configs/ryzora-active.conf")).unwrap();
+        assert!(conf_content.contains("position = \"left\""), "Must contain modified login area position");
+        assert!(conf_content.contains("position = \"bottom-right\""), "Must contain modified clock position");
+        assert!(conf_content.contains("blur = 15"), "Must contain modified login blur");
+        assert!(conf_content.contains("blur = 40"), "Must contain modified lock blur");
+        assert!(conf_content.contains("shape = \"square\""), "Must contain modified avatar shape");
+        assert!(conf_content.contains("background-fill-mode = \"stretch\""), "Must contain modified fill mode");
+
+        // Verify metadata.desktop points to ryzora-active.conf
+        let meta_content = fs::read_to_string(test_dir.join("metadata.desktop")).unwrap();
+        assert!(meta_content.contains("ConfigFile=configs/ryzora-active.conf"));
+
+        // Clean up test dir
+        let _ = fs::remove_dir_all(&test_dir);
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    #[test]
+    fn test_authoritative_lockscreen_three_target_independence() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+        let sandbox = TestSandbox::new("auth-independence");
+        let sys_root = sandbox.root.join("system_root");
+        std::env::set_var("RYZORA_SYSTEM_ROOT", &sys_root);
+        crate::sddm_helper::setup_privileged_helper_in(Some(&sys_root)).unwrap();
+
+        // 1. Initial state: everything inactive
+        let auth0 = get_authoritative_lockscreen_state_in(&sandbox.home_dir, &sandbox.installed_dir, Some(&sys_root));
+        assert_eq!(auth0.session_lock, None);
+        assert_eq!(auth0.sddm_login, None);
+        assert_eq!(auth0.sddm_lock, None);
+
+        // 2. Proof 1: Qylock active does NOT activate either SilentSDDM target
+        let qs_symlink = sandbox.home_dir.join(".local/share/ryzora/active/lockscreen/quickshell");
+        fs::create_dir_all(qs_symlink.parent().unwrap()).unwrap();
+        let dummy_target = sandbox.home_dir.join(".local/share/ryzora/lockscreens/qylock/dog-samurai");
+        fs::create_dir_all(&dummy_target).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&dummy_target, &qs_symlink).unwrap();
+        let state_dir = sandbox.root.join("state");
+        fs::create_dir_all(&state_dir).unwrap();
+        let mut st = ActiveLockscreenState::default();
+        st.quickshell = Some("lockscreen-qylock-dog-samurai".to_string());
+        save_active_lockscreen_state_in(&state_dir, &st).unwrap();
+
+        let auth1 = get_authoritative_lockscreen_state_in(&sandbox.home_dir, &state_dir, Some(&sys_root));
+        assert_eq!(auth1.session_lock, Some("lockscreen-qylock-dog-samurai".to_string()));
+        assert_eq!(auth1.sddm_login, None, "Qylock must NOT activate sddm_login");
+        assert_eq!(auth1.sddm_lock, None, "Qylock must NOT activate sddm_lock");
+
+        // 3. Proof 2: Direct SDDM theme (dog-samurai) in /etc/sddm.conf.d/ does NOT activate session lock or sddm_lock
+        let sddm_conf_dir = sys_root.join("etc/sddm.conf.d");
+        fs::create_dir_all(&sddm_conf_dir).unwrap();
+        fs::write(sddm_conf_dir.join("zz-ryzora-theme.conf"), "[Theme]\nCurrent=ryzora-dog-samurai\n").unwrap();
+
+        let auth2 = get_authoritative_lockscreen_state_in(&sandbox.home_dir, &state_dir, Some(&sys_root));
+        assert_eq!(auth2.sddm_login, Some("lockscreen-qylock-dog-samurai".to_string()));
+        assert_eq!(auth2.sddm_lock, None, "SDDM Login must NOT activate sddm_lock");
+        // Winter check: Winter is NOT the active theme
+        assert_ne!(auth2.sddm_login, Some("lockscreen-qylock-winter".to_string()));
+
+        // 4. Proof 3: SilentSDDM Login active does NOT activate Session Lock
+        // Clear quickshell symlink
+        let _ = fs::remove_file(&qs_symlink);
+        let mut cfg = crate::integration::sddm::config::SilentSddmConfiguration::default();
+        cfg.login_screen.background = "silentsddm-silvia".to_string();
+        cfg.lock_screen.background = "silentsddm-lock-bg".to_string();
+        cfg.lock_screen.display = true;
+        let _ = crate::integration::sddm::config::save_configuration(&sandbox.home_dir, &cfg);
+
+        // Set effective SDDM to ryzora-silent
+        fs::write(sddm_conf_dir.join("zz-ryzora-theme.conf"), "[Theme]\nCurrent=ryzora-silent\n").unwrap();
+
+        let auth3 = get_authoritative_lockscreen_state_in(&sandbox.home_dir, &state_dir, Some(&sys_root));
+        assert_eq!(auth3.session_lock, None, "SilentSDDM Login must NOT activate Session Lock");
+        assert_eq!(auth3.sddm_login, Some("silentsddm-silvia".to_string()));
+        assert_eq!(auth3.sddm_lock, Some("silentsddm-lock-bg".to_string()));
+
+        // 5. Proof 4: Changing Login does NOT change Lock
+        cfg.login_screen.background = "silentsddm-ken".to_string();
+        let _ = crate::integration::sddm::config::save_configuration(&sandbox.home_dir, &cfg);
+        let auth4 = get_authoritative_lockscreen_state_in(&sandbox.home_dir, &state_dir, Some(&sys_root));
+        assert_eq!(auth4.sddm_login, Some("silentsddm-ken".to_string()), "Login should change to ken");
+        assert_eq!(auth4.sddm_lock, Some("silentsddm-lock-bg".to_string()), "Lock must remain silentsddm-lock-bg");
+
+        // 6. Proof 5: Deactivating Lock does NOT deactivate Login
+        cfg.lock_screen.display = false;
+        let _ = crate::integration::sddm::config::save_configuration(&sandbox.home_dir, &cfg);
+        let auth5 = get_authoritative_lockscreen_state_in(&sandbox.home_dir, &state_dir, Some(&sys_root));
+        assert_eq!(auth5.sddm_login, Some("silentsddm-ken".to_string()), "Login must remain active after Lock deactivated");
+        assert_eq!(auth5.sddm_lock, None, "Lock must be deactivated");
+
+        // Cleanup
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
 }

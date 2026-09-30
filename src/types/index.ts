@@ -1082,9 +1082,24 @@ export type Phase15CategoryId =
   | "compatibility-lab"
   | "apps";
 
+export type LockScreenActivationState = {
+  sessionLock: boolean;
+  sddmLogin: boolean;
+  sddmLock: boolean;
+};
+
+export interface AuthoritativeLockscreenState {
+  session_lock: string | null;
+  sddm_login: string | null;
+  sddm_lock: string | null;
+}
+
 export interface ActiveLockscreenState {
   quickshell?: string | null;
   sddm?: string | null;
+  session_lock?: string | null;
+  sddm_login?: string | null;
+  sddm_lock?: string | null;
   quickshell_theme_path?: string | null;
   sddm_theme_path?: string | null;
   last_applied_at?: number | null;
@@ -1378,6 +1393,10 @@ export interface SilentSddmActivationManifest {
   previous_activation_conf: PreviousActivationConf;
   active_conf_sha256: string;
   engine_snapshot: EngineConfigSnapshot;
+  active_lock_filename?: string | null;
+  active_login_filename?: string | null;
+  active_login_asset_id?: string | null;
+  active_lock_asset_id?: string | null;
 }
 
 export type PackageTransactionStage =

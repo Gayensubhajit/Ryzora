@@ -63,6 +63,8 @@ import {
   RepositorySyncReport,
   InstalledHistoryEntry,
   ActiveLockscreenState,
+  AuthoritativeLockscreenState,
+  LockScreenActivationState,
   HostCapabilities,
   LockscreenRuntimeStatus,
   SystemIntegrationReport,
@@ -150,6 +152,8 @@ interface AppContextType {
   getInstalledPackageHistory: (packageId: string) => Promise<InstalledHistoryEntry[]>;
   activeLockscreen: ActiveLockscreenState;
   activeSilentSddmManifest: SilentSddmActivationManifest | null;
+  authoritativeLockscreen: AuthoritativeLockscreenState;
+  getLockScreenActivation: (pkgId: string) => LockScreenActivationState;
   applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both", config?: Record<string, any>) => Promise<ActiveLockscreenState>;
   deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
@@ -626,13 +630,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         session_lock_protocol: "ext-session-lock-v1",
         display_manager: "sddm",
         display_manager_service: "sddm.service",
-        display_manager_theme: "winter",
+        display_manager_theme: null,
         active_lockscreen: {
           session_lock_type: "hyprlock",
           session_lock_name: "~/.config/hypr/hyprlock_themes/006_stacked_clock/hyprlock.conf",
           session_lock_config: "/home/silentbyte/.config/hypr/hypridle.conf",
           login_screen_type: "sddm",
-          login_screen_theme: "winter",
+          login_screen_theme: null,
           login_screen_config: "sddm.service",
           managed_by: "Dusky",
         },
@@ -694,21 +698,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  const [authoritativeLockscreen, setAuthoritativeLockscreen] = useState<AuthoritativeLockscreenState>({
+    session_lock: null,
+    sddm_login: null,
+    sddm_lock: null,
+  });
+
   const [activeLockscreen, setActiveLockscreen] = useState<ActiveLockscreenState>({
     quickshell: null,
     sddm: null,
   });
   const [activeSilentSddmManifest, setActiveSilentSddmManifest] = useState<SilentSddmActivationManifest | null>(null);
 
+  const getLockScreenActivation = useCallback(
+    (pkgId: string): LockScreenActivationState => {
+      const normalize = (id: string | null | undefined) => {
+        if (!id) return "";
+        return id.replace(/^lockscreen-(qylock-)?/, "").replace(/^ryzora-/, "").toLowerCase();
+      };
+      const targetId = normalize(pkgId);
+      const sessionTarget = normalize(authoritativeLockscreen.session_lock);
+      const sddmLoginTarget = normalize(authoritativeLockscreen.sddm_login);
+      const sddmLockTarget = normalize(authoritativeLockscreen.sddm_lock);
+
+      return {
+        sessionLock: Boolean(sessionTarget && sessionTarget === targetId),
+        sddmLogin: Boolean(sddmLoginTarget && sddmLoginTarget === targetId),
+        sddmLock: Boolean(sddmLockTarget && sddmLockTarget === targetId),
+      };
+    },
+    [authoritativeLockscreen]
+  );
+
   const refreshActiveLockscreen = async (): Promise<ActiveLockscreenState> => {
     try {
-      const [state, sddmManifest] = await Promise.all([
+      const [state, authState, sddmManifest] = await Promise.all([
         invoke<ActiveLockscreenState>("get_active_lockscreen").catch(() => ({ quickshell: null, sddm: null })),
+        invoke<AuthoritativeLockscreenState>("get_authoritative_lockscreen_state").catch(() => null),
         SilentSddmService.getActivationManifest().catch(() => null),
       ]);
       const mergedState: ActiveLockscreenState = state || { quickshell: null, sddm: null };
+
+      const effectiveAuth: AuthoritativeLockscreenState = authState || {
+        session_lock: mergedState.session_lock || mergedState.quickshell || null,
+        sddm_login: mergedState.sddm_login || mergedState.sddm || sddmManifest?.active_asset_id || null,
+        sddm_lock: mergedState.sddm_lock || sddmManifest?.active_lock_asset_id || null,
+      };
+
+      setAuthoritativeLockscreen(effectiveAuth);
+      mergedState.session_lock = effectiveAuth.session_lock;
+      mergedState.sddm_login = effectiveAuth.sddm_login;
+      mergedState.sddm_lock = effectiveAuth.sddm_lock;
+      mergedState.quickshell = effectiveAuth.session_lock;
+      mergedState.sddm = effectiveAuth.sddm_login;
+
       if (sddmManifest) {
-        mergedState.sddm = sddmManifest.active_asset_id;
         mergedState.sddm_theme_path = "/usr/share/sddm/themes/ryzora-silent";
         setActiveSilentSddmManifest(sddmManifest);
       } else {
@@ -843,7 +887,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         idle_provider: "hypridle",
         idle_config: "~/.config/hypr/hypridle.conf",
         login_manager: "SDDM",
-        login_theme: "winter",
+        login_theme: null,
         login_config: "/etc/sddm.conf.d/theme.conf",
         confidence: "high",
         evidence: ["Default environment fallback"],
@@ -2026,6 +2070,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getInstalledPackageHistory,
         activeLockscreen,
         activeSilentSddmManifest,
+        authoritativeLockscreen,
+        getLockScreenActivation,
         applyLockscreen,
         deactivateLockscreen,
         refreshActiveLockscreen,

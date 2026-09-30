@@ -32,7 +32,7 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
     installedPackages,
     checkCompatibility,
     repositories,
-    activeLockscreen,
+    getLockScreenActivation,
     systemInfo,
     deactivateLockscreen,
     uninstallPackage,
@@ -50,16 +50,9 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
       ? compareSemver(packageItem.version, installedRecord.version) > 0
       : false;
 
-  const isQsActive = Boolean(
-    activeLockscreen?.quickshell &&
-    (activeLockscreen.quickshell === packageItem.id ||
-      activeLockscreen.quickshell === packageItem.id.replace(/^lockscreen-(qylock-)?/, ""))
-  );
-  const isSddmActive = Boolean(
-    activeLockscreen?.sddm &&
-    (activeLockscreen.sddm === packageItem.id ||
-      activeLockscreen.sddm === packageItem.id.replace(/^lockscreen-(qylock-)?/, ""))
-  );
+  const activation = getLockScreenActivation(packageItem.id);
+  const isQsActive = activation.sessionLock;
+  const isSddmActive = activation.sddmLogin || activation.sddmLock;
   const isActive = isQsActive || isSddmActive;
 
   const repo = repositories.find((r) => r.id === packageItem.repository_id);

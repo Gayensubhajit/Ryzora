@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert";
 import { packageEngine } from "../providers/index.ts";
@@ -928,4 +929,155 @@ test("Library card presentation: ACTIVE badge only on active items, no Installed
   assert.strictEqual(isPkgActive(activePackage.id), true);
   // Inactive item
   assert.strictEqual(isPkgActive(inactivePackage.id), false);
+});
+
+
+test("Redesigned Lock Screens navigation hierarchy separates Intent Target and Engine", () => {
+  const targetFilters = ["All", "Session Lock", "Login Screen", "My Media"];
+  const engineFilters = ["All Engines", "Qylock", "Hyprlock", "Quickshell", "Swaylock", "SilentSDDM"];
+
+  assert.strictEqual(targetFilters.length, 4);
+  assert.strictEqual(engineFilters.length, 6);
+
+  // Assert target separation
+  assert.ok(targetFilters.includes("Session Lock"));
+  assert.ok(targetFilters.includes("Login Screen"));
+  assert.ok(targetFilters.includes("My Media"));
+
+  // Assert engine separation
+  assert.ok(engineFilters.includes("Qylock"));
+  assert.ok(engineFilters.includes("Hyprlock"));
+  assert.ok(engineFilters.includes("SilentSDDM"));
+});
+
+test("SilentSDDM configuration editor structure supports persistent Login and Lock screen settings", () => {
+  const panelSource = fs.readFileSync("src/components/sddm/SilentSddmConfigPanel.tsx", "utf-8");
+
+  // Login screen settings
+  assert.ok(panelSource.includes("Login Screen"), "Panel must include Login Screen tab");
+  assert.ok(panelSource.includes("config.login_screen.blur"), "Panel must configure login screen blur");
+  assert.ok(panelSource.includes("config.login_screen.brightness"), "Panel must configure login screen brightness");
+  assert.ok(panelSource.includes("config.login_screen.saturation"), "Panel must configure login screen saturation");
+  assert.ok(panelSource.includes("config.login_screen.login_area.position"), "Panel must configure login area position");
+  assert.ok(panelSource.includes("config.login_screen.avatar.shape"), "Panel must configure avatar shape");
+  assert.ok(panelSource.includes("config.login_screen.avatar.active_size"), "Panel must configure avatar active size");
+
+  // Lock screen settings
+  assert.ok(panelSource.includes("Lock Screen"), "Panel must include Lock Screen tab");
+  assert.ok(panelSource.includes("config.lock_screen.blur"), "Panel must configure lock screen blur");
+  assert.ok(panelSource.includes("config.lock_screen.brightness"), "Panel must configure lock screen brightness");
+  assert.ok(panelSource.includes("config.lock_screen.saturation"), "Panel must configure lock screen saturation");
+  assert.ok(panelSource.includes("config.lock_screen.clock.position"), "Panel must configure clock position grid");
+  assert.ok(panelSource.includes("config.lock_screen.date"), "Panel must configure date format and display");
+  assert.ok(panelSource.includes("config.lock_screen.message"), "Panel must configure unlock message text");
+
+  // Fill mode
+  assert.ok(panelSource.includes("config.background.fill_mode"), "Panel must configure background fill mode");
+
+  // Explicit lifecycle: Configure -> Preview/Test -> Apply
+  assert.ok(panelSource.includes("Configuration Lifecycle"), "Panel must display configuration lifecycle banner");
+  assert.ok(panelSource.includes("handleSaveDraft"), "Panel must have draft saving lifecycle step");
+  assert.ok(panelSource.includes("Preview / Test"), "Panel must have preview/test lifecycle step");
+  assert.ok(panelSource.includes("handleApply"), "Panel must have apply lifecycle step");
+});
+
+test("Library view includes Current Wallpaper control center with Login and Lock targets", () => {
+  const installedSource = fs.readFileSync("src/views/InstalledView.tsx", "utf-8");
+
+  assert.ok(
+    installedSource.includes("CurrentConfigurationSection"),
+    "InstalledView must embed CurrentConfigurationSection as the central control center"
+  );
+  assert.ok(
+    installedSource.includes("report={silentSddmReport}"),
+    "InstalledView must pass silentSddmReport to CurrentConfigurationSection"
+  );
+  assert.ok(
+    installedSource.includes("testLockscreen"),
+    "InstalledView must hook into testLockscreen for live isolated testing"
+  );
+});
+
+test("Lock Screen detail view is redesigned with clean tabs instead of stacked vertical panels", () => {
+  const detailSource = fs.readFileSync("src/views/LockScreenDetailView.tsx", "utf-8");
+
+  assert.ok(
+    detailSource.includes('activeDetailSection === "configuration"'),
+    "Detail view must support dedicated Configuration tab"
+  );
+  assert.ok(
+    detailSource.includes('activeDetailSection === "details"'),
+    "Detail view must support dedicated Details & Specs tab"
+  );
+  assert.ok(
+    detailSource.includes('activeDetailSection === "compatibility"'),
+    "Detail view must support dedicated Compatibility tab"
+  );
+});
+
+test("draft Preview passes current config and does not persist draft", () => {
+  const panelSource = fs.readFileSync("src/components/sddm/SilentSddmConfigPanel.tsx", "utf-8");
+
+  // Passes draft config to onTestMode
+  assert.ok(
+    panelSource.includes('onTestMode("sddm", config)'),
+    "Preview/Test must pass current draft config to onTestMode"
+  );
+
+  // Preview button does not invoke saveConfiguration
+  const previewMatch = panelSource.includes('onClick={() => onTestMode("sddm", config)}');
+  assert.ok(previewMatch, "Preview button handler must only invoke onTestMode with draft config");
+  assert.ok(
+    !panelSource.includes('onClick={() => { handleSaveDraft(); onTestMode'),
+    "Preview must not persist draft to disk"
+  );
+});
+
+test("Login and Lock targets open their respective initial tabs", () => {
+  const currentSection = fs.readFileSync("src/components/sddm/CurrentConfigurationSection.tsx", "utf-8");
+
+  assert.ok(
+    currentSection.includes('setConfigModalTab("login")'),
+    "Login Screen Configure button must set configModalTab to login"
+  );
+  assert.ok(
+    currentSection.includes('setConfigModalTab("lock")'),
+    "Lock Screen Configure button must set configModalTab to lock"
+  );
+  assert.ok(
+    currentSection.includes('initialTab={configModalTab}'),
+    "Modal must pass initialTab to SilentSddmConfigPanel"
+  );
+});
+
+test("Only one canonical CurrentConfigurationSection is rendered in Library and not CategoryView", () => {
+  const categorySource = fs.readFileSync("src/views/CategoryView.tsx", "utf-8");
+  const installedSource = fs.readFileSync("src/views/InstalledView.tsx", "utf-8");
+
+  assert.ok(
+    !categorySource.includes("<CurrentConfigurationSection"),
+    "CategoryView must not have duplicate CurrentConfigurationSection"
+  );
+  assert.ok(
+    installedSource.includes("<CurrentConfigurationSection"),
+    "InstalledView must be the single canonical host for CurrentConfigurationSection"
+  );
+});
+
+test("Target labels strictly use SilentSDDM Login Screen and SilentSDDM Lock Screen", () => {
+  const panelSource = fs.readFileSync("src/components/sddm/SilentSddmConfigPanel.tsx", "utf-8");
+  const currentSection = fs.readFileSync("src/components/sddm/CurrentConfigurationSection.tsx", "utf-8");
+
+  assert.ok(
+    !panelSource.includes("Session Screen Locker"),
+    "Panel must not call SilentSDDM Lock Screen 'Session Screen Locker'"
+  );
+  assert.ok(
+    panelSource.includes("SilentSDDM Login Screen") && panelSource.includes("SilentSDDM Lock Screen"),
+    "Panel must identify targets as SilentSDDM Login Screen and SilentSDDM Lock Screen"
+  );
+  assert.ok(
+    currentSection.includes("SilentSDDM Login Screen") && currentSection.includes("SilentSDDM Lock Screen"),
+    "CurrentConfigurationSection must identify targets as SilentSDDM Login Screen and SilentSDDM Lock Screen"
+  );
 });
