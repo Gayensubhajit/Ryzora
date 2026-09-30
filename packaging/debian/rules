@@ -1,0 +1,26 @@
+#!/usr/bin/make -f
+export DH_VERBOSE = 1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	npm install --frozen-lockfile || npm install
+	npm run build
+	cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+
+override_dh_auto_install:
+	install -Dm755 src-tauri/target/release/ryzora debian/ryzora/usr/bin/ryzora
+	if [ -f src-tauri/target/release/ryzora-ci ]; then \
+		install -Dm755 src-tauri/target/release/ryzora-ci debian/ryzora/usr/bin/ryzora-ci; \
+	fi
+	install -Dm644 dist-assets/io.ryzora.Ryzora.desktop debian/ryzora/usr/share/applications/io.ryzora.Ryzora.desktop
+	ln -sf io.ryzora.Ryzora.desktop debian/ryzora/usr/share/applications/ryzora.desktop
+	install -Dm644 dist-assets/io.ryzora.Ryzora.metainfo.xml debian/ryzora/usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml
+	install -Dm644 dist-assets/icons/hicolor/scalable/apps/ryzora.svg debian/ryzora/usr/share/icons/hicolor/scalable/apps/ryzora.svg
+	for size in 16 32 48 64 128 256 512; do \
+		if [ -f dist-assets/icons/hicolor/$${size}x$${size}/apps/ryzora.png ]; then \
+			install -Dm644 dist-assets/icons/hicolor/$${size}x$${size}/apps/ryzora.png \
+				debian/ryzora/usr/share/icons/hicolor/$${size}x$${size}/apps/ryzora.png; \
+		fi \
+	done

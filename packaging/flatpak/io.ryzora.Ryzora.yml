@@ -1,0 +1,60 @@
+app-id: io.ryzora.Ryzora
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node20
+command: ryzora
+
+finish-args:
+  # Wayland and X11 display access
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Networking for community catalog downloads
+  - --share=network
+  # Desktop notifications
+  - --talk-name=org.freedesktop.Notifications
+  # Polkit authentication access
+  - --system-talk-name=org.freedesktop.PolicyKit1
+  # Portal spawn for external privileged helpers
+  - --talk-name=org.freedesktop.portal.Flatpak
+  # Desktop configuration access (dotfiles management)
+  - --filesystem=xdg-config/hypr:create
+  - --filesystem=xdg-config/waybar:create
+  - --filesystem=xdg-config/ryzora:create
+  - --filesystem=xdg-data/ryzora:create
+  - --filesystem=xdg-data/icons:ro
+  - --filesystem=xdg-data/themes:ro
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node20/bin
+  env:
+    CARGO_HOME: /run/build/ryzora/cargo
+
+modules:
+  - name: ryzora
+    buildsystem: simple
+    build-commands:
+      # Frontend assets build
+      - npm install --offline || npm install
+      - npm run build
+      # Tauri Rust backend release build
+      - cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+      # Installation
+      - install -Dm755 src-tauri/target/release/ryzora /app/bin/ryzora
+      - install -Dm644 dist-assets/io.ryzora.Ryzora.desktop /app/share/applications/io.ryzora.Ryzora.desktop
+      - install -Dm644 dist-assets/io.ryzora.Ryzora.metainfo.xml /app/share/metainfo/io.ryzora.Ryzora.metainfo.xml
+      - install -Dm644 dist-assets/icons/hicolor/scalable/apps/ryzora.svg /app/share/icons/hicolor/scalable/apps/ryzora.svg
+      - |
+        for size in 16 32 48 64 128 256 512; do
+          if [ -f dist-assets/icons/hicolor/${size}x${size}/apps/ryzora.png ]; then
+            install -Dm644 dist-assets/icons/hicolor/${size}x${size}/apps/ryzora.png \
+              /app/share/icons/hicolor/${size}x${size}/apps/ryzora.png
+          fi
+        done
+    sources:
+      - type: dir
+        path: ../../

@@ -1,0 +1,35 @@
+Source: ryzora
+Section: utils
+Priority: optional
+Maintainer: Ryzora Contributors <contributors@ryzora.org>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc (>= 1.75),
+               nodejs (>= 18),
+               npm,
+               libgtk-3-dev,
+               libwebkit2gtk-4.1-dev,
+               libssl-dev,
+               pkg-config
+Standards-Version: 4.6.2
+Homepage: https://github.com/Gayensubhajit/Ryzora
+Vcs-Git: https://github.com/Gayensubhajit/Ryzora.git
+Vcs-Browser: https://github.com/Gayensubhajit/Ryzora
+
+Package: ryzora
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libgtk-3-0,
+         libwebkit2gtk-4.1-0,
+         libssl3,
+         hicolor-icon-theme
+Recommends: hyprland,
+            waybar,
+            hyprlock,
+            fastfetch,
+            kitty
+Description: Universal Linux Desktop Customization Platform
+ Ryzora is a universal Linux desktop customization manager and software center.
+ It allows users to safely discover, preview, install, configure, and roll back
+ desktop rices, Waybar configs, lock screens, and themes without risking system breakage.
