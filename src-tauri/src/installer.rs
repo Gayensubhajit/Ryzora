@@ -3117,6 +3117,7 @@ pub fn install_package(
     create_snapshot: Option<bool>,
     target: Option<String>,
 ) -> Result<InstallResult, String> {
+    eprintln!("[RYZORA_TRACE] install_package: id={} target={:?}", package_id, target);
     let home = get_home_dir();
     let package_dir = find_package_dir(&package_id, None)?;
     let snapshots_root = get_ryzora_snapshots_dir();
@@ -3305,7 +3306,7 @@ pub fn get_authoritative_lockscreen_state_in(
         Some(theme) if theme.starts_with("ryzora-") => {
             let slug = theme.strip_prefix("ryzora-").unwrap();
             let pkg_id = format!("lockscreen-qylock-{}", slug);
-            (Some(pkg_id), None)
+            (Some(pkg_id), raw_state.sddm_lock.clone())
         }
         _ => (None, None),
     };
@@ -3578,8 +3579,13 @@ pub fn apply_lockscreen_target_in_with_config(
         .or_else(|| package_id.strip_prefix("lockscreen-"))
         .unwrap_or(package_id);
 
+    let wants_session = target_norm == "sessionlock" || target_norm == "quickshell" || (target_norm == "both" && !target_norm.contains("sddm"));
+    let wants_sddm_login = target_norm == "sddmlogin" || target_norm == "sddm" || target_norm == "sddm_login" || target_norm == "both" || target_norm == "sddm_both" || target_norm == "both_screens";
+    let wants_sddm_lock = target_norm == "sddmlock" || target_norm == "sddm_lock" || target_norm == "sddm_both" || target_norm == "both_screens";
+    eprintln!("[RYZORA_TRACE] apply_lockscreen_target: id={} target_norm={} wants_session={} wants_sddm_login={} wants_sddm_lock={}", package_id, target_norm, wants_session, wants_sddm_login, wants_sddm_lock);
+
     // 1. Quickshell target activation (unprivileged user-space)
-    if target_norm == "quickshell" || target_norm == "both" {
+    if wants_session {
         let mut qs_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(slug);
         if !qs_dir.exists() {
             for f in &record.installed_files {
@@ -3669,11 +3675,12 @@ pub fn apply_lockscreen_target_in_with_config(
         let _ = crate::hypridle::hook_waybar_lock_trigger(home);
 
         state.quickshell = Some(package_id.to_string());
+        state.session_lock = Some(package_id.to_string());
         state.quickshell_theme_path = Some(qs_dir.display().to_string());
     }
 
     // 2. SDDM target activation (privileged system integration)
-    if target_norm == "sddm" || target_norm == "both" {
+    if wants_sddm_login || wants_sddm_lock {
         let (active_dm, _, _) = crate::host::detect_display_manager();
         if active_dm != "sddm" && !active_dm.is_empty() && std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
             return Err(format!("Cannot apply SDDM theme: '{}' is active as the system display manager. SDDM themes are only compatible with SDDM.", active_dm));
@@ -3719,11 +3726,15 @@ pub fn apply_lockscreen_target_in_with_config(
             let theme_conf_path = sddm_theme_dir.join("theme.conf");
             let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
         }
-        crate::sddm_helper::activate_sddm_theme(&slug)?;
-
-        state.sddm = Some(package_id.to_string());
-        state.sddm_login = Some(package_id.to_string());
-        state.sddm_theme_path = Some(sddm_theme_dir.display().to_string());
+        if wants_sddm_login {
+            crate::sddm_helper::activate_sddm_theme(&slug)?;
+            state.sddm = Some(package_id.to_string());
+            state.sddm_login = Some(package_id.to_string());
+            state.sddm_theme_path = Some(sddm_theme_dir.display().to_string());
+        }
+        if wants_sddm_lock {
+            state.sddm_lock = Some(package_id.to_string());
+        }
     }
 
     if config.is_some() {
@@ -3742,7 +3753,11 @@ pub fn deactivate_lockscreen_target_in(
     let mut state = get_active_lockscreen_state_in(state_dir);
     let target_norm = target.to_lowercase();
 
-    if target_norm == "quickshell" || target_norm == "both" {
+    let wants_session = target_norm == "sessionlock" || target_norm == "quickshell" || (target_norm == "both" && !target_norm.contains("sddm"));
+    let wants_sddm_login = target_norm == "sddmlogin" || target_norm == "sddm" || target_norm == "sddm_login" || target_norm == "both" || target_norm == "sddm_both" || target_norm == "both_screens";
+    let wants_sddm_lock = target_norm == "sddmlock" || target_norm == "sddm_lock" || target_norm == "sddm_both" || target_norm == "both_screens";
+
+    if wants_session {
         let qs_symlink = home.join(".local/share/ryzora/active/lockscreen/quickshell");
         if qs_symlink.exists() || qs_symlink.is_symlink() {
             let _ = fs::remove_file(&qs_symlink);
@@ -3789,16 +3804,21 @@ pub fn deactivate_lockscreen_target_in(
         state.quickshell_theme_path = None;
     }
 
-    if target_norm == "sddm" || target_norm == "both" {
-        if let Some(ref prev_theme) = state.sddm_previous_theme {
-            let _ = crate::sddm_helper::restore_sddm_theme(prev_theme);
-        } else {
-            let _ = crate::sddm_helper::deactivate_sddm_theme();
+    if wants_sddm_login {
+        if state.sddm_lock.is_none() {
+            if let Some(ref prev_theme) = state.sddm_previous_theme {
+                let _ = crate::sddm_helper::restore_sddm_theme(prev_theme);
+            } else {
+                let _ = crate::sddm_helper::deactivate_sddm_theme();
+            }
+            state.sddm_theme_path = None;
+            state.sddm_previous_theme = None;
         }
         state.sddm = None;
         state.sddm_login = None;
-        state.sddm_theme_path = None;
-        state.sddm_previous_theme = None;
+    }
+    if wants_sddm_lock {
+        state.sddm_lock = None;
     }
 
     save_active_lockscreen_state_in(state_dir, &state)?;
@@ -3817,6 +3837,7 @@ pub fn apply_lockscreen(
     target: String,
     config: Option<std::collections::HashMap<String, serde_json::Value>>,
 ) -> Result<ActiveLockscreenState, String> {
+    eprintln!("[RYZORA_TRACE] apply_lockscreen: id={} target={}", package_id, target);
     let home = get_home_dir();
     let installed_root = get_ryzora_installed_dir();
     let state_dir = get_ryzora_state_dir();
@@ -4197,13 +4218,15 @@ pub fn deactivate_and_uninstall_lockscreen_target_in(
             .map_err(|e| format!("Failed to deactivate active login screen before uninstall: {}", e))?;
     }
 
-    // Verify authoritative deactivation succeeded before deleting any package files
-    let state_after = get_active_lockscreen_state_in(state_dir);
-    if is_qs_active && (state_after.quickshell.as_deref() == Some(package_id) || state_after.quickshell.as_deref() == Some(slug)) {
+    // Verify authoritative deactivation succeeded before deleting any package files.
+    // Use get_authoritative_lockscreen_state_in to probe the real SDDM drop-in file,
+    // not just the local JSON state — this catches cases where the helper failed silently.
+    let auth_after = get_authoritative_lockscreen_state_in(home, state_dir, None);
+    if is_qs_active && auth_after.session_lock.as_deref().map(|s| s == package_id || s == slug).unwrap_or(false) {
         return Err("Deactivation verification failed: Session lock remains active. Refusing to uninstall.".to_string());
     }
-    if is_sddm_active && (state_after.sddm.as_deref() == Some(package_id) || state_after.sddm.as_deref() == Some(slug)) {
-        return Err("Deactivation verification failed: Login screen remains active. Refusing to uninstall.".to_string());
+    if is_sddm_active && auth_after.sddm_login.as_deref().map(|s| s == package_id || s == slug).unwrap_or(false) {
+        return Err("Deactivation verification failed: SDDM Login screen remains active after deactivation. Refusing to uninstall.".to_string());
     }
 
     // 2. If SDDM target was installed, clean /usr/share/sddm/themes/ryzora-<slug>
@@ -4225,6 +4248,7 @@ pub fn deactivate_and_uninstall_lockscreen(
     package_id: String,
     target: Option<String>,
 ) -> Result<UninstallResult, String> {
+    eprintln!("[RYZORA_TRACE] deactivate_and_uninstall_lockscreen: id={} target={:?}", package_id, target);
     let home = get_home_dir();
     let snapshots_root = get_ryzora_snapshots_dir();
     let installed_root = get_ryzora_installed_dir();
@@ -9054,6 +9078,102 @@ hyprlock
         assert_eq!(auth5.sddm_lock, None, "Lock must be deactivated");
 
         // Cleanup
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    #[test]
+    fn test_qylock_target_specific_apply_and_deactivate() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let sandbox = TestSandbox::new("test-qylock-apply");
+        let state_dir = sandbox.home_dir.join(".local/share/ryzora/state");
+        fs::create_dir_all(&state_dir).unwrap();
+
+        let sys_root = sandbox.root.join("sys_root");
+        std::env::set_var("RYZORA_SYSTEM_ROOT", sys_root.to_str().unwrap());
+        crate::sddm_helper::setup_privileged_helper_in(Some(&sys_root)).unwrap();
+
+        // Setup mock theme files
+        let pkg_id = "lockscreen-qylock-samurai-dog";
+        let qs_theme_dir = sandbox.home_dir.join(".local/share/ryzora/lockscreens/qylock/samurai-dog");
+        fs::create_dir_all(&qs_theme_dir).unwrap();
+        fs::write(qs_theme_dir.join("theme.conf"), "[General]\n").unwrap();
+
+        let sddm_theme_dir = sys_root.join("usr/share/sddm/themes/ryzora-samurai-dog");
+        fs::create_dir_all(&sddm_theme_dir).unwrap();
+        fs::write(sddm_theme_dir.join("Main.qml"), "import QtQuick 2.0; Item {}").unwrap();
+
+        // Write installed record
+        let record = InstalledPackageRecord {
+            package_id: pkg_id.to_string(),
+            installed_files: vec![
+                qs_theme_dir.display().to_string(),
+                sddm_theme_dir.display().to_string(),
+            ],
+            ..Default::default()
+        };
+        fs::write(
+            sandbox.installed_dir.join(format!("{}.json", pkg_id)),
+            serde_json::to_string(&record).unwrap(),
+        ).unwrap();
+
+        // 1. Apply to Login Screen only ("sddm")
+        let s1 = apply_lockscreen_target_in_with_config(
+            pkg_id,
+            "sddm",
+            None,
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert_eq!(s1.sddm_login, Some(pkg_id.to_string()));
+        assert_eq!(s1.sddm_lock, None, "sddm target must NOT activate sddm_lock");
+        assert_eq!(s1.session_lock, None, "sddm target must NOT activate session_lock");
+        assert!(!sandbox.home_dir.join(".local/share/ryzora/active/lockscreen/quickshell").exists(), "quickshell symlink must NOT exist");
+
+        // 2. Apply to SDDM Lock Screen only ("sddm_lock")
+        let s2 = apply_lockscreen_target_in_with_config(
+            pkg_id,
+            "sddm_lock",
+            None,
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert_eq!(s2.sddm_login, Some(pkg_id.to_string()), "Login screen remains active");
+        assert_eq!(s2.sddm_lock, Some(pkg_id.to_string()), "sddm_lock is now active");
+        assert_eq!(s2.session_lock, None, "session_lock must still NOT be active");
+
+        // 3. Deactivate Login Screen only ("sddm")
+        let s3 = deactivate_lockscreen_target_in("sddm", &sandbox.home_dir, &state_dir).unwrap();
+        assert_eq!(s3.sddm_login, None, "Login screen must be deactivated");
+        assert_eq!(s3.sddm_lock, Some(pkg_id.to_string()), "Lock screen must remain active");
+        assert_eq!(s3.session_lock, None);
+
+        // 4. Apply to Both SDDM Screens ("sddm_both")
+        let s4 = apply_lockscreen_target_in_with_config(
+            pkg_id,
+            "sddm_both",
+            None,
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert_eq!(s4.sddm_login, Some(pkg_id.to_string()));
+        assert_eq!(s4.sddm_lock, Some(pkg_id.to_string()));
+        assert_eq!(s4.session_lock, None, "sddm_both must NOT touch session_lock");
+
+        // 5. Apply to Session Lock only ("quickshell")
+        let s5 = apply_lockscreen_target_in_with_config(
+            pkg_id,
+            "quickshell",
+            None,
+            &sandbox.home_dir,
+            &sandbox.installed_dir,
+            &state_dir,
+        ).unwrap();
+        assert_eq!(s5.session_lock, Some(pkg_id.to_string()));
+        assert!(sandbox.home_dir.join(".local/share/ryzora/active/lockscreen/quickshell").exists());
+
         std::env::remove_var("RYZORA_SYSTEM_ROOT");
     }
 }

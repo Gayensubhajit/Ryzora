@@ -246,7 +246,7 @@ impl RyzoraManifest {
                 }).collect();
                 Ok(deps)
             }
-            Some("sddm") => {
+            Some("sddm") | Some("sddmLogin") | Some("sddmlogin") | Some("sddm_login") => {
                 if !self.supports_target("sddm") {
                     return Err(format!("Package '{}' does not support target 'sddm'", self.id));
                 }
@@ -262,7 +262,14 @@ impl RyzoraManifest {
                 }).collect();
                 Ok(deps)
             }
-            Some("both") => {
+            Some("sddm_lock") | Some("sddmLock") | Some("sddmlock") => {
+                if self.supports_target("sddm") {
+                    self.target_dependencies(Some("sddm"))
+                } else {
+                    Err(format!("Package '{}' does not support target 'sddm_lock'", self.id))
+                }
+            }
+            Some("both") | Some("sddm_both") | Some("both_screens") => {
                 if !self.supports_target("quickshell") && !self.supports_target("sddm") {
                     return Err(format!("Package '{}' does not support target 'both'", self.id));
                 }
@@ -311,10 +318,22 @@ impl RyzoraManifest {
     }
 
     /// Resolve files specific to target selection.
+    ///
+    /// PRIVILEGE BOUNDARY: When `target` is `None`, lockscreen packages that support
+    /// quickshell must default to quickshell-only (user-space) files.
+    /// SDDM files must NEVER be included without an explicit SDDM target — doing so
+    /// would silently trigger privileged helper / Polkit on plain "Install".
     pub fn target_files(&self, target: Option<&str>) -> Result<Vec<ManifestFile>, String> {
         match target {
-            None => Ok(self.files.clone()),
-            Some("quickshell") => {
+            None => {
+                // For lockscreen packages: default to quickshell (user-space) only.
+                // This prevents install from entering the privileged SDDM path.
+                if self.package_type == PackageType::Lockscreen && self.supports_target("quickshell") {
+                    return self.target_files(Some("quickshell"));
+                }
+                Ok(self.files.clone())
+            }
+            Some("quickshell") | Some("sessionLock") | Some("sessionlock") => {
                 if !self.supports_target("quickshell") {
                     return Err(format!("Package '{}' does not support target 'quickshell'", self.id));
                 }
@@ -333,7 +352,7 @@ impl RyzoraManifest {
                     }
                 }
             }
-            Some("sddm") => {
+            Some("sddm") | Some("sddmLogin") | Some("sddmlogin") | Some("sddm_login") => {
                 if !self.supports_target("sddm") {
                     return Err(format!("Package '{}' does not support target 'sddm'", self.id));
                 }
@@ -364,7 +383,14 @@ impl RyzoraManifest {
                     }
                 }
             }
-            Some("both") => {
+            Some("sddm_lock") | Some("sddmLock") | Some("sddmlock") => {
+                if self.supports_target("sddm") {
+                    self.target_files(Some("sddm"))
+                } else {
+                    Err(format!("Package '{}' does not support target 'sddm_lock'", self.id))
+                }
+            }
+            Some("both") | Some("sddm_both") | Some("both_screens") => {
                 let mut all_files = Vec::new();
                 if self.supports_target("quickshell") {
                     let mut qf = self.target_files(Some("quickshell"))?;
