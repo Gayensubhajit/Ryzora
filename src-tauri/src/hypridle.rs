@@ -759,11 +759,19 @@ pub fn launch_test_sddm_process(theme_dir: &Path) -> Result<(), String> {
         return Err("Neither 'sddm-greeter-qt6' nor 'sddm-greeter' was found in /usr/bin. Install SDDM to preview login themes.".to_string());
     };
 
-    std::process::Command::new(binary)
-        .arg("--test-mode")
+    let mut cmd = std::process::Command::new(binary);
+    cmd.arg("--test-mode")
         .arg("--theme")
         .arg(theme_dir.as_os_str())
-        .stdin(std::process::Stdio::null())
+        .current_dir(theme_dir)
+        .env("QT_IM_MODULE", "qtvirtualkeyboard");
+
+    let components_dir = theme_dir.join("components");
+    if components_dir.is_dir() {
+        cmd.env("QML2_IMPORT_PATH", &components_dir);
+    }
+
+    cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()

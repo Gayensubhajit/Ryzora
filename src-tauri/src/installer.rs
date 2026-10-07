@@ -3773,35 +3773,74 @@ pub struct LockscreenTestResult {
 fn materialize_silentsddm_isolated_draft(
     home: &Path,
     isolated_dir: &Path,
-    cfg_map: &std::collections::HashMap<String, serde_json::Value>,
+    pkg_id: Option<&str>,
+    cfg_map: Option<&std::collections::HashMap<String, serde_json::Value>>,
 ) -> Result<(), String> {
-    let val = serde_json::to_value(cfg_map)
-        .map_err(|e| format!("Failed to serialize draft config map: {}", e))?;
-    let silentsddm_cfg: crate::integration::sddm::config::SilentSddmConfiguration = serde_json::from_value(val)
-        .unwrap_or_else(|_| crate::integration::sddm::config::SilentSddmConfiguration::default());
+    let mut silentsddm_cfg = if let Some(map) = cfg_map {
+        let val = serde_json::to_value(map)
+            .map_err(|e| format!("Failed to serialize draft config map: {}", e))?;
+        serde_json::from_value::<crate::integration::sddm::config::SilentSddmConfiguration>(val)
+            .unwrap_or_else(|_| {
+                let mut cfg = crate::integration::sddm::config::load_configuration(home);
+                if let Some(pid) = pkg_id {
+                    cfg.login_screen.background = pid.to_string();
+                    cfg.lock_screen.background = pid.to_string();
+                }
+                cfg
+            })
+    } else {
+        let mut cfg = crate::integration::sddm::config::load_configuration(home);
+        if let Some(pid) = pkg_id {
+            cfg.login_screen.background = pid.to_string();
+            cfg.lock_screen.background = pid.to_string();
+        }
+        cfg
+    };
 
-    let lock_asset = crate::integration::sddm::activation::resolve_asset_file(home, &silentsddm_cfg.lock_screen.background)
+    // If pkg_id was explicitly provided and config didn't override background, ensure it uses pkg_id
+    if let Some(pid) = pkg_id {
+        if cfg_map.map(|c| !c.contains_key("login_screen")).unwrap_or(true) {
+            silentsddm_cfg.login_screen.background = pid.to_string();
+            silentsddm_cfg.lock_screen.background = pid.to_string();
+        }
+    }
+
+    let (lock_asset_path, lock_filename) = crate::integration::sddm::activation::resolve_asset_file(home, &silentsddm_cfg.lock_screen.background)
+        .or_else(|_| {
+            if let Some(pid) = pkg_id {
+                crate::integration::sddm::activation::resolve_asset_file(home, pid)
+            } else {
+                Err("No asset".to_string())
+            }
+        })
         .map(|(p, fn_str, _, _)| (p, fn_str))
         .unwrap_or_else(|_| (home.to_path_buf(), silentsddm_cfg.lock_screen.background.clone()));
 
-    let login_asset = if silentsddm_cfg.login_screen.background == silentsddm_cfg.lock_screen.background {
-        lock_asset.clone()
+    let (login_asset_path, login_filename) = if silentsddm_cfg.login_screen.background == silentsddm_cfg.lock_screen.background {
+        (lock_asset_path.clone(), lock_filename.clone())
     } else {
         crate::integration::sddm::activation::resolve_asset_file(home, &silentsddm_cfg.login_screen.background)
+            .or_else(|_| {
+                if let Some(pid) = pkg_id {
+                    crate::integration::sddm::activation::resolve_asset_file(home, pid)
+                } else {
+                    Err("No asset".to_string())
+                }
+            })
             .map(|(p, fn_str, _, _)| (p, fn_str))
             .unwrap_or_else(|_| (home.to_path_buf(), silentsddm_cfg.login_screen.background.clone()))
     };
 
-    let wallpapers_dir = isolated_dir.join("wallpapers");
-    let _ = fs::create_dir_all(&wallpapers_dir);
-    if lock_asset.0.is_file() {
-        let _ = fs::copy(&lock_asset.0, wallpapers_dir.join(&lock_asset.1));
+    let backgrounds_dir = isolated_dir.join("backgrounds");
+    let _ = fs::create_dir_all(&backgrounds_dir);
+    if lock_asset_path.is_file() {
+        let _ = fs::copy(&lock_asset_path, backgrounds_dir.join(&lock_filename));
     }
-    if login_asset.0.is_file() {
-        let _ = fs::copy(&login_asset.0, wallpapers_dir.join(&login_asset.1));
+    if login_asset_path.is_file() {
+        let _ = fs::copy(&login_asset_path, backgrounds_dir.join(&login_filename));
     }
 
-    let ini = silentsddm_cfg.to_ini_string(&lock_asset.1, &login_asset.1);
+    let ini = silentsddm_cfg.to_ini_string(&lock_filename, &login_filename);
     let configs_dir = isolated_dir.join("configs");
     let _ = fs::create_dir_all(&configs_dir);
     fs::write(configs_dir.join("ryzora-active.conf"), &ini)
@@ -3988,17 +4027,15 @@ pub fn launch_lockscreen_test(
         crate::ingestion::copy_dir_all(&src_dir, &isolated_test_dir)?;
 
         // Materialize the exact selected configuration into isolated test directory
-        if let Some(ref cfg) = config {
+        if is_silentsddm {
+            let _ = materialize_silentsddm_isolated_draft(&home, &isolated_test_dir, Some(pkg_id.as_str()), config.as_ref());
+        } else if let Some(ref cfg) = config {
             let config_json_path = isolated_test_dir.join("ryzora_config.json");
             if let Ok(serialized) = serde_json::to_string_pretty(cfg) {
                 let _ = fs::write(&config_json_path, serialized);
             }
-            if is_silentsddm {
-                let _ = materialize_silentsddm_isolated_draft(&home, &isolated_test_dir, cfg);
-            } else {
-                let theme_conf_path = isolated_test_dir.join("theme.conf");
-                let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
-            }
+            let theme_conf_path = isolated_test_dir.join("theme.conf");
+            let _ = update_theme_conf_with_config(&theme_conf_path, cfg);
         }
 
         if is_sddm {
@@ -4051,7 +4088,7 @@ pub fn launch_lockscreen_test(
                         .unwrap_or(0);
                     let isolated_test_dir = tmp_test_root.join(format!("silentsddm-draft-{}", timestamp));
                     crate::ingestion::copy_dir_all(&sddm_theme_dir, &isolated_test_dir)?;
-                    let _ = materialize_silentsddm_isolated_draft(&home, &isolated_test_dir, cfg);
+                    let _ = materialize_silentsddm_isolated_draft(&home, &isolated_test_dir, maybe_sddm_pkg.as_deref(), Some(cfg));
                     crate::hypridle::launch_test_sddm_process(&isolated_test_dir)?;
                     return Ok(LockscreenTestResult {
                         success: true,
