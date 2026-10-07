@@ -327,9 +327,16 @@ impl RyzoraManifest {
         match target {
             None => {
                 // For lockscreen packages: default to quickshell (user-space) only.
-                // This prevents install from entering the privileged SDDM path.
-                if self.package_type == PackageType::Lockscreen && self.supports_target("quickshell") {
-                    return self.target_files(Some("quickshell"));
+                // SDDM files must NEVER be returned on default/None install.
+                if self.package_type == PackageType::Lockscreen {
+                    if self.supports_target("quickshell") {
+                        return self.target_files(Some("quickshell"));
+                    }
+                    let user_files: Vec<ManifestFile> = self.files.iter()
+                        .filter(|f| f.target.starts_with("~/"))
+                        .cloned()
+                        .collect();
+                    return Ok(user_files);
                 }
                 Ok(self.files.clone())
             }
@@ -345,11 +352,7 @@ impl RyzoraManifest {
                         .filter(|f| f.target.starts_with("~/"))
                         .cloned()
                         .collect();
-                    if qfiles.is_empty() {
-                        Ok(self.files.clone())
-                    } else {
-                        Ok(qfiles)
-                    }
+                    Ok(qfiles)
                 }
             }
             Some("sddm") | Some("sddmLogin") | Some("sddmlogin") | Some("sddm_login") => {

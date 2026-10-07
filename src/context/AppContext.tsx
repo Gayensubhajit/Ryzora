@@ -65,6 +65,7 @@ import {
   ActiveLockscreenState,
   AuthoritativeLockscreenState,
   LockScreenActivationState,
+  LockScreenTarget,
   HostCapabilities,
   LockscreenRuntimeStatus,
   SystemIntegrationReport,
@@ -93,7 +94,7 @@ interface AppContextType {
   getPackageTransaction: (packageId: string) => PackageTransaction | undefined;
   previewInstallation: (packageId: string, target?: string) => Promise<InstallationPlan>;
   resolvePackageDependencies: (packageId: string) => Promise<DependencyResolutionReport>;
-  installPackage: (pkg: PackageItem, createSnapshot?: boolean, target?: string) => Promise<InstallResult>;
+  installPackage: (pkg: PackageItem, createSnapshot?: boolean, target?: string | LockScreenTarget[] | LockScreenTarget) => Promise<InstallResult>;
   uninstallPackage: (packageId: string) => Promise<UninstallResult>;
   checkPackageUpdate: (packageId: string) => Promise<PackageUpdateStatus>;
   checkAllUpdates: () => Promise<PackageUpdateStatus[]>;
@@ -154,8 +155,8 @@ interface AppContextType {
   activeSilentSddmManifest: SilentSddmActivationManifest | null;
   authoritativeLockscreen: AuthoritativeLockscreenState;
   getLockScreenActivation: (pkgId: string) => LockScreenActivationState;
-  applyLockscreen: (packageId: string, target: "quickshell" | "sddm" | "both", config?: Record<string, any>) => Promise<ActiveLockscreenState>;
-  deactivateLockscreen: (target: "quickshell" | "sddm" | "both") => Promise<ActiveLockscreenState>;
+  applyLockscreen: (packageId: string, target?: "sddm" | LockScreenTarget[] | LockScreenTarget, config?: Record<string, any>) => Promise<ActiveLockscreenState>;
+  deactivateLockscreen: (target?: "sddm" | LockScreenTarget[] | LockScreenTarget) => Promise<ActiveLockscreenState>;
   refreshActiveLockscreen: () => Promise<ActiveLockscreenState>;
   testLockscreen: (packageId?: string, target?: string, config?: Record<string, any>) => Promise<LockscreenTestResult>;
   checkConfigDrift: () => Promise<string | null>;
@@ -704,9 +705,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const [authoritativeLockscreen, setAuthoritativeLockscreen] = useState<AuthoritativeLockscreenState>({
-    session_lock: null,
     sddm_login: null,
-    sddm_lock: null,
   });
 
   const [activeLockscreen, setActiveLockscreen] = useState<ActiveLockscreenState>({
@@ -722,14 +721,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return id.replace(/^lockscreen-(qylock-)?/, "").replace(/^ryzora-/, "").toLowerCase();
       };
       const targetId = normalize(pkgId);
-      const sessionTarget = normalize(authoritativeLockscreen.session_lock);
       const sddmLoginTarget = normalize(authoritativeLockscreen.sddm_login);
-      const sddmLockTarget = normalize(authoritativeLockscreen.sddm_lock);
 
       return {
-        sessionLock: Boolean(sessionTarget && sessionTarget === targetId),
         sddmLogin: Boolean(sddmLoginTarget && sddmLoginTarget === targetId),
-        sddmLock: Boolean(sddmLockTarget && sddmLockTarget === targetId),
       };
     },
     [authoritativeLockscreen]
@@ -745,16 +740,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const mergedState: ActiveLockscreenState = state || { quickshell: null, sddm: null };
 
       const effectiveAuth: AuthoritativeLockscreenState = authState || {
-        session_lock: mergedState.session_lock || mergedState.quickshell || null,
         sddm_login: mergedState.sddm_login || mergedState.sddm || sddmManifest?.active_asset_id || null,
-        sddm_lock: mergedState.sddm_lock || sddmManifest?.active_lock_asset_id || null,
       };
 
       setAuthoritativeLockscreen(effectiveAuth);
-      mergedState.session_lock = effectiveAuth.session_lock;
       mergedState.sddm_login = effectiveAuth.sddm_login;
-      mergedState.sddm_lock = effectiveAuth.sddm_lock;
-      mergedState.quickshell = effectiveAuth.session_lock;
       mergedState.sddm = effectiveAuth.sddm_login;
 
       if (sddmManifest) {
@@ -772,10 +762,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const applyLockscreen = async (
     packageId: string,
-    target: "quickshell" | "sddm" | "both",
+    _target?: "sddm" | LockScreenTarget[] | LockScreenTarget,
     config?: Record<string, any>
   ): Promise<ActiveLockscreenState> => {
-    if (packageId.startsWith("silentsddm-") || packageId.startsWith("custom:") || (target === "sddm" && packageId.startsWith("silentsddm"))) {
+    const isSilentSddmPkg =
+      packageId.startsWith("silentsddm-") ||
+      packageId.startsWith("custom:");
+
+    if (isSilentSddmPkg) {
       setPackageTransactions((prev) => ({
         ...prev,
         [packageId]: {
@@ -787,7 +781,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       await yieldFrame();
       try {
-        await SilentSddmService.applyWallpaper(packageId);
+        await SilentSddmService.applyWallpaper(packageId, "login");
         const nextState = await refreshActiveLockscreen();
         await loadSilentSddmReport();
         setPackageTransactions((prev) => {
@@ -815,16 +809,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
+      console.log(`[RYZORA_IPC]\ncommand=apply_lockscreen\npackage=${packageId}\ntarget=sddm\noperation=apply`);
       const state = await invoke<ActiveLockscreenState>("apply_lockscreen", {
         packageId,
-        target,
+        target: "sddm",
         config: config || null,
       });
-      setActiveLockscreen(state);
+      await refreshActiveLockscreen();
       setToast({
-        message: `Activated ${packageId} for ${
-          target === "both" ? "Session Lock & SDDM Login Screen" : target === "quickshell" ? "Session Lock" : "SDDM Login Screen"
-        }!`,
+        message: `Activated ${packageId} for SDDM Login Screen!`,
         type: "success",
       });
       return state;
@@ -838,33 +831,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deactivateLockscreen = async (
-    target: "quickshell" | "sddm" | "both"
+    _target?: "sddm" | LockScreenTarget[] | LockScreenTarget
   ): Promise<ActiveLockscreenState> => {
     try {
-      if (activeSilentSddmManifest && (target === "sddm" || target === "both")) {
-        await SilentSddmService.deactivate();
-        if (target === "both" && activeLockscreen?.quickshell) {
-          await invoke<ActiveLockscreenState>("deactivate_lockscreen", { target: "quickshell" });
-        }
+      if (activeSilentSddmManifest) {
+        await SilentSddmService.deactivate("login");
         const nextState = await refreshActiveLockscreen();
         await loadSilentSddmReport();
         setToast({
-          message: `Deactivated ${
-            target === "both" ? "Session Lock & SDDM" : "SDDM Login Screen"
-          }.`,
+          message: `Deactivated SDDM Login Screen.`,
           type: "info",
         });
         return nextState;
       }
 
+      console.log(`[RYZORA_IPC]\ncommand=deactivate_lockscreen\npackage=\ntarget=sddm\noperation=deactivate`);
       const state = await invoke<ActiveLockscreenState>("deactivate_lockscreen", {
-        target,
+        target: "sddm",
       });
-      setActiveLockscreen(state);
+      await refreshActiveLockscreen();
       setToast({
-        message: `Deactivated ${
-          target === "both" ? "Session Lock & SDDM" : target === "quickshell" ? "Session Lock" : "SDDM Login Screen"
-        }.`,
+        message: `Deactivated SDDM Login Screen.`,
         type: "info",
       });
       return state;
@@ -917,7 +904,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         return true;
       }
-      await invoke("deactivate_and_uninstall_lockscreen", { packageId, target });
+      const backendTarget = target || "sddm";
+      console.log(`[RYZORA_IPC]\ncommand=deactivate_and_uninstall_lockscreen\npackage=${packageId}\ntarget=${backendTarget || ""}\nselectedTarget=\noperation=uninstall`);
+      await invoke("deactivate_and_uninstall_lockscreen", { packageId, target: backendTarget });
       await loadInstalledPackages();
       await refreshActiveLockscreen();
       setToast({
@@ -1441,7 +1430,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const installPackage = async (
     pkg: PackageItem,
     createSnapshot: boolean = true,
-    target?: string
+    target?: string | LockScreenTarget[] | LockScreenTarget
   ): Promise<InstallResult> => {
     if (pkg.lockscreen?.provider === "silentsddm" || pkg.id.startsWith("silentsddm-")) {
       // Synchronously set transaction state and global installing indicator before any async work
@@ -1567,6 +1556,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `[Step 1/5] Inspecting package payload & validating manifest for '${pkg.title}'...`,
     ]);
 
+    const targetList: string[] = Array.isArray(target)
+      ? target
+      : target
+      ? [target]
+      : [];
+
+    let backendTarget: string | undefined = undefined;
+    if (targetList.includes("sessionLock") && (targetList.includes("sddmLogin") || targetList.includes("sddmLock"))) {
+      backendTarget = "both";
+    } else if (targetList.includes("sessionLock") || targetList.includes("quickshell")) {
+      backendTarget = "quickshell";
+    } else if (targetList.includes("sddmLogin") || targetList.includes("sddmLock") || targetList.includes("sddm")) {
+      backendTarget = "sddm";
+    } else if (typeof target === "string") {
+      backendTarget = target;
+    }
+
     try {
       // Step 0: Ensure provider package payload is prepared & synthesized
       if (pkg.repository_id?.startsWith("provider:")) {
@@ -1582,7 +1588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Step 1: Pre-flight preview/plan
-      const plan = await previewInstallation(pkg.id, target);
+      const plan = await previewInstallation(pkg.id, backendTarget);
       setInstallProgress(25);
       setInstallLogs((prev) => [
         ...prev,
@@ -1621,9 +1627,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `[Step 4/5] Safely applying configuration to target paths...`,
       ]);
 
-      // Ensure privileged helper is installed before invoking install_package for SDDM
-      const isSddmInstall = target === "sddm" || target === "both" || (!target && (pkg.supports_login_screen || Boolean(pkg.manifest?.targets?.["sddm"])));
-      if (isSddmInstall) {
+      // Lockscreen packages must NEVER require privilege during package installation (Install = user-space only)
+      const isLockscreen = pkg.category === "lockscreens" || pkg.id.startsWith("lockscreen-");
+      const isSddmInstall = !isLockscreen && targetList.some((t) =>
+        ["sddmLogin", "sddmLock", "sddm", "sddm_lock", "sddm_both", "both"].includes(t)
+      );
+
+      const isImplicitSddm =
+        !isLockscreen &&
+        targetList.length === 0 &&
+        !pkg.supports_session_lock &&
+        (pkg.supports_login_screen || Boolean(pkg.manifest?.targets?.["sddm"]));
+
+      const requiresPrivilege = isSddmInstall || isImplicitSddm;
+      if (requiresPrivilege) {
         const helperStatus = await checkPrivilegedHelper();
         if (!helperStatus.installed) {
           setInstallLogs((prev) => [
@@ -1638,10 +1655,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      console.log(`[RYZORA_IPC]\ncommand=install_package\npackage=${pkg.id}\ntarget=${backendTarget || "none"}\nselectedTarget=${Array.isArray(target) ? target.join(",") : target || "none"}\noperation=install`);
       const result = await invoke<InstallResult>("install_package", {
         packageId: pkg.id,
         createSnapshot,
-        target,
+        target: backendTarget,
       });
 
       if (result.success) {
@@ -1653,6 +1671,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : `[Step 5/5] Verified on disk! Direct install completed without snapshot.`,
           `✓ '${pkg.title}' installed successfully (${result.installed_files.length} files).`,
         ]);
+
+        const refreshedAuth = await invoke<AuthoritativeLockscreenState>("get_authoritative_lockscreen_state").catch(() => null);
+        const refActTargets: string[] = [];
+        if (refreshedAuth?.sddm_login === pkg.id) refActTargets.push("SddmLogin");
+        
+        const refAvailTargets: string[] = [];
+        if (pkg.supports_login_screen) refAvailTargets.push("SddmLogin");
+        console.log(`[LOCKSCREEN_STATE_REFRESH]\ninstalled=true\nactiveTargets=${JSON.stringify(refActTargets)}\navailableTargets=${JSON.stringify(refAvailTargets)}`);
 
         await loadInstalledPackages();
         if (createSnapshot) {

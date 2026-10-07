@@ -13,8 +13,8 @@ export const DISCOVERED_QYLOCK_THEMES: RawQylockTheme[] = [
     "name": "Dog Samurai",
     "version": "1.0.0",
     "author": "Darkkal44",
-    "summary": "Qylock theme: Dog Samurai with authentic lockscreen visuals.",
-    "description": "Authentic Qylock lockscreen theme 'Dog Samurai', featuring lightweight declarative QML rendering, smooth animations, and high performance Wayland lock and SDDM greeter support.",
+    "summary": "SDDM login theme: Dog Samurai with authentic login visuals.",
+    "description": "Authentic Dog Samurai SDDM login screen theme, featuring lightweight declarative QML rendering, smooth animations, and high performance SDDM greeter support.",
     "tags": [
       "qylock",
       "quickshell",

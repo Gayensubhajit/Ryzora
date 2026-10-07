@@ -164,7 +164,10 @@ pub fn detect_system_info() -> SystemInfo {
         "Standalone WM".to_string()
     };
 
-    if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok()
+    if let Ok(test_desktop) = env::var("RYZORA_TEST_DESKTOP") {
+        wm = test_desktop.clone();
+        de = test_desktop;
+    } else if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok()
         || xdg_current.to_lowercase().contains("hyprland")
         || desktop_session.to_lowercase().contains("hyprland")
     {

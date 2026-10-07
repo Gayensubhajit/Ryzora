@@ -87,8 +87,8 @@ pub struct HelperResult {
     pub exit_code: i32,
 }
 
-/// Locate bundled helper script and Polkit action file
-pub fn find_bundled_helper_resources() -> Result<(PathBuf, PathBuf), String> {
+/// Locate bundled helper script, Polkit action file, and Polkit rules file
+pub fn find_bundled_helper_resources() -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let mut candidate_dirs = Vec::new();
 
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
@@ -115,8 +115,9 @@ pub fn find_bundled_helper_resources() -> Result<(PathBuf, PathBuf), String> {
     for dir in &candidate_dirs {
         let helper = dir.join("ryzora-sddm-helper");
         let policy = dir.join("io.ryzora.sddm.policy");
+        let rules = dir.join("io.ryzora.sddm.rules");
         if helper.is_file() && policy.is_file() {
-            return Ok((helper, policy));
+            return Ok((helper, policy, rules));
         }
     }
 
@@ -128,15 +129,17 @@ pub fn find_bundled_helper_resources() -> Result<(PathBuf, PathBuf), String> {
 
 /// Detect whether the privileged helper and Polkit policy are installed and healthy
 pub fn detect_privileged_helper_status_in(sys_root: Option<&Path>) -> PrivilegedHelperStatus {
-    let (helper_path, policy_path) = if let Some(root) = sys_root {
+    let (helper_path, policy_path, rules_path) = if let Some(root) = sys_root {
         (
             root.join("usr/lib/ryzora/ryzora-sddm-helper"),
             root.join("usr/share/polkit-1/actions/io.ryzora.sddm.policy"),
+            root.join("usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"),
         )
     } else {
         (
             PathBuf::from(HELPER_SYSTEM_PATH),
             PathBuf::from("/usr/share/polkit-1/actions/io.ryzora.sddm.policy"),
+            PathBuf::from("/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"),
         )
     };
 
@@ -154,7 +157,8 @@ pub fn detect_privileged_helper_status_in(sys_root: Option<&Path>) -> Privileged
         c.contains("io.ryzora.sddm")
     });
 
-    let installed = helper_exists && helper_executable && helper_valid && policy_exists && policy_valid;
+    let rules_exists = rules_path.is_file();
+    let installed = helper_exists && helper_executable && helper_valid && policy_exists && policy_valid && rules_exists;
 
     let error = if !helper_exists {
         Some(format!("Helper binary not found at '{}'", helper_path.display()))
@@ -166,6 +170,8 @@ pub fn detect_privileged_helper_status_in(sys_root: Option<&Path>) -> Privileged
         Some(format!("Polkit policy file not found at '{}'", policy_path.display()))
     } else if !policy_valid {
         Some(format!("Polkit policy at '{}' is invalid", policy_path.display()))
+    } else if !rules_exists {
+        Some(format!("Polkit rules file not found at '{}'", rules_path.display()))
     } else {
         None
     };
@@ -191,18 +197,22 @@ pub fn detect_privileged_helper_status() -> PrivilegedHelperStatus {
 
 /// Explicit setup of the Ryzora privileged integration (helper + Polkit policy)
 pub fn setup_privileged_helper_in(sys_root: Option<&Path>) -> Result<PrivilegedHelperStatus, String> {
-    let (helper_src, policy_src) = find_bundled_helper_resources()?;
+    let (helper_src, policy_src, rules_src) = find_bundled_helper_resources()?;
 
     if let Some(root) = sys_root {
         // Test mode: direct installation into test root
         let target_helper = root.join("usr/lib/ryzora/ryzora-sddm-helper");
         let target_policy = root.join("usr/share/polkit-1/actions/io.ryzora.sddm.policy");
+        let target_rules = root.join("usr/share/polkit-1/rules.d/io.ryzora.sddm.rules");
 
         if let Some(parent) = target_helper.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Failed to create helper dir: {}", e))?;
         }
         if let Some(parent) = target_policy.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Failed to create policy dir: {}", e))?;
+        }
+        if let Some(parent) = target_rules.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create rules dir: {}", e))?;
         }
 
         fs::copy(&helper_src, &target_helper)
@@ -214,6 +224,10 @@ pub fn setup_privileged_helper_in(sys_root: Option<&Path>) -> Result<PrivilegedH
         }
         fs::copy(&policy_src, &target_policy)
             .map_err(|e| format!("Failed to copy policy: {}", e))?;
+        if rules_src.exists() {
+            fs::copy(&rules_src, &target_rules)
+                .map_err(|e| format!("Failed to copy rules: {}", e))?;
+        }
 
         let status = detect_privileged_helper_status_in(Some(root));
         if !status.installed {
@@ -225,22 +239,31 @@ pub fn setup_privileged_helper_in(sys_root: Option<&Path>) -> Result<PrivilegedH
     // Live development mode: single Polkit authentication dialog
     let helper_str = helper_src.to_str().ok_or("Invalid UTF-8 in helper source path")?;
     let policy_str = policy_src.to_str().ok_or("Invalid UTF-8 in policy source path")?;
+    let rules_str = rules_src.to_str().ok_or("Invalid UTF-8 in rules source path")?;
 
     let script = r#"
 set -euo pipefail
-mkdir -p /usr/lib/ryzora /usr/share/polkit-1/actions
+mkdir -p /usr/lib/ryzora /usr/share/polkit-1/actions /usr/share/polkit-1/rules.d
 cp "$1" /usr/lib/ryzora/ryzora-sddm-helper
 chmod 755 /usr/lib/ryzora/ryzora-sddm-helper
 chown root:root /usr/lib/ryzora/ryzora-sddm-helper 2>/dev/null || true
 cp "$2" /usr/share/polkit-1/actions/io.ryzora.sddm.policy
 chmod 644 /usr/share/polkit-1/actions/io.ryzora.sddm.policy
 chown root:root /usr/share/polkit-1/actions/io.ryzora.sddm.policy 2>/dev/null || true
+if [ -f "$3" ]; then
+    cp "$3" /usr/share/polkit-1/rules.d/io.ryzora.sddm.rules
+    chmod 644 /usr/share/polkit-1/rules.d/io.ryzora.sddm.rules
+    chown root:root /usr/share/polkit-1/rules.d/io.ryzora.sddm.rules 2>/dev/null || true
+fi
 "#;
 
+    eprintln!("[RYZORA_AUTH]\noperation=setup_privileged_helper\npackage=ryzora-sddm-helper\ntarget=system\ncaller=setup_privileged_helper\nreason=System integration helper setup");
+    eprintln!("[RYZORA_POLKIT]\noperation=setup_privileged_helper\ntarget=system");
     let output = Command::new("pkexec")
-        .args(["bash", "-c", script, "--", helper_str, policy_str])
+        .args(["bash", "-c", script, "--", helper_str, policy_str, rules_str])
         .output()
         .map_err(|e| format!("Failed to invoke pkexec for system integration setup: {}", e))?;
+    eprintln!("[RYZORA_POLKIT_RESULT]\nsuccess={}\ntarget=system", output.status.success());
 
     if !output.status.success() {
         let err_msg = String::from_utf8_lossy(&output.stderr);
@@ -291,6 +314,12 @@ fn invoke_helper(operation: &str, args: &[&str]) -> Result<HelperResult, String>
 
     let use_pkexec = std::env::var("RYZORA_SYSTEM_ROOT").is_err();
 
+    let target = args.last().copied().unwrap_or(operation);
+    eprintln!("[RYZORA_HELPER]\noperation={}\ntarget={}\npaths={:?}", operation, target, args);
+    if use_pkexec {
+        eprintln!("[RYZORA_POLKIT]\noperation={}\ntarget={}", operation, target);
+    }
+
     let mut cmd = if use_pkexec {
         let mut c = Command::new("pkexec");
         c.arg(helper_path.as_os_str());
@@ -309,6 +338,10 @@ fn invoke_helper(operation: &str, args: &[&str]) -> Result<HelperResult, String>
     let output = cmd
         .output()
         .map_err(|e| format!("Failed to invoke SDDM helper: {}", e))?;
+
+    if use_pkexec {
+        eprintln!("[RYZORA_POLKIT_RESULT]\nsuccess={}\ntarget={}", output.status.success(), target);
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -886,10 +919,13 @@ esac
             fs::set_permissions(&helper_path, fs::Permissions::from_mode(0o755)).unwrap();
         }
 
-        // Also setup dummy polkit policy
+        // Also setup dummy polkit policy and rules
         let polkit_dir = sys_root.join("usr/share/polkit-1/actions");
         fs::create_dir_all(&polkit_dir).unwrap();
         fs::write(polkit_dir.join("io.ryzora.sddm.policy"), "<policyconfig><action id=\"io.ryzora.sddm\"></action></policyconfig>").unwrap();
+        let rules_dir = sys_root.join("usr/share/polkit-1/rules.d");
+        fs::create_dir_all(&rules_dir).unwrap();
+        fs::write(rules_dir.join("io.ryzora.sddm.rules"), "// dummy rules\n").unwrap();
     }
 
     fn make_valid_staging(base: &std::path::Path, slug: &str) -> std::path::PathBuf {

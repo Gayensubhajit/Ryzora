@@ -81,9 +81,8 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
       ? parseFloat(packageItem.version) > parseFloat(installedRecord.version)
       : false;
   const activation = getLockScreenActivation(packageItem.id);
-  const isQsActive = activation.sessionLock;
-  const isSddmActive = activation.sddmLogin || activation.sddmLock;
-  const isActive = isQsActive || isSddmActive;
+  const isSddmActive = activation.sddmLogin;
+  const isActive = isSddmActive;
 
   const handleClick = () => setSelectedPackage(packageItem);
 
@@ -268,17 +267,12 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowOverflow(false);
-                        const targetToDeactivate = isQsActive && isSddmActive
-                          ? "both"
-                          : isQsActive
-                          ? "quickshell"
-                          : "sddm";
-                        deactivateLockscreen(targetToDeactivate);
+                        deactivateLockscreen("sddm");
                       }}
                       className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
                     >
                       <RotateCcw className="w-3 h-3 text-amber-500" />
-                      <span>{isQsActive && !isSddmActive ? "Deactivate Session" : !isQsActive && isSddmActive ? "Deactivate Login" : "Deactivate"}</span>
+                      <span>Deactivate Login</span>
                     </button>
                   )}
 

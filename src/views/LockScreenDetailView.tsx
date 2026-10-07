@@ -124,16 +124,6 @@ export const LockScreenDetailView: React.FC = () => {
 
   if (!isLockscreen) return null;
 
-  // Protocol & Desktop capability detection
-  const isKde =
-    systemInfo?.desktop_environment?.toLowerCase().includes("kde") ||
-    systemInfo?.desktop_environment?.toLowerCase().includes("plasma");
-  const isWayland = systemInfo?.session_type?.toLowerCase() === "wayland";
-
-  const isGnome =
-    (systemIntegrationReport?.desktop?.toLowerCase().includes("gnome") ?? false) ||
-    (systemInfo?.desktop_environment?.toLowerCase().includes("gnome") ?? false);
-
   const isGdmActive =
     systemIntegrationReport?.login_manager?.toLowerCase() === "gdm" ||
     hostCapabilities?.display_manager?.toLowerCase() === "gdm" ||
@@ -145,17 +135,11 @@ export const LockScreenDetailView: React.FC = () => {
      ((systemInfo as any)?.display_manager?.toLowerCase() === "sddm")) &&
     !isGdmActive;
 
-  const isSessionLockSupported =
-    (hostCapabilities
-      ? (hostCapabilities.supported_adapters?.find((a) => a.adapter === "quickshell")?.supported ?? false)
-      : (isWayland && !isKde && !isGnome));
-
   const isLoginScreenSupported =
     (hostCapabilities
       ? (hostCapabilities.supported_adapters?.find((a) => a.adapter === "sddm")?.supported ?? false)
       : isSddmActiveHost);
 
-  const canQs = Boolean(selectedPackage.supports_session_lock && isSessionLockSupported);
   const canSddm = Boolean(selectedPackage.supports_login_screen && isLoginScreenSupported && !isGdmActive);
 
   const isCustomPkg = Boolean(
@@ -166,24 +150,11 @@ export const LockScreenDetailView: React.FC = () => {
     selectedPackage?.id.startsWith("silentsddm-") ||
     isCustomPkg;
 
-  const [selectedTarget, setSelectedTarget] = useState<"quickshell" | "sddm" | "both">(() => {
-    if (isSilentSddm) return "sddm";
-    if (canQs && canSddm) return "both";
-    if (canSddm) return "sddm";
-    return "quickshell";
-  });
+  const [selectedTarget, setSelectedTarget] = useState<"sddm">("sddm");
 
   useEffect(() => {
-    if (isSilentSddm) {
-      setSelectedTarget("sddm");
-    } else if (canQs && canSddm) {
-      setSelectedTarget("both");
-    } else if (canSddm) {
-      setSelectedTarget("sddm");
-    } else {
-      setSelectedTarget("quickshell");
-    }
-  }, [selectedPackage?.id, isSilentSddm, canQs, canSddm]);
+    setSelectedTarget("sddm");
+  }, [selectedPackage?.id]);
 
   useEffect(() => {
     if (selectedPackage) {
@@ -195,31 +166,12 @@ export const LockScreenDetailView: React.FC = () => {
     (p) => p.package_id === selectedPackage.id
   );
 
-  // Target-aware installation verification
-  const hasUserFiles = Boolean(
-    installedRecord?.files?.some((f) => f.target.startsWith("~/")) ||
-    installedRecord?.installed_files?.some((f) => f.startsWith("~/") || f.includes(".local/share/ryzora"))
-  );
-  const hasSddmFiles = Boolean(
-    sddmRuntimeStatus?.available ||
-    installedRecord?.files?.some((f) => f.target.includes("/usr/share/sddm")) ||
-    installedRecord?.installed_files?.some((f) => f.includes("/usr/share/sddm"))
-  );
-
-  const isInstalledForTarget = isSilentSddm
+  const isInstalled = isSilentSddm
     ? Boolean(
         installedRecord ||
         silentSddmReport?.cached_wallpapers?.some((w) => w.id === selectedPackage.id)
       )
-    : !installedRecord
-    ? false
-    : selectedTarget === "quickshell"
-    ? hasUserFiles
-    : selectedTarget === "sddm"
-    ? hasSddmFiles
-    : hasUserFiles && hasSddmFiles;
-
-  const isInstalled = isInstalledForTarget;
+    : Boolean(installedRecord);
   const isUpdateAvailable =
     isInstalled && installedRecord
       ? parseFloat(selectedPackage.version) > parseFloat(installedRecord.version)
@@ -230,25 +182,20 @@ export const LockScreenDetailView: React.FC = () => {
 
 
   const activation = getLockScreenActivation(selectedPackage.id);
-  const isQuickshellActive = activation.sessionLock;
-  const isSddmActive = activation.sddmLogin || activation.sddmLock;
+  const isSddmActive = Boolean(activation.sddmLogin);
   const isSddmApplied = isSddmActive;
   const isSddmOverridden = isSddmApplied && sddmRuntimeStatus?.is_overridden === true;
 
+  const isTargetOverridden = isSddmOverridden;
 
-
-  const isTargetOverridden =
-    (selectedTarget === "sddm" || selectedTarget === "both") && isSddmOverridden;
-
-  const handleApply = async (targetOverride?: "quickshell" | "sddm" | "both") => {
+  const handleApply = async () => {
     setIsApplying(true);
-    const targetToApply = targetOverride || selectedTarget;
     try {
       const fullConfig = {
         ...customConfig,
         variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
       };
-      await applyLockscreen(selectedPackage.id, targetToApply, fullConfig);
+      await applyLockscreen(selectedPackage.id, "sddm", fullConfig);
     } catch {
       // toast is handled in AppContext
     } finally {
@@ -256,17 +203,10 @@ export const LockScreenDetailView: React.FC = () => {
     }
   };
 
-  const handleDeactivate = async (targetOverride?: "quickshell" | "sddm" | "both") => {
+  const handleDeactivate = async () => {
     setIsApplying(true);
-    const targetToDeactivate =
-      targetOverride ||
-      (isQuickshellActive && isSddmActive
-        ? "both"
-        : isQuickshellActive
-        ? "quickshell"
-        : "sddm");
     try {
-      await deactivateLockscreen(targetToDeactivate);
+      await deactivateLockscreen("sddm");
       await refreshActiveLockscreen();
     } catch {
       // toast is handled in AppContext
@@ -276,7 +216,7 @@ export const LockScreenDetailView: React.FC = () => {
   };
 
   const handleTest = async (
-    targetOverride?: "quickshell" | "sddm",
+    _targetOverride?: "sddm",
     configOverride?: Record<string, any>
   ) => {
     try {
@@ -284,16 +224,7 @@ export const LockScreenDetailView: React.FC = () => {
         ...customConfig,
         variant: selectedVariantId || (schema?.variants?.[0]?.id || "default"),
       };
-      const targetToTest =
-        targetOverride ||
-        (isQuickshellActive && !isSddmActive
-          ? "quickshell"
-          : !isQuickshellActive && isSddmActive
-          ? "sddm"
-          : selectedTarget === "sddm"
-          ? "sddm"
-          : "quickshell");
-      const res = await testLockscreen(selectedPackage.id, targetToTest, fullConfig);
+      const res = await testLockscreen(selectedPackage.id, "sddm", fullConfig);
       if (res) {
         setLastTestResult(res);
       }
@@ -311,15 +242,7 @@ export const LockScreenDetailView: React.FC = () => {
         }
         await uninstallPackage(selectedPackage.id);
       } else {
-        const activeTarget =
-          isQuickshellActive && isSddmActive
-            ? "both"
-            : isQuickshellActive
-            ? "quickshell"
-            : isSddmActive
-            ? "sddm"
-            : undefined;
-
+        const activeTarget = isSddmActive ? "sddm" : undefined;
         const success = await deactivateAndUninstallLockscreen(selectedPackage.id, activeTarget);
         if (success) {
           await refreshActiveLockscreen();
@@ -338,7 +261,7 @@ export const LockScreenDetailView: React.FC = () => {
 
   const targetCapabilities =
     selectedPackage.lockscreen && systemInfo
-      ? resolveLockscreenCapabilities(systemInfo, selectedPackage.lockscreen, selectedTarget)
+      ? resolveLockscreenCapabilities(systemInfo, selectedPackage.lockscreen, 'sddm')
       : null;
   const missingDependencies = targetCapabilities?.missing_dependencies || [];
 
@@ -349,7 +272,12 @@ export const LockScreenDetailView: React.FC = () => {
     const shouldSnapshot = settings?.snapshot_policy === "always";
 
     try {
-      const res = await installPackage(selectedPackage, shouldSnapshot, selectedTarget);
+      const canTargetSddmCheck = isLoginScreenSupported && Boolean(selectedPackage.supports_login_screen);
+      const avail = [
+        ...(canTargetSddmCheck ? ["SddmLogin"] : [])
+      ];
+      console.log(`[LOCKSCREEN_TARGET]\noperation=install\nselectedTarget=none\nactiveTargets=[]\navailableTargets=${JSON.stringify(avail)}`);
+      const res = await installPackage(selectedPackage, shouldSnapshot, undefined);
       if (res && res.success) {
         setToast({
           message: `${selectedPackage.title} installed successfully.`,
@@ -391,18 +319,13 @@ export const LockScreenDetailView: React.FC = () => {
         installStageText={getPackageTransaction(selectedPackage.id)?.message}
         isInstalled={isInstalled}
         isUpdateAvailable={isUpdateAvailable}
-        isBlocked={!canQs && !canSddm}
+        isBlocked={!canSddm}
         missingDependencies={missingDependencies}
         selectedTarget={selectedTarget}
         onSelectTarget={setSelectedTarget}
-        isSessionLockSupported={isSessionLockSupported}
         isLoginScreenSupported={isLoginScreenSupported}
-        isActive={isQuickshellActive || isSddmActive}
-        activeTargets={{ quickshell: isQuickshellActive, sddm: isSddmActive }}
-        installedTargets={{
-          quickshell: isSilentSddm ? false : hasUserFiles,
-          sddm: isSilentSddm ? isInstalled : hasSddmFiles,
-        }}
+        isActive={isSddmActive}
+        activeTargets={{ sddm_login: activation.sddmLogin, sddm: isSddmActive }}
         onApply={handleApply}
         onDeactivate={handleDeactivate}
         onTest={isInstalled ? handleTest : undefined}
@@ -502,7 +425,6 @@ export const LockScreenDetailView: React.FC = () => {
               systemInfo={systemInfo}
               missingDependencies={missingDependencies}
               selectedTarget={selectedTarget}
-              isSessionLockSupported={isSessionLockSupported}
               isLoginScreenSupported={isLoginScreenSupported}
               isGdmActive={isGdmActive}
             />

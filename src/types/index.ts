@@ -1082,16 +1082,25 @@ export type Phase15CategoryId =
   | "compatibility-lab"
   | "apps";
 
+export type LockScreenTarget = "sddmLogin";
+
 export type LockScreenActivationState = {
-  sessionLock: boolean;
   sddmLogin: boolean;
-  sddmLock: boolean;
 };
 
+export interface LockScreenTargetRequest {
+  packageId: string;
+  targets: LockScreenTarget[];
+  operation: "install" | "apply" | "deactivate";
+  config?: Record<string, any>;
+}
+
+export function isPrivilegedLockScreenTarget(_target: LockScreenTarget | LockScreenTarget[] | string): boolean {
+  return true;
+}
+
 export interface AuthoritativeLockscreenState {
-  session_lock: string | null;
   sddm_login: string | null;
-  sddm_lock: string | null;
 }
 
 export interface ActiveLockscreenState {
@@ -1109,6 +1118,7 @@ export interface ActiveLockscreenState {
   hypridle_ryzora_config?: string | null;
   lock_wrapper_path?: string | null;
   sddm_previous_theme?: string | null;
+  dusky_previous_hyprlock_source?: string | null;
   active_config?: Record<string, any> | null;
 }
 

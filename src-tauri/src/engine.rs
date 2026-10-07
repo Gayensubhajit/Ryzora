@@ -601,10 +601,13 @@ mod tests {
         pub installed_dir: PathBuf,
         pub staging_dir: PathBuf,
         pub home_dir: PathBuf,
+        _guard: std::sync::MutexGuard<'static, ()>,
     }
 
     impl EngineSandbox {
         fn new(name: &str) -> Self {
+            let _guard = crate::TEST_ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+            std::env::set_var("RYZORA_TEST_DESKTOP", "hyprland");
             let unique_id = format!(
                 "ryzora-engine-test-{}-{}",
                 name,
@@ -624,13 +627,14 @@ mod tests {
             fs::create_dir_all(&staging_dir).unwrap();
             fs::create_dir_all(&home_dir.join(".config")).unwrap();
 
-            Self { root, snapshots_dir, installed_dir, staging_dir, home_dir }
+            Self { root, snapshots_dir, installed_dir, staging_dir, home_dir, _guard }
         }
     }
 
     impl Drop for EngineSandbox {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
+            std::env::remove_var("RYZORA_TEST_DESKTOP");
         }
     }
 

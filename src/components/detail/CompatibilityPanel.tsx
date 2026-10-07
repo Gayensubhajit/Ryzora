@@ -13,8 +13,7 @@ interface CompatibilityPanelProps {
   packageItem: PackageItem;
   systemInfo: SystemInfo | null;
   missingDependencies?: string[];
-  selectedTarget?: "quickshell" | "sddm" | "both";
-  isSessionLockSupported?: boolean;
+  selectedTarget?: "sddm";
   isLoginScreenSupported?: boolean;
   isGdmActive?: boolean;
 }
@@ -23,8 +22,7 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   packageItem: _packageItem,
   systemInfo,
   missingDependencies = [],
-  selectedTarget = "quickshell",
-  isSessionLockSupported = true,
+  selectedTarget = "sddm",
   isLoginScreenSupported = true,
   isGdmActive = false,
 }) => {
@@ -51,7 +49,7 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   }
 
   // 2. Display Manager Incompatibility Warning (GDM, PlasmaLogin, or non-SDDM)
-  if (!isLoginScreenSupported && (selectedTarget === "sddm" || selectedTarget === "both")) {
+  if (!isLoginScreenSupported && (selectedTarget === "sddm")) {
     const activeDmName = isGdmActive ? "GDM" : (systemReport?.login_manager || "Another display manager");
     return (
       <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-start gap-2.5">
@@ -80,7 +78,7 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   }
 
   // 2b. Privileged Helper Setup Required for SDDM
-  if (isLoginScreenSupported && privilegedHelperStatus && !privilegedHelperStatus.installed && (selectedTarget === "sddm" || selectedTarget === "both")) {
+  if (isLoginScreenSupported && privilegedHelperStatus && !privilegedHelperStatus.installed && (selectedTarget === "sddm")) {
     return (
       <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-start gap-2.5">
         <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -108,7 +106,7 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   }
 
   // 3. Protocol Failure Warning
-  if (!isSessionLockSupported && (selectedTarget === "quickshell" || selectedTarget === "both")) {
+  if (false) {
     const isGnome = (systemInfo?.desktop_environment || "").toLowerCase().includes("gnome") || currentWm.includes("mutter");
     return (
       <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-start gap-2.5">

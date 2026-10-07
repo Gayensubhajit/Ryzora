@@ -29,6 +29,7 @@ export function isLoginScreen(pkg: PackageItem): boolean {
 }
 
 /** Determines if a package represents or supports a session lock (Hyprlock, Quickshell, Swaylock) */
+/** Determines if a package represents or supports a session lock (Hyprlock, Quickshell, Swaylock) */
 export function isSessionLock(pkg: PackageItem): boolean {
   if (pkg.category !== "lockscreens" && pkg.package_type !== "lockscreen") {
     return false;

@@ -52,7 +52,7 @@ export const InstalledView: React.FC = () => {
 
     const isPkgActive = (pkg: (typeof list)[0]) => {
       const act = getLockScreenActivation(pkg.id);
-      return act.sessionLock || act.sddmLogin || act.sddmLock;
+      return act.sddmLogin;
     };
 
     return [...list].sort((a, b) => {

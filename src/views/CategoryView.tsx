@@ -253,7 +253,7 @@ export const CategoryView: React.FC = () => {
 
     const isPkgActive = (pkg: (typeof list)[0]) => {
       const act = getLockScreenActivation(pkg.id);
-      return act.sessionLock || act.sddmLogin || act.sddmLock;
+      return act.sddmLogin;
     };
 
     const sorted = [...list].sort((a, b) => {

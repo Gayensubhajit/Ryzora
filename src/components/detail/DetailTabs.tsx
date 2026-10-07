@@ -6,10 +6,8 @@ import {
   DownloadCloud,
   History,
   ShieldCheck,
-  Lock,
   Code,
   Monitor,
-  KeyRound,
 } from "lucide-react";
 import { PackageItem, SystemInfo } from "../../types";
 
@@ -18,13 +16,13 @@ type TabKey = "overview" | "files" | "dependencies" | "installation" | "changelo
 interface DetailTabsProps {
   packageItem: PackageItem;
   systemInfo: SystemInfo | null;
-  selectedTarget?: "quickshell" | "sddm" | "both";
+  selectedTarget?: "sddm";
 }
 
 export const DetailTabs: React.FC<DetailTabsProps> = ({
   packageItem,
   systemInfo: _systemInfo,
-  selectedTarget = "quickshell",
+  selectedTarget = "sddm",
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
@@ -39,23 +37,12 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
     packageItem.id.startsWith("silentsddm-") ||
     isCustomMedia
   );
-  const canTargetQs = !isSilentSddm && Boolean(
-    packageItem.supports_session_lock || packageItem.lockscreen?.targets?.quickshell
-  );
-  const canTargetSddm = Boolean(
-    packageItem.supports_login_screen || packageItem.lockscreen?.targets?.sddm
-  );
+
 
   // Compute dynamic dependencies based on selected target
   const getDependencies = () => {
     const multimediaDeps = isVideo ? ["qt6-multimedia", "gst-plugins-good"] : [];
-    if (selectedTarget === "sddm") {
-      return ["sddm", "qt6-declarative", "qt6-svg", ...multimediaDeps];
-    }
-    if (selectedTarget === "both") {
-      return ["quickshell", "sddm", "qt6-declarative", "qt6-svg", ...multimediaDeps];
-    }
-    return ["quickshell", "qt6-declarative", ...multimediaDeps];
+    return ["sddm", "qt6-declarative", "qt6-svg", ...multimediaDeps];
   };
 
   // Compute dynamic files based on selected target
@@ -197,25 +184,14 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
               <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--rz-text-muted)] font-bold block">
                 Target Architecture & Environment
               </span>
-              <div className={`grid gap-2 text-xs ${canTargetQs && canTargetSddm ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
-                {canTargetQs && (
-                  <div className="p-2 rounded-lg bg-[var(--rz-surface-elevated)] flex items-center gap-2">
-                    <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <div>
-                      <span className="font-semibold text-[var(--rz-text)] block">Session Lock (Quickshell)</span>
-                      <span className="text-[10px] text-[var(--rz-text-muted)]">User space · ext-session-lock-v1</span>
-                    </div>
+              <div className="grid gap-2 text-xs grid-cols-1">
+                <div className="p-2 rounded-lg bg-[var(--rz-surface-elevated)] flex items-center gap-2">
+                  <Monitor className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-[var(--rz-text)] block">Login Screen (SDDM)</span>
+                    <span className="text-[10px] text-[var(--rz-text-muted)]">System space · Admin permission</span>
                   </div>
-                )}
-                {canTargetSddm && (
-                  <div className="p-2 rounded-lg bg-[var(--rz-surface-elevated)] flex items-center gap-2">
-                    <Monitor className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <div>
-                      <span className="font-semibold text-[var(--rz-text)] block">Login Screen (SDDM)</span>
-                      <span className="text-[10px] text-[var(--rz-text-muted)]">System space · Admin permission</span>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -230,18 +206,7 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
               </div>
             </div>
 
-            {/* Desktop Keybind & Idle Separation (only shown when Session Lock is supported) */}
-            {canTargetQs && (
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-subtle)]">
-                <KeyRound className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-[var(--rz-text)] text-xs">Keybind & Desktop Idle Separation</div>
-                  <div className="text-[11px] text-[var(--rz-text-secondary)] mt-0.5 leading-relaxed">
-                    Theme installation never silently overwrites your <code className="text-[var(--rz-accent-text)]">Super+L</code> shortcut or <code className="text-[var(--rz-accent-text)]">hypridle.conf</code>. Ryzora generates a self-contained launch script at <code className="text-[var(--rz-accent-text)]">~/.local/share/ryzora/integrations/quickshell/lock.sh</code> for explicit user configuration.
-                  </div>
-                </div>
-              </div>
-            )}
+
           </div>
         )}
 
@@ -310,7 +275,7 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
                 <strong className="text-[var(--rz-text)]">Staging & Checksum Verification:</strong> Download and verify all theme assets against sha256 hashes.
               </li>
               <li className="p-2 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
-                <strong className="text-[var(--rz-text)]">Materialization:</strong> Copy files directly into destination directory. {selectedTarget !== "quickshell" && <span className="text-amber-400 font-semibold">(Requires administrator pkexec confirmation)</span>}
+                <strong className="text-[var(--rz-text)]">Materialization:</strong> Copy files directly into destination directory. <span className="text-amber-400 font-semibold">(Requires administrator pkexec confirmation)</span>
               </li>
               <li className="p-2 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
                 <strong className="text-[var(--rz-text)]">Registration:</strong> Register ownership in Ryzora database for clean 1-click uninstalls.
@@ -333,7 +298,7 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
               <ul className="mt-1.5 space-y-1 text-[11px] text-[var(--rz-text-secondary)] list-disc list-inside">
                 <li>Materialized self-contained theme assets without external symlinks</li>
                 <li>Support for video backgrounds and high-framerate playback</li>
-                <li>Full integration with Quickshell session lock and SDDM greeter</li>
+                <li>Full SDDM login screen and greeter integration</li>
               </ul>
             </div>
           </div>

@@ -605,12 +605,13 @@ mod tests {
 
     #[test]
     fn test_live_system_enable_verify_disable_revert() {
+        let _lock = crate::TEST_ENV_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
         let home_str = std::env::var("HOME").unwrap();
         let home = PathBuf::from(&home_str);
 
         let native_conf = home.join(NATIVE_CONFIG_REL);
-        if !native_conf.exists() {
-            eprintln!("Skipping live test: native config not present");
+        if !native_conf.exists() || !is_hypridle_service_active() {
+            eprintln!("Skipping live test: native config not present or hypridle service not active");
             return;
         }
 
