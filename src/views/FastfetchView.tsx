@@ -169,29 +169,98 @@ const INITIAL_ROWS: FastfetchRowItem[] = [
   },
 ];
 
-const BUILTIN_ASCII = [
-  "    /\\",
-  "   /  \\",
-  "  /\\   \\",
-  " /      \\",
-  "/   ,,   \\",
-  "/   |  |  \\",
-  "/_-''    ''-_\\",
-].join("\n");
-
-const PRESET_ASCII = [
-  "  .-----.",
-  " /  ___  \\",
-  "|  /   \\  |",
-  "|  | O |  |",
-  "|  \\___/  |",
-  " \\       /",
-  "  `-----`",
-].join("\n");
-
 export interface FastfetchViewProps {
   initialStyleId?: string;
   onConsumeInitialPresetId?: () => void;
+}
+
+
+export function ansiToHtml(raw: string): string {
+  if (!raw) return "";
+
+  // Strip kitty graphics protocol sequences: _G...(\|)
+  let cleaned = raw.replace(/\x1b_G[^\x1b\x07]*(\x1b\\|\x07)/g, "");
+
+  const stdColors = [
+    "#3e4451", "#e06c75", "#98c379", "#e5c07b",
+    "#61afef", "#c678dd", "#56b6c2", "#abb2bf"
+  ];
+  const brightColors = [
+    "#5c6370", "#be5046", "#98c379", "#d19a66",
+    "#61afef", "#c678dd", "#56b6c2", "#ffffff"
+  ];
+
+  const escapeHtml = (str: string) =>
+    str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const tokens = cleaned.split(/(\x1b\[[0-9;]*m)/);
+  const out: string[] = [];
+
+  let currentFg: string | null = null;
+  let isBold = false;
+  let isDim = false;
+  let isItalic = false;
+  let isUnderline = false;
+
+  for (const token of tokens) {
+    if (!token) continue;
+    if (token.startsWith("\x1b[")) {
+      const codeStr = token.slice(2, -1);
+      const codes = codeStr ? codeStr.split(";").map(Number) : [0];
+
+      let i = 0;
+      while (i < codes.length) {
+        const c = codes[i];
+        if (c === 0) {
+          currentFg = null;
+          isBold = false;
+          isDim = false;
+          isItalic = false;
+          isUnderline = false;
+        } else if (c === 1) {
+          isBold = true;
+        } else if (c === 2) {
+          isDim = true;
+        } else if (c === 3) {
+          isItalic = true;
+        } else if (c === 4) {
+          isUnderline = true;
+        } else if (c === 22) {
+          isBold = false;
+          isDim = false;
+        } else if (c === 23) {
+          isItalic = false;
+        } else if (c === 24) {
+          isUnderline = false;
+        } else if (c >= 30 && c <= 37) {
+          currentFg = stdColors[c - 30];
+        } else if (c === 39) {
+          currentFg = null;
+        } else if (c >= 90 && c <= 97) {
+          currentFg = brightColors[c - 90];
+        } else if (c === 38 && i + 4 < codes.length && codes[i + 1] === 2) {
+          const r = codes[i + 2];
+          const g = codes[i + 3];
+          const b = codes[i + 4];
+          currentFg = `rgb(${r},${g},${b})`;
+          i += 4;
+        }
+        i++;
+      }
+    } else {
+      const styles: string[] = [];
+      if (currentFg) styles.push(`color: ${currentFg}`);
+      if (isBold) styles.push("font-weight: 700");
+      if (isDim) styles.push("opacity: 0.75");
+      if (isItalic) styles.push("font-style: italic");
+      if (isUnderline) styles.push("text-decoration: underline");
+
+      const styleAttr = styles.length ? ` style="${styles.join("; ")}"` : "";
+      out.push(`<span${styleAttr}>${escapeHtml(token)}</span>`);
+    }
+  }
+
+  return out.join("");
 }
 
 export const FastfetchView: React.FC<FastfetchViewProps> = ({
@@ -257,6 +326,8 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
   const [dither, setDither] = useState<boolean>(false);
   const [accentColor, setAccentColor] = useState<string>("#e2342a");
   const [rows, setRows] = useState<FastfetchRowItem[]>(INITIAL_ROWS);
+  const [previewAnsi, setPreviewAnsi] = useState<string>("");
+  const [isRenderingPreview, setIsRenderingPreview] = useState<boolean>(false);
 
   // Status & Edit state
   const [isSaved, setIsSaved] = useState<boolean>(true);
@@ -319,21 +390,109 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
       .catch(() => {});
   }, [systemInfo]);
 
+  // Live Fastfetch execution preview pipeline
+  const renderPreview = async () => {
+    setIsRenderingPreview(true);
+    const selectedEmblem = installedEmblems.find((e) => e.id === selectedEmblemId);
+    try {
+      const res = await invoke<{ raw_ansi: string; success: boolean }>("render_fastfetch_preview", {
+        req: {
+          presetId: selectedStyleId,
+          accentColor,
+          emblemType,
+          emblemPath: customEmblemUrl || selectedEmblem?.path,
+          widthCols,
+          heightLines,
+          paddingCols,
+          dither,
+          activeModules: rows
+            .filter((r) => r.enabled)
+            .map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type)),
+        },
+      });
+      if (res && res.raw_ansi) {
+        setPreviewAnsi(res.raw_ansi);
+      }
+    } catch (e) {
+      console.error("Preview render failed:", e);
+    } finally {
+      setIsRenderingPreview(false);
+    }
+  };
+
+  // Trigger live Fastfetch execution whenever parameters change (with 120ms debounce)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      renderPreview();
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [
+    selectedStyleId,
+    accentColor,
+    emblemType,
+    selectedEmblemId,
+    customEmblemUrl,
+    widthCols,
+    heightLines,
+    paddingCols,
+    dither,
+    rows,
+    installedEmblems,
+  ]);
+
   // When a style preset is selected from the left column
-  const handleSelectStyle = (pkgId: string) => {
+  const handleSelectStyle = async (pkgId: string) => {
     setSelectedStyleId(pkgId);
     const found = fastfetchPackages.find((p) => p.id === pkgId);
-    if (found) {
-      if (found.color_palette && found.color_palette[0]) {
-        setAccentColor(found.color_palette[0]);
+    try {
+      const configStr = await invoke<string>("get_fastfetch_preset_config", { presetId: pkgId });
+      if (configStr) {
+        const cleanJson = configStr.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+        const parsed = JSON.parse(cleanJson);
+        if (parsed.logo) {
+          if (parsed.logo.type === "none") {
+            setEmblemType("none");
+          } else if (parsed.logo.type === "builtin") {
+            setEmblemType("builtin");
+          } else if (parsed.logo.type === "file" || parsed.logo.type?.includes("ascii")) {
+            setEmblemType("ascii");
+          } else if (parsed.logo.source) {
+            const matchingEmblem = installedEmblems.find(
+              (e) => e.path === parsed.logo.source || e.id === parsed.logo.source
+            );
+            if (matchingEmblem) {
+              setEmblemType("image");
+              setSelectedEmblemId(matchingEmblem.id);
+            }
+          }
+          if (typeof parsed.logo.width === "number") setWidthCols(parsed.logo.width);
+          if (typeof parsed.logo.height === "number") setHeightLines(parsed.logo.height);
+          if (parsed.logo.padding && typeof parsed.logo.padding.left === "number") {
+            setPaddingCols(parsed.logo.padding.left);
+          }
+        }
+        if (parsed.display?.color?.keys) {
+          const keyCol = parsed.display.color.keys;
+          if (keyCol.startsWith("38;2;")) {
+            const parts = keyCol.split(";");
+            if (parts.length >= 5) {
+              const r = parseInt(parts[2]).toString(16).padStart(2, "0");
+              const g = parseInt(parts[3]).toString(16).padStart(2, "0");
+              const b = parseInt(parts[4]).toString(16).padStart(2, "0");
+              setAccentColor(`#${r}${g}${b}`);
+            }
+          }
+        }
       }
-
-      setIsSaved(false);
-      setToast({
-        message: `Loaded starting style "${found.title}".`,
-        type: "info",
-      });
+    } catch {}
+    if (found?.color_palette?.[0]) {
+      setAccentColor(found.color_palette[0]);
     }
+    setIsSaved(false);
+    setToast({
+      message: `Loaded starting style "${found?.title || pkgId}".`,
+      type: "info",
+    });
   };
 
   const handleApplyInstalledStyle = async () => {
@@ -374,8 +533,26 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     });
   };
 
-  const handleRevert = () => {
-    handleResetToDefault();
+  const handleRevert = async () => {
+    try {
+      const savedConfig = await invoke<string | null>("get_fastfetch_saved_config");
+      if (savedConfig) {
+        const clean = savedConfig.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+        const parsed = JSON.parse(clean);
+        if (parsed.logo) {
+          if (parsed.logo.type === "none") setEmblemType("none");
+          else if (parsed.logo.type === "builtin") setEmblemType("builtin");
+          else if (parsed.logo.type === "file") setEmblemType("ascii");
+          if (typeof parsed.logo.width === "number") setWidthCols(parsed.logo.width);
+          if (typeof parsed.logo.height === "number") setHeightLines(parsed.logo.height);
+          if (parsed.logo.padding && typeof parsed.logo.padding.left === "number") {
+            setPaddingCols(parsed.logo.padding.left);
+          }
+        }
+      }
+    } catch {
+      handleResetToDefault();
+    }
     setIsSaved(true);
     setToast({
       message: "Reverted unsaved changes to active config.jsonc.",
@@ -676,128 +853,63 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
               </div>
             </div>
 
-            <span className="text-[11px] px-2 py-0.5 rounded bg-[#1c2433] text-slate-400 border border-[#2d3748]">
-              {widthCols} cols × {heightLines} lines
-            </span>
+            <div className="flex items-center gap-2 font-mono text-[10px]">
+              <span
+                className={[
+                  "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium border",
+                  isSaved
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "w-1.5 h-1.5 rounded-full",
+                    isSaved ? "bg-emerald-400" : "bg-amber-400 animate-pulse",
+                  ].join(" ")}
+                />
+                {isSaved ? "Live · Current configuration" : "Live · Unsaved configuration"}
+              </span>
+            </div>
           </div>
 
           {/* Terminal Canvas */}
-          <div className="flex-1 p-6 overflow-y-auto flex items-center justify-center">
-            <div className="w-full flex flex-col sm:flex-row items-center sm:items-start justify-center gap-6 min-h-[340px]">
-              {/* Emblem Area */}
-              {emblemType !== "none" && (
+          <div className="flex-1 p-6 overflow-auto flex items-center justify-center bg-[#0b0f17]">
+            {previewAnsi ? (
+              <div className="w-full flex flex-col sm:flex-row items-center sm:items-start justify-center gap-6 min-h-[320px]">
+                {/* Emblem Area (if image mode and image available) */}
+                {emblemType === "image" && activeEmblemImage && (
+                  <div
+                    className={[
+                      "shrink-0 relative overflow-hidden rounded-xl border border-white/10 shadow-lg bg-black/40 flex items-center justify-center",
+                      dither ? "contrast-125 brightness-95" : "",
+                    ].join(" ")}
+                    style={{
+                      width: `${Math.max(120, widthCols * 6.5)}px`,
+                      height: `${Math.max(120, heightLines * 13)}px`,
+                      marginRight: `${paddingCols * 4}px`,
+                    }}
+                  >
+                    <img
+                      src={activeEmblemImage}
+                      alt="Fastfetch Emblem"
+                      className="w-full h-full object-contain filter drop-shadow-md"
+                    />
+                  </div>
+                )}
+
+                {/* Real Fastfetch ANSI Output */}
                 <div
-                  className="shrink-0 flex flex-col items-center justify-center"
-                  style={{ paddingRight: `${paddingCols * 4}px` }}
-                >
-                  {emblemType === "image" && activeEmblemImage ? (
-                    <div
-                      className={[
-                        "relative overflow-hidden rounded-xl border border-white/10 shadow-lg bg-black/40 flex items-center justify-center",
-                        dither ? "contrast-125 brightness-95" : "",
-                      ].join(" ")}
-                      style={{
-                        width: `${Math.max(120, widthCols * 6.5)}px`,
-                        height: `${Math.max(120, heightLines * 13)}px`,
-                      }}
-                    >
-                      <img
-                        src={activeEmblemImage}
-                        alt="Fastfetch Emblem"
-                        className="w-full h-full object-contain filter drop-shadow-md"
-                      />
-                      {dither && (
-                        <div
-                          className="absolute inset-0 pointer-events-none opacity-25 mix-blend-overlay"
-                          style={{
-                            backgroundImage:
-                              "repeating-linear-gradient(0deg, #000, #000 2px, transparent 2px, transparent 4px)",
-                          }}
-                        />
-                      )}
-                    </div>
-                  ) : emblemType === "ascii" ? (
-                    <pre
-                      className="font-mono text-xs sm:text-sm leading-tight select-none filter drop-shadow-sm"
-                      style={{ color: accentColor }}
-                    >
-                      {PRESET_ASCII}
-                    </pre>
-                  ) : (
-                    <pre
-                      className="font-mono text-xs sm:text-sm leading-tight select-none filter drop-shadow-sm"
-                      style={{ color: accentColor }}
-                    >
-                      {BUILTIN_ASCII}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              {/* Rows Area */}
-              <div className="flex-1 min-w-[240px] max-w-[480px] space-y-0.5 text-xs select-none">
-                {rows
-                  .filter((r) => r.enabled)
-                  .map((row) => {
-                    if (row.type === "host_user") {
-                      return (
-                        <div key={row.id} className="pb-1">
-                          <span style={{ color: accentColor }}>silentbyte</span>
-                          <span className="text-slate-400">@</span>
-                          <span style={{ color: accentColor }}>slayer</span>
-                          <div className="text-[10px] text-slate-500 tracking-wider">
-                            ----------------------
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    if (row.type === "tagline") {
-                      return (
-                        <div key={row.id} className="py-1 text-slate-400 italic text-[11px] flex items-center gap-1.5">
-                          <span style={{ color: accentColor }}>■</span>
-                          <span>{row.customText}</span>
-                        </div>
-                      );
-                    }
-
-                    if (row.type === "spacer") {
-                      return <div key={row.id} className="h-2" />;
-                    }
-
-                    if (row.type === "section_header") {
-                      return (
-                        <div
-                          key={row.id}
-                          className="pt-2 pb-0.5 text-[10px] font-bold tracking-widest uppercase border-b border-white/5"
-                          style={{ color: accentColor }}
-                        >
-                          {row.customText}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div key={row.id} className="flex items-baseline justify-between gap-3 text-[11px] leading-relaxed">
-                        <div className="flex items-center gap-1.5 text-slate-300 shrink-0">
-                          <span style={{ color: accentColor }}>{row.keyPrefix}</span>
-                          <span className="font-semibold">{row.label}</span>
-                        </div>
-                        <span className="text-slate-400 truncate text-right font-normal">
-                          {row.value}
-                        </span>
-                      </div>
-                    );
-                  })}
-
-                {/* Terminal Colorblocks */}
-                <div className="pt-3 flex items-center gap-1 opacity-90">
-                  {["#1e1e2e", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#cba6f7", "#94e2d5", "#cdd6f4"].map((bg, idx) => (
-                    <span key={idx} className="w-3.5 h-3.5 rounded-sm inline-block shadow-xs" style={{ backgroundColor: bg }} />
-                  ))}
-                </div>
+                  className="font-mono text-xs sm:text-[12.5px] leading-relaxed select-text whitespace-pre overflow-x-auto text-[#c9d1d9] flex-1 max-w-[560px]"
+                  dangerouslySetInnerHTML={{ __html: ansiToHtml(previewAnsi) }}
+                />
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 text-[var(--rz-text-muted)] font-mono text-xs">
+                <Terminal className="w-6 h-6 animate-pulse text-[var(--rz-accent)]" />
+                <span>{isRenderingPreview ? "Rendering live Fastfetch preview…" : "Loading Fastfetch configuration…"}</span>
+              </div>
+            )}
           </div>
 
           {/* Bottom Terminal Control Footer */}
@@ -811,7 +923,7 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
               <span>PREVIEW IN TERMINAL</span>
             </button>
             <span className="text-[11px] text-slate-500 italic">
-              Live terminal preview
+              Live · Generated from current config
             </span>
           </div>
         </div>

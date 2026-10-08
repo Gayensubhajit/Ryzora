@@ -58,6 +58,9 @@ pub fn run() {
             system::get_fastfetch_telemetry,
             system::preview_fastfetch_terminal,
             system::apply_fastfetch_configuration,
+            system::render_fastfetch_preview,
+            system::get_fastfetch_preset_config,
+            system::get_fastfetch_saved_config,
             // Deep Link Handler (Phase 19)
             deeplink::handle_deeplink,
             // Manifest — validation only (Phase 2)

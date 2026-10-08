@@ -64,3 +64,34 @@ pub fn launch_fastfetch_terminal(temp_config_path: &Path) -> Result<bool, String
         }
     }
 }
+
+pub fn run_fastfetch_preview(config_jsonc: &str) -> Result<String, String> {
+    if env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        return Ok("silentbyte@slayer\n-----------------\nOS: Garuda Linux x86_64\nHost: ASUS TUF Gaming F15\nKernel: Linux 7.2.9-1-garuda\nUptime: 2 hours\nShell: zsh\nWM: Hyprland".to_string());
+    }
+
+    let temp_dir = env::temp_dir();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let temp_path = temp_dir.join(format!("ryzora_ff_render_{}.jsonc", timestamp));
+
+    fs::write(&temp_path, config_jsonc)
+        .map_err(|e| format!("Failed to write temporary preview config: {}", e))?;
+
+    let output_res = Command::new("fastfetch")
+        .args(&["-c", &temp_path.to_string_lossy(), "--pipe", "false"])
+        .output();
+
+    let _ = fs::remove_file(&temp_path);
+
+    match output_res {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            Ok(stdout)
+        }
+        Err(e) => Err(format!("Failed to execute fastfetch preview: {}", e)),
+    }
+}
+

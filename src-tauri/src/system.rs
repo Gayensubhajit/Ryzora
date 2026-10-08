@@ -922,3 +922,87 @@ pub fn apply_fastfetch_configuration(req: FastfetchPreviewRequest) -> Result<boo
 
     Ok(true)
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FastfetchPreviewResponse {
+    pub raw_ansi: String,
+    pub is_image_emblem: bool,
+    pub emblem_path: Option<String>,
+    pub success: bool,
+}
+
+#[tauri::command]
+pub fn render_fastfetch_preview(req: FastfetchPreviewRequest) -> Result<FastfetchPreviewResponse, String> {
+    let home = crate::snapshot::get_home_dir();
+
+    let is_image = req.emblem_type.as_deref() == Some("image");
+    let mut render_req = req.clone();
+    if is_image {
+        render_req.emblem_type = Some("none".to_string());
+    }
+
+    let config_json = build_fastfetch_jsonc(&render_req, &home);
+    let serialized = serde_json::to_string_pretty(&config_json)
+        .map_err(|e| format!("Failed to serialize preview config: {}", e))?;
+
+    let raw_ansi = crate::app_adapters::fastfetch_runner::run_fastfetch_preview(&serialized)?;
+
+    Ok(FastfetchPreviewResponse {
+        raw_ansi,
+        is_image_emblem: is_image,
+        emblem_path: req.emblem_path,
+        success: true,
+    })
+}
+
+#[tauri::command]
+pub fn get_fastfetch_preset_config(preset_id: String) -> Result<String, String> {
+    let home = crate::snapshot::get_home_dir();
+
+    let installed_preset_path = home
+        .join(".config/fastfetch/presets")
+        .join(&preset_id)
+        .join("config.jsonc");
+    if installed_preset_path.exists() {
+        if let Ok(c) = fs::read_to_string(&installed_preset_path) {
+            return Ok(c);
+        }
+    }
+
+    let repo_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("repositories/community/packages")
+        .join(&preset_id)
+        .join("files/config.jsonc");
+    if repo_path.exists() {
+        if let Ok(c) = fs::read_to_string(&repo_path) {
+            return Ok(c);
+        }
+    }
+
+    let saved_config = home.join(".config/fastfetch/config.jsonc");
+    if saved_config.exists() {
+        if let Ok(c) = fs::read_to_string(&saved_config) {
+            return Ok(c);
+        }
+    }
+
+    Ok(
+        "{\n  \"$schema\": \"https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json\",\n  \"modules\": [\"title\", \"separator\", \"os\", \"host\", \"kernel\", \"uptime\", \"packages\", \"shell\", \"wm\", \"terminal\", \"cpu\", \"gpu\", \"memory\", \"disk\"]\n}"
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub fn get_fastfetch_saved_config() -> Result<Option<String>, String> {
+    let home = crate::snapshot::get_home_dir();
+    let saved_config = home.join(".config/fastfetch/config.jsonc");
+    if saved_config.exists() {
+        if let Ok(c) = fs::read_to_string(&saved_config) {
+            return Ok(Some(c));
+        }
+    }
+    Ok(None)
+}
+
