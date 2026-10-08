@@ -444,6 +444,8 @@ pub struct FastfetchTelemetry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FastfetchPreviewRequest {
     pub preset_id: Option<String>,
+    pub base_config_jsonc: Option<String>,
+    pub is_modified: Option<bool>,
     pub accent_color: Option<String>,
     pub emblem_type: Option<String>,
     pub emblem_path: Option<String>,
@@ -548,6 +550,32 @@ pub fn list_fastfetch_local_emblems() -> Result<Vec<FastfetchEmblem>, String> {
                                         });
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Check user decor and emblem folders: ~/Pictures/ryodecors, ~/Pictures/fastfetch, ~/Pictures/emblems
+    for sub in &["Pictures/ryodecors", "Pictures/fastfetch", "Pictures/emblems"] {
+        let decor_dir = home.join(sub);
+        if decor_dir.exists() && decor_dir.is_dir() {
+            if let Ok(entries) = fs::read_dir(&decor_dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_file() {
+                        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                        if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "svg" | "webp" | "txt") {
+                            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("emblem");
+                            if !emblems.iter().any(|e| e.path == p.to_string_lossy()) {
+                                emblems.push(FastfetchEmblem {
+                                    id: stem.to_string(),
+                                    name: stem.to_uppercase(),
+                                    path: p.to_string_lossy().to_string(),
+                                    is_image: ext != "txt",
+                                });
                             }
                         }
                     }
@@ -783,6 +811,246 @@ pub fn get_fastfetch_telemetry() -> Result<FastfetchTelemetry, String> {
     Ok(tel)
 }
 
+fn strip_jsonc_syntax(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    let n = chars.len();
+    let mut in_str = false;
+    let mut esc = false;
+
+    while i < n {
+        let c = chars[i];
+        if in_str {
+            out.push(c);
+            if esc {
+                esc = false;
+            } else if c == '\\' {
+                esc = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            i += 1;
+        } else {
+            if c == '"' {
+                in_str = true;
+                out.push(c);
+                i += 1;
+            } else if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+                i += 2;
+                while i < n && chars[i] != '\n' {
+                    i += 1;
+                }
+            } else if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+                i += 2;
+                while i + 1 < n && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+            } else {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+
+    // Remove trailing commas before } or ]
+    let mut clean_chars: Vec<char> = out.chars().collect();
+    let mut j = 0;
+    let len = clean_chars.len();
+    let mut in_quote = false;
+    let mut escape = false;
+
+    while j < len {
+        let ch = clean_chars[j];
+        if in_quote {
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_quote = false;
+            }
+        } else {
+            if ch == '"' {
+                in_quote = true;
+            } else if ch == ',' {
+                let mut k = j + 1;
+                while k < len && clean_chars[k].is_whitespace() {
+                    k += 1;
+                }
+                if k < len && (clean_chars[k] == '}' || clean_chars[k] == ']') {
+                    clean_chars[j] = ' ';
+                }
+            }
+        }
+        j += 1;
+    }
+
+    clean_chars.into_iter().collect()
+}
+
+fn patch_preset_json(
+    base_val: &mut serde_json::Value,
+    req: &FastfetchPreviewRequest,
+    home: &std::path::Path,
+) {
+    if !base_val.is_object() {
+        *base_val = serde_json::json!({
+            "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json"
+        });
+    }
+
+    // 1. Logo patch
+    if req.emblem_type.is_some() || req.emblem_path.is_some() || req.width_cols.is_some() || req.height_lines.is_some() || req.padding_cols.is_some() {
+        let emblem_type_str = req.emblem_type.as_deref().unwrap_or("none");
+        let mut logo_obj = base_val.get("logo").cloned().unwrap_or_else(|| serde_json::json!({}));
+        if !logo_obj.is_object() {
+            logo_obj = serde_json::json!({});
+        }
+
+        match emblem_type_str {
+            "image" => {
+                logo_obj["type"] = serde_json::json!("kitty-direct");
+                if let Some(ref path_str) = req.emblem_path {
+                    let expanded = if path_str.starts_with("~/") {
+                        home.join(path_str.trim_start_matches("~/"))
+                    } else {
+                        std::path::PathBuf::from(path_str)
+                    };
+                    logo_obj["source"] = serde_json::json!(expanded.to_string_lossy());
+                }
+                if let Some(w) = req.width_cols {
+                    logo_obj["width"] = serde_json::json!(w);
+                }
+                if let Some(h) = req.height_lines {
+                    logo_obj["height"] = serde_json::json!(h);
+                }
+                if let Some(p) = req.padding_cols {
+                    let mut padding = logo_obj.get("padding").cloned().unwrap_or_else(|| serde_json::json!({}));
+                    if !padding.is_object() {
+                        padding = serde_json::json!({});
+                    }
+                    padding["left"] = serde_json::json!(p);
+                    padding["right"] = serde_json::json!(p);
+                    logo_obj["padding"] = padding;
+                }
+            }
+            "ascii" => {
+                logo_obj["type"] = serde_json::json!("file");
+                if let Some(ref path_str) = req.emblem_path {
+                    let expanded = if path_str.starts_with("~/") {
+                        home.join(path_str.trim_start_matches("~/"))
+                    } else {
+                        std::path::PathBuf::from(path_str)
+                    };
+                    logo_obj["source"] = serde_json::json!(expanded.to_string_lossy());
+                }
+            }
+            "builtin" => {
+                logo_obj["type"] = serde_json::json!("builtin");
+                if let Some(map) = logo_obj.as_object_mut() {
+                    map.remove("source");
+                }
+            }
+            "none" => {
+                logo_obj["type"] = serde_json::json!("none");
+                if let Some(map) = logo_obj.as_object_mut() {
+                    map.remove("source");
+                }
+            }
+            _ => {}
+        }
+        base_val["logo"] = logo_obj;
+    }
+
+    // 2. Accent color patch
+    if let Some(ref accent) = req.accent_color {
+        let key_color = if accent.starts_with('#') && accent.len() == 7 {
+            if let (Ok(r), Ok(g), Ok(b)) = (
+                u8::from_str_radix(&accent[1..3], 16),
+                u8::from_str_radix(&accent[3..5], 16),
+                u8::from_str_radix(&accent[5..7], 16),
+            ) {
+                format!("38;2;{};{};{}", r, g, b)
+            } else {
+                "38;2;226;52;42".to_string()
+            }
+        } else {
+            "38;2;226;52;42".to_string()
+        };
+
+        let mut display = base_val.get("display").cloned().unwrap_or_else(|| serde_json::json!({}));
+        if !display.is_object() {
+            display = serde_json::json!({});
+        }
+        let mut color = display.get("color").cloned().unwrap_or_else(|| serde_json::json!({}));
+        if !color.is_object() {
+            color = serde_json::json!({});
+        }
+        color["keys"] = serde_json::json!(key_color);
+        display["color"] = color;
+        base_val["display"] = display;
+    }
+
+    // 3. Active modules patch
+    if let Some(ref active_mods) = req.active_modules {
+        base_val["modules"] = serde_json::json!(active_mods);
+    }
+}
+
+fn patch_fastfetch_config(
+    base_jsonc: &str,
+    req: &FastfetchPreviewRequest,
+    home: &std::path::Path,
+) -> Result<String, String> {
+    let cleaned = strip_jsonc_syntax(base_jsonc);
+    let mut val: serde_json::Value = serde_json::from_str(&cleaned)
+        .unwrap_or_else(|_| build_fastfetch_jsonc(req, home));
+
+    patch_preset_json(&mut val, req, home);
+
+    serde_json::to_string_pretty(&val)
+        .map_err(|e| format!("Failed to serialize patched fastfetch config: {}", e))
+}
+
+fn resolve_preset_file(req: &FastfetchPreviewRequest, home: &std::path::Path) -> Option<std::path::PathBuf> {
+    if let Some(ref pid) = req.preset_id {
+        let p = home.join(".config/fastfetch/presets").join(pid).join("config.jsonc");
+        if p.exists() {
+            return Some(p);
+        }
+        let repo_p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("repositories/community/packages")
+            .join(pid)
+            .join("files/config.jsonc");
+        if repo_p.exists() {
+            return Some(repo_p);
+        }
+    }
+    let saved_p = home.join(".config/fastfetch/config.jsonc");
+    if saved_p.exists() {
+        return Some(saved_p);
+    }
+    None
+}
+
+fn get_base_preset_jsonc(req: &FastfetchPreviewRequest, home: &std::path::Path) -> Result<String, String> {
+    if let Some(ref raw) = req.base_config_jsonc {
+        if !raw.trim().is_empty() {
+            return Ok(raw.clone());
+        }
+    }
+    if let Some(path) = resolve_preset_file(req, home) {
+        if let Ok(c) = fs::read_to_string(&path) {
+            return Ok(c);
+        }
+    }
+    Ok("{\n  \"$schema\": \"https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json\",\n  \"modules\": [\"title\", \"separator\", \"os\", \"host\", \"kernel\", \"uptime\", \"packages\", \"shell\", \"wm\", \"terminal\", \"cpu\", \"gpu\", \"memory\", \"disk\"]\n}".to_string())
+}
+
 fn build_fastfetch_jsonc(req: &FastfetchPreviewRequest, home: &std::path::Path) -> serde_json::Value {
     let emblem_type_str = req.emblem_type.as_deref().unwrap_or("none");
     let resolved_logo = match emblem_type_str {
@@ -887,6 +1155,17 @@ pub fn preview_fastfetch_terminal(req: FastfetchPreviewRequest) -> Result<bool, 
     }
 
     let home = crate::snapshot::get_home_dir();
+    let is_modified = req.is_modified.unwrap_or(false);
+
+    if !is_modified {
+        if let Some(preset_path) = resolve_preset_file(&req, &home) {
+            return crate::app_adapters::fastfetch_runner::launch_fastfetch_terminal_file(&preset_path);
+        }
+    }
+
+    let base_jsonc = get_base_preset_jsonc(&req, &home)?;
+    let modified_jsonc = patch_fastfetch_config(&base_jsonc, &req, &home)?;
+
     let temp_dir = env::temp_dir();
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -894,10 +1173,7 @@ pub fn preview_fastfetch_terminal(req: FastfetchPreviewRequest) -> Result<bool, 
         .unwrap_or(0);
     let temp_config_path = temp_dir.join(format!("ryzora_ff_preview_{}.jsonc", timestamp));
 
-    let config_json = build_fastfetch_jsonc(&req, &home);
-    let serialized = serde_json::to_string_pretty(&config_json)
-        .map_err(|e| format!("Failed to serialize preview config: {}", e))?;
-    fs::write(&temp_config_path, serialized)
+    fs::write(&temp_config_path, modified_jsonc)
         .map_err(|e| format!("Failed to write preview config to /tmp: {}", e))?;
 
     crate::app_adapters::fastfetch_runner::launch_fastfetch_terminal(&temp_config_path)
@@ -913,11 +1189,19 @@ pub fn apply_fastfetch_configuration(req: FastfetchPreviewRequest) -> Result<boo
     let ff_dir = home.join(".config/fastfetch");
     let _ = fs::create_dir_all(&ff_dir);
     let target_path = ff_dir.join("config.jsonc");
+    let is_modified = req.is_modified.unwrap_or(false);
 
-    let config_json = build_fastfetch_jsonc(&req, &home);
-    let serialized = serde_json::to_string_pretty(&config_json)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
-    fs::write(&target_path, serialized)
+    if !is_modified {
+        if let Some(preset_path) = resolve_preset_file(&req, &home) {
+            fs::copy(&preset_path, &target_path)
+                .map_err(|e| format!("Failed to copy preset to ~/.config/fastfetch/config.jsonc: {}", e))?;
+            return Ok(true);
+        }
+    }
+
+    let base_jsonc = get_base_preset_jsonc(&req, &home)?;
+    let modified_jsonc = patch_fastfetch_config(&base_jsonc, &req, &home)?;
+    fs::write(&target_path, modified_jsonc)
         .map_err(|e| format!("Failed to write ~/.config/fastfetch/config.jsonc: {}", e))?;
 
     Ok(true)
@@ -934,22 +1218,24 @@ pub struct FastfetchPreviewResponse {
 #[tauri::command]
 pub fn render_fastfetch_preview(req: FastfetchPreviewRequest) -> Result<FastfetchPreviewResponse, String> {
     let home = crate::snapshot::get_home_dir();
+    let is_modified = req.is_modified.unwrap_or(false);
 
-    let is_image = req.emblem_type.as_deref() == Some("image");
-    let mut render_req = req.clone();
-    if is_image {
-        render_req.emblem_type = Some("none".to_string());
-    }
-
-    let config_json = build_fastfetch_jsonc(&render_req, &home);
-    let serialized = serde_json::to_string_pretty(&config_json)
-        .map_err(|e| format!("Failed to serialize preview config: {}", e))?;
-
-    let raw_ansi = crate::app_adapters::fastfetch_runner::run_fastfetch_preview(&serialized)?;
+    let raw_ansi = if !is_modified {
+        if let Some(preset_path) = resolve_preset_file(&req, &home) {
+            crate::app_adapters::fastfetch_runner::run_fastfetch_preview_file(&preset_path)?
+        } else {
+            let base_jsonc = get_base_preset_jsonc(&req, &home)?;
+            crate::app_adapters::fastfetch_runner::run_fastfetch_preview(&base_jsonc)?
+        }
+    } else {
+        let base_jsonc = get_base_preset_jsonc(&req, &home)?;
+        let modified_jsonc = patch_fastfetch_config(&base_jsonc, &req, &home)?;
+        crate::app_adapters::fastfetch_runner::run_fastfetch_preview(&modified_jsonc)?
+    };
 
     Ok(FastfetchPreviewResponse {
         raw_ansi,
-        is_image_emblem: is_image,
+        is_image_emblem: req.emblem_type.as_deref() == Some("image"),
         emblem_path: req.emblem_path,
         success: true,
     })
