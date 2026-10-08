@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-moon",
+  "name": "Moon Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Stylized crescent moon emblem for night-mode terminal fetch layouts.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Moon",
+    "Astronomy",
+    "Night"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/moon.png",
+      "target": "~/.config/fastfetch/logos/moon.png",
+      "description": "Fastfetch Moon Emblem"
+    }
+  ]
+}

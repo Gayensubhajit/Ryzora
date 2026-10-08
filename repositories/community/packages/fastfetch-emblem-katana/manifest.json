@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-katana",
+  "name": "Katana Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "High-contrast Katana emblem artwork formatted for Fastfetch Kitty graphics.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Katana",
+    "Sword",
+    "Minimal"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/katana.png",
+      "target": "~/.config/fastfetch/logos/katana.png",
+      "description": "Fastfetch Katana Emblem"
+    }
+  ]
+}

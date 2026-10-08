@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-mic",
+  "name": "Mic Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Studio condenser microphone emblem artwork for audio and music setups.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Microphone",
+    "Studio",
+    "Audio"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/mic.png",
+      "target": "~/.config/fastfetch/logos/mic.png",
+      "description": "Fastfetch Mic Emblem"
+    }
+  ]
+}

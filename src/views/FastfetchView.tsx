@@ -3,6 +3,7 @@ import {
   Terminal,
   RotateCcw,
   Save,
+  Plus,
   Trash2,
   Upload,
   ChevronUp,
@@ -181,6 +182,7 @@ export interface ParsedFastfetchOutput {
   kittyCols?: number;
   kittyRows?: number;
   kittyTopPadding?: number;
+  kittyLeftPadding?: number;
   textHtml: string;
 }
 
@@ -217,12 +219,14 @@ export function parseFastfetchAnsi(raw: string): ParsedFastfetchOutput {
     imageUrl = "";
   }
 
+  const preImage = raw.slice(0, match.index ?? 0);
+  const leftPadMatch = preImage.match(/\x1b\[(\d+)C$/);
+  const leftCols = leftPadMatch ? parseInt(leftPadMatch[1], 10) : 3;
+  const topPadding = Math.max(0, preImage.split("\n").length - 1);
+
   const postImage = raw.slice((match.index ?? 0) + match[0].length);
   const upMatch = postImage.match(/\x1b\[(\d+)A/);
   const textPart = upMatch ? postImage.slice((upMatch.index ?? 0) + upMatch[0].length) : postImage;
-  const cleanedLines = textPart.split("\n").map((l) => l.replace(/^\x1b\[\d+C/, ""));
-  const preImage = raw.slice(0, match.index ?? 0);
-  const topPadding = preImage.split("\n").filter((l) => !l.trim() || l === "\x1b[m").length;
 
   return {
     hasKittyImage: Boolean(imageUrl),
@@ -230,14 +234,15 @@ export function parseFastfetchAnsi(raw: string): ParsedFastfetchOutput {
     kittyCols: parseInt(controls.c || "28", 10),
     kittyRows: parseInt(controls.r || "14", 10),
     kittyTopPadding: topPadding,
-    textHtml: ansiToHtml(cleanedLines.join("\n")),
+    kittyLeftPadding: leftCols,
+    textHtml: ansiToHtml(textPart),
   };
 }
 
 export function ansiToHtml(raw: string): string {
   if (!raw) return "";
 
-  // Strip kitty graphics protocol sequences: _G...(\|)
+  // Strip kitty graphics protocol sequences: \x1b_G...(\x1b\\|\x07)
   let cleaned = raw.replace(/\x1b_G[^\x1b\x07]*(\x1b\\|\x07)/g, "");
 
   const stdColors = [
@@ -252,74 +257,85 @@ export function ansiToHtml(raw: string): string {
   const escapeHtml = (str: string) =>
     str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const tokens = cleaned.split(/(\x1b\[[0-9;]*m)/);
-  const out: string[] = [];
+  const lines = cleaned.split("\n");
+  const processedLines: string[] = [];
 
-  let currentFg: string | null = null;
-  let isBold = false;
-  let isDim = false;
-  let isItalic = false;
-  let isUnderline = false;
+  for (const line of lines) {
+    let col = 0;
+    let lineOut = "";
+    let currentFg: string | null = null;
+    let isBold = false;
+    let isDim = false;
+    let isItalic = false;
+    let isUnderline = false;
 
-  for (const token of tokens) {
-    if (!token) continue;
-    if (token.startsWith("\x1b[")) {
-      const codeStr = token.slice(2, -1);
-      const codes = codeStr ? codeStr.split(";").map(Number) : [0];
+    // Split tokens by ANSI escape sequences \x1b\[[0-9;]*[a-zA-Z]
+    const tokens = line.split(/(\x1b\[[0-9;]*[a-zA-Z])/);
+    for (const token of tokens) {
+      if (!token) continue;
+      if (token.startsWith("\x1b[")) {
+        const type = token.slice(-1);
+        const argsStr = token.slice(2, -1);
+        const args = argsStr ? argsStr.split(";").map(Number) : [0];
 
-      let i = 0;
-      while (i < codes.length) {
-        const c = codes[i];
-        if (c === 0) {
-          currentFg = null;
-          isBold = false;
-          isDim = false;
-          isItalic = false;
-          isUnderline = false;
-        } else if (c === 1) {
-          isBold = true;
-        } else if (c === 2) {
-          isDim = true;
-        } else if (c === 3) {
-          isItalic = true;
-        } else if (c === 4) {
-          isUnderline = true;
-        } else if (c === 22) {
-          isBold = false;
-          isDim = false;
-        } else if (c === 23) {
-          isItalic = false;
-        } else if (c === 24) {
-          isUnderline = false;
-        } else if (c >= 30 && c <= 37) {
-          currentFg = stdColors[c - 30];
-        } else if (c === 39) {
-          currentFg = null;
-        } else if (c >= 90 && c <= 97) {
-          currentFg = brightColors[c - 90];
-        } else if (c === 38 && i + 4 < codes.length && codes[i + 1] === 2) {
-          const r = codes[i + 2];
-          const g = codes[i + 3];
-          const b = codes[i + 4];
-          currentFg = `rgb(${r},${g},${b})`;
-          i += 4;
+        if (type === "m") {
+          let i = 0;
+          while (i < args.length) {
+            const c = args[i];
+            if (c === 0) {
+              currentFg = null;
+              isBold = false;
+              isDim = false;
+              isItalic = false;
+              isUnderline = false;
+            } else if (c === 1) isBold = true;
+            else if (c === 2) isDim = true;
+            else if (c === 3) isItalic = true;
+            else if (c === 4) isUnderline = true;
+            else if (c === 22) { isBold = false; isDim = false; }
+            else if (c === 23) isItalic = false;
+            else if (c === 24) isUnderline = false;
+            else if (c >= 30 && c <= 37) currentFg = stdColors[c - 30];
+            else if (c === 39) currentFg = null;
+            else if (c >= 90 && c <= 97) currentFg = brightColors[c - 90];
+            else if (c === 38 && i + 4 < args.length && args[i + 1] === 2) {
+              const r = args[i + 2];
+              const g = args[i + 3];
+              const b = args[i + 4];
+              currentFg = `rgb(${r},${g},${b})`;
+              i += 4;
+            }
+            i++;
+          }
+        } else if (type === "C") {
+          const count = args[0] || 1;
+          lineOut += " ".repeat(count);
+          col += count;
+        } else if (type === "G") {
+          const targetCol = (args[0] || 1) - 1;
+          if (targetCol > col) {
+            const spaces = targetCol - col;
+            lineOut += " ".repeat(spaces);
+            col = targetCol;
+          }
         }
-        i++;
-      }
-    } else {
-      const styles: string[] = [];
-      if (currentFg) styles.push(`color: ${currentFg}`);
-      if (isBold) styles.push("font-weight: 700");
-      if (isDim) styles.push("opacity: 0.75");
-      if (isItalic) styles.push("font-style: italic");
-      if (isUnderline) styles.push("text-decoration: underline");
+      } else {
+        const styles: string[] = [];
+        if (currentFg) styles.push(`color: ${currentFg}`);
+        if (isBold) styles.push("font-weight: 700");
+        if (isDim) styles.push("opacity: 0.75");
+        if (isItalic) styles.push("font-style: italic");
+        if (isUnderline) styles.push("text-decoration: underline");
 
-      const styleAttr = styles.length ? ` style="${styles.join("; ")}"` : "";
-      out.push(`<span${styleAttr}>${escapeHtml(token)}</span>`);
+        const styleAttr = styles.length ? ` style="${styles.join("; ")}"` : "";
+        lineOut += `<span${styleAttr}>${escapeHtml(token)}</span>`;
+        col += token.length;
+      }
     }
+    processedLines.push(lineOut);
   }
 
-  return out.join("");
+  return processedLines.join("\n");
 }
 
 export const FastfetchView: React.FC<FastfetchViewProps> = ({
@@ -966,19 +982,22 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
           {/* Terminal Canvas */}
           <div className="flex-1 p-6 overflow-auto flex items-center justify-center bg-[#0b0f17]">
             {previewAnsi ? (
-              parsedOutput.hasKittyImage ? (
-                <div className="w-full flex flex-col sm:flex-row items-center sm:items-start justify-center gap-6 min-h-[320px]">
-                  {/* Emblem Area decoded directly from Fastfetch Kitty Graphics */}
+              <div
+                className="relative font-mono text-[13px] leading-[20px] select-text whitespace-pre text-[#c9d1d9] max-w-full"
+                style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}
+              >
+                {/* Emblem Image positioned at exact terminal cell coordinates */}
+                {parsedOutput.hasKittyImage && parsedOutput.kittyImageUrl && (
                   <div
                     className={[
-                      "shrink-0 relative overflow-hidden rounded-xl border border-white/10 shadow-lg bg-black/40 flex items-center justify-center",
+                      "absolute overflow-hidden pointer-events-none z-10 flex items-center justify-center",
                       dither ? "contrast-125 brightness-95" : "",
                     ].join(" ")}
                     style={{
-                      width: `${Math.max(120, (parsedOutput.kittyCols || widthCols) * 7.5)}px`,
-                      height: `${Math.max(120, (parsedOutput.kittyRows || heightLines) * 15)}px`,
-                      marginTop: `${(parsedOutput.kittyTopPadding || 0) * 16}px`,
-                      marginRight: `${paddingCols * 3}px`,
+                      left: `${parsedOutput.kittyLeftPadding ?? 3}ch`,
+                      top: `${(parsedOutput.kittyTopPadding ?? 0) * 20}px`,
+                      width: `${(parsedOutput.kittyCols ?? widthCols)}ch`,
+                      height: `${(parsedOutput.kittyRows ?? heightLines) * 20}px`,
                     }}
                   >
                     <img
@@ -987,22 +1006,11 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                       className="w-full h-full object-contain filter drop-shadow-md"
                     />
                   </div>
+                )}
 
-                  {/* Real Fastfetch ANSI Output beside the image */}
-                  <div
-                    className="font-mono text-xs sm:text-[12.5px] leading-relaxed select-text whitespace-pre overflow-x-auto text-[#c9d1d9] flex-1 max-w-[560px]"
-                    dangerouslySetInnerHTML={{ __html: parsedOutput.textHtml }}
-                  />
-                </div>
-              ) : (
-                /* Complete Fastfetch ANSI 2D Output (ASCII art / Builtin logo / Pure text) */
-                <div className="w-full flex items-center justify-center min-h-[320px]">
-                  <div
-                    className="font-mono text-xs sm:text-[12.5px] leading-relaxed select-text whitespace-pre overflow-x-auto text-[#c9d1d9] max-w-full"
-                    dangerouslySetInnerHTML={{ __html: parsedOutput.textHtml }}
-                  />
-                </div>
-              )
+                {/* Unified Terminal text output (with identical monospace cell metrics) */}
+                <div dangerouslySetInnerHTML={{ __html: parsedOutput.textHtml }} />
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-2 text-[var(--rz-text-muted)] font-mono text-xs">
                 <Terminal className="w-6 h-6 animate-pulse text-[var(--rz-accent)]" />
@@ -1010,7 +1018,6 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
               </div>
             )}
           </div>
-
           {/* Bottom Terminal Control Footer */}
           <div className="px-4 py-2 bg-[#121824] border-t border-[#1f2937]/80 flex items-center justify-between text-xs text-slate-400 select-none">
             <button
@@ -1104,10 +1111,20 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                 {emblemType === "image" && (
                   <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[var(--rz-text)]">Emblem Library</span>
-                      <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">
-                        {installedEmblems.length} Installed
-                      </span>
+                      <span className="font-semibold text-[var(--rz-text)]">Installed Emblems</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-[var(--rz-text-muted)] font-mono">
+                          {installedEmblems.length} Installed
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveCategory("fastfetch")}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--rz-accent)] hover:underline cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Browse Emblems</span>
+                        </button>
+                      </div>
                     </div>
 
                     {installedEmblems.length === 0 && !customEmblemUrl ? (
@@ -1115,16 +1132,26 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                         <ImageIcon className="w-7 h-7 text-[var(--rz-text-muted)] mb-2" />
                         <span className="text-xs font-semibold text-[var(--rz-text)]">No installed emblems</span>
                         <span className="text-[10px] text-[var(--rz-text-muted)] mt-0.5 mb-3">
-                          No local emblem assets found on filesystem
+                          Discover and install emblems from the Ryzora Store.
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--rz-accent)] hover:opacity-90 text-white text-xs font-medium cursor-pointer transition-opacity"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          Upload Custom Image
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveCategory("fastfetch")}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--rz-accent)] hover:opacity-90 text-white text-xs font-medium cursor-pointer transition-opacity"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Browse Emblems
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] text-[var(--rz-text)] text-xs font-medium cursor-pointer transition-colors"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload Custom Image
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="grid grid-cols-4 gap-2">

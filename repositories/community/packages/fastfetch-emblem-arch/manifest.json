@@ -1,0 +1,37 @@
+{
+  "id": "fastfetch-emblem-arch",
+  "name": "Arch Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "High-contrast Arch Linux logo emblem for Fastfetch.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "Arch",
+    "PNG"
+  ],
+  "color_palette": [
+    "#1793d1",
+    "#ffffff",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/arch.png",
+      "target": "~/.config/fastfetch/logos/arch.png",
+      "description": "Fastfetch Arch Emblem"
+    }
+  ]
+}

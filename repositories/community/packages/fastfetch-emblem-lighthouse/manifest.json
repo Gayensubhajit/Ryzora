@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-lighthouse",
+  "name": "Lighthouse Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Coastal lighthouse beacon emblem artwork.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Lighthouse",
+    "Beacon",
+    "Coast"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/lighthouse.png",
+      "target": "~/.config/fastfetch/logos/lighthouse.png",
+      "description": "Fastfetch Lighthouse Emblem"
+    }
+  ]
+}

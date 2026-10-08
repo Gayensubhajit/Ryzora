@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-needle",
+  "name": "Needle Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Minimalist sewing needle and thread emblem for bespoke rice themes.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Needle",
+    "Minimal",
+    "Craft"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/needle.png",
+      "target": "~/.config/fastfetch/logos/needle.png",
+      "description": "Fastfetch Needle Emblem"
+    }
+  ]
+}

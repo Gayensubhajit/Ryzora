@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-aurelius",
+  "name": "Aurelius Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Marcus Aurelius classical statue bust emblem artwork.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Aurelius",
+    "Statue",
+    "Classical"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/aurelius.png",
+      "target": "~/.config/fastfetch/logos/aurelius.png",
+      "description": "Fastfetch Aurelius Emblem"
+    }
+  ]
+}

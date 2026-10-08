@@ -52,6 +52,7 @@ const LOCKSCREEN_PROVIDER_FILTERS = ["All Engines", "Qylock", "Hyprlock", "Quick
 /** Per-category sub-filter pills */
 const CATEGORY_SUB_FILTERS: Partial<Record<CategoryId, string[]>> = {
   lockscreens: ["All", "Session Lock", "Login Screen", "My Media"],
+  fastfetch: ["All", "Configs", "Emblems"],
   rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
   themes: ["All", "GTK", "Qt", "Application"],
   wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
@@ -240,6 +241,17 @@ export const CategoryView: React.FC = () => {
           (providerFilter === "SilentSDDM" && isSilentSddmPkg);
 
         matchesSubFilter = matchesTarget && matchesEngine;
+      } else if (activeCategory === "fastfetch") {
+        if (subFilter === "Configs") {
+          matchesSubFilter = (pkg as any).subfilter === "Configs" ||
+            pkg.tags.some((t) => t.toLowerCase() === "config" || t.toLowerCase() === "preset") ||
+            !pkg.tags.some((t) => t.toLowerCase() === "emblem");
+        } else if (subFilter === "Emblems") {
+          matchesSubFilter = (pkg as any).subfilter === "Emblems" ||
+            pkg.tags.some((t) => t.toLowerCase() === "emblem" || t.toLowerCase() === "logo");
+        } else {
+          matchesSubFilter = true;
+        }
       } else {
         matchesSubFilter =
           subFilter === "All" ||

@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-camera",
+  "name": "Camera Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Retro vintage camera emblem artwork for photography-inspired fetch themes.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Camera",
+    "Photography",
+    "Vintage"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/camera.png",
+      "target": "~/.config/fastfetch/logos/camera.png",
+      "description": "Fastfetch Camera Emblem"
+    }
+  ]
+}

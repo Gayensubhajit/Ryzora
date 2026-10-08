@@ -2377,7 +2377,8 @@
         "Two-Column",
         "Spectrum",
         "Hardware",
-        "Modular"
+        "Modular",
+        "Config"
       ],
       "color_palette": [
         "#7aa2f7",
@@ -2409,7 +2410,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/2.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-3",
@@ -2424,7 +2426,8 @@
         "Bordered",
         "Box",
         "Compact",
-        "Unicode"
+        "Unicode",
+        "Config"
       ],
       "color_palette": [
         "#ff79c6",
@@ -2456,7 +2459,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/3.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-4",
@@ -2471,7 +2475,8 @@
         "Hardware",
         "Metrics",
         "Monitoring",
-        "Terminal"
+        "Terminal",
+        "Config"
       ],
       "color_palette": [
         "#89b4fa",
@@ -2503,7 +2508,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/4.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-5",
@@ -2518,7 +2524,8 @@
         "Dashboard",
         "Console",
         "System Info",
-        "Comprehensive"
+        "Comprehensive",
+        "Config"
       ],
       "color_palette": [
         "#fab387",
@@ -2550,7 +2557,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/5.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-6",
@@ -2565,7 +2573,8 @@
         "Matrix",
         "Expanded",
         "Colors",
-        "Media"
+        "Media",
+        "Config"
       ],
       "color_palette": [
         "#a6e3a1",
@@ -2597,7 +2606,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/6.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-7",
@@ -2612,7 +2622,8 @@
         "Kuruma",
         "Grid",
         "Wayland",
-        "Hyprland"
+        "Hyprland",
+        "Config"
       ],
       "color_palette": [
         "#cba6f7",
@@ -2644,7 +2655,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/7.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-8",
@@ -2659,7 +2671,8 @@
         "Neofetch",
         "Classic",
         "Unixporn",
-        "Retro"
+        "Retro",
+        "Config"
       ],
       "color_palette": [
         "#f38ba8",
@@ -2691,7 +2704,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/8.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-9",
@@ -2706,7 +2720,8 @@
         "Spec Sheet",
         "Technical",
         "Glyphs",
-        "Hardware"
+        "Hardware",
+        "Config"
       ],
       "color_palette": [
         "#89b4fa",
@@ -2738,7 +2753,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/9.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-preset-10",
@@ -2753,7 +2769,8 @@
         "Dossier",
         "Hardware",
         "Packages",
-        "Display"
+        "Display",
+        "Config"
       ],
       "color_palette": [
         "#f5c2e7",
@@ -2785,7 +2802,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/10.jsonc"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-cmdr-scotty",
@@ -2800,7 +2818,8 @@
         "Anime",
         "Tsukikko",
         "Art",
-        "Custom Logo"
+        "Custom Logo",
+        "Config"
       ],
       "color_palette": [
         "#ff79c6",
@@ -2832,7 +2851,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/Cmdr_Scotty"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-aayushchalise",
@@ -2847,7 +2867,8 @@
         "Multi-Logo",
         "Pochita",
         "Anime",
-        "ASCII"
+        "ASCII",
+        "Config"
       ],
       "color_palette": [
         "#fab387",
@@ -2879,7 +2900,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/aayushchalise"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-friefetch",
@@ -2894,7 +2916,8 @@
         "Frieren",
         "ASCII",
         "Boxed",
-        "Anime"
+        "Anime",
+        "Config"
       ],
       "color_palette": [
         "#cdd6f4",
@@ -2926,7 +2949,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/friefetch"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-ghosttree",
@@ -2941,7 +2965,8 @@
         "Cat",
         "Cozy",
         "Animal",
-        "Emblem"
+        "Emblem",
+        "Config"
       ],
       "color_palette": [
         "#f9e2af",
@@ -2973,7 +2998,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/ghosttree"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-jonaszfetch",
@@ -2988,7 +3014,8 @@
         "Cyber",
         "JetBrains Mono",
         "Minimal",
-        "Terminal"
+        "Terminal",
+        "Config"
       ],
       "color_palette": [
         "#00f0ff",
@@ -3020,7 +3047,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/jonaszfetch"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-kitty-cachyos",
@@ -3035,7 +3063,8 @@
         "CachyOS",
         "Kitty",
         "Graphics",
-        "Hardware"
+        "Hardware",
+        "Config"
       ],
       "color_palette": [
         "#00c0a3",
@@ -3067,7 +3096,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/kitty-cachyos"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-kuruma",
@@ -3082,7 +3112,8 @@
         "Dynamic",
         "Random Emblem",
         "Kuruma",
-        "ASCII"
+        "ASCII",
+        "Config"
       ],
       "color_palette": [
         "#cba6f7",
@@ -3114,7 +3145,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/kuruma-config"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-rorfetch",
@@ -3129,7 +3161,8 @@
         "Gaming",
         "Risk of Rain",
         "RoR",
-        "Art"
+        "Art",
+        "Config"
       ],
       "color_palette": [
         "#e06c75",
@@ -3161,7 +3194,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/rorfetch"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-snoopy-mugiwara",
@@ -3176,7 +3210,8 @@
         "Snoopy",
         "One Piece",
         "Mugiwara",
-        "Quotes"
+        "Quotes",
+        "Config"
       ],
       "color_palette": [
         "#e5c07b",
@@ -3208,7 +3243,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/snoopy-mugiwara"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-sofijacom",
@@ -3223,7 +3259,8 @@
         "Arch Linux",
         "Rose",
         "Pastel",
-        "Collection"
+        "Collection",
+        "Config"
       ],
       "color_palette": [
         "#f38ba8",
@@ -3255,7 +3292,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/sofijacom-config"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-taiyo",
@@ -3270,7 +3308,8 @@
         "Japanese",
         "Taiyo",
         "Sun",
-        "Minimal"
+        "Minimal",
+        "Config"
       ],
       "color_palette": [
         "#e06c75",
@@ -3302,7 +3341,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/taiyo-theme"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-tf2soldier",
@@ -3317,7 +3357,8 @@
         "TF2",
         "Soldier",
         "Valve",
-        "Tribute"
+        "Tribute",
+        "Config"
       ],
       "color_palette": [
         "#c73e3a",
@@ -3349,7 +3390,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/tf2soldier-config"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-thinkpad-styled",
@@ -3364,7 +3406,8 @@
         "ThinkPad",
         "IBM",
         "TrackPoint",
-        "Hardware"
+        "Hardware",
+        "Config"
       ],
       "color_palette": [
         "#e00000",
@@ -3396,7 +3439,8 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/thinkpad-styled"
-      }
+      },
+      "subfilter": "Configs"
     },
     {
       "id": "fastfetch-win-11",
@@ -3411,7 +3455,8 @@
         "Fluent",
         "Windows 11",
         "Clean",
-        "Cards"
+        "Cards",
+        "Config"
       ],
       "color_palette": [
         "#0078d4",
@@ -3443,6 +3488,535 @@
         "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
         "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
         "path": "configs/win-11-config"
+      },
+      "subfilter": "Configs"
+    },
+    {
+      "id": "fastfetch-emblem-katana",
+      "name": "Katana Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "High-contrast Katana emblem artwork formatted for Fastfetch Kitty graphics.",
+      "manifest": "packages/fastfetch-emblem-katana/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Katana",
+        "Sword",
+        "Minimal"
+      ],
+      "color_palette": [
+        "#e2342a",
+        "#f3ede1",
+        "#1a1a1a"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-katana",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-katana/files/katana.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-katana/files/katana.png"
+      ],
+      "featured": true,
+      "trending": true,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/katana.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/katana.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-moon",
+      "name": "Moon Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Stylized crescent moon emblem for night-mode terminal fetch layouts.",
+      "manifest": "packages/fastfetch-emblem-moon/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Moon",
+        "Astronomy",
+        "Night"
+      ],
+      "color_palette": [
+        "#f5e0dc",
+        "#1e1e2e",
+        "#89b4fa"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-moon",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-moon/files/moon.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-moon/files/moon.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/moon.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/moon.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-camera",
+      "name": "Camera Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Retro vintage camera emblem artwork for photography-inspired fetch themes.",
+      "manifest": "packages/fastfetch-emblem-camera/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Camera",
+        "Photography",
+        "Vintage"
+      ],
+      "color_palette": [
+        "#f38ba8",
+        "#fab387",
+        "#313244"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-camera",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-camera/files/camera.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-camera/files/camera.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/camera.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/camera.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-mic",
+      "name": "Mic Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Studio condenser microphone emblem artwork for audio and music setups.",
+      "manifest": "packages/fastfetch-emblem-mic/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Microphone",
+        "Studio",
+        "Audio"
+      ],
+      "color_palette": [
+        "#cba6f7",
+        "#b4befe",
+        "#181825"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-mic",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-mic/files/mic.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-mic/files/mic.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/mic.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/mic.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-needle",
+      "name": "Needle Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Minimalist sewing needle and thread emblem for bespoke rice themes.",
+      "manifest": "packages/fastfetch-emblem-needle/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Needle",
+        "Minimal",
+        "Craft"
+      ],
+      "color_palette": [
+        "#a6e3a1",
+        "#94e2d5",
+        "#11111b"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-needle",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-needle/files/needle.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-needle/files/needle.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/needle.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/needle.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-aurelius",
+      "name": "Aurelius Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Marcus Aurelius classical statue bust emblem artwork.",
+      "manifest": "packages/fastfetch-emblem-aurelius/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Aurelius",
+        "Statue",
+        "Classical"
+      ],
+      "color_palette": [
+        "#c0caf5",
+        "#7aa2f7",
+        "#1a1b26"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-aurelius",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-aurelius/files/aurelius.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-aurelius/files/aurelius.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/aurelius.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/aurelius.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-david",
+      "name": "David Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Michelangelo's David classical statue bust emblem artwork.",
+      "manifest": "packages/fastfetch-emblem-david/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "David",
+        "Classical",
+        "Art"
+      ],
+      "color_palette": [
+        "#e0af68",
+        "#ff9e64",
+        "#1f2335"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-david",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-david/files/david.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-david/files/david.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/david.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/david.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-hawk",
+      "name": "Hawk Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Stylized predatory hawk avian emblem artwork.",
+      "manifest": "packages/fastfetch-emblem-hawk/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Hawk",
+        "Bird",
+        "Predator"
+      ],
+      "color_palette": [
+        "#bb9af7",
+        "#7dcfff",
+        "#24283b"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-hawk",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-hawk/files/hawk.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-hawk/files/hawk.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/hawk.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/hawk.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-lighthouse",
+      "name": "Lighthouse Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Coastal lighthouse beacon emblem artwork.",
+      "manifest": "packages/fastfetch-emblem-lighthouse/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Lighthouse",
+        "Beacon",
+        "Coast"
+      ],
+      "color_palette": [
+        "#7dcfff",
+        "#b4f9f8",
+        "#16161e"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-lighthouse",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-lighthouse/files/lighthouse.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-lighthouse/files/lighthouse.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/lighthouse.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/lighthouse.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-rashin",
+      "name": "Rashin Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Rashin samurai warrior character artwork emblem.",
+      "manifest": "packages/fastfetch-emblem-rashin/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Rashin",
+        "Samurai",
+        "Anime"
+      ],
+      "color_palette": [
+        "#f7768e",
+        "#e0af68",
+        "#1a1b26"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-rashin",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-rashin/files/rashin.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-rashin/files/rashin.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/rashin.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/rashin.png"
+      }
+    },
+    {
+      "id": "fastfetch-emblem-arch",
+      "name": "Arch Emblem",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "High-contrast Arch Linux logo emblem for Fastfetch.",
+      "manifest": "packages/fastfetch-emblem-arch/manifest.json",
+      "category": "fastfetch",
+      "subfilter": "Emblems",
+      "tags": [
+        "Fastfetch",
+        "Emblem",
+        "Logo",
+        "PNG",
+        "Arch",
+        "Logo",
+        "Linux"
+      ],
+      "color_palette": [
+        "#1793d1",
+        "#ffffff",
+        "#1a1a1a"
+      ],
+      "author": {
+        "name": "Ryoku",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-emblem-arch",
+        "verified": true
+      },
+      "hero_image": "packages/fastfetch-emblem-arch/files/arch.png",
+      "screenshots": [
+        "packages/fastfetch-emblem-arch/files/arch.png"
+      ],
+      "featured": false,
+      "trending": true,
+      "rating": 4.9,
+      "downloads": 850,
+      "provenance": {
+        "upstream": "https://github.com/Gayensubhajit/Ryzora",
+        "revision": "main",
+        "license": "MIT",
+        "path": "emblems/arch.png"
+      },
+      "source": {
+        "type": "local",
+        "repository": "ryzora/emblems",
+        "path": "emblems/arch.png"
       }
     }
   ]

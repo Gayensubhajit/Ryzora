@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-david",
+  "name": "David Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Michelangelo's David classical statue bust emblem artwork.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "David",
+    "Classical",
+    "Art"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/david.png",
+      "target": "~/.config/fastfetch/logos/david.png",
+      "description": "Fastfetch David Emblem"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "id": "fastfetch-emblem-rashin",
+  "name": "Rashin Emblem",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Ryoku",
+  "package_type": "fastfetch",
+  "description": "Rashin samurai warrior character artwork emblem.",
+  "tags": [
+    "Fastfetch",
+    "Emblem",
+    "Logo",
+    "PNG",
+    "Rashin",
+    "Samurai",
+    "Anime"
+  ],
+  "color_palette": [
+    "#e2342a",
+    "#f3ede1",
+    "#1a1a1a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/rashin.png",
+      "target": "~/.config/fastfetch/logos/rashin.png",
+      "description": "Fastfetch Rashin Emblem"
+    }
+  ]
+}
