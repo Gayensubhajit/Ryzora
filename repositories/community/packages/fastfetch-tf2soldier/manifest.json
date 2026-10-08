@@ -1,0 +1,53 @@
+{
+  "id": "fastfetch-tf2soldier",
+  "name": "TF2 Soldier Tribute",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "TehEpikBoi",
+  "package_type": "fastfetch",
+  "description": "Team Fortress 2 Soldier tribute with Rick May quote, helmet ASCII icon, and militarized color scheme.",
+  "tags": [
+    "Fastfetch",
+    "TF2",
+    "Soldier",
+    "Valve",
+    "Tribute"
+  ],
+  "color_palette": [
+    "#c73e3a",
+    "#e8a838",
+    "#4e6a85",
+    "#1c2024"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-tf2soldier/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/Icon_soldier.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-tf2soldier/Icon_soldier.txt",
+      "description": "Fastfetch asset Icon_soldier.txt"
+    },
+    {
+      "source": "files/oh-hello-soldier.webp",
+      "target": "~/.config/fastfetch/presets/fastfetch-tf2soldier/oh-hello-soldier.webp",
+      "description": "Fastfetch asset oh-hello-soldier.webp"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-tf2soldier/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

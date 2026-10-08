@@ -9,7 +9,7 @@ interface StickyActionBarProps {
   isInstalling: boolean;
   installProgress?: number;
   missingDependencies?: string[];
-  selectedTarget?: "quickshell" | "sddm" | "both";
+  selectedTarget?: "sddm";
   onInstall: () => void;
   onPreview?: () => void;
   isActive?: boolean;
@@ -28,7 +28,7 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
   isUpdateAvailable,
   isInstalling,
   missingDependencies = [],
-  selectedTarget = "both",
+  selectedTarget: _selectedTarget = "sddm",
   onInstall,
   onTest,
   onUninstall,
@@ -36,8 +36,6 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
   const isBlocked = missingDependencies.length > 0;
-  const isBoth = selectedTarget === "both";
-  const isSddm = selectedTarget === "sddm";
 
   const handleConfirmUninstall = () => {
     setShowUninstallConfirm(false);
@@ -61,20 +59,10 @@ export const StickyActionBar: React.FC<StickyActionBarProps> = ({
               <Check className="w-4 h-4 shrink-0" />
               <span className="truncate">Ready to install</span>
             </div>
-          ) : isBoth ? (
-            <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium truncate">
-              <Check className="w-4 h-4 shrink-0 stroke-[3]" />
-              <span className="truncate">Installed for Session + Login</span>
-            </div>
-          ) : isSddm ? (
-            <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium truncate">
-              <Check className="w-4 h-4 shrink-0 stroke-[3]" />
-              <span className="truncate">Installed for Login Screen</span>
-            </div>
           ) : (
             <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium truncate">
               <Check className="w-4 h-4 shrink-0 stroke-[3]" />
-              <span className="truncate">Installed for Session Lock</span>
+              <span className="truncate">Installed for Login Screen</span>
             </div>
           )}
         </div>

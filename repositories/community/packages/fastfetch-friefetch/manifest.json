@@ -1,0 +1,53 @@
+{
+  "id": "fastfetch-friefetch",
+  "name": "Friefetch Frieren Box",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "MHashir09",
+  "package_type": "fastfetch",
+  "description": "Custom boxed layout featuring ASCII Frieren art and framed system metrics with multilingual tagline.",
+  "tags": [
+    "Fastfetch",
+    "Frieren",
+    "ASCII",
+    "Boxed",
+    "Anime"
+  ],
+  "color_palette": [
+    "#cdd6f4",
+    "#89b4fa",
+    "#b4befe",
+    "#181825"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-friefetch/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/README.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-friefetch/README.md",
+      "description": "Fastfetch asset README.md"
+    },
+    {
+      "source": "files/logo/frieren.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-friefetch/logo/frieren.txt",
+      "description": "Fastfetch asset logo/frieren.txt"
+    },
+    {
+      "source": "files/showcase.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-friefetch/showcase.png",
+      "description": "Fastfetch asset showcase.png"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "fastfetch-jonaszfetch",
+  "name": "Jonaszfetch Cyber Profile",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "jonasz",
+  "package_type": "fastfetch",
+  "description": "JetBrains Mono optimized terminal fetch designed for high-density terminal setups.",
+  "tags": [
+    "Fastfetch",
+    "Cyber",
+    "JetBrains Mono",
+    "Minimal",
+    "Terminal"
+  ],
+  "color_palette": [
+    "#00f0ff",
+    "#ff007f",
+    "#39ff14",
+    "#12121e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-jonaszfetch/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/images/fetchimage.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-jonaszfetch/images/fetchimage.png",
+      "description": "Fastfetch asset images/fetchimage.png"
+    },
+    {
+      "source": "files/images/preview.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-jonaszfetch/images/preview.png",
+      "description": "Fastfetch asset images/preview.png"
+    },
+    {
+      "source": "files/readme.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-jonaszfetch/readme.txt",
+      "description": "Fastfetch asset readme.txt"
+    }
+  ]
+}

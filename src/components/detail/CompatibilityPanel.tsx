@@ -20,14 +20,13 @@ interface CompatibilityPanelProps {
 
 export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   packageItem: _packageItem,
-  systemInfo,
+  systemInfo: _systemInfo,
   missingDependencies = [],
   selectedTarget = "sddm",
   isLoginScreenSupported = true,
   isGdmActive = false,
 }) => {
   const [showDetails, setShowDetails] = useState(false);
-  const currentWm = systemInfo?.window_manager?.toLowerCase() || "";
   const { systemIntegrationReport: systemReport, privilegedHelperStatus, setupPrivilegedHelper, isSettingUpHelper } = useApp();
   const isMissingDeps = missingDependencies.length > 0;
 
@@ -105,27 +104,7 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
     );
   }
 
-  // 3. Protocol Failure Warning
-  if (false) {
-    const isGnome = (systemInfo?.desktop_environment || "").toLowerCase().includes("gnome") || currentWm.includes("mutter");
-    return (
-      <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs flex items-start gap-2.5">
-        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-        <div className="min-w-0">
-          <div className="font-semibold text-[var(--rz-text)]">
-            Session Lock Protocol Unavailable
-          </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-[var(--rz-text-secondary)]">
-            {isGnome
-              ? "GNOME / Mutter uses a built-in lockscreen and does not implement ext-session-lock-v1."
-              : `Your window manager (${currentWm || "KWin"}) does not implement ext-session-lock-v1 required for session lock.`}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // 4. Default: Quiet, Clean Single-Row Compatibility Summary
+  // 3. Default: Quiet, Clean Single-Row Compatibility Summary
   return (
     <div className="rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] shadow-[0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden transition-all">
       <div className="flex items-center justify-between py-2.5 px-4 text-xs">

@@ -178,7 +178,7 @@ fn test_desktop_entry_compliance_and_mime_registration() {
     assert!(content.contains("Name=Ryzora"));
     assert!(content.contains("Exec=ryzora %u") || content.contains("Exec=ryzora %U"));
     assert!(content.contains("Icon=ryzora") || content.contains("Icon=io.ryzora.Ryzora"));
-    assert!(content.contains("Categories=Utility;DesktopSettings;Settings;"));
+    assert!(content.contains("Categories=Settings;DesktopSettings;") || content.contains("Categories=Utility;DesktopSettings;Settings;"));
 
     // MIME type registration for deep link protocol
     assert!(

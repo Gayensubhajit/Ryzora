@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-3",
+  "name": "Compact Bordered Box",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "LainOS",
+  "package_type": "fastfetch",
+  "description": "Box-framed terminal info display with sharp Unicode line borders and grouped modules.",
+  "tags": [
+    "Fastfetch",
+    "Bordered",
+    "Box",
+    "Compact",
+    "Unicode"
+  ],
+  "color_palette": [
+    "#ff79c6",
+    "#bd93f9",
+    "#50fa7b",
+    "#f8f8f2"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-3/config.jsonc",
+      "description": "Fastfetch Compact Bordered Box configuration"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "id": "fastfetch-kuruma",
+  "name": "Kuruma Multi-Spec",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "ImKruma",
+  "package_type": "fastfetch",
+  "description": "Dynamic multi-logo Fastfetch suite supporting random ASCII and image emblem selection.",
+  "tags": [
+    "Fastfetch",
+    "Dynamic",
+    "Random Emblem",
+    "Kuruma",
+    "ASCII"
+  ],
+  "color_palette": [
+    "#cba6f7",
+    "#f38ba8",
+    "#89b4fa",
+    "#1e1e2e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/ascii/gurl.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/ascii/gurl.txt",
+      "description": "Fastfetch asset ascii/gurl.txt"
+    },
+    {
+      "source": "files/ascii/hyprlarp.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/ascii/hyprlarp.txt",
+      "description": "Fastfetch asset ascii/hyprlarp.txt"
+    },
+    {
+      "source": "files/config.jsone",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/config.jsone",
+      "description": "Fastfetch asset config.jsone"
+    },
+    {
+      "source": "files/config2.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/config2.jsonc",
+      "description": "Fastfetch asset config2.jsonc"
+    },
+    {
+      "source": "files/host.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/host.jsonc",
+      "description": "Fastfetch asset host.jsonc"
+    },
+    {
+      "source": "files/mini.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/mini.jsonc",
+      "description": "Fastfetch asset mini.jsonc"
+    },
+    {
+      "source": "files/png/2b.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/2b.png",
+      "description": "Fastfetch asset png/2b.png"
+    },
+    {
+      "source": "files/png/bazzite.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/bazzite.png",
+      "description": "Fastfetch asset png/bazzite.png"
+    },
+    {
+      "source": "files/png/gudetama.webp",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/gudetama.webp",
+      "description": "Fastfetch asset png/gudetama.webp"
+    },
+    {
+      "source": "files/png/inoue.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/inoue.png",
+      "description": "Fastfetch asset png/inoue.png"
+    },
+    {
+      "source": "files/png/iusearchbtw.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/iusearchbtw.png",
+      "description": "Fastfetch asset png/iusearchbtw.png"
+    },
+    {
+      "source": "files/png/orf.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/orf.png",
+      "description": "Fastfetch asset png/orf.png"
+    },
+    {
+      "source": "files/png/seal-bounce.gif",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/seal-bounce.gif",
+      "description": "Fastfetch asset png/seal-bounce.gif"
+    },
+    {
+      "source": "files/png/teto.webp",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/teto.webp",
+      "description": "Fastfetch asset png/teto.webp"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-kuruma/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-8",
+  "name": "Reddit Neofetch Classic",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Chintan Patel",
+  "package_type": "fastfetch",
+  "description": "Reddit r/unixporn classic Neofetch recreation with modern Fastfetch speed and color block footer.",
+  "tags": [
+    "Fastfetch",
+    "Neofetch",
+    "Classic",
+    "Unixporn",
+    "Retro"
+  ],
+  "color_palette": [
+    "#f38ba8",
+    "#fab387",
+    "#f9e2af",
+    "#a6e3a1"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-8/config.jsonc",
+      "description": "Fastfetch Reddit Neofetch Classic configuration"
+    }
+  ]
+}

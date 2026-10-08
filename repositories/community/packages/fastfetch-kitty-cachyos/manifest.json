@@ -1,0 +1,48 @@
+{
+  "id": "fastfetch-kitty-cachyos",
+  "name": "CachyOS Kitty Fetch",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "miketester10",
+  "package_type": "fastfetch",
+  "description": "Optimized Kitty image renderer layout bundled with CachyOS styling and custom artwork.",
+  "tags": [
+    "Fastfetch",
+    "CachyOS",
+    "Kitty",
+    "Graphics",
+    "Hardware"
+  ],
+  "color_palette": [
+    "#00c0a3",
+    "#7aa2f7",
+    "#bb9af7",
+    "#1a1b26"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-kitty-cachyos/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/logo/girl.jpg",
+      "target": "~/.config/fastfetch/presets/fastfetch-kitty-cachyos/logo/girl.jpg",
+      "description": "Fastfetch asset logo/girl.jpg"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-kitty-cachyos/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

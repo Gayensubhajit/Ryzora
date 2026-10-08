@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-9",
+  "name": "Modern Spec Sheet",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "esplatanukis2-wq",
+  "package_type": "fastfetch",
+  "description": "Modern technical specification sheet with custom module glyphs and formatted uptime counters.",
+  "tags": [
+    "Fastfetch",
+    "Spec Sheet",
+    "Technical",
+    "Glyphs",
+    "Hardware"
+  ],
+  "color_palette": [
+    "#89b4fa",
+    "#b4befe",
+    "#cdd6f4",
+    "#313244"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-9/config.jsonc",
+      "description": "Fastfetch Modern Spec Sheet configuration"
+    }
+  ]
+}

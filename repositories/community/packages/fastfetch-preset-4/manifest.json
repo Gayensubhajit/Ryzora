@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-4",
+  "name": "Hardware Metric Card",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Chintan Patel",
+  "package_type": "fastfetch",
+  "description": "Clean card layout highlighting CPU, GPU, memory, and disk usage with progress markers.",
+  "tags": [
+    "Fastfetch",
+    "Hardware",
+    "Metrics",
+    "Monitoring",
+    "Terminal"
+  ],
+  "color_palette": [
+    "#89b4fa",
+    "#f38ba8",
+    "#a6e3a1",
+    "#cdd6f4"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-4/config.jsonc",
+      "description": "Fastfetch Hardware Metric Card configuration"
+    }
+  ]
+}

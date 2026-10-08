@@ -1,0 +1,48 @@
+{
+  "id": "fastfetch-thinkpad-styled",
+  "name": "ThinkPad Classic Red Dot",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Sarthak-Sidhant",
+  "package_type": "fastfetch",
+  "description": "IBM/Lenovo ThinkPad homage featuring the legendary TrackPoint red dot ASCII badge and industrial layout.",
+  "tags": [
+    "Fastfetch",
+    "ThinkPad",
+    "IBM",
+    "TrackPoint",
+    "Hardware"
+  ],
+  "color_palette": [
+    "#e00000",
+    "#707070",
+    "#ffffff",
+    "#000000"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-thinkpad-styled/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-thinkpad-styled/readme.md",
+      "description": "Fastfetch asset readme.md"
+    },
+    {
+      "source": "files/thinkpad.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-thinkpad-styled/thinkpad.txt",
+      "description": "Fastfetch asset thinkpad.txt"
+    }
+  ]
+}

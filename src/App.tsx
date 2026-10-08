@@ -21,13 +21,17 @@ import { CompatibilityLabView } from "./views/CompatibilityLabView";
 import { AppsView } from "./views/AppsView";
 import { PackageDetailModal } from "./components/PackageDetailModal";
 import { LockScreenDetailView } from "./views/LockScreenDetailView";
+import { FastfetchView } from "./views/FastfetchView";
+import { FastfetchDetailView } from "./views/FastfetchDetailView";
 import { AboutModal } from "./components/AboutModal";
 import { FirstRunBanner } from "./components/FirstRunBanner";
 import { Toast } from "./components/Toast";
 
 const MainLayout: React.FC = () => {
-  const { activeCategory, selectedPackage } = useApp();
+  const { activeCategory, setActiveCategory, selectedPackage, setSelectedPackage } = useApp();
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [fastfetchSettingsPresetId, setFastfetchSettingsPresetId] = useState<string | null>(null);
+
 
   const renderActiveView = () => {
     switch (activeCategory) {
@@ -61,6 +65,13 @@ const MainLayout: React.FC = () => {
         return <CompatibilityLabView />;
       case "apps":
         return <AppsView />;
+      case "fastfetch":
+        return (
+          <FastfetchView
+            initialStyleId={fastfetchSettingsPresetId || undefined}
+            onConsumeInitialPresetId={() => setFastfetchSettingsPresetId(null)}
+          />
+        );
       default:
         return <CategoryView />;
     }
@@ -96,12 +107,20 @@ const MainLayout: React.FC = () => {
         </main>
       </div>
 
-      {/* Dedicated Lock Screen Product View vs Generic Package Detail Modal */}
+      {/* Dedicated Lock Screen / Fastfetch Product Views vs Generic Package Detail Modal */}
       {selectedPackage && (selectedPackage.category === "lockscreens" || selectedPackage.package_type === "lockscreen") ? (
         <LockScreenDetailView />
-      ) : (
+      ) : selectedPackage && (selectedPackage.category === "fastfetch" || selectedPackage.package_type === "fastfetch") ? (
+        <FastfetchDetailView
+          onOpenSettings={(presetId) => {
+            setFastfetchSettingsPresetId(presetId);
+            setSelectedPackage(null);
+            setActiveCategory("fastfetch");
+          }}
+        />
+      ) : selectedPackage ? (
         <PackageDetailModal />
-      )}
+      ) : null}
 
       {/* Compact Native About Modal */}
       <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />

@@ -1,0 +1,48 @@
+{
+  "id": "fastfetch-rorfetch",
+  "name": "RoR Fetch Risk of Rain",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "dedpan1k",
+  "package_type": "fastfetch",
+  "description": "Risk of Rain themed gaming terminal fetch with character artwork and system telemetry.",
+  "tags": [
+    "Fastfetch",
+    "Gaming",
+    "Risk of Rain",
+    "RoR",
+    "Art"
+  ],
+  "color_palette": [
+    "#e06c75",
+    "#61afef",
+    "#98c379",
+    "#282c34"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-rorfetch/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-rorfetch/readme.md",
+      "description": "Fastfetch asset readme.md"
+    },
+    {
+      "source": "files/ror_fetch.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-rorfetch/ror_fetch.png",
+      "description": "Fastfetch asset ror_fetch.png"
+    }
+  ]
+}

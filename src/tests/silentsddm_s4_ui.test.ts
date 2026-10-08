@@ -337,7 +337,7 @@ test("S4-B 14: light-theme tab state uses semantic tokens and avoids hardcoded d
     "bg-[var(--rz-surface-elevated)]",
   ];
   for (const cls of semanticClasses) {
-    assert.ok(cls.includes("--rz-"), `Class ${cls} must reference RyoStore semantic tokens`);
+    assert.ok(cls.includes("--rz-"), `Class ${cls} must reference Ryzora semantic tokens`);
   }
 });
 

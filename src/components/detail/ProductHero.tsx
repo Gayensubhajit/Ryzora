@@ -31,7 +31,6 @@ interface ProductHeroProps {
   missingDependencies: string[];
   selectedTarget?: "sddm";
   onSelectTarget?: (target: "sddm") => void;
-  isSessionLockSupported?: boolean;
   isLoginScreenSupported?: boolean;
   isActive?: boolean;
   activeTargets?: { sddm_login?: boolean; sddm?: boolean };
@@ -62,7 +61,6 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
   missingDependencies,
   selectedTarget: _selectedTarget = "sddm",
   onSelectTarget: _onSelectTarget,
-  isSessionLockSupported: _isSessionLockSupported,
   isLoginScreenSupported = true,
   isActive = false,
   activeTargets = { sddm_login: false, sddm: false },
@@ -236,7 +234,13 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               ) : (
                 <div className="flex items-center justify-between p-3 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] text-xs">
                   <div className="flex items-center gap-3">
-                    <Check className="w-4 h-4 text-emerald-500 stroke-[2.5] shrink-0" />
+                    {isSddmActive ? (
+                      <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm" />
+                      </div>
+                    ) : (
+                      <Check className="w-4 h-4 text-emerald-500 stroke-[2.5] shrink-0" />
+                    )}
                     <div>
                       <span className="block text-xs font-semibold text-[var(--rz-text)]">Login Screen</span>
                       <span className="block text-[11px] text-[var(--rz-text-secondary)] mt-0.5">
@@ -245,29 +249,44 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
                     </div>
                   </div>
 
-                  {!privilegedHelperInstalled && onSetupPrivilegedHelper && !isInstalled ? (
-                    <button
-                      type="button"
-                      disabled={isSettingUpHelper}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSetupPrivilegedHelper();
-                      }}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1 shrink-0"
-                    >
-                      <ShieldCheck className="w-3 h-3" />
-                      <span>{isSettingUpHelper ? "Setting Up…" : "Set Up System Integration"}</span>
-                    </button>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {!privilegedHelperInstalled && onSetupPrivilegedHelper && !isInstalled ? (
+                      <button
+                        type="button"
+                        disabled={isSettingUpHelper}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSetupPrivilegedHelper();
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        <span>{isSettingUpHelper ? "Setting Up…" : "Set Up System Integration"}</span>
+                      </button>
+                    ) : null}
+
+                    {isSddmActive ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        Active
+                      </span>
+                    ) : isInstalled ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[var(--rz-surface)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)]">
+                        <Check className="w-3 h-3 text-emerald-500 stroke-[2.5]" />
+                        Installed
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Bottom Action Bar: Prominent, state-aware single-row action area ── */}
-        <div className="pt-3 border-t border-[var(--rz-border-subtle)]">
+        {/* ── Bottom Action Bar: Clear single-row action area ── */}
+        <div className="pt-4 border-t border-[var(--rz-border-subtle)] mt-auto">
           {!isInstalled ? (
+            /* NOT INSTALLED: [Install] */
             <button
               type="button"
               disabled={isBlocked || isInstalling || !canTargetSddm}
@@ -296,149 +315,135 @@ export const ProductHero: React.FC<ProductHeroProps> = ({
               )}
             </button>
           ) : isSddmActive ? (
-            /* Active State: Status indicator on left, actions on right */
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 shrink-0">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" />
-                <span>Active · Login Screen</span>
-              </div>
+            /* ACTIVE: [Test] [Deactivate] [...] */
+            <div className="flex items-center gap-2.5">
+              {onTest && (
+                <button
+                  type="button"
+                  onClick={() => onTest("sddm")}
+                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
+                  title="Test on login screen"
+                >
+                  <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
+                  <span>Test</span>
+                </button>
+              )}
 
-              <div className="flex items-center gap-2">
-                {onTest && (
-                  <button
-                    type="button"
-                    onClick={() => onTest("sddm")}
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-xs"
-                    title="Test on login screen"
-                  >
-                    <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
-                    <span>Test</span>
-                  </button>
-                )}
-
-                {onDeactivate && (
-                  <button
-                    type="button"
-                    disabled={isApplying}
-                    onClick={() => onDeactivate("sddm")}
-                    className="py-2 px-4 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-amber-500/40 text-amber-500 hover:text-amber-400 transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                    title="Deactivate Login Screen"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Deactivate</span>
-                  </button>
-                )}
-
-                {onUninstall && (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowOverflow(!showOverflow);
-                      }}
-                      className="p-2 rounded-xl border border-[var(--rz-border-strong)] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
-                      aria-label="More options"
-                      title="More options"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-
-                    {showOverflow && (
-                      <div
-                        className="absolute right-0 bottom-full mb-2 w-48 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowOverflow(false);
-                            setShowUninstallConfirm(true);
-                          }}
-                          className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          <span>Uninstall</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Installed (Inactive) State: Status indicator on left, actions on right */
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 shrink-0">
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Installed</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {onTest && (
-                  <button
-                    type="button"
-                    onClick={() => onTest("sddm")}
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center gap-1.5 shadow-xs"
-                    title="Test on login screen"
-                  >
-                    <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
-                    <span>Test</span>
-                  </button>
-                )}
-
+              {onDeactivate && (
                 <button
                   type="button"
                   disabled={isApplying}
-                  onClick={() => onApply?.("sddm")}
-                  className="py-2 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs disabled:opacity-60"
+                  onClick={() => onDeactivate("sddm")}
+                  className="py-2.5 px-4 rounded-xl text-xs font-medium bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] hover:border-amber-500/40 text-[var(--rz-text-secondary)] hover:text-amber-400 transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+                  title="Deactivate Login Screen"
                 >
-                  {isApplying ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Applying...</span>
-                    </>
-                  ) : (
-                    <span>Apply to Login Screen</span>
-                  )}
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Deactivate</span>
                 </button>
+              )}
 
-                {onUninstall && (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowOverflow(!showOverflow);
-                      }}
-                      className="p-2 rounded-xl border border-[var(--rz-border-strong)] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
-                      aria-label="More options"
-                      title="More options"
+              {onUninstall && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowOverflow(!showOverflow);
+                    }}
+                    className="p-2.5 rounded-xl border border-[var(--rz-border-strong)] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
+                    aria-label="More options"
+                    title="More options"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+
+                  {showOverflow && (
+                    <div
+                      className="absolute right-0 bottom-full mb-2 w-48 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-
-                    {showOverflow && (
-                      <div
-                        className="absolute right-0 bottom-full mb-2 w-48 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100"
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOverflow(false);
+                          setShowUninstallConfirm(true);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
                       >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowOverflow(false);
-                            setShowUninstallConfirm(true);
-                          }}
-                          className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          <span>Uninstall</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Uninstall</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* INSTALLED BUT INACTIVE: [Test] [Apply to Login Screen] [...] */
+            <div className="flex items-center gap-2.5">
+              {onTest && (
+                <button
+                  type="button"
+                  onClick={() => onTest("sddm")}
+                  className="py-2.5 px-4 rounded-xl text-xs font-semibold bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-strong)] text-[var(--rz-text)] transition-all cursor-pointer select-none flex items-center justify-center gap-1.5 shadow-xs"
+                  title="Test on login screen"
+                >
+                  <Play className="w-3.5 h-3.5 text-[var(--rz-accent)] fill-[var(--rz-accent)]/20" />
+                  <span>Test</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={isApplying}
+                onClick={() => onApply?.("sddm")}
+                className="flex-1 py-2.5 px-5 rounded-xl text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs disabled:opacity-60"
+              >
+                {isApplying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Applying…</span>
+                  </>
+                ) : (
+                  <span>Apply to Login Screen</span>
                 )}
-              </div>
+              </button>
+
+              {onUninstall && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowOverflow(!showOverflow);
+                    }}
+                    className="p-2.5 rounded-xl border border-[var(--rz-border-strong)] bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)] hover:bg-[var(--rz-surface-hover)] transition-colors cursor-pointer select-none shadow-xs"
+                    aria-label="More options"
+                    title="More options"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+
+                  {showOverflow && (
+                    <div
+                      className="absolute right-0 bottom-full mb-2 w-48 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border-strong)] shadow-xl p-1.5 z-40 animate-in fade-in zoom-in-95 duration-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOverflow(false);
+                          setShowUninstallConfirm(true);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors cursor-pointer text-left"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Uninstall</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

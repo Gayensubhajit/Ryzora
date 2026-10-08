@@ -1,0 +1,113 @@
+{
+  "id": "fastfetch-sofijacom",
+  "name": "Sofijacom Arch Spec",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "sofijacom",
+  "package_type": "fastfetch",
+  "description": "Curated collection of 10+ Arch Linux variations with soft pastel accents and rose ASCII art.",
+  "tags": [
+    "Fastfetch",
+    "Arch Linux",
+    "Rose",
+    "Pastel",
+    "Collection"
+  ],
+  "color_palette": [
+    "#f38ba8",
+    "#a6e3a1",
+    "#89b4fa",
+    "#1e1e2e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/ascii/arch.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/ascii/arch.txt",
+      "description": "Fastfetch asset ascii/arch.txt"
+    },
+    {
+      "source": "files/ascii/cat.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/ascii/cat.txt",
+      "description": "Fastfetch asset ascii/cat.txt"
+    },
+    {
+      "source": "files/ascii/rose.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/ascii/rose.txt",
+      "description": "Fastfetch asset ascii/rose.txt"
+    },
+    {
+      "source": "files/png/Arch-3.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/Arch-3.png",
+      "description": "Fastfetch asset png/Arch-3.png"
+    },
+    {
+      "source": "files/png/arch-4.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-4.png",
+      "description": "Fastfetch asset png/arch-4.png"
+    },
+    {
+      "source": "files/png/arch-5.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-5.png",
+      "description": "Fastfetch asset png/arch-5.png"
+    },
+    {
+      "source": "files/png/arch-6.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-6.png",
+      "description": "Fastfetch asset png/arch-6.png"
+    },
+    {
+      "source": "files/png/arch-7.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-7.png",
+      "description": "Fastfetch asset png/arch-7.png"
+    },
+    {
+      "source": "files/png/arch.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch.png",
+      "description": "Fastfetch asset png/arch.png"
+    },
+    {
+      "source": "files/png/archlinux.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/archlinux.png",
+      "description": "Fastfetch asset png/archlinux.png"
+    },
+    {
+      "source": "files/png/dot-face.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/dot-face.png",
+      "description": "Fastfetch asset png/dot-face.png"
+    },
+    {
+      "source": "files/png/nyarch.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/nyarch.png",
+      "description": "Fastfetch asset png/nyarch.png"
+    },
+    {
+      "source": "files/png/oie_transparent.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/oie_transparent.png",
+      "description": "Fastfetch asset png/oie_transparent.png"
+    },
+    {
+      "source": "files/png/penrose-sky-wp.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/penrose-sky-wp.png",
+      "description": "Fastfetch asset png/penrose-sky-wp.png"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

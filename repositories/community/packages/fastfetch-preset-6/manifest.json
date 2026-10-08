@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-6",
+  "name": "Expanded Terminal Matrix",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Chintan Patel",
+  "package_type": "fastfetch",
+  "description": "Expanded info matrix with colorful section dividers and full media player integration.",
+  "tags": [
+    "Fastfetch",
+    "Matrix",
+    "Expanded",
+    "Colors",
+    "Media"
+  ],
+  "color_palette": [
+    "#a6e3a1",
+    "#94e2d5",
+    "#89dceb",
+    "#cdd6f4"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-6/config.jsonc",
+      "description": "Fastfetch Expanded Terminal Matrix configuration"
+    }
+  ]
+}

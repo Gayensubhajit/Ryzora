@@ -1,0 +1,103 @@
+// Load with --config examples/2.jsonc
+// Note that you must replace the image path to an existing image to display it.
+{
+    "logo": {
+        "source": "none"
+    },
+    "display": {
+        "separator": "   ",
+        "constants": [
+            "──────────────────────────────"
+        ]
+    },
+    "modules": [
+        {
+            "type": "custom",
+            "key":"\n██╗  ██╗██████╗ ██╗   ██╗███╗   ███╗ █████╗ \n██║ ██╔╝██╔══██╗██║   ██║████╗ ████║██╔══██╗\n█████╔╝ ██████╔╝██║   ██║██╔████╔██║███████║\n██╔═██╗ ██╔══██╗██║   ██║██║╚██╔╝██║██╔══██║\n██║  ██╗██║  ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║\n╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝\n"
+        },
+        // You can make your own name in ""https://patorjk.com/software/taag/#p=display&f=ANSI+Shadow&t=Kruma&x=none&v=4&h=4&w=80&we=false" 
+        // then put it here, to make newlines use "\n" at the end of each line in the normal text like the example above
+        {
+            "type": "custom",
+            "format": "{#32}╭{$1}{$1}╮"
+        },
+        {
+            "type": "os",
+            "key": "{#32}{icon} OS"
+        },
+        {
+            "type": "kernel",
+            "key": "{#32}│ ├"
+        },
+        {
+            "type": "packages",
+            "key": "{#32}│ ├󰏖"
+        },
+        {
+            "type": "shell",
+            "key": "{#32}│ └"
+        },
+        {
+            "type": "wm",
+            "key": "{#34} DE/WM"
+        },
+        {
+            "type": "lm",
+            "key": "{#34}│ ├󰧨"
+        },
+        {
+            "type": "wmtheme",
+            "key": "{#34}│ ├󰉼"
+        },
+        {
+            "type": "icons",
+            "key": "{#34}│ ├󰀻"
+        },
+        {
+            "type": "terminal",
+            "key": "{#34}│ ├"
+        },
+        {
+            "type": "wallpaper",
+            "key": "{#34}│ └󰸉"
+        },
+        {
+            "type": "host",
+            "key": "{#32}󰌢 PC"
+        },
+        {
+            "type": "cpu",
+            "key": "{#32}│ ├󰻠"
+        },
+        {
+            "type": "gpu",
+            "key": "{#32}│ ├󰍛"
+        },
+        {
+            "type": "disk",
+            "key": "{#32}│ ├"
+        },
+        {
+            "type": "memory",
+            "key": "{#32}│ ├󰑭"
+        },
+        {
+            "type": "swap",
+            "key": "{#32}│ ├󰓡"
+        },
+        {
+            "type": "uptime",
+            "key": "{#32}│ ├󰅐"
+        },
+        {
+            "type": "display",
+            "key": "{#32}│ └󰍹"
+        },
+        {
+            "type": "custom",
+            "format": "{#32}╰{$1}{$1}╯",
+            "outputColor": "90"
+        },
+        "break"
+    ]
+}

@@ -1,0 +1,190 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+"logo": {
+    "type": "kitty",
+    "source": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/Snoppy-mugiwara.png",
+    "width": 50,
+    "padding": {
+        "top": 2,
+        "right": 3,
+        "left": 2
+    }
+},
+ "display": {
+    "separator": " ",
+    "color": {
+      "keys": "white",
+      "title": "white",
+      "separator": "white"
+    }
+  },
+  "modules": [
+    { "type": "custom", "format": "" },
+
+    {
+      "key": "╭─────────────╮",
+      "type": "custom"
+    },
+
+    // ── Sistema ──
+    {
+      "key": "│ {#36}  Distro   {#keys}│",
+      "type": "os"
+    },
+    {
+      "key": "│ {#35}  DE       {#keys}│",
+      "type": "de"
+    },
+    {
+      "key": "│ {#33}  WM       {#keys}│",
+      "type": "wm"
+    },
+    {
+      "key": "│ {#33}󰍂  LM       {#keys}│",
+      "type": "lm"
+    },
+    {
+      "key": "│ {#33}  Kernel   {#keys}│",
+      "type": "kernel"
+    },
+    {
+      "key": "│ {#33}󱐋  BootMgr  {#keys}│",
+      "type": "bootmgr"
+    },
+    {
+      "key": "│ {#33}  Terminal {#keys}│",
+      "type": "terminal"
+    },
+    {
+      "key": "│ {#33}󰛖  TermFont {#keys}│",
+      "type": "terminalfont"
+    },
+    {
+      "key": "│ {#33}  Shell    {#keys}│",
+      "type": "shell"
+    },
+    {
+      "key": "│ {#33}󰏖  Packages {#keys}│",
+      "type": "packages"
+    },
+    {
+      "key": "│ {#33}󰥔  Uptime   {#keys}│",
+      "type": "uptime"
+    },
+
+    {
+      "key": "├─────────────┤",
+      "type": "custom"
+    },
+
+    // ── Hardware ──
+    {
+      "key": "│ {#33}󰇅  Machine  {#keys}│",
+      "type": "host"
+    },
+    {
+      "key": "│ {#33}  Bios     {#keys}│",
+      "type": "bios"
+    },
+    {
+      "key": "│ {#33}󰍛  CPU      {#keys}│",
+      "type": "cpu",
+      "showPeCoreCount": true
+    },
+    {
+      "key": "│ {#33}󰾆  CPU Use  {#keys}│",
+      "type": "cpuusage"
+    },
+    {
+      "key": "│ {#33}󰍛  GFX      {#keys}│",
+      "type": "gpu"
+    },
+    {
+      "key": "│ {#33}󰍛  Vulkan   {#keys}│",
+      "type": "vulkan"
+    },
+    {
+      "key": "│ {#33}󰍹  Monitor  {#keys}│",
+      "type": "monitor"
+    },
+    {
+      "key": "│ {#33}󰟶  Memory   {#keys}│",
+      "type": "memory"
+    },
+    {
+      "key": "│ {#33}󰣁  Swap     {#keys}│",
+      "type": "swap"
+    },
+
+    {
+      "key": "├─────────────┤",
+      "type": "custom"
+    },
+
+    // ── Storage ──
+    {
+      "key": "│ {#33}󰉉  Storage  {#keys}│",
+      "type": "disk"
+    },
+
+    {
+      "key": "├─────────────┤",
+      "type": "custom"
+    },
+
+    // ── Mídia ──
+    {
+      "key": "│ {#33}󰜟  Som      {#keys}│",
+      "type": "sound"
+    },
+    {
+      "key": "│ {#33}  Tocando  {#keys}│",
+      "type": "media"
+    },
+
+    {
+      "key": "├─────────────┤",
+      "type": "custom"
+    },
+    // ── Dashboard ──
+    {
+      "key": "│ {#33}󰖨  Clima    {#keys}│",
+      "type": "command",
+      "text": "curl -s 'wttr.in/Sao+Paulo?format=%C+%t' 2>/dev/null || echo 'N/A'" //Change Weather Location!
+    },
+    {
+      "key": "│ {#33}󰃰  Data/Hora{#keys}│",
+      "type": "datetime",
+      "dateFormat": "%d/%m/%Y",
+      "timeFormat": "%H:%M"
+    },
+
+    {
+      "key": "├─────────────┤",
+      "type": "custom"
+    },
+
+    // ── Palette ──
+    {
+      "key": "│ {#33}󰏘  Cores    {#keys}│",
+      "type": "colors",
+      "symbol": "circle"
+    },
+
+    {
+      "key": "├─────────────┤",
+      "type": "custom"
+    },
+
+    // ── Quote ──
+    {
+      "key": "│ {#33}󰉾  Citação  {#keys}│",
+      "type": "command",
+      "text": "shuf -n1 ~/.config/fastfetch/trabalho/quotes.txt"
+    },
+    {
+      "key": "╰─────────────╯",
+      "type": "custom"
+    }
+  ]
+}

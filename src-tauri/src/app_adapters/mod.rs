@@ -3,6 +3,7 @@
 //! Orchestrates native and universal package managers across Linux distributions.
 //! Phase 23A implements the Pacman adapter for Arch Linux.
 
+pub mod fastfetch_runner;
 pub mod pacman;
 pub mod transaction;
 pub mod catalog;

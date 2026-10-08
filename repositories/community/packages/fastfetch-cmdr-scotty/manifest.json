@@ -1,0 +1,48 @@
+{
+  "id": "fastfetch-cmdr-scotty",
+  "name": "Cmdr Scotty Anime Spec",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "cmdrscotty",
+  "package_type": "fastfetch",
+  "description": "Anime-themed Fastfetch layout featuring Tsukikko companion artwork and custom field formatting.",
+  "tags": [
+    "Fastfetch",
+    "Anime",
+    "Tsukikko",
+    "Art",
+    "Custom Logo"
+  ],
+  "color_palette": [
+    "#ff79c6",
+    "#8be9fd",
+    "#50fa7b",
+    "#282a36"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-cmdr-scotty/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/images/Tsukikko.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-cmdr-scotty/images/Tsukikko.png",
+      "description": "Fastfetch asset images/Tsukikko.png"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-cmdr-scotty/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "id": "fastfetch-snoopy-mugiwara",
+  "name": "Snoopy Mugiwara One Piece",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Chintan Patel",
+  "package_type": "fastfetch",
+  "description": "Straw Hat pirate themed Snoopy illustration with quote generator and formatted metrics.",
+  "tags": [
+    "Fastfetch",
+    "Snoopy",
+    "One Piece",
+    "Mugiwara",
+    "Quotes"
+  ],
+  "color_palette": [
+    "#e5c07b",
+    "#e06c75",
+    "#61afef",
+    "#1e1e2e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/README.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/README.md",
+      "description": "Fastfetch asset README.md"
+    },
+    {
+      "source": "files/Snoppy-mugiwara.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/Snoppy-mugiwara.png",
+      "description": "Fastfetch asset Snoppy-mugiwara.png"
+    },
+    {
+      "source": "files/preview.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/preview.png",
+      "description": "Fastfetch asset preview.png"
+    },
+    {
+      "source": "files/quotes.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/quotes.txt",
+      "description": "Fastfetch asset quotes.txt"
+    }
+  ]
+}

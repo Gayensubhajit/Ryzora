@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-5",
+  "name": "System Dashboard Console",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Chintan Patel",
+  "package_type": "fastfetch",
+  "description": "Full console dashboard readout featuring battery, network, desktop environment and kernel status.",
+  "tags": [
+    "Fastfetch",
+    "Dashboard",
+    "Console",
+    "System Info",
+    "Comprehensive"
+  ],
+  "color_palette": [
+    "#fab387",
+    "#f9e2af",
+    "#94e2d5",
+    "#cdd6f4"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-5/config.jsonc",
+      "description": "Fastfetch System Dashboard Console configuration"
+    }
+  ]
+}

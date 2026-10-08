@@ -1,0 +1,48 @@
+{
+  "id": "fastfetch-taiyo",
+  "name": "Taiyo Sun Japanese Theme",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Chintan Patel",
+  "package_type": "fastfetch",
+  "description": "Rising Sun Japanese aesthetic layout featuring Taiyo Kanji emblem and clean system metrics.",
+  "tags": [
+    "Fastfetch",
+    "Japanese",
+    "Taiyo",
+    "Sun",
+    "Minimal"
+  ],
+  "color_palette": [
+    "#e06c75",
+    "#d19a66",
+    "#e5c07b",
+    "#1f232a"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-taiyo/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/preview.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-taiyo/preview.png",
+      "description": "Fastfetch asset preview.png"
+    },
+    {
+      "source": "files/taiyo.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-taiyo/taiyo.txt",
+      "description": "Fastfetch asset taiyo.txt"
+    }
+  ]
+}

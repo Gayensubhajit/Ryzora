@@ -72,59 +72,16 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
 
     const assets = manifest?.runtime.assets || ["Main.qml", "theme.conf", "metadata.desktop"];
 
-    if (selectedTarget === "sddm") {
-      return [
-        ...assets.map((a) => ({
-          target: `/usr/share/sddm/themes/ryzora-${themeId}/${a}`,
-          type: a.endsWith(".qml") ? "QML Script" : a.endsWith(".mp4") ? "Video Asset" : "Config",
-          isSystem: true,
-        })),
-        {
-          target: `/etc/sddm.conf.d/ryzora-theme.conf`,
-          type: "SDDM Greeter Config",
-          isSystem: true,
-        },
-      ];
-    }
-
-    if (selectedTarget === "both") {
-      return [
-        // User Space
-        ...assets.map((a) => ({
-          target: `~/.local/share/ryzora/lockscreens/qylock/${themeId}/${a}`,
-          type: a.endsWith(".qml") ? "QML Script" : a.endsWith(".mp4") ? "Video Asset" : "Asset",
-          isSystem: false,
-        })),
-        {
-          target: `~/.local/share/ryzora/integrations/quickshell/lock.sh`,
-          type: "Session Lock Launcher",
-          isSystem: false,
-        },
-        // System Space
-        ...assets.map((a) => ({
-          target: `/usr/share/sddm/themes/ryzora-${themeId}/${a}`,
-          type: a.endsWith(".qml") ? "QML Script" : a.endsWith(".mp4") ? "Video Asset" : "Asset",
-          isSystem: true,
-        })),
-        {
-          target: `/etc/sddm.conf.d/ryzora-theme.conf`,
-          type: "SDDM Greeter Config",
-          isSystem: true,
-        },
-      ];
-    }
-
-    // Default Quickshell user space
     return [
       ...assets.map((a) => ({
-        target: `~/.local/share/ryzora/lockscreens/qylock/${themeId}/${a}`,
-        type: a.endsWith(".qml") ? "QML Script" : a.endsWith(".mp4") ? "Video Asset" : "Asset",
-        isSystem: false,
+        target: `/usr/share/sddm/themes/ryzora-${themeId}/${a}`,
+        type: a.endsWith(".qml") ? "QML Script" : a.endsWith(".mp4") ? "Video Asset" : "Config",
+        isSystem: true,
       })),
       {
-        target: `~/.local/share/ryzora/integrations/quickshell/lock.sh`,
-        type: "Session Lock Launcher",
-        isSystem: false,
+        target: `/etc/sddm.conf.d/ryzora-theme.conf`,
+        type: "SDDM Greeter Config",
+        isSystem: true,
       },
     ];
   };
@@ -173,7 +130,7 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
         {activeTab === "overview" && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-[var(--rz-text)] mb-1">About this Lock Screen</h3>
+              <h3 className="text-sm font-bold text-[var(--rz-text)] mb-1">About this Login Screen</h3>
               <p className="text-[var(--rz-text-secondary)] leading-relaxed text-xs">
                 {packageItem.description}
               </p>
@@ -189,7 +146,7 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
                   <Monitor className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <div>
                     <span className="font-semibold text-[var(--rz-text)] block">Login Screen (SDDM)</span>
-                    <span className="text-[10px] text-[var(--rz-text-muted)]">System space · Admin permission</span>
+                    <span className="text-[10px] text-[var(--rz-text-muted)]">System space · SDDM</span>
                   </div>
                 </div>
               </div>
@@ -281,7 +238,7 @@ export const DetailTabs: React.FC<DetailTabsProps> = ({
                 <strong className="text-[var(--rz-text)]">Registration:</strong> Register ownership in Ryzora database for clean 1-click uninstalls.
               </li>
               <li className="p-2 rounded-lg bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
-                <strong className="text-[var(--rz-text)]">Integration (Optional):</strong> Desktop keybindings and idle configurations remain untouched; the launcher wrapper is created without silently modifying window manager settings.
+                <strong className="text-[var(--rz-text)]">Integration (Optional):</strong> Desktop keybindings and idle configurations remain untouched; SDDM configuration is applied via isolated drop-in configuration.
               </li>
             </ol>
           </div>

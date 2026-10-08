@@ -1,0 +1,123 @@
+{
+  "id": "fastfetch-aayushchalise",
+  "name": "Aayush Chalise Multi-Logo",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "aayushchalise",
+  "package_type": "fastfetch",
+  "description": "Multi-emblem collection including Pochita, Ryuzaki, Arch ASCII, and custom icons.",
+  "tags": [
+    "Fastfetch",
+    "Multi-Logo",
+    "Pochita",
+    "Anime",
+    "ASCII"
+  ],
+  "color_palette": [
+    "#fab387",
+    "#89b4fa",
+    "#a6e3a1",
+    "#1e1e2e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/ascii/arch.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/ascii/arch.txt",
+      "description": "Fastfetch asset ascii/arch.txt"
+    },
+    {
+      "source": "files/ascii/cat.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/ascii/cat.txt",
+      "description": "Fastfetch asset ascii/cat.txt"
+    },
+    {
+      "source": "files/ascii/rose.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/ascii/rose.txt",
+      "description": "Fastfetch asset ascii/rose.txt"
+    },
+    {
+      "source": "files/ascii/triangle.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/ascii/triangle.txt",
+      "description": "Fastfetch asset ascii/triangle.txt"
+    },
+    {
+      "source": "files/images/arch.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/arch.png",
+      "description": "Fastfetch asset images/arch.png"
+    },
+    {
+      "source": "files/images/archlinux.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/archlinux.png",
+      "description": "Fastfetch asset images/archlinux.png"
+    },
+    {
+      "source": "files/images/hypr.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/hypr.png",
+      "description": "Fastfetch asset images/hypr.png"
+    },
+    {
+      "source": "files/images/nyarch.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/nyarch.png",
+      "description": "Fastfetch asset images/nyarch.png"
+    },
+    {
+      "source": "files/images/penrose-sky-wp.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/penrose-sky-wp.png",
+      "description": "Fastfetch asset images/penrose-sky-wp.png"
+    },
+    {
+      "source": "files/images/pusheen.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/pusheen.png",
+      "description": "Fastfetch asset images/pusheen.png"
+    },
+    {
+      "source": "files/pngs/aisaka.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/aisaka.png",
+      "description": "Fastfetch asset pngs/aisaka.png"
+    },
+    {
+      "source": "files/pngs/arch.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/arch.png",
+      "description": "Fastfetch asset pngs/arch.png"
+    },
+    {
+      "source": "files/pngs/hyde.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/hyde.png",
+      "description": "Fastfetch asset pngs/hyde.png"
+    },
+    {
+      "source": "files/pngs/loli.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/loli.png",
+      "description": "Fastfetch asset pngs/loli.png"
+    },
+    {
+      "source": "files/pngs/pochita.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/pochita.png",
+      "description": "Fastfetch asset pngs/pochita.png"
+    },
+    {
+      "source": "files/pngs/ryuzaki.png",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/ryuzaki.png",
+      "description": "Fastfetch asset pngs/ryuzaki.png"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

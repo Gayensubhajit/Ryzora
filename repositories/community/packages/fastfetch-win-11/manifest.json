@@ -1,0 +1,53 @@
+{
+  "id": "fastfetch-win-11",
+  "name": "Fluent Windows 11 Profile",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Somrat10369",
+  "package_type": "fastfetch",
+  "description": "Modern Windows 11 Fluent Design inspired fetch layout with segmented cards and glyph accents.",
+  "tags": [
+    "Fastfetch",
+    "Fluent",
+    "Windows 11",
+    "Clean",
+    "Cards"
+  ],
+  "color_palette": [
+    "#0078d4",
+    "#60cdff",
+    "#ffffff",
+    "#202020"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-win-11/config.jsonc",
+      "description": "Fastfetch asset config.jsonc"
+    },
+    {
+      "source": "files/Oh_my_posh_atomic_theme.json",
+      "target": "~/.config/fastfetch/presets/fastfetch-win-11/Oh_my_posh_atomic_theme.json",
+      "description": "Fastfetch asset Oh_my_posh_atomic_theme.json"
+    },
+    {
+      "source": "files/ascii.txt",
+      "target": "~/.config/fastfetch/presets/fastfetch-win-11/ascii.txt",
+      "description": "Fastfetch asset ascii.txt"
+    },
+    {
+      "source": "files/readme.md",
+      "target": "~/.config/fastfetch/presets/fastfetch-win-11/readme.md",
+      "description": "Fastfetch asset readme.md"
+    }
+  ]
+}

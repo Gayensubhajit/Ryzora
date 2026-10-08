@@ -147,40 +147,6 @@
       "downloads": 5600
     },
     {
-      "id": "fastfetch-cyber-spec",
-      "name": "Cyber Spec Fastfetch",
-      "version": "1.1.0",
-      "package_type": "fastfetch",
-      "description": "Terminal system info display with custom distro ASCII art and hardware metrics layout.",
-      "manifest": "packages/fastfetch-cyber-spec/manifest.json",
-      "category": "terminal",
-      "tags": [
-        "Fastfetch",
-        "CLI",
-        "System Info",
-        "ASCII Art"
-      ],
-      "color_palette": [
-        "#00f0ff",
-        "#ff007f",
-        "#39ff14",
-        "#12121e"
-      ],
-      "author": {
-        "name": "ByteRacer",
-        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=ByteRacer",
-        "verified": false
-      },
-      "hero_image": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80",
-      "screenshots": [
-        "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"
-      ],
-      "featured": false,
-      "trending": false,
-      "rating": 4.67,
-      "downloads": 3900
-    },
-    {
       "id": "lockscreen-hyprlock-aurora",
       "name": "Aurora Glass Hyprlock",
       "version": "1.0.0",
@@ -2396,6 +2362,1087 @@
         "revision": "22b92ae3318930c9e5b088b3c516b96d0fde6b15",
         "license": "GPL-3.0",
         "path": "themes/wuwa"
+      }
+    },
+    {
+      "id": "fastfetch-preset-2",
+      "name": "Two-Column Spectrum",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Dual-column Fastfetch layout organizing hardware metrics and session telemetry side by side.",
+      "manifest": "packages/fastfetch-preset-2/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Two-Column",
+        "Spectrum",
+        "Hardware",
+        "Modular"
+      ],
+      "color_palette": [
+        "#7aa2f7",
+        "#bb9af7",
+        "#7dcfff",
+        "#c0caf5"
+      ],
+      "author": {
+        "name": "harilvfs",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-2",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/bcf9e5b2-efcd-4f4a-b5ec-6e23d86e9478",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/bcf9e5b2-efcd-4f4a-b5ec-6e23d86e9478"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/2.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/2.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-3",
+      "name": "Compact Bordered Box",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Box-framed terminal info display with sharp Unicode line borders and grouped modules.",
+      "manifest": "packages/fastfetch-preset-3/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Bordered",
+        "Box",
+        "Compact",
+        "Unicode"
+      ],
+      "color_palette": [
+        "#ff79c6",
+        "#bd93f9",
+        "#50fa7b",
+        "#f8f8f2"
+      ],
+      "author": {
+        "name": "LainOS",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-3",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/106b7bcd-f2e5-4f98-91d7-f20ed1e127c2",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/106b7bcd-f2e5-4f98-91d7-f20ed1e127c2"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/3.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/3.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-4",
+      "name": "Hardware Metric Card",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Clean card layout highlighting CPU, GPU, memory, and disk usage with progress markers.",
+      "manifest": "packages/fastfetch-preset-4/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Hardware",
+        "Metrics",
+        "Monitoring",
+        "Terminal"
+      ],
+      "color_palette": [
+        "#89b4fa",
+        "#f38ba8",
+        "#a6e3a1",
+        "#cdd6f4"
+      ],
+      "author": {
+        "name": "Chintan Patel",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-4",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/6f699d5d-8614-4d15-936b-12e1501c52ef",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/6f699d5d-8614-4d15-936b-12e1501c52ef"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/4.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/4.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-5",
+      "name": "System Dashboard Console",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Full console dashboard readout featuring battery, network, desktop environment and kernel status.",
+      "manifest": "packages/fastfetch-preset-5/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Dashboard",
+        "Console",
+        "System Info",
+        "Comprehensive"
+      ],
+      "color_palette": [
+        "#fab387",
+        "#f9e2af",
+        "#94e2d5",
+        "#cdd6f4"
+      ],
+      "author": {
+        "name": "Chintan Patel",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-5",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/e4198aa2-e4a4-48b7-98b7-8df8bddba296",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/e4198aa2-e4a4-48b7-98b7-8df8bddba296"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/5.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/5.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-6",
+      "name": "Expanded Terminal Matrix",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Expanded info matrix with colorful section dividers and full media player integration.",
+      "manifest": "packages/fastfetch-preset-6/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Matrix",
+        "Expanded",
+        "Colors",
+        "Media"
+      ],
+      "color_palette": [
+        "#a6e3a1",
+        "#94e2d5",
+        "#89dceb",
+        "#cdd6f4"
+      ],
+      "author": {
+        "name": "Chintan Patel",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-6",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/338b887d-4da1-485e-837f-cf0a0e35341f",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/338b887d-4da1-485e-837f-cf0a0e35341f"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/6.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/6.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-7",
+      "name": "Kuruma Clean Grid",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Clean grid system specification designed for Hyprland and Wayland tiling environments.",
+      "manifest": "packages/fastfetch-preset-7/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Kuruma",
+        "Grid",
+        "Wayland",
+        "Hyprland"
+      ],
+      "color_palette": [
+        "#cba6f7",
+        "#f38ba8",
+        "#eba0ac",
+        "#cdd6f4"
+      ],
+      "author": {
+        "name": "Beastboy999cr",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-7",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/380c86c2-1bc0-4a97-9ead-5d44ef495ce7",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/380c86c2-1bc0-4a97-9ead-5d44ef495ce7"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/7.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/7.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-8",
+      "name": "Reddit Neofetch Classic",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Reddit r/unixporn classic Neofetch recreation with modern Fastfetch speed and color block footer.",
+      "manifest": "packages/fastfetch-preset-8/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Neofetch",
+        "Classic",
+        "Unixporn",
+        "Retro"
+      ],
+      "color_palette": [
+        "#f38ba8",
+        "#fab387",
+        "#f9e2af",
+        "#a6e3a1"
+      ],
+      "author": {
+        "name": "Chintan Patel",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-8",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/db652032-01be-4726-a6a9-a8c968795328",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/db652032-01be-4726-a6a9-a8c968795328"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/8.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/8.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-9",
+      "name": "Modern Spec Sheet",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Modern technical specification sheet with custom module glyphs and formatted uptime counters.",
+      "manifest": "packages/fastfetch-preset-9/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Spec Sheet",
+        "Technical",
+        "Glyphs",
+        "Hardware"
+      ],
+      "color_palette": [
+        "#89b4fa",
+        "#b4befe",
+        "#cdd6f4",
+        "#313244"
+      ],
+      "author": {
+        "name": "esplatanukis2-wq",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-9",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/e311eb13-713d-4c9b-8cce-c9026bd02d27",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/e311eb13-713d-4c9b-8cce-c9026bd02d27"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/9.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/9.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-preset-10",
+      "name": "Full Hardware Dossier",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Comprehensive hardware and desktop dossier with detailed GPU, display resolution, and package counts.",
+      "manifest": "packages/fastfetch-preset-10/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Dossier",
+        "Hardware",
+        "Packages",
+        "Display"
+      ],
+      "color_palette": [
+        "#f5c2e7",
+        "#cba6f7",
+        "#f38ba8",
+        "#1e1e2e"
+      ],
+      "author": {
+        "name": "MiZentUi",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-preset-10",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/ebd49018-94a6-4e88-9854-c70b85841225",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/ebd49018-94a6-4e88-9854-c70b85841225"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/10.jsonc"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/10.jsonc"
+      }
+    },
+    {
+      "id": "fastfetch-cmdr-scotty",
+      "name": "Cmdr Scotty Anime Spec",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Anime-themed Fastfetch layout featuring Tsukikko companion artwork and custom field formatting.",
+      "manifest": "packages/fastfetch-cmdr-scotty/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Anime",
+        "Tsukikko",
+        "Art",
+        "Custom Logo"
+      ],
+      "color_palette": [
+        "#ff79c6",
+        "#8be9fd",
+        "#50fa7b",
+        "#282a36"
+      ],
+      "author": {
+        "name": "cmdrscotty",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-cmdr-scotty",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/90958e82-ed7f-4daf-a749-5b413f3c99e3",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/90958e82-ed7f-4daf-a749-5b413f3c99e3"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/Cmdr_Scotty"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/Cmdr_Scotty"
+      }
+    },
+    {
+      "id": "fastfetch-aayushchalise",
+      "name": "Aayush Chalise Multi-Logo",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Multi-emblem collection including Pochita, Ryuzaki, Arch ASCII, and custom icons.",
+      "manifest": "packages/fastfetch-aayushchalise/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Multi-Logo",
+        "Pochita",
+        "Anime",
+        "ASCII"
+      ],
+      "color_palette": [
+        "#fab387",
+        "#89b4fa",
+        "#a6e3a1",
+        "#1e1e2e"
+      ],
+      "author": {
+        "name": "aayushchalise",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-aayushchalise",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/e22fa38a-c77c-4013-a9f2-c65fc628e6d1",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/e22fa38a-c77c-4013-a9f2-c65fc628e6d1"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/aayushchalise"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/aayushchalise"
+      }
+    },
+    {
+      "id": "fastfetch-friefetch",
+      "name": "Friefetch Frieren Box",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Custom boxed layout featuring ASCII Frieren art and framed system metrics with multilingual tagline.",
+      "manifest": "packages/fastfetch-friefetch/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Frieren",
+        "ASCII",
+        "Boxed",
+        "Anime"
+      ],
+      "color_palette": [
+        "#cdd6f4",
+        "#89b4fa",
+        "#b4befe",
+        "#181825"
+      ],
+      "author": {
+        "name": "MHashir09",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-friefetch",
+        "verified": false
+      },
+      "hero_image": "https://github.com/MHashir09/fastfetch-collection/blob/b97ad8360eb7fadbea767622d09e130cb33bb5ef/configs/friefetch/showcase.png",
+      "screenshots": [
+        "https://github.com/MHashir09/fastfetch-collection/blob/b97ad8360eb7fadbea767622d09e130cb33bb5ef/configs/friefetch/showcase.png"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/friefetch"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/friefetch"
+      }
+    },
+    {
+      "id": "fastfetch-ghosttree",
+      "name": "Ghosttree Catfetch",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Cozy terminal readout with custom cat emblem and color-accented system modules.",
+      "manifest": "packages/fastfetch-ghosttree/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Cat",
+        "Cozy",
+        "Animal",
+        "Emblem"
+      ],
+      "color_palette": [
+        "#f9e2af",
+        "#fab387",
+        "#89b4fa",
+        "#1e1e2e"
+      ],
+      "author": {
+        "name": "ghosttree",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-ghosttree",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/eb76ef56-fdd1-481a-80dd-deacbfd491dd",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/eb76ef56-fdd1-481a-80dd-deacbfd491dd"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/ghosttree"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/ghosttree"
+      }
+    },
+    {
+      "id": "fastfetch-jonaszfetch",
+      "name": "Jonaszfetch Cyber Profile",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "JetBrains Mono optimized terminal fetch designed for high-density terminal setups.",
+      "manifest": "packages/fastfetch-jonaszfetch/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Cyber",
+        "JetBrains Mono",
+        "Minimal",
+        "Terminal"
+      ],
+      "color_palette": [
+        "#00f0ff",
+        "#ff007f",
+        "#39ff14",
+        "#12121e"
+      ],
+      "author": {
+        "name": "jonasz",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-jonaszfetch",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/406591bf-aac4-4a7f-ac1b-ffca2df8c9ac",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/406591bf-aac4-4a7f-ac1b-ffca2df8c9ac"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/jonaszfetch"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/jonaszfetch"
+      }
+    },
+    {
+      "id": "fastfetch-kitty-cachyos",
+      "name": "CachyOS Kitty Fetch",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Optimized Kitty image renderer layout bundled with CachyOS styling and custom artwork.",
+      "manifest": "packages/fastfetch-kitty-cachyos/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "CachyOS",
+        "Kitty",
+        "Graphics",
+        "Hardware"
+      ],
+      "color_palette": [
+        "#00c0a3",
+        "#7aa2f7",
+        "#bb9af7",
+        "#1a1b26"
+      ],
+      "author": {
+        "name": "miketester10",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-kitty-cachyos",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/133116d3-7c5a-47f3-a385-0095594a5500",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/133116d3-7c5a-47f3-a385-0095594a5500"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/kitty-cachyos"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/kitty-cachyos"
+      }
+    },
+    {
+      "id": "fastfetch-kuruma",
+      "name": "Kuruma Multi-Spec",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Dynamic multi-logo Fastfetch suite supporting random ASCII and image emblem selection.",
+      "manifest": "packages/fastfetch-kuruma/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Dynamic",
+        "Random Emblem",
+        "Kuruma",
+        "ASCII"
+      ],
+      "color_palette": [
+        "#cba6f7",
+        "#f38ba8",
+        "#89b4fa",
+        "#1e1e2e"
+      ],
+      "author": {
+        "name": "ImKruma",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-kuruma",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/77515b91-8979-4498-881c-ecfbc68b0bca",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/77515b91-8979-4498-881c-ecfbc68b0bca"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/kuruma-config"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/kuruma-config"
+      }
+    },
+    {
+      "id": "fastfetch-rorfetch",
+      "name": "RoR Fetch Risk of Rain",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Risk of Rain themed gaming terminal fetch with character artwork and system telemetry.",
+      "manifest": "packages/fastfetch-rorfetch/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Gaming",
+        "Risk of Rain",
+        "RoR",
+        "Art"
+      ],
+      "color_palette": [
+        "#e06c75",
+        "#61afef",
+        "#98c379",
+        "#282c34"
+      ],
+      "author": {
+        "name": "dedpan1k",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-rorfetch",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/93285c30-8911-4d58-9341-04810c540f01",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/93285c30-8911-4d58-9341-04810c540f01"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/rorfetch"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/rorfetch"
+      }
+    },
+    {
+      "id": "fastfetch-snoopy-mugiwara",
+      "name": "Snoopy Mugiwara One Piece",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Straw Hat pirate themed Snoopy illustration with quote generator and formatted metrics.",
+      "manifest": "packages/fastfetch-snoopy-mugiwara/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Snoopy",
+        "One Piece",
+        "Mugiwara",
+        "Quotes"
+      ],
+      "color_palette": [
+        "#e5c07b",
+        "#e06c75",
+        "#61afef",
+        "#1e1e2e"
+      ],
+      "author": {
+        "name": "Chintan Patel",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-snoopy-mugiwara",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/f405592b-6d5d-4a84-b6ed-6e46bdacf440",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/f405592b-6d5d-4a84-b6ed-6e46bdacf440"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/snoopy-mugiwara"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/snoopy-mugiwara"
+      }
+    },
+    {
+      "id": "fastfetch-sofijacom",
+      "name": "Sofijacom Arch Spec",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Curated collection of 10+ Arch Linux variations with soft pastel accents and rose ASCII art.",
+      "manifest": "packages/fastfetch-sofijacom/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Arch Linux",
+        "Rose",
+        "Pastel",
+        "Collection"
+      ],
+      "color_palette": [
+        "#f38ba8",
+        "#a6e3a1",
+        "#89b4fa",
+        "#1e1e2e"
+      ],
+      "author": {
+        "name": "sofijacom",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-sofijacom",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/c3cd16a1-ccae-461e-8420-75dbfd8184af",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/c3cd16a1-ccae-461e-8420-75dbfd8184af"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/sofijacom-config"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/sofijacom-config"
+      }
+    },
+    {
+      "id": "fastfetch-taiyo",
+      "name": "Taiyo Sun Japanese Theme",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Rising Sun Japanese aesthetic layout featuring Taiyo Kanji emblem and clean system metrics.",
+      "manifest": "packages/fastfetch-taiyo/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Japanese",
+        "Taiyo",
+        "Sun",
+        "Minimal"
+      ],
+      "color_palette": [
+        "#e06c75",
+        "#d19a66",
+        "#e5c07b",
+        "#1f232a"
+      ],
+      "author": {
+        "name": "Chintan Patel",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-taiyo",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/a9fc403f-c949-4f34-af9d-86513c05e07b",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/a9fc403f-c949-4f34-af9d-86513c05e07b"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/taiyo-theme"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/taiyo-theme"
+      }
+    },
+    {
+      "id": "fastfetch-tf2soldier",
+      "name": "TF2 Soldier Tribute",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Team Fortress 2 Soldier tribute with Rick May quote, helmet ASCII icon, and militarized color scheme.",
+      "manifest": "packages/fastfetch-tf2soldier/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "TF2",
+        "Soldier",
+        "Valve",
+        "Tribute"
+      ],
+      "color_palette": [
+        "#c73e3a",
+        "#e8a838",
+        "#4e6a85",
+        "#1c2024"
+      ],
+      "author": {
+        "name": "TehEpikBoi",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-tf2soldier",
+        "verified": false
+      },
+      "hero_image": "https://github.com/TehEpikBoi/tehepikboi-config/blob/main/PNGs/Soldiertf2.webp?raw=true",
+      "screenshots": [
+        "https://github.com/TehEpikBoi/tehepikboi-config/blob/main/PNGs/Soldiertf2.webp?raw=true"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/tf2soldier-config"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/tf2soldier-config"
+      }
+    },
+    {
+      "id": "fastfetch-thinkpad-styled",
+      "name": "ThinkPad Classic Red Dot",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "IBM/Lenovo ThinkPad homage featuring the legendary TrackPoint red dot ASCII badge and industrial layout.",
+      "manifest": "packages/fastfetch-thinkpad-styled/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "ThinkPad",
+        "IBM",
+        "TrackPoint",
+        "Hardware"
+      ],
+      "color_palette": [
+        "#e00000",
+        "#707070",
+        "#ffffff",
+        "#000000"
+      ],
+      "author": {
+        "name": "Sarthak-Sidhant",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-thinkpad-styled",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/c3adefa8-34de-457e-aed0-2fbc55771d87",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/c3adefa8-34de-457e-aed0-2fbc55771d87"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/thinkpad-styled"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/thinkpad-styled"
+      }
+    },
+    {
+      "id": "fastfetch-win-11",
+      "name": "Fluent Windows 11 Profile",
+      "version": "1.0.0",
+      "package_type": "fastfetch",
+      "description": "Modern Windows 11 Fluent Design inspired fetch layout with segmented cards and glyph accents.",
+      "manifest": "packages/fastfetch-win-11/manifest.json",
+      "category": "fastfetch",
+      "tags": [
+        "Fastfetch",
+        "Fluent",
+        "Windows 11",
+        "Clean",
+        "Cards"
+      ],
+      "color_palette": [
+        "#0078d4",
+        "#60cdff",
+        "#ffffff",
+        "#202020"
+      ],
+      "author": {
+        "name": "Somrat10369",
+        "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=fastfetch-win-11",
+        "verified": false
+      },
+      "hero_image": "https://github.com/user-attachments/assets/05a7bb62-1a5e-43ab-84c4-19b6fdcc9545",
+      "screenshots": [
+        "https://github.com/user-attachments/assets/05a7bb62-1a5e-43ab-84c4-19b6fdcc9545"
+      ],
+      "featured": false,
+      "trending": false,
+      "rating": 4.8,
+      "downloads": 500,
+      "provenance": {
+        "upstream": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "license": "MIT",
+        "path": "configs/win-11-config"
+      },
+      "source": {
+        "type": "git",
+        "repository": "https://github.com/Chintanpatel24/awesome-fastfetch",
+        "revision": "2ff9895f182462c76dc21dd4759c67d0a0a35ff3",
+        "path": "configs/win-11-config"
       }
     }
   ]

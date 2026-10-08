@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-7",
+  "name": "Kuruma Clean Grid",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "Beastboy999cr",
+  "package_type": "fastfetch",
+  "description": "Clean grid system specification designed for Hyprland and Wayland tiling environments.",
+  "tags": [
+    "Fastfetch",
+    "Kuruma",
+    "Grid",
+    "Wayland",
+    "Hyprland"
+  ],
+  "color_palette": [
+    "#cba6f7",
+    "#f38ba8",
+    "#eba0ac",
+    "#cdd6f4"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-7/config.jsonc",
+      "description": "Fastfetch Kuruma Clean Grid configuration"
+    }
+  ]
+}

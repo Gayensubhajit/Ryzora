@@ -54,6 +54,10 @@ pub fn run() {
             system::window_toggle_maximize,
             system::window_close,
             system::set_window_appearance,
+            system::list_fastfetch_local_emblems,
+            system::get_fastfetch_telemetry,
+            system::preview_fastfetch_terminal,
+            system::apply_fastfetch_configuration,
             // Deep Link Handler (Phase 19)
             deeplink::handle_deeplink,
             // Manifest — validation only (Phase 2)

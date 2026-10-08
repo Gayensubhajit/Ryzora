@@ -409,3 +409,516 @@ pub fn window_close(app: tauri::AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+
+// ============================================================================
+// Fastfetch Live Telemetry, Emblem Discovery, and Configuration Preview
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FastfetchEmblem {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub is_image: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FastfetchTelemetry {
+    pub host: Option<String>,
+    pub user: Option<String>,
+    pub os: Option<String>,
+    pub kernel: Option<String>,
+    pub wm: Option<String>,
+    pub shell: Option<String>,
+    pub terminal: Option<String>,
+    pub cpu: Option<String>,
+    pub gpu: Option<String>,
+    pub memory: Option<String>,
+    pub disk: Option<String>,
+    pub packages: Option<String>,
+    pub uptime: Option<String>,
+    pub age: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FastfetchPreviewRequest {
+    pub preset_id: Option<String>,
+    pub accent_color: Option<String>,
+    pub emblem_type: Option<String>,
+    pub emblem_path: Option<String>,
+    pub width_cols: Option<u32>,
+    pub height_lines: Option<u32>,
+    pub padding_cols: Option<u32>,
+    pub dither: Option<bool>,
+    pub active_modules: Option<Vec<String>>,
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_escape = false;
+    for c in s.chars() {
+        if c == '' {
+            in_escape = true;
+        } else if in_escape {
+            if c.is_ascii_alphabetic() {
+                in_escape = false;
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub fn list_fastfetch_local_emblems() -> Result<Vec<FastfetchEmblem>, String> {
+    let home = crate::snapshot::get_home_dir();
+    let mut emblems = Vec::new();
+
+    // 1. Check ~/.config/fastfetch/logos/
+    let logos_dir = home.join(".config/fastfetch/logos");
+    if logos_dir.exists() && logos_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&logos_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                    if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "svg" | "webp" | "txt") {
+                        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("emblem");
+                        emblems.push(FastfetchEmblem {
+                            id: stem.to_string(),
+                            name: stem.to_uppercase(),
+                            path: p.to_string_lossy().to_string(),
+                            is_image: ext != "txt",
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Check ~/.config/fastfetch/ for specific emblem files
+    let ff_dir = home.join(".config/fastfetch");
+    if ff_dir.exists() && ff_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&ff_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if (name.contains("emblem") || name.contains("logo"))
+                        && !emblems.iter().any(|e| e.path == p.to_string_lossy())
+                    {
+                        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                        if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "svg" | "webp" | "txt") {
+                            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("emblem");
+                            emblems.push(FastfetchEmblem {
+                                id: stem.to_string(),
+                                name: stem.to_uppercase(),
+                                path: p.to_string_lossy().to_string(),
+                                is_image: ext != "txt",
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Check installed fastfetch presets under ~/.config/fastfetch/presets/
+    let presets_dir = home.join(".config/fastfetch/presets");
+    if presets_dir.exists() && presets_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&presets_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    if let Ok(sub_entries) = fs::read_dir(&p) {
+                        for sub in sub_entries.flatten() {
+                            let sub_p = sub.path();
+                            if sub_p.is_file() {
+                                let ext = sub_p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                                if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "svg" | "webp" | "txt") {
+                                    let stem = sub_p.file_stem().and_then(|s| s.to_str()).unwrap_or("emblem");
+                                    if !emblems.iter().any(|e| e.path == sub_p.to_string_lossy()) {
+                                        emblems.push(FastfetchEmblem {
+                                            id: stem.to_string(),
+                                            name: stem.to_uppercase(),
+                                            path: sub_p.to_string_lossy().to_string(),
+                                            is_image: ext != "txt",
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(emblems)
+}
+
+#[tauri::command]
+pub fn get_fastfetch_telemetry() -> Result<FastfetchTelemetry, String> {
+    let mut tel = FastfetchTelemetry::default();
+    tel.user = env::var("USER").ok();
+
+    if let Ok(h) = fs::read_to_string("/etc/hostname") {
+        let trimmed = h.trim();
+        if !trimmed.is_empty() {
+            tel.host = Some(trimmed.to_string());
+        }
+    }
+    if tel.host.is_none() {
+        tel.host = env::var("HOSTNAME").ok();
+    }
+
+    if let Some(stdout) = crate::app_adapters::fastfetch_runner::probe_fastfetch_raw_json() {
+            let cleaned = strip_ansi(&stdout);
+            if let (Some(start), Some(end)) = (cleaned.find('['), cleaned.rfind(']')) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&cleaned[start..=end]) {
+                    if let Some(arr) = val.as_array() {
+                        let mut gpus = Vec::new();
+                        let mut disks = Vec::new();
+                        for item in arr {
+                            let t = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                            let res = item.get("result");
+                            match t {
+                                "Title" => {
+                                    if let Some(r) = res {
+                                        if let Some(u) = r.get("user").and_then(|v| v.as_str()) {
+                                            tel.user = Some(u.to_string());
+                                        }
+                                        if let Some(h) = r.get("host").and_then(|v| v.as_str()) {
+                                            tel.host = Some(h.to_string());
+                                        }
+                                    }
+                                }
+                                "CPU" => {
+                                    if let Some(r) = res {
+                                        let items = if r.is_array() {
+                                            r.as_array().unwrap().clone()
+                                        } else {
+                                            vec![r.clone()]
+                                        };
+                                        for it in items {
+                                            let name = it.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                            let cores = it
+                                                .get("cores")
+                                                .and_then(|c| c.get("logical"))
+                                                .and_then(|v| v.as_i64());
+                                            let freq = it
+                                                .get("frequency")
+                                                .and_then(|f| f.get("max"))
+                                                .and_then(|v| v.as_f64());
+                                            let cores_str = cores.map(|c| format!(" ({})", c)).unwrap_or_default();
+                                            let freq_str = freq
+                                                .map(|f| format!(" @ {:.2} GHz", f / 1000.0))
+                                                .unwrap_or_default();
+                                            let cpu_val = format!("{}{}{}", name, cores_str, freq_str).trim().to_string();
+                                            if !cpu_val.is_empty() {
+                                                tel.cpu = Some(cpu_val);
+                                            }
+                                        }
+                                    }
+                                }
+                                "GPU" => {
+                                    if let Some(r) = res {
+                                        let items = if r.is_array() {
+                                            r.as_array().unwrap().clone()
+                                        } else {
+                                            vec![r.clone()]
+                                        };
+                                        for it in items {
+                                            let name = it.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                            let gtype = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                            if !name.is_empty() {
+                                                let display = if !gtype.is_empty() {
+                                                    format!("{} [{}]", name, gtype)
+                                                } else {
+                                                    name.to_string()
+                                                };
+                                                gpus.push(display);
+                                            }
+                                        }
+                                    }
+                                }
+                                "Memory" => {
+                                    if let Some(r) = res {
+                                        let used_bytes = r.get("used").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                        let total_bytes = r.get("total").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                        if total_bytes > 0.0 {
+                                            let used_gib = used_bytes / (1024.0 * 1024.0 * 1024.0);
+                                            let total_gib = total_bytes / (1024.0 * 1024.0 * 1024.0);
+                                            let pct = ((used_gib / total_gib) * 100.0).round() as u64;
+                                            tel.memory = Some(format!("{:.2} GiB / {:.2} GiB ({}%)", used_gib, total_gib, pct));
+                                        }
+                                    }
+                                }
+                                "Disk" => {
+                                    if let Some(r) = res {
+                                        let items = if r.is_array() {
+                                            r.as_array().unwrap().clone()
+                                        } else {
+                                            vec![r.clone()]
+                                        };
+                                        for it in items {
+                                            let mp = it.get("mountpoint").and_then(|v| v.as_str()).unwrap_or("");
+                                            if mp == "/" || mp == "/home" {
+                                                if let Some(bytes) = it.get("bytes") {
+                                                    let used = bytes.get("used").and_then(|v| v.as_f64()).unwrap_or(0.0)
+                                                        / (1024.0 * 1024.0 * 1024.0);
+                                                    let total = bytes.get("total").and_then(|v| v.as_f64()).unwrap_or(0.0)
+                                                        / (1024.0 * 1024.0 * 1024.0);
+                                                    let fs = it.get("filesystem").and_then(|v| v.as_str()).unwrap_or("");
+                                                    if total > 0.0 {
+                                                        let pct = ((used / total) * 100.0).round() as u64;
+                                                        disks.push(format!("{:.2} GiB / {:.2} GiB ({}%) - {}", used, total, pct, fs));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                "Kernel" => {
+                                    if let Some(r) = res {
+                                        if let Some(rel) = r.get("release").and_then(|v| v.as_str()) {
+                                            tel.kernel = Some(format!("Linux {}", rel));
+                                        }
+                                    }
+                                }
+                                "Packages" => {
+                                    if let Some(r) = res {
+                                        let mut parts = Vec::new();
+                                        if let Some(p) = r.get("pacman").and_then(|v| v.as_i64()) {
+                                            if p > 0 {
+                                                parts.push(format!("{} (pacman)", p));
+                                            }
+                                        }
+                                        if let Some(f) = r.get("flatpakSystem").and_then(|v| v.as_i64()) {
+                                            if f > 0 {
+                                                parts.push(format!("{} (flatpak-system)", f));
+                                            }
+                                        }
+                                        if let Some(f) = r.get("flatpakUser").and_then(|v| v.as_i64()) {
+                                            if f > 0 {
+                                                parts.push(format!("{} (flatpak-user)", f));
+                                            }
+                                        }
+                                        if !parts.is_empty() {
+                                            tel.packages = Some(parts.join(", "));
+                                        } else if let Some(all) = r.get("all").and_then(|v| v.as_i64()) {
+                                            tel.packages = Some(all.to_string());
+                                        }
+                                    }
+                                }
+                                "Uptime" => {
+                                    if let Some(r) = res {
+                                        if let Some(secs) = r.get("uptime").and_then(|v| v.as_i64()) {
+                                            let hrs = secs / 3600;
+                                            let mins = (secs % 3600) / 60;
+                                            if hrs > 0 {
+                                                tel.uptime = Some(format!("{}h {}m", hrs, mins));
+                                            } else {
+                                                tel.uptime = Some(format!("{}m", mins));
+                                            }
+                                        }
+                                    }
+                                }
+                                "Terminal" => {
+                                    if let Some(r) = res {
+                                        if let Some(p) = r
+                                            .get("prettyName")
+                                            .or_else(|| r.get("processName"))
+                                            .and_then(|v| v.as_str())
+                                        {
+                                            tel.terminal = Some(p.to_string());
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        if !gpus.is_empty() {
+                            tel.gpu = Some(gpus.join(" | "));
+                        }
+                        if !disks.is_empty() {
+                            tel.disk = Some(disks[0].clone());
+                        }
+                    }
+                }
+            }
+        }
+
+    let sys = detect_system_info();
+    if tel.os.is_none() {
+        tel.os = Some(format!("{} x86_64", sys.distro_name));
+    }
+    if tel.kernel.is_none() {
+        tel.kernel = Some(format!("Linux {}", sys.kernel_version));
+    }
+    if tel.wm.is_none() {
+        tel.wm = Some(sys.window_manager);
+    }
+    if tel.shell.is_none() {
+        tel.shell = Some(sys.shell);
+    }
+    if tel.terminal.is_none() {
+        tel.terminal = Some(sys.terminal);
+    }
+    if tel.cpu.is_none() {
+        if let Ok(cpuinfo) = fs::read_to_string("/proc/cpuinfo") {
+            for line in cpuinfo.lines() {
+                if line.starts_with("model name") {
+                    if let Some((_, model)) = line.split_once(':') {
+                        tel.cpu = Some(model.trim().to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(tel)
+}
+
+fn build_fastfetch_jsonc(req: &FastfetchPreviewRequest, home: &std::path::Path) -> serde_json::Value {
+    let emblem_type_str = req.emblem_type.as_deref().unwrap_or("none");
+    let resolved_logo = match emblem_type_str {
+        "image" => {
+            if let Some(ref path_str) = req.emblem_path {
+                let expanded = if path_str.starts_with("~/") {
+                    home.join(path_str.trim_start_matches("~/"))
+                } else {
+                    std::path::PathBuf::from(path_str)
+                };
+                if expanded.exists() {
+                    serde_json::json!({
+                        "type": "kitty-direct",
+                        "source": expanded.to_string_lossy(),
+                        "width": req.width_cols.unwrap_or(28),
+                        "height": req.height_lines.unwrap_or(14),
+                        "padding": {
+                            "left": req.padding_cols.unwrap_or(3),
+                            "right": req.padding_cols.unwrap_or(3),
+                            "top": 2
+                        }
+                    })
+                } else {
+                    serde_json::json!({ "type": "none" })
+                }
+            } else {
+                serde_json::json!({ "type": "none" })
+            }
+        }
+        "ascii" => {
+            if let Some(ref path_str) = req.emblem_path {
+                let expanded = if path_str.starts_with("~/") {
+                    home.join(path_str.trim_start_matches("~/"))
+                } else {
+                    std::path::PathBuf::from(path_str)
+                };
+                if expanded.exists() {
+                    serde_json::json!({
+                        "type": "file",
+                        "source": expanded.to_string_lossy(),
+                        "padding": { "right": req.padding_cols.unwrap_or(3) }
+                    })
+                } else {
+                    serde_json::json!({ "type": "builtin" })
+                }
+            } else {
+                serde_json::json!({ "type": "builtin" })
+            }
+        }
+        "builtin" => serde_json::json!({ "type": "builtin" }),
+        _ => serde_json::json!({ "type": "none" }),
+    };
+
+    let accent = req.accent_color.clone().unwrap_or_else(|| "#e2342a".to_string());
+    let key_color = if accent.starts_with('#') && accent.len() == 7 {
+        if let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&accent[1..3], 16),
+            u8::from_str_radix(&accent[3..5], 16),
+            u8::from_str_radix(&accent[5..7], 16),
+        ) {
+            format!("38;2;{};{};{}", r, g, b)
+        } else {
+            "38;2;226;52;42".to_string()
+        }
+    } else {
+        "38;2;226;52;42".to_string()
+    };
+
+    let active_mods = req.active_modules.clone().unwrap_or_else(|| {
+        vec![
+            "title".to_string(),
+            "separator".to_string(),
+            "cpu".to_string(),
+            "gpu".to_string(),
+            "memory".to_string(),
+            "disk".to_string(),
+            "os".to_string(),
+            "kernel".to_string(),
+            "wm".to_string(),
+            "shell".to_string(),
+            "packages".to_string(),
+            "uptime".to_string(),
+        ]
+    });
+
+    serde_json::json!({
+        "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+        "logo": resolved_logo,
+        "display": {
+            "color": { "keys": key_color },
+            "key": { "width": 10 },
+            "separator": "  "
+        },
+        "modules": active_mods
+    })
+}
+
+#[tauri::command]
+pub fn preview_fastfetch_terminal(req: FastfetchPreviewRequest) -> Result<bool, String> {
+    if env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        return Ok(true);
+    }
+
+    let home = crate::snapshot::get_home_dir();
+    let temp_dir = env::temp_dir();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let temp_config_path = temp_dir.join(format!("ryzora_ff_preview_{}.jsonc", timestamp));
+
+    let config_json = build_fastfetch_jsonc(&req, &home);
+    let serialized = serde_json::to_string_pretty(&config_json)
+        .map_err(|e| format!("Failed to serialize preview config: {}", e))?;
+    fs::write(&temp_config_path, serialized)
+        .map_err(|e| format!("Failed to write preview config to /tmp: {}", e))?;
+
+    crate::app_adapters::fastfetch_runner::launch_fastfetch_terminal(&temp_config_path)
+}
+
+#[tauri::command]
+pub fn apply_fastfetch_configuration(req: FastfetchPreviewRequest) -> Result<bool, String> {
+    if env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        return Ok(true);
+    }
+
+    let home = crate::snapshot::get_home_dir();
+    let ff_dir = home.join(".config/fastfetch");
+    let _ = fs::create_dir_all(&ff_dir);
+    let target_path = ff_dir.join("config.jsonc");
+
+    let config_json = build_fastfetch_jsonc(&req, &home);
+    let serialized = serde_json::to_string_pretty(&config_json)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    fs::write(&target_path, serialized)
+        .map_err(|e| format!("Failed to write ~/.config/fastfetch/config.jsonc: {}", e))?;
+
+    Ok(true)
+}

@@ -91,7 +91,9 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
 
   return (
     <div
-      onClick={() => setSelectedPackage(packageItem)}
+      onClick={() => {
+        setSelectedPackage(packageItem);
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className="group flex flex-col rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-elevated)] transition-all duration-200 cursor-pointer overflow-hidden select-none shadow-xs hover:shadow-md"

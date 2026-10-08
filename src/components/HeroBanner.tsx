@@ -15,7 +15,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredPackage }) => {
   return (
     <div
       className="relative w-full h-56 sm:h-64 md:h-72 rounded-2xl overflow-hidden cursor-pointer group border border-[var(--rz-border)] shadow-xl"
-      onClick={() => setSelectedPackage(featuredPackage)}
+      onClick={() => {
+        setSelectedPackage(featuredPackage);
+      }}
     >
       {/* Full-bleed artwork */}
       <img
@@ -89,7 +91,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredPackage }) => {
 
             <button
               className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white transition-colors shadow-md cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setSelectedPackage(featuredPackage); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedPackage(featuredPackage);
+              }}
             >
               View Details
             </button>

@@ -84,7 +84,9 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
   const isSddmActive = activation.sddmLogin;
   const isActive = isSddmActive;
 
-  const handleClick = () => setSelectedPackage(packageItem);
+  const handleClick = () => {
+    setSelectedPackage(packageItem);
+  };
 
   const subtype = getPackageSubtype(packageItem);
   const authorName = packageItem.author?.name || "Community";

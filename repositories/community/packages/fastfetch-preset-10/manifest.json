@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-10",
+  "name": "Full Hardware Dossier",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "MiZentUi",
+  "package_type": "fastfetch",
+  "description": "Comprehensive hardware and desktop dossier with detailed GPU, display resolution, and package counts.",
+  "tags": [
+    "Fastfetch",
+    "Dossier",
+    "Hardware",
+    "Packages",
+    "Display"
+  ],
+  "color_palette": [
+    "#f5c2e7",
+    "#cba6f7",
+    "#f38ba8",
+    "#1e1e2e"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-10/config.jsonc",
+      "description": "Fastfetch Full Hardware Dossier configuration"
+    }
+  ]
+}

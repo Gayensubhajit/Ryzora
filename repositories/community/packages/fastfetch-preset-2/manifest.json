@@ -1,0 +1,38 @@
+{
+  "id": "fastfetch-preset-2",
+  "name": "Two-Column Spectrum",
+  "version": "1.0.0",
+  "ryzora_spec": "1",
+  "author": "harilvfs",
+  "package_type": "fastfetch",
+  "description": "Dual-column Fastfetch layout organizing hardware metrics and session telemetry side by side.",
+  "tags": [
+    "Fastfetch",
+    "Two-Column",
+    "Spectrum",
+    "Hardware",
+    "Modular"
+  ],
+  "color_palette": [
+    "#7aa2f7",
+    "#bb9af7",
+    "#7dcfff",
+    "#c0caf5"
+  ],
+  "compatibility": {
+    "desktops": [],
+    "sessions": [],
+    "distros": [],
+    "required": [
+      "fastfetch"
+    ],
+    "optional": []
+  },
+  "files": [
+    {
+      "source": "files/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-preset-2/config.jsonc",
+      "description": "Fastfetch Two-Column Spectrum configuration"
+    }
+  ]
+}
