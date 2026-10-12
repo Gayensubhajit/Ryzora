@@ -21,6 +21,7 @@ type ActiveTab = CategoryId | "all";
 /** Per-tab sub-filter pills */
 const TAB_SUB_FILTERS: Partial<Record<ActiveTab, string[]>> = {
   lockscreens: ["All", "Qylock", "SilentSDDM", "SDDM", "My Media"],
+  fastfetch: ["Configs", "Emblems"],
   rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
   themes: ["All", "GTK", "Qt", "Application"],
   wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
@@ -80,7 +81,7 @@ export const DiscoverView: React.FC = () => {
   // Reset category-specific sub-filters when tab changes
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
-    setSubFilter("All");
+    setSubFilter(tab === "fastfetch" ? "Configs" : "All");
     setSelectedTypes([]);
   };
 
@@ -205,8 +206,16 @@ export const DiscoverView: React.FC = () => {
         if (!matchesGlobalDesktop) return false;
       }
 
+      // Fastfetch strict subtype partitioning (Configs: 23, Emblems: 11, No All)
+      if (activeTab === "fastfetch") {
+        const effectiveSub = subFilter === "Emblems" ? "Emblems" : "Configs";
+        if (pkg.subfilter !== effectiveSub) {
+          return false;
+        }
+      }
+
       // 4. Sub-filter pill (All, Qylock, SilentSDDM, SDDM, My Media)
-      if (subFilter !== "All") {
+      if (subFilter !== "All" && activeTab !== "fastfetch") {
         const sf = subFilter.toLowerCase();
         if (activeTab === "lockscreens") {
           const isCustomPkg = pkg.tags.includes("custom") || pkg.id.startsWith("custom:");

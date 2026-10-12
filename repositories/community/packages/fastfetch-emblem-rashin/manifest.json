@@ -3,7 +3,7 @@
   "name": "Rashin Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "Rashin samurai warrior character artwork emblem.",
   "tags": [
@@ -32,7 +32,7 @@
   "files": [
     {
       "source": "files/rashin.png",
-      "target": "~/.config/fastfetch/logos/rashin.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-rashin/rashin.png",
       "description": "Fastfetch Rashin Emblem"
     }
   ]

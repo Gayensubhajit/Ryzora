@@ -1,3 +1,4 @@
+import { resolveLocalAssetSrc } from "../providers/customMediaProvider.ts";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Terminal,
@@ -22,6 +23,7 @@ import {
   Layout as LayoutIcon,
   Info,
   Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -172,175 +174,19 @@ const INITIAL_ROWS: FastfetchRowItem[] = [
 
 export interface FastfetchViewProps {
   initialStyleId?: string;
+  initialEmblemId?: string;
   onConsumeInitialPresetId?: () => void;
+  onConsumeInitialEmblemId?: () => void;
 }
 
 
-export interface ParsedFastfetchOutput {
-  hasKittyImage: boolean;
-  kittyImageUrl?: string;
-  kittyCols?: number;
-  kittyRows?: number;
-  kittyTopPadding?: number;
-  kittyLeftPadding?: number;
-  textHtml: string;
-}
-
-export function parseFastfetchAnsi(raw: string): ParsedFastfetchOutput {
-  if (!raw) return { hasKittyImage: false, textHtml: "" };
-
-  const kittyRegex = /\x1b_G([^;]*);([^\x1b\x07]+)(?:\x1b\\|\x07)/;
-  const match = raw.match(kittyRegex);
-
-  if (!match) {
-    return {
-      hasKittyImage: false,
-      textHtml: ansiToHtml(raw),
-    };
-  }
-
-  const controlsStr = match[1] || "";
-  const payloadB64 = match[2] || "";
-  const controls: Record<string, string> = {};
-  for (const part of controlsStr.split(",")) {
-    const [k, v] = part.split("=");
-    if (k && v) controls[k] = v;
-  }
-
-  let imageUrl = "";
-  try {
-    const decoded = atob(payloadB64);
-    if (controls.t === "f" || controls.t === "t") {
-      imageUrl = convertFileSrc(decoded);
-    } else {
-      imageUrl = `data:image/png;base64,${payloadB64}`;
-    }
-  } catch {
-    imageUrl = "";
-  }
-
-  const preImage = raw.slice(0, match.index ?? 0);
-  const leftPadMatch = preImage.match(/\x1b\[(\d+)C$/);
-  const leftCols = leftPadMatch ? parseInt(leftPadMatch[1], 10) : 3;
-  const topPadding = Math.max(0, preImage.split("\n").length - 1);
-
-  const postImage = raw.slice((match.index ?? 0) + match[0].length);
-  const upMatch = postImage.match(/\x1b\[(\d+)A/);
-  const textPart = upMatch ? postImage.slice((upMatch.index ?? 0) + upMatch[0].length) : postImage;
-
-  return {
-    hasKittyImage: Boolean(imageUrl),
-    kittyImageUrl: imageUrl,
-    kittyCols: parseInt(controls.c || "28", 10),
-    kittyRows: parseInt(controls.r || "14", 10),
-    kittyTopPadding: topPadding,
-    kittyLeftPadding: leftCols,
-    textHtml: ansiToHtml(textPart),
-  };
-}
-
-export function ansiToHtml(raw: string): string {
-  if (!raw) return "";
-
-  // Strip kitty graphics protocol sequences: \x1b_G...(\x1b\\|\x07)
-  let cleaned = raw.replace(/\x1b_G[^\x1b\x07]*(\x1b\\|\x07)/g, "");
-
-  const stdColors = [
-    "#3e4451", "#e06c75", "#98c379", "#e5c07b",
-    "#61afef", "#c678dd", "#56b6c2", "#abb2bf"
-  ];
-  const brightColors = [
-    "#5c6370", "#be5046", "#98c379", "#d19a66",
-    "#61afef", "#c678dd", "#56b6c2", "#ffffff"
-  ];
-
-  const escapeHtml = (str: string) =>
-    str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const lines = cleaned.split("\n");
-  const processedLines: string[] = [];
-
-  for (const line of lines) {
-    let col = 0;
-    let lineOut = "";
-    let currentFg: string | null = null;
-    let isBold = false;
-    let isDim = false;
-    let isItalic = false;
-    let isUnderline = false;
-
-    // Split tokens by ANSI escape sequences \x1b\[[0-9;]*[a-zA-Z]
-    const tokens = line.split(/(\x1b\[[0-9;]*[a-zA-Z])/);
-    for (const token of tokens) {
-      if (!token) continue;
-      if (token.startsWith("\x1b[")) {
-        const type = token.slice(-1);
-        const argsStr = token.slice(2, -1);
-        const args = argsStr ? argsStr.split(";").map(Number) : [0];
-
-        if (type === "m") {
-          let i = 0;
-          while (i < args.length) {
-            const c = args[i];
-            if (c === 0) {
-              currentFg = null;
-              isBold = false;
-              isDim = false;
-              isItalic = false;
-              isUnderline = false;
-            } else if (c === 1) isBold = true;
-            else if (c === 2) isDim = true;
-            else if (c === 3) isItalic = true;
-            else if (c === 4) isUnderline = true;
-            else if (c === 22) { isBold = false; isDim = false; }
-            else if (c === 23) isItalic = false;
-            else if (c === 24) isUnderline = false;
-            else if (c >= 30 && c <= 37) currentFg = stdColors[c - 30];
-            else if (c === 39) currentFg = null;
-            else if (c >= 90 && c <= 97) currentFg = brightColors[c - 90];
-            else if (c === 38 && i + 4 < args.length && args[i + 1] === 2) {
-              const r = args[i + 2];
-              const g = args[i + 3];
-              const b = args[i + 4];
-              currentFg = `rgb(${r},${g},${b})`;
-              i += 4;
-            }
-            i++;
-          }
-        } else if (type === "C") {
-          const count = args[0] || 1;
-          lineOut += " ".repeat(count);
-          col += count;
-        } else if (type === "G") {
-          const targetCol = (args[0] || 1) - 1;
-          if (targetCol > col) {
-            const spaces = targetCol - col;
-            lineOut += " ".repeat(spaces);
-            col = targetCol;
-          }
-        }
-      } else {
-        const styles: string[] = [];
-        if (currentFg) styles.push(`color: ${currentFg}`);
-        if (isBold) styles.push("font-weight: 700");
-        if (isDim) styles.push("opacity: 0.75");
-        if (isItalic) styles.push("font-style: italic");
-        if (isUnderline) styles.push("text-decoration: underline");
-
-        const styleAttr = styles.length ? ` style="${styles.join("; ")}"` : "";
-        lineOut += `<span${styleAttr}>${escapeHtml(token)}</span>`;
-        col += token.length;
-      }
-    }
-    processedLines.push(lineOut);
-  }
-
-  return processedLines.join("\n");
-}
+import { parseFastfetchAnsi, stripJsoncComments } from "../services/fastfetchAnsi.ts";
 
 export const FastfetchView: React.FC<FastfetchViewProps> = ({
   initialStyleId,
+  initialEmblemId,
   onConsumeInitialPresetId,
+  onConsumeInitialEmblemId,
 }) => {
   const {
     packages,
@@ -352,25 +198,73 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     selectedPackage,
   } = useApp();
 
-  // All available fastfetch packages in catalog
+  // Fastfetch style/preset packages in catalog (excluding standalone emblems)
   const fastfetchPackages = packages.filter(
-    (p) => p.category === "fastfetch" || p.package_type === "fastfetch"
+    (p) =>
+      (p.category === "fastfetch" || p.package_type === "fastfetch") &&
+      !p.tags?.some((t) => t.toLowerCase() === "emblem") &&
+      p.subfilter !== "Emblems" &&
+      !p.id.includes("emblem")
   );
+
+  const [fsInstalledPresetIds, setFsInstalledPresetIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    invoke<string[]>("list_fastfetch_installed_presets")
+      .then((ids) => {
+        if (Array.isArray(ids)) {
+          setFsInstalledPresetIds(ids);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Filter to ONLY installed fastfetch packages (or active/staged preset)
   const isInstalledPkg = (id: string) =>
     Boolean(
       installedPackageIds?.includes(id) ||
-      installedPackages?.some((rec) => rec.package_id === id)
+      installedPackages?.some((rec) => rec.package_id === id) ||
+      fsInstalledPresetIds.includes(id)
     );
 
-  const installedFastfetchPackages = fastfetchPackages.filter((p) =>
-    isInstalledPkg(p.id) || (initialStyleId && p.id === initialStyleId)
-  );
+  const installedFastfetchPackages = useMemo(() => {
+    const list = [
+      ...fastfetchPackages.filter(
+        (p) => isInstalledPkg(p.id) || (initialStyleId && p.id === initialStyleId)
+      ),
+    ];
+    for (const fsId of fsInstalledPresetIds) {
+      if (!list.some((p) => p.id === fsId)) {
+        const catalogPkg = packages.find((p) => p.id === fsId);
+        if (catalogPkg) {
+          list.push(catalogPkg);
+        } else {
+          const cleanName = fsId.replace(/^fastfetch-/, "").replace(/[-_]/g, " ");
+          const title = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+          list.push({
+            id: fsId,
+            title,
+            name: title,
+            version: "1.0.0",
+            category: "fastfetch",
+            package_type: "fastfetch",
+            description: `Installed Fastfetch preset: ${title}`,
+            tags: ["Fastfetch", "Preset"],
+            preview_poster_url: "",
+            components: [],
+            author: { name: "Community" },
+          } as any);
+        }
+      }
+    }
+    return list;
+  }, [fastfetchPackages, installedPackageIds, installedPackages, fsInstalledPresetIds, initialStyleId, packages]);
 
+  const storedActive = typeof window !== "undefined" ? localStorage.getItem("ryzora_active_fastfetch_preset") : null;
   const targetInitialId =
     (initialStyleId && installedFastfetchPackages.some((p) => p.id === initialStyleId) ? initialStyleId : null) ||
     (selectedPackage && installedFastfetchPackages.some((p) => p.id === selectedPackage.id) ? selectedPackage.id : null) ||
+    (storedActive && installedFastfetchPackages.some((p) => p.id === storedActive) ? storedActive : null) ||
     installedFastfetchPackages[0]?.id ||
     fastfetchPackages[0]?.id ||
     "fastfetch-preset-2";
@@ -378,11 +272,13 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
   // Selected Style in Left Column
   const [selectedStyleId, setSelectedStyleId] = useState<string>(targetInitialId);
 
-  // Sync selectedStyleId when initialStyleId is provided
+  // Sync selectedStyleId when initialStyleId is provided or on initial mount
   useEffect(() => {
     if (initialStyleId) {
       handleSelectStyle(initialStyleId);
       onConsumeInitialPresetId?.();
+    } else if (targetInitialId) {
+      handleSelectStyle(targetInitialId);
     }
   }, [initialStyleId]);
   const [styleSearch, setStyleSearch] = useState<string>("");
@@ -394,9 +290,11 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
   const [installedEmblems, setInstalledEmblems] = useState<FastfetchEmblem[]>([]);
   const [emblemType, setEmblemType] = useState<EmblemType>("none");
   const [selectedEmblemId, setSelectedEmblemId] = useState<string>("");
+  const [userEmblemOverridden, setUserEmblemOverridden] = useState<boolean>(false);
+  const [missingLogoPath, setMissingLogoPath] = useState<string | null>(null);
   const [customEmblemUrl, setCustomEmblemUrl] = useState<string>("");
-  const [widthCols, setWidthCols] = useState<number>(28);
-  const [heightLines, setHeightLines] = useState<number>(14);
+  const [widthCols, setWidthCols] = useState<number>(34);
+  const [heightLines, setHeightLines] = useState<number>(15);
   const [paddingCols, setPaddingCols] = useState<number>(3);
   const [dither, setDither] = useState<boolean>(false);
   const [accentColor, setAccentColor] = useState<string>("#e2342a");
@@ -407,12 +305,23 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
   // Status & Edit state
   const [isSaved, setIsSaved] = useState<boolean>(true);
   const [isModified, setIsModified] = useState<boolean>(false);
+  const [colorModified, setColorModified] = useState<boolean>(false);
+  const [modulesModified, setModulesModified] = useState<boolean>(false);
   const [baseConfigJsonc, setBaseConfigJsonc] = useState<string>("");
-  const [activeAppliedStyleId, setActiveAppliedStyleId] = useState<string>("fastfetch-preset-2");
+  const [activeAppliedStyleId, setActiveAppliedStyleId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ryzora_active_fastfetch_preset") || "fastfetch-preset-2";
+    }
+    return "fastfetch-preset-2";
+  });
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isLaunchingTerminal, setIsLaunchingTerminal] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const requestSeqRef = useRef<number>(0);
+  const previewCacheRef = useRef<Map<string, { raw_ansi: string; missing_logo_path?: string }>>(new Map());
 
   // Click outside to close style dropdown
   useEffect(() => {
@@ -433,13 +342,29 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
       .then((emblems) => {
         if (emblems && Array.isArray(emblems)) {
           setInstalledEmblems(emblems);
-          if (emblems.length > 0 && emblemType === "image" && !selectedEmblemId) {
-            setSelectedEmblemId(emblems[0].id);
+          if (initialEmblemId) {
+            const matched = emblems.find(
+              (e) =>
+                e.id === initialEmblemId ||
+                e.id.toLowerCase() === initialEmblemId.toLowerCase() ||
+                e.id === initialEmblemId.replace("fastfetch-emblem-", "") ||
+                e.path.includes(initialEmblemId) ||
+                (initialEmblemId.includes(e.id) && e.id.length > 2)
+            );
+            if (matched) {
+              setUserEmblemOverridden(true);
+              setSelectedEmblemId(matched.id);
+              setCustomEmblemUrl("");
+              setEmblemType("image");
+              setIsSaved(false);
+              setIsModified(true);
+            }
+            if (onConsumeInitialEmblemId) onConsumeInitialEmblemId();
           }
         }
       })
       .catch(() => {});
-  }, []);
+  }, [initialEmblemId]);
 
   // Fetch real host telemetry without fake hardware values
   useEffect(() => {
@@ -467,48 +392,102 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
       .catch(() => {});
   }, [systemInfo]);
 
-  // Live Fastfetch execution preview pipeline
+  // Live Fastfetch execution preview pipeline with request sequencing & caching
   const renderPreview = async () => {
-    setIsRenderingPreview(true);
     const selectedEmblem = installedEmblems.find((e) => e.id === selectedEmblemId);
+    const explicitEmblemPath =
+      userEmblemOverridden && (customEmblemUrl || selectedEmblem?.path)
+        ? customEmblemUrl || selectedEmblem?.path
+        : undefined;
+
+    const cacheKey = JSON.stringify({
+      presetId: selectedStyleId,
+      baseConfigJsonc,
+      isModified,
+      accentColor: colorModified ? accentColor : undefined,
+      emblemType,
+      emblemPath: explicitEmblemPath,
+      widthCols,
+      heightLines,
+      paddingCols,
+      dither,
+      activeModules: modulesModified
+        ? rows.filter((r) => r.enabled).map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type))
+        : undefined,
+    });
+
+    if (previewCacheRef.current.has(cacheKey)) {
+      const cached = previewCacheRef.current.get(cacheKey)!;
+      setPreviewAnsi(cached.raw_ansi);
+      setMissingLogoPath(cached.missing_logo_path || null);
+      setIsRenderingPreview(false);
+      return;
+    }
+
+    const currentSeq = ++requestSeqRef.current;
+    setIsRenderingPreview(true);
+
     try {
-      const res = await invoke<{ raw_ansi: string; success: boolean }>("render_fastfetch_preview", {
+      const res = await invoke<{
+        raw_ansi: string;
+        success: boolean;
+        missing_logo_path?: string;
+      }>("render_fastfetch_preview", {
         req: {
           presetId: selectedStyleId,
           baseConfigJsonc,
           isModified,
-          accentColor,
+          accentColor: colorModified ? accentColor : undefined,
           emblemType,
-          emblemPath: customEmblemUrl || selectedEmblem?.path,
+          emblemPath: explicitEmblemPath,
           widthCols,
           heightLines,
           paddingCols,
           dither,
-          activeModules: rows
-            .filter((r) => r.enabled)
-            .map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type)),
+          activeModules: modulesModified
+            ? rows.filter((r) => r.enabled).map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type))
+            : undefined,
         },
       });
-      if (res && res.raw_ansi) {
+      if (currentSeq === requestSeqRef.current && res && res.raw_ansi) {
+        previewCacheRef.current.set(cacheKey, {
+          raw_ansi: res.raw_ansi,
+          missing_logo_path: res.missing_logo_path,
+        });
         setPreviewAnsi(res.raw_ansi);
+        setMissingLogoPath(res.missing_logo_path || null);
       }
     } catch (e) {
-      console.error("Preview render failed:", e);
+      if (currentSeq === requestSeqRef.current) {
+        console.error("Preview render failed:", e);
+      }
     } finally {
-      setIsRenderingPreview(false);
+      if (currentSeq === requestSeqRef.current) {
+        setIsRenderingPreview(false);
+      }
     }
   };
 
-  // Trigger live Fastfetch execution whenever parameters change (with 120ms debounce)
+  const activeModulesKey = useMemo(() => {
+    return modulesModified
+      ? rows
+          .filter((r) => r.enabled)
+          .map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type))
+          .join(",")
+      : "";
+  }, [modulesModified, rows]);
+
+  // Trigger live Fastfetch execution whenever parameters change (with 300ms debounce)
   useEffect(() => {
     const timer = setTimeout(() => {
       renderPreview();
-    }, 120);
+    }, 300);
     return () => clearTimeout(timer);
   }, [
     selectedStyleId,
     baseConfigJsonc,
     isModified,
+    colorModified,
     accentColor,
     emblemType,
     selectedEmblemId,
@@ -517,66 +496,116 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     heightLines,
     paddingCols,
     dither,
-    rows,
-    installedEmblems,
+    activeModulesKey,
   ]);
+
+  const applyParsedLogoDimensions = (logo: any) => {
+    const hasW = typeof logo?.width === "number" && logo.width > 0;
+    const hasH = typeof logo?.height === "number" && logo.height > 0;
+    if (hasW && hasH) {
+      setWidthCols(logo.width);
+      setHeightLines(logo.height);
+    } else if (hasH) {
+      setHeightLines(logo.height);
+      setWidthCols(Math.round(logo.height * 2.2));
+    } else if (hasW) {
+      setWidthCols(logo.width);
+      setHeightLines(Math.max(8, Math.round(logo.width / 2.2)));
+    } else {
+      setWidthCols(34);
+      setHeightLines(15);
+    }
+    const rightPad =
+      typeof logo?.padding?.right === "number"
+        ? logo.padding.right
+        : typeof logo?.padding?.left === "number" && logo.padding.left > 0
+        ? logo.padding.left
+        : 3;
+    setPaddingCols(rightPad);
+  };
 
   // When a style preset is selected from the left column
   const handleSelectStyle = async (pkgId: string) => {
     setSelectedStyleId(pkgId);
     setIsModified(false);
     setIsSaved(true);
+    setColorModified(false);
+    setModulesModified(false);
+    setUserEmblemOverridden(false);
+    setMissingLogoPath(null);
+    setCustomEmblemUrl("");
     const found = fastfetchPackages.find((p) => p.id === pkgId);
     try {
       const configStr = await invoke<string>("get_fastfetch_preset_config", { presetId: pkgId });
       if (configStr) {
-        setBaseConfigJsonc(configStr);
-        const cleanJson = configStr
-          .replace(/\/\/.*$/gm, "")
-          .replace(/\/\*[\s\S]*?\*\//g, "")
-          .replace(/,\s*([\]}])/g, "$1");
+        let newEmblemType: EmblemType = "none";
+        let newEmblemId = "";
+        let newWidth = 34;
+        let newHeight = 15;
+        let newPad = 3;
+        let newAccent = found?.color_palette?.[0] || "#e2342a";
+
+        const cleanJson = stripJsoncComments(configStr);
         try {
           const parsed = JSON.parse(cleanJson);
           if (parsed.logo) {
             if (parsed.logo.type === "none") {
-              setEmblemType("none");
+              newEmblemType = "none";
             } else if (parsed.logo.type === "builtin") {
-              setEmblemType("builtin");
+              newEmblemType = "builtin";
             } else if (parsed.logo.type === "file" || parsed.logo.type?.includes("ascii")) {
-              setEmblemType("ascii");
+              newEmblemType = "ascii";
             } else if (parsed.logo.source) {
-              setEmblemType("image");
+              newEmblemType = "image";
               const matchingEmblem = installedEmblems.find(
-                (e) => e.path === parsed.logo.source || e.id === parsed.logo.source
+                (e) =>
+                  e.path === parsed.logo.source ||
+                  e.id === parsed.logo.source ||
+                  parsed.logo.source.endsWith("/" + e.id + ".png")
               );
               if (matchingEmblem) {
-                setSelectedEmblemId(matchingEmblem.id);
+                newEmblemId = matchingEmblem.id;
               }
             }
-            if (typeof parsed.logo.width === "number") setWidthCols(parsed.logo.width);
-            if (typeof parsed.logo.height === "number") setHeightLines(parsed.logo.height);
-            if (parsed.logo.padding && typeof parsed.logo.padding.left === "number") {
-              setPaddingCols(parsed.logo.padding.left);
+            const hasW = typeof parsed.logo?.width === "number" && parsed.logo.width > 0;
+            const hasH = typeof parsed.logo?.height === "number" && parsed.logo.height > 0;
+            if (hasW && hasH) {
+              newWidth = parsed.logo.width;
+              newHeight = parsed.logo.height;
+            } else if (hasH) {
+              newHeight = parsed.logo.height;
+              newWidth = Math.round(parsed.logo.height * 2.2);
+            } else if (hasW) {
+              newWidth = parsed.logo.width;
+              newHeight = Math.max(8, Math.round(parsed.logo.width / 2.2));
             }
+            newPad =
+              typeof parsed.logo?.padding?.right === "number"
+                ? parsed.logo.padding.right
+                : typeof parsed.logo?.padding?.left === "number" && parsed.logo.padding.left > 0
+                ? parsed.logo.padding.left
+                : 3;
           }
-          if (parsed.display?.color?.keys) {
-            const keyCol = parsed.display.color.keys;
-            if (keyCol.startsWith("38;2;")) {
-              const parts = keyCol.split(";");
-              if (parts.length >= 5) {
-                const r = parseInt(parts[2]).toString(16).padStart(2, "0");
-                const g = parseInt(parts[3]).toString(16).padStart(2, "0");
-                const b = parseInt(parts[4]).toString(16).padStart(2, "0");
-                setAccentColor(`#${r}${g}${b}`);
-              }
+          if (parsed.display?.color?.keys?.startsWith("38;2;")) {
+            const parts = parsed.display.color.keys.split(";");
+            if (parts.length >= 5) {
+              const r = parseInt(parts[2]).toString(16).padStart(2, "0");
+              const g = parseInt(parts[3]).toString(16).padStart(2, "0");
+              const b = parseInt(parts[4]).toString(16).padStart(2, "0");
+              newAccent = `#${r}${g}${b}`;
             }
           }
         } catch {}
+
+        setEmblemType(newEmblemType);
+        setSelectedEmblemId(newEmblemId);
+        setWidthCols(newWidth);
+        setHeightLines(newHeight);
+        setPaddingCols(newPad);
+        setAccentColor(newAccent);
+        setBaseConfigJsonc(configStr);
       }
     } catch {}
-    if (found?.color_palette?.[0]) {
-      setAccentColor(found.color_palette[0]);
-    }
     setToast({
       message: `Loaded starting style "${found?.title || pkgId}".`,
       type: "info",
@@ -588,12 +617,7 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     try {
       localStorage.setItem("ryzora_active_fastfetch_preset", selectedStyleId);
     } catch {}
-    setIsSaved(true);
-    const found = fastfetchPackages.find((p) => p.id === selectedStyleId);
-    setToast({
-      message: `Applied installed style "${found?.title || selectedStyleId}" to ~/.config/fastfetch/config.jsonc.`,
-      type: "success",
-    });
+    await handleSave();
   };
 
   const handleRemoveInstalledStyle = () => {
@@ -608,12 +632,14 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     setEmblemType("none");
     setSelectedEmblemId("");
     setCustomEmblemUrl("");
-    setWidthCols(28);
-    setHeightLines(14);
+    setWidthCols(34);
+    setHeightLines(15);
     setPaddingCols(3);
     setDither(false);
     setAccentColor("#e2342a");
+    setColorModified(true);
     setRows(INITIAL_ROWS);
+    setModulesModified(true);
     setIsSaved(false);
     setIsModified(true);
     setToast({
@@ -625,23 +651,18 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
   const handleRevert = async () => {
     setIsModified(false);
     setIsSaved(true);
+    setColorModified(false);
+    setModulesModified(false);
     if (baseConfigJsonc) {
       try {
-        const clean = baseConfigJsonc
-          .replace(/\/\/.*$/gm, "")
-          .replace(/\/\*[\s\S]*?\*\//g, "")
-          .replace(/,\s*([\]}])/g, "$1");
+        const clean = stripJsoncComments(baseConfigJsonc);
         const parsed = JSON.parse(clean);
         if (parsed.logo) {
           if (parsed.logo.type === "none") setEmblemType("none");
           else if (parsed.logo.type === "builtin") setEmblemType("builtin");
           else if (parsed.logo.type === "file" || parsed.logo.type?.includes("ascii")) setEmblemType("ascii");
           else if (parsed.logo.source) setEmblemType("image");
-          if (typeof parsed.logo.width === "number") setWidthCols(parsed.logo.width);
-          if (typeof parsed.logo.height === "number") setHeightLines(parsed.logo.height);
-          if (parsed.logo.padding && typeof parsed.logo.padding.left === "number") {
-            setPaddingCols(parsed.logo.padding.left);
-          }
+          applyParsedLogoDimensions(parsed.logo);
         }
       } catch {}
     }
@@ -652,46 +673,73 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
     const selectedEmblem = installedEmblems.find((e) => e.id === selectedEmblemId);
-    await invoke("apply_fastfetch_configuration", {
-      req: {
-        presetId: selectedStyleId,
-        baseConfigJsonc,
-        isModified,
-        accentColor,
-        emblemType,
-        emblemPath: customEmblemUrl || selectedEmblem?.path,
-        widthCols,
-        heightLines,
-        paddingCols,
-        dither,
-        activeModules: rows.filter((r) => r.enabled).map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type)),
-      },
-    }).catch(() => {});
-    setIsSaved(true);
-    setIsModified(false);
-    setToast({
-      message: "Saved configuration to ~/.config/fastfetch/config.jsonc.",
-      type: "success",
-    });
+    const explicitEmblemPath =
+      userEmblemOverridden && (customEmblemUrl || selectedEmblem?.path)
+        ? customEmblemUrl || selectedEmblem?.path
+        : undefined;
+    try {
+      await invoke("apply_fastfetch_configuration", {
+        req: {
+          presetId: selectedStyleId,
+          baseConfigJsonc,
+          isModified,
+          accentColor: colorModified ? accentColor : undefined,
+          emblemType,
+          emblemPath: explicitEmblemPath,
+          widthCols,
+          heightLines,
+          paddingCols,
+          dither,
+          activeModules: modulesModified
+            ? rows.filter((r) => r.enabled).map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type))
+            : undefined,
+        },
+      });
+      setIsSaved(true);
+      setIsModified(false);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("ryzora_active_fastfetch_preset", selectedStyleId);
+      }
+      setActiveAppliedStyleId(selectedStyleId);
+      setToast({
+        message: "Saved configuration to ~/.config/fastfetch/config.jsonc.",
+        type: "success",
+      });
+    } catch (err: any) {
+      setToast({
+        message: `Failed to save configuration: ${err?.message || String(err)}`,
+        type: "warning",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePreviewInTerminal = async () => {
+    setIsLaunchingTerminal(true);
     const selectedEmblem = installedEmblems.find((e) => e.id === selectedEmblemId);
+    const explicitEmblemPath =
+      userEmblemOverridden && (customEmblemUrl || selectedEmblem?.path)
+        ? customEmblemUrl || selectedEmblem?.path
+        : undefined;
     try {
       await invoke("preview_fastfetch_terminal", {
         req: {
           presetId: selectedStyleId,
           baseConfigJsonc,
           isModified,
-          accentColor,
+          accentColor: colorModified ? accentColor : undefined,
           emblemType,
-          emblemPath: customEmblemUrl || selectedEmblem?.path,
+          emblemPath: explicitEmblemPath,
           widthCols,
           heightLines,
           paddingCols,
           dither,
-          activeModules: rows.filter((r) => r.enabled).map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type)),
+          activeModules: modulesModified
+            ? rows.filter((r) => r.enabled).map((r) => (r.type === "telemetry" ? r.telemetryKey : r.type))
+            : undefined,
         },
       });
       setToast({
@@ -705,6 +753,8 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
         message: `Failed to launch preview: ${err?.message || err}`,
         type: "warning",
       });
+    } finally {
+      setIsLaunchingTerminal(false);
     }
   };
 
@@ -714,10 +764,11 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
+          setUserEmblemOverridden(true);
           setCustomEmblemUrl(reader.result);
           setEmblemType("image");
           setIsSaved(false);
-    setIsModified(true);
+          setIsModified(true);
         }
       };
       reader.readAsDataURL(file);
@@ -731,6 +782,7 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
     setRows(next);
+    setModulesModified(true);
     setIsSaved(false);
     setIsModified(true);
   };
@@ -739,12 +791,14 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
     setRows((prev) =>
       prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
     );
+    setModulesModified(true);
     setIsSaved(false);
     setIsModified(true);
   };
 
   const handleRemoveRow = (id: string) => {
     setRows((prev) => prev.filter((r) => r.id !== id));
+    setModulesModified(true);
     setIsSaved(false);
     setIsModified(true);
   };
@@ -759,14 +813,14 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
 
   // ANSI spectrum palette
   const ansiColors = [
-    "#1e1e2e",
-    accentColor || "#e2342a",
-    "#a6e3a1",
-    "#f9e2af",
-    "#89b4fa",
-    "#f5c2e7",
-    "#94e2d5",
-    "#cdd6f4",
+    "#1e1e1e",
+    accentColor || "#ef4444",
+    "#22c55e",
+    "#eab308",
+    "#3b82f6",
+    "#a855f7",
+    "#06b6d4",
+    "#e2e8f0",
   ];
 
   const COLOR_PALETTE_SWATCHES = ansiColors;
@@ -785,6 +839,7 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
         enabled: true,
       },
     ]);
+    setModulesModified(true);
     setIsSaved(false);
     setIsModified(true);
   };
@@ -944,72 +999,77 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
       {/* ── Main Workspace: Dominant Preview (Left 60-65%) + Clean Configuration (Right 35-40%) ── */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 pt-4 min-h-0">
         {/* ── LEFT COLUMN: Dominant Readout Preview (lg:col-span-7) ── */}
-        <div className="lg:col-span-7 flex flex-col h-full bg-[#0b0f17] rounded-2xl border border-[var(--rz-border-subtle)] overflow-hidden shadow-2xl font-mono">
-          {/* Terminal Titlebar */}
-          <div className="flex items-center justify-between px-4 py-2.5 bg-[#121824] border-b border-[#1f2937]/80 text-xs text-slate-400 select-none">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#f35757]/80 border border-[#f35757] inline-block" />
-                <span className="w-3 h-3 rounded-full bg-[#e6c149]/80 border border-[#e6c149] inline-block" />
-                <span className="w-3 h-3 rounded-full bg-[#49cc6a]/80 border border-[#49cc6a] inline-block" />
-              </div>
-              <div className="flex items-center gap-1.5 ml-3 font-medium text-slate-300">
-                <Terminal className="w-3.5 h-3.5 text-slate-400" />
-                <span>silentbyte@slayer: ~</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 font-mono text-[10px]">
-              <span
-                className={[
-                  "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium border",
-                  !isModified
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                    : "bg-amber-500/10 text-amber-400 border-amber-500/20",
-                ].join(" ")}
-              >
-                <span
-                  className={[
-                    "w-1.5 h-1.5 rounded-full",
-                    !isModified ? "bg-emerald-400" : "bg-amber-400 animate-pulse",
-                  ].join(" ")}
-                />
-                {!isModified ? "Live · Original preset" : "Live · Modified"}
-              </span>
-            </div>
-          </div>
-
-          {/* Terminal Canvas */}
-          <div className="flex-1 p-6 overflow-auto flex items-center justify-center bg-[#0b0f17]">
+        <div className="lg:col-span-7 flex flex-col h-full bg-[#050608] rounded-2xl border border-[var(--rz-border)] overflow-hidden shadow-2xl">
+          {/* Minimal Terminal Canvas (silentbyte@slayer host preview) */}
+          <div
+            className={[
+              "flex-1 p-7 overflow-auto flex bg-[#050608]",
+              previewAnsi ? "items-start justify-start" : "items-center justify-center",
+            ].join(" ")}
+          >
             {previewAnsi ? (
+              <div className="flex flex-col">
+                {missingLogoPath && (
+                  <div className="mb-3 px-3 py-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-300 text-xs font-mono">
+                    Preset logo not found ({missingLogoPath}). Fastfetch rendered default layout.
+                  </div>
+                )}
               <div
-                className="relative font-mono text-[13px] leading-[20px] select-text whitespace-pre text-[#c9d1d9] max-w-full"
-                style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}
+                className="relative text-[14px] select-text whitespace-pre text-[#f1f5f9] max-w-full"
+                style={{
+                  fontFamily:
+                    "'JetBrainsMono Nerd Font', 'JetBrainsMonoNL Nerd Font', 'FiraCode Nerd Font', 'Hack Nerd Font', 'JetBrainsMono Nerd Font Mono', monospace",
+                  fontFeatureSettings: '"liga" 0',
+                  fontVariantLigatures: "none",
+                  letterSpacing: "0px",
+                  lineHeight: "19px",
+                  minHeight: `${
+                    Math.max(
+                      parsedOutput.textRows ?? 0,
+                      parsedOutput.hasKittyImage
+                        ? (parsedOutput.kittyTopPadding ?? 0) +
+                            Math.max(
+                              parsedOutput.kittyRows ?? heightLines,
+                              (parsedOutput.textRows ?? 0) - (parsedOutput.kittyTopPadding ?? 0)
+                            )
+                        : 0
+                    ) * 19
+                  }px`,
+                }}
               >
                 {/* Emblem Image positioned at exact terminal cell coordinates */}
                 {parsedOutput.hasKittyImage && parsedOutput.kittyImageUrl && (
                   <div
                     className={[
-                      "absolute overflow-hidden pointer-events-none z-10 flex items-center justify-center",
+                      "absolute overflow-hidden pointer-events-none z-10 flex items-start justify-center",
                       dither ? "contrast-125 brightness-95" : "",
                     ].join(" ")}
                     style={{
-                      left: `${parsedOutput.kittyLeftPadding ?? 3}ch`,
-                      top: `${(parsedOutput.kittyTopPadding ?? 0) * 20}px`,
-                      width: `${(parsedOutput.kittyCols ?? widthCols)}ch`,
-                      height: `${(parsedOutput.kittyRows ?? heightLines) * 20}px`,
+                      left: `${parsedOutput.kittyLeftPadding ?? 0}ch`,
+                      top: `${(parsedOutput.kittyTopPadding ?? 0) * 19}px`,
+                      width: `${parsedOutput.kittyCols ?? widthCols}ch`,
+                      height: `${
+                        Math.max(
+                          parsedOutput.kittyRows ?? heightLines,
+                          (parsedOutput.textRows ?? 0) - (parsedOutput.kittyTopPadding ?? 0)
+                        ) * 19
+                      }px`,
                     }}
                   >
                     <img
                       src={parsedOutput.kittyImageUrl}
-                      alt="Fastfetch Emblem"
-                      className="w-full h-full object-contain filter drop-shadow-md"
+                      alt=""
+                      className="w-full h-full object-contain object-top filter drop-shadow-md"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
                     />
                   </div>
                 )}
 
                 {/* Unified Terminal text output (with identical monospace cell metrics) */}
                 <div dangerouslySetInnerHTML={{ __html: parsedOutput.textHtml }} />
+              </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-2 text-[var(--rz-text-muted)] font-mono text-xs">
@@ -1018,23 +1078,9 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
               </div>
             )}
           </div>
-          {/* Bottom Terminal Control Footer */}
-          <div className="px-4 py-2 bg-[#121824] border-t border-[#1f2937]/80 flex items-center justify-between text-xs text-slate-400 select-none">
-            <button
-              type="button"
-              onClick={handlePreviewInTerminal}
-              className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#1c2433] hover:bg-[#253043] text-slate-200 border border-[#2d3748] transition-colors cursor-pointer"
-            >
-              <Terminal className="w-3 h-3 text-[var(--rz-accent)]" />
-              <span>PREVIEW IN TERMINAL</span>
-            </button>
-            <span className="text-[11px] text-slate-500 italic">
-              Live · Generated from current config
-            </span>
-          </div>
         </div>
 
-        {/* ── RIGHT COLUMN: Configuration Inspector (lg:col-span-5) ── */}
+{/* ── RIGHT COLUMN: Configuration Inspector (lg:col-span-5) ── */}
         <div className="lg:col-span-5 flex flex-col h-full bg-[var(--rz-surface)] rounded-2xl border border-[var(--rz-border-subtle)] overflow-hidden shadow-xs">
           {/* Header */}
           <div className="px-5 py-3.5 border-b border-[var(--rz-border-subtle)] bg-[var(--rz-surface-elevated)] flex items-center justify-between">
@@ -1159,11 +1205,17 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="aspect-square rounded-xl border border-dashed border-[var(--rz-border)] hover:border-[var(--rz-accent)] bg-[var(--rz-bg)] flex flex-col items-center justify-center p-1 text-center cursor-pointer group transition-colors"
+                          className="aspect-square rounded-xl border border-dashed border-[var(--rz-border)] hover:border-[var(--rz-accent)] bg-[var(--rz-bg)] hover:bg-[var(--rz-surface-hover)] flex flex-col items-center justify-between p-2 text-center cursor-pointer group transition-all"
                           title="Upload Custom Image Emblem"
                         >
-                          <Upload className="w-3.5 h-3.5 text-[var(--rz-text-secondary)] group-hover:text-[var(--rz-accent)] mb-1" />
-                          <span className="text-[9px] font-medium text-[var(--rz-text-secondary)]">Custom</span>
+                          <div className="flex-1 w-full flex items-center justify-center min-h-[72px] max-h-[88px]">
+                            <div className="w-14 h-14 rounded-xl bg-[var(--rz-surface-elevated)] group-hover:bg-[var(--rz-accent)]/10 flex items-center justify-center transition-colors">
+                              <Upload className="w-6 h-6 text-[var(--rz-text-secondary)] group-hover:text-[var(--rz-accent)] transition-colors" />
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-medium text-[var(--rz-text-secondary)] group-hover:text-[var(--rz-text)] truncate w-full text-center mt-1">
+                            Custom
+                          </span>
                         </button>
 
                         {/* Installed local emblem items */}
@@ -1174,29 +1226,39 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                               key={emb.id}
                               type="button"
                               onClick={() => {
+                                setUserEmblemOverridden(true);
                                 setSelectedEmblemId(emb.id);
                                 setCustomEmblemUrl("");
                                 setEmblemType("image");
                                 setIsSaved(false);
-    setIsModified(true);
+                                setIsModified(true);
                               }}
                               className={[
-                                "aspect-square rounded-xl border p-1 flex flex-col items-center justify-center bg-[var(--rz-bg)] transition-all cursor-pointer relative overflow-hidden group",
+                                "aspect-square rounded-xl border p-2 flex flex-col items-center justify-between bg-[var(--rz-bg)] transition-all cursor-pointer relative overflow-hidden group",
                                 isSelected
-                                  ? "border-[var(--rz-accent)] shadow-xs ring-1 ring-[var(--rz-accent)]"
-                                  : "border-[var(--rz-border-subtle)] hover:border-[var(--rz-border)]",
+                                  ? "border-[var(--rz-accent)] shadow-xs ring-1.5 ring-[var(--rz-accent)] bg-[var(--rz-surface)]"
+                                  : "border-[var(--rz-border-subtle)] hover:border-[var(--rz-border)] hover:bg-[var(--rz-surface-hover)]",
                               ].join(" ")}
                               title={emb.name}
                             >
-                              <img
-                                src={convertFileSrc(emb.path)}
-                                alt={emb.name}
-                                className="w-7 h-7 object-contain mb-1"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = "none";
-                                }}
-                              />
-                              <span className="text-[8px] font-mono text-[var(--rz-text-secondary)] truncate w-full text-center">
+                              {isSelected && (
+                                <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-[var(--rz-accent)] text-white flex items-center justify-center shadow-xs z-10">
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                </div>
+                              )}
+                              <div className="flex-1 w-full flex items-center justify-center min-h-[72px] max-h-[88px] p-1 overflow-hidden">
+                                <img
+                                  src={resolveLocalAssetSrc(emb.path)}
+                                  alt={emb.name}
+                                  loading="lazy"
+                                  className="max-w-[88px] max-h-[88px] w-auto h-auto object-contain group-hover:scale-105 transition-transform"
+                                  style={{ maxWidth: "88px", maxHeight: "88px" }}
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = "none";
+                                  }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-medium text-[var(--rz-text)] truncate w-full text-center mt-1">
                                 {emb.name}
                               </span>
                             </button>
@@ -1301,7 +1363,7 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          setPaddingCols((p) => Math.max(1, p - 1));
+                          setPaddingCols((p) => Math.max(0, p - 1));
                           setIsSaved(false);
     setIsModified(true);
                         }}
@@ -1370,8 +1432,9 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                       value={accentColor}
                       onChange={(e) => {
                         setAccentColor(e.target.value);
+                        setColorModified(true);
                         setIsSaved(false);
-    setIsModified(true);
+                        setIsModified(true);
                       }}
                       className="w-10 h-10 rounded-xl cursor-pointer border border-white/20 bg-transparent shrink-0"
                     />
@@ -1397,8 +1460,9 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
                           type="button"
                           onClick={() => {
                             setAccentColor(swatch);
+                            setColorModified(true);
                             setIsSaved(false);
-    setIsModified(true);
+                            setIsModified(true);
                           }}
                           className={[
                             "w-6 h-6 rounded-lg border transition-transform cursor-pointer",
@@ -1559,11 +1623,16 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
           {/* Preview in Terminal */}
           <button
             type="button"
+            disabled={isLaunchingTerminal}
             onClick={handlePreviewInTerminal}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] transition-all cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[var(--rz-text)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] border border-[var(--rz-border-subtle)] transition-all cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Terminal className="w-3.5 h-3.5 text-[var(--rz-accent)]" />
-            <span>PREVIEW IN TERMINAL</span>
+            {isLaunchingTerminal ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--rz-accent)]" />
+            ) : (
+              <Terminal className="w-3.5 h-3.5 text-[var(--rz-accent)]" />
+            )}
+            <span>{isLaunchingTerminal ? "LAUNCHING…" : "PREVIEW IN TERMINAL"}</span>
           </button>
 
           {/* Secondary More Menu [...] */}
@@ -1630,11 +1699,16 @@ export const FastfetchView: React.FC<FastfetchViewProps> = ({
           {/* Primary Save Button */}
           <button
             type="button"
+            disabled={isSaving}
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold bg-[var(--rz-accent)] text-white hover:bg-[var(--rz-accent-hover)] active:scale-[0.98] shadow-md shadow-[var(--rz-accent)]/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold bg-[var(--rz-accent)] text-[var(--rz-accent-contrast)] hover:bg-[var(--rz-accent-hover)] active:scale-[0.98] shadow-md shadow-[var(--rz-accent)]/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="w-3.5 h-3.5" />
-            <span>SAVE</span>
+            {isSaving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--rz-accent-contrast)]" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            <span>{isSaving ? "SAVING…" : "SAVE"}</span>
           </button>
         </div>
       </div>

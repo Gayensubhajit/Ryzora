@@ -3,7 +3,7 @@
   "name": "Katana Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "High-contrast Katana emblem artwork formatted for Fastfetch Kitty graphics.",
   "tags": [
@@ -32,7 +32,7 @@
   "files": [
     {
       "source": "files/katana.png",
-      "target": "~/.config/fastfetch/logos/katana.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-katana/katana.png",
       "description": "Fastfetch Katana Emblem"
     }
   ]

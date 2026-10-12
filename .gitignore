@@ -32,3 +32,10 @@ target/
 *.priv
 release-keys/
 release-artifacts/
+
+# Build outputs and targets
+crates/**/target/
+crates/target/
+prototypes/**/build/
+prototypes/**/target/
+.directory

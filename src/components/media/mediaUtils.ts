@@ -1,20 +1,27 @@
 import type { PackageItem } from "../../types/index.ts";
+import { resolveLocalAssetSrc } from "../../providers/customMediaProvider.ts";
 
 export const MAX_CONCURRENT_VIDEOS = 4;
 
 export function normalizeMediaUrl(url?: string): string {
   if (!url) return "";
+  const trimmed = url.trim();
   if (
-    url.startsWith("http://") ||
-    url.startsWith("https://") ||
-    url.startsWith("asset://") ||
-    url.startsWith("/") ||
-    url.startsWith("data:") ||
-    url.startsWith("blob:")
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("asset://") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:")
   ) {
-    return url;
+    return trimmed;
   }
-  return "/" + url;
+  if (trimmed.startsWith("~/") || (trimmed.startsWith("/") && !trimmed.startsWith("/packages/") && !trimmed.startsWith("/assets/"))) {
+    return resolveLocalAssetSrc(trimmed);
+  }
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+  return "/" + trimmed;
 }
 
 export type PlaybackPriority = "hero" | "hover" | "normal";

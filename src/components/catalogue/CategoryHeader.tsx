@@ -30,7 +30,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
       case "bars":
         return "Status Bars";
       case "fastfetch":
-        return "Fastfetch Profiles";
+        return subFilter === "Emblems" ? "Fastfetch Emblems" : "Fastfetch Configs";
       case "terminal":
         return "Terminals & Shells";
       case "bundles":
@@ -53,7 +53,9 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
       case "bars":
         return "Modular Waybar, Eww, and status panel configurations.";
       case "fastfetch":
-        return "ASCII logo art, system telemetry presets, and neofetch replacements.";
+        return subFilter === "Emblems"
+          ? "Curated Fastfetch emblem artwork and terminal logos"
+          : "Curated Fastfetch system fetch layouts and configurations";
       case "terminal":
         return "Color palettes and configuration profiles for Kitty, Alacritty, Foot, and Starship.";
       case "bundles":
@@ -75,7 +77,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
           </h1>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)] font-medium">
             {count} {count === 1 ? "item" : "items"}
-            {subFilter && subFilter !== "All" ? ` · ${subFilter}` : ""}
+            {category !== "fastfetch" && subFilter && subFilter !== "All" ? ` · ${subFilter}` : ""}
           </span>
         </div>
       </div>

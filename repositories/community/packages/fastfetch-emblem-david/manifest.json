@@ -3,7 +3,7 @@
   "name": "David Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "Michelangelo's David classical statue bust emblem artwork.",
   "tags": [
@@ -32,7 +32,7 @@
   "files": [
     {
       "source": "files/david.png",
-      "target": "~/.config/fastfetch/logos/david.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-david/david.png",
       "description": "Fastfetch David Emblem"
     }
   ]

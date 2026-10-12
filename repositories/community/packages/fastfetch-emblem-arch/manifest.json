@@ -3,7 +3,7 @@
   "name": "Arch Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "High-contrast Arch Linux logo emblem for Fastfetch.",
   "tags": [
@@ -30,7 +30,7 @@
   "files": [
     {
       "source": "files/arch.png",
-      "target": "~/.config/fastfetch/logos/arch.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-arch/arch.png",
       "description": "Fastfetch Arch Emblem"
     }
   ]

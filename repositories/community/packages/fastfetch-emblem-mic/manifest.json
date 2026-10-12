@@ -3,7 +3,7 @@
   "name": "Mic Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "Studio condenser microphone emblem artwork for audio and music setups.",
   "tags": [
@@ -32,7 +32,7 @@
   "files": [
     {
       "source": "files/mic.png",
-      "target": "~/.config/fastfetch/logos/mic.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-mic/mic.png",
       "description": "Fastfetch Mic Emblem"
     }
   ]

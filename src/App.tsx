@@ -31,6 +31,7 @@ const MainLayout: React.FC = () => {
   const { activeCategory, setActiveCategory, selectedPackage, setSelectedPackage } = useApp();
   const [aboutOpen, setAboutOpen] = useState(false);
   const [fastfetchSettingsPresetId, setFastfetchSettingsPresetId] = useState<string | null>(null);
+  const [fastfetchSettingsEmblemId, setFastfetchSettingsEmblemId] = useState<string | null>(null);
 
 
   const renderActiveView = () => {
@@ -69,7 +70,9 @@ const MainLayout: React.FC = () => {
         return (
           <FastfetchView
             initialStyleId={fastfetchSettingsPresetId || undefined}
+            initialEmblemId={fastfetchSettingsEmblemId || undefined}
             onConsumeInitialPresetId={() => setFastfetchSettingsPresetId(null)}
+            onConsumeInitialEmblemId={() => setFastfetchSettingsEmblemId(null)}
           />
         );
       default:
@@ -112,8 +115,14 @@ const MainLayout: React.FC = () => {
         <LockScreenDetailView />
       ) : selectedPackage && (selectedPackage.category === "fastfetch" || selectedPackage.package_type === "fastfetch") ? (
         <FastfetchDetailView
-          onOpenSettings={(presetId) => {
-            setFastfetchSettingsPresetId(presetId);
+          onOpenSettings={(targetId, type) => {
+            if (type === "emblem") {
+              setFastfetchSettingsEmblemId(targetId);
+              setFastfetchSettingsPresetId(null);
+            } else {
+              setFastfetchSettingsPresetId(targetId);
+              setFastfetchSettingsEmblemId(null);
+            }
             setSelectedPackage(null);
             setActiveCategory("fastfetch");
           }}

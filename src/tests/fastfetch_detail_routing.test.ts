@@ -72,7 +72,7 @@ test("Fastfetch Detail View: Pure package detail page with Install / Open in Set
 
   // Pure detail elements
   assert.ok(detailFile.includes("ProductDetailShell"), "Must use ProductDetailShell");
-  assert.ok(detailFile.includes('categoryLabel="Fastfetch"'), "Must have categoryLabel Fastfetch");
+  assert.ok(detailFile.includes('categoryLabel={isEmblem ? "Fastfetch Emblems" : "Fastfetch Configs"}'), "Must have dynamic categoryLabel for Fastfetch");
   assert.ok(detailFile.includes("Open in Fastfetch Settings"), "Must have Open in Fastfetch Settings button");
   assert.ok(detailFile.includes("Available on this system"), "Must show Available on this system");
   assert.ok(detailFile.includes("~/.config/fastfetch/"), "Must show target path");
@@ -285,4 +285,184 @@ test("Fastfetch Correctness Contract: No Sidebar Shortcut, Real Hardware Telemet
   // 4. Real terminal preview wiring
   assert.ok(settingsFile.includes("preview_fastfetch_terminal"), "Must invoke preview_fastfetch_terminal with real config");
   assert.ok(settingsFile.includes("apply_fastfetch_configuration"), "Must invoke apply_fastfetch_configuration");
+});
+
+// 10. Fastfetch Store Subfilters and Strict Categorization Contract
+test("Fastfetch Store Subfilters: exactly Configs and Emblems without All, strict counts and separation", () => {
+  const catViewFile = fs.readFileSync(path.resolve(process.cwd(), "src/views/CategoryView.tsx"), "utf-8");
+  assert.ok(catViewFile.includes('fastfetch: ["Configs", "Emblems"]'), "Fastfetch subfilters must be exactly Configs and Emblems (no All)");
+  assert.ok(!catViewFile.includes('fastfetch: ["All", "Configs", "Emblems"]'), "Fastfetch subfilters must not contain All");
+  assert.ok(catViewFile.includes('setSubFilter(activeCategory === "fastfetch" ? "Configs" : "All")'), "Default subfilter for fastfetch must be Configs");
+
+  const repo = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "repositories/community/repository.json"), "utf-8"));
+  const fastfetchPkgs = repo.packages.filter((p: any) => p.category === "fastfetch" || p.package_type === "fastfetch");
+  const configs = fastfetchPkgs.filter((p: any) => p.subfilter === "Configs");
+  const emblems = fastfetchPkgs.filter((p: any) => p.subfilter === "Emblems");
+
+  assert.equal(configs.length, 23, "Fastfetch Configs must contain exactly 23 preset packages");
+  assert.equal(emblems.length, 11, "Fastfetch Emblems must contain exactly 11 emblem packages");
+  assert.equal(configs.length + emblems.length, fastfetchPkgs.length, "Configs and Emblems must partition all Fastfetch packages without overlap or unclassified items");
+});
+
+// 11. Fastfetch Emblem Integrity: No Ryoku branding, local assets exist on disk, Ryzora Community author
+test("Fastfetch Emblem Integrity: local assets exist, Ryzora Community attribution, zero Ryoku branding", () => {
+  const repoRaw = fs.readFileSync(path.resolve(process.cwd(), "repositories/community/repository.json"), "utf-8");
+  assert.ok(!/ryoku/i.test(repoRaw), "repository.json must contain zero Ryoku branding");
+  assert.ok(!/ryostore/i.test(repoRaw), "repository.json must contain zero RyoStore branding");
+  assert.ok(!/ryohub/i.test(repoRaw), "repository.json must contain zero RyoHub branding");
+
+  const repo = JSON.parse(repoRaw);
+  const emblems = repo.packages.filter((p: any) => p.subfilter === "Emblems");
+  assert.equal(emblems.length, 11);
+
+  const expectedNames = [
+    "Katana", "Arch", "Moon", "Camera", "Mic", "Needle",
+    "Aurelius", "David", "Hawk", "Lighthouse", "Rashin"
+  ];
+
+  for (const name of expectedNames) {
+    const found = emblems.find((e: any) => e.name.toLowerCase().includes(name.toLowerCase()));
+    assert.ok(found, `Must find emblem package for ${name}`);
+    assert.equal(found.author.name, "Ryzora Community", `${name} author must be Ryzora Community`);
+    assert.ok(found.hero_image.startsWith("packages/fastfetch-emblem-"), `${name} hero_image must be local package path`);
+
+    // Verify file exists on disk
+    const diskPath = path.resolve(process.cwd(), "repositories/community", found.hero_image);
+    assert.ok(fs.existsSync(diskPath), `Emblem file on disk must exist: ${diskPath}`);
+
+    // Verify manifest
+    const manifestPath = path.resolve(process.cwd(), "repositories/community", found.manifest);
+    assert.ok(fs.existsSync(manifestPath), `Manifest on disk must exist: ${manifestPath}`);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+    assert.equal(manifest.author, "Ryzora Community", `Manifest author must be Ryzora Community for ${name}`);
+    assert.ok(!/ryoku/i.test(JSON.stringify(manifest)), `Manifest must contain no Ryoku branding for ${name}`);
+  }
+});
+
+// 12. App routing: Both Emblem and Config cards open full FastfetchDetailView with settings handoff
+test("App routing: Both Emblem and Config cards open full FastfetchDetailView with settings handoff", () => {
+  const appFile = fs.readFileSync(path.resolve(process.cwd(), "src/App.tsx"), "utf-8");
+  assert.ok(
+    appFile.includes('selectedPackage.category === "fastfetch" || selectedPackage.package_type === "fastfetch"'),
+    "App.tsx routes all Fastfetch packages (Configs and Emblems) to FastfetchDetailView"
+  );
+  assert.ok(
+    appFile.includes("fastfetchSettingsEmblemId"),
+    "App.tsx manages fastfetchSettingsEmblemId state for emblem handoff to Settings"
+  );
+  assert.ok(
+    appFile.includes("initialEmblemId"),
+    "App.tsx passes initialEmblemId to FastfetchView"
+  );
+});
+
+// 14. Emblem Card Preview and Install Destination Contract
+test("Fastfetch Emblem Card Preview and Install Destination Contract", () => {
+  // 1. Emblem manifests install strictly into ~/.config/fastfetch/logos/<package-id>/<filename>
+  const glob = require("node:fs");
+  const emblemDir = path.resolve(process.cwd(), "repositories/community/packages");
+  const packages = fs.readdirSync(emblemDir).filter(p => p.startsWith("fastfetch-emblem-"));
+  assert.equal(packages.length, 11, "Must have exactly 11 emblem packages");
+
+  for (const pkg of packages) {
+    const manifestPath = path.join(emblemDir, pkg, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+    const files = manifest.files || [];
+    assert.ok(files.length > 0, `${pkg} must declare installation files`);
+    for (const f of files) {
+      assert.ok(
+        f.target.startsWith(`~/.config/fastfetch/logos/${pkg}/`),
+        `${pkg} target must be scoped to ~/.config/fastfetch/logos/${pkg}/, got: ${f.target}`
+      );
+      assert.notEqual(
+        f.target,
+        "~/.config/fastfetch/config.jsonc",
+        `${pkg} must never install directly to active user config.jsonc`
+      );
+    }
+  }
+
+  // 2. FastfetchDetailView adapts for emblems
+  const detailFile = fs.readFileSync(path.resolve(process.cwd(), "src/views/FastfetchDetailView.tsx"), "utf-8");
+  assert.ok(detailFile.includes("isEmblem"), "FastfetchDetailView must branch on isEmblem");
+  assert.ok(detailFile.includes('categoryLabel={isEmblem ? "Fastfetch Emblems" : "Fastfetch Configs"}'), "Breadcrumb adapts to subtype");
+  assert.ok(detailFile.includes("object-contain"), "Emblem preview uses object-contain");
+
+  // 3. StoreCard and PackageCard use contain presentation
+  const storeCardFile = fs.readFileSync(path.resolve(process.cwd(), "src/components/StoreCard.tsx"), "utf-8");
+  assert.ok(storeCardFile.includes('fit={isEmblem ? "contain" : "cover"}'), "StoreCard passes contain fit for emblems");
+});
+
+// 13. DiscoverView Fastfetch subfilter navigation and CategoryHeader contract
+test("DiscoverView Fastfetch subfilter navigation and CategoryHeader contract", () => {
+  const discoverFile = fs.readFileSync(path.resolve(process.cwd(), "src/views/DiscoverView.tsx"), "utf-8");
+  assert.ok(discoverFile.includes('fastfetch: ["Configs", "Emblems"]'), "DiscoverView must define Fastfetch subfilters");
+  assert.ok(discoverFile.includes('setSubFilter(tab === "fastfetch" ? "Configs" : "All")'), "DiscoverView must default fastfetch to Configs");
+
+  const headerFile = fs.readFileSync(path.resolve(process.cwd(), "src/components/catalogue/CategoryHeader.tsx"), "utf-8");
+  assert.ok(headerFile.includes('subFilter === "Emblems" ? "Fastfetch Emblems" : "Fastfetch Configs"'), "CategoryHeader must render Fastfetch Configs or Fastfetch Emblems");
+  assert.ok(!headerFile.includes('return "Fastfetch Profiles"'), "CategoryHeader must not return Fastfetch Profiles");
+});
+
+
+// 15. Fastfetch Config Lifecycle and Safety Invariant Contract
+test("Fastfetch Config Lifecycle: Selecting a preset NEVER touches config.jsonc, Save is atomic", () => {
+  const settingsFile = fs.readFileSync(path.resolve(process.cwd(), "src/views/FastfetchView.tsx"), "utf-8");
+  const systemFile = fs.readFileSync(path.resolve(process.cwd(), "src-tauri/src/system.rs"), "utf-8");
+
+  // 1. handleSelectStyle must NOT invoke apply_fastfetch_configuration
+  const selectStyleIdx = settingsFile.indexOf("const handleSelectStyle");
+  const selectStyleEnd = settingsFile.indexOf("const handleApplyInstalledStyle", selectStyleIdx);
+  const selectStyleBody = settingsFile.slice(selectStyleIdx, selectStyleEnd);
+  assert.ok(
+    !selectStyleBody.includes("apply_fastfetch_configuration"),
+    "handleSelectStyle must NEVER call apply_fastfetch_configuration"
+  );
+
+  // 2. apply_fastfetch_configuration must reject empty content
+  assert.ok(
+    systemFile.includes("content_to_write.trim().is_empty()"),
+    "Backend must check and reject empty configuration"
+  );
+  assert.ok(
+    systemFile.includes("Refusing to write empty Fastfetch configuration"),
+    "Backend must return error on empty configuration"
+  );
+
+  // 3. Backend must perform atomic write with temporary file and rename
+  assert.ok(
+    systemFile.includes(".config.jsonc.ryzora-tmp"),
+    "Backend must write to temporary file before replacing config.jsonc"
+  );
+  assert.ok(
+    systemFile.includes("fs::rename(&tmp_file_path, &target_path)"),
+    "Backend must atomically rename temporary file over target_path"
+  );
+
+  // 4. Backend must create backup of existing config.jsonc
+  assert.ok(
+    systemFile.includes("config.jsonc.ryzora.bak"),
+    "Backend must backup existing configuration before overwriting"
+  );
+});
+
+// 16. Fastfetch Detail Action Button & Typography Contract
+test("Fastfetch Detail Action Button: explicit contrast, no white-on-white text, readable actions", () => {
+  const detailFile = fs.readFileSync(path.resolve(process.cwd(), "src/views/FastfetchDetailView.tsx"), "utf-8");
+
+  // Must not have text-white on accent buttons
+  assert.ok(
+    !detailFile.includes("bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white"),
+    "Detail action buttons must NOT have text-white on silver accent background"
+  );
+
+  // Must have theme-aware contrast on accent buttons
+  assert.ok(
+    detailFile.includes("text-[var(--rz-accent-contrast)]") || detailFile.includes("text-[#050608]"),
+    "Detail action buttons must use theme-aware contrast (text-[var(--rz-accent-contrast)])"
+  );
+
+  // Action labels
+  assert.ok(detailFile.includes("Open in Fastfetch Settings"), "Must render Open in Fastfetch Settings");
+  assert.ok(detailFile.includes("Install"), "Must render Install action for uninstalled");
 });

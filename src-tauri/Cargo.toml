@@ -19,6 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+ryzora-core = { path = "../crates/ryzora-core" }
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -37,6 +38,10 @@ tempfile = "3.10"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.dev]
+incremental = false
+codegen-units = 1
+
 [profile.release]
 codegen-units = 1
 lto = true

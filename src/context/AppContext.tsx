@@ -3,7 +3,7 @@ import {
   SILENTSDDM_WALLPAPERS,
   normalizeSilentSddmWallpaper,
 } from "../providers/silentSddmProvider";
-import { normalizeCustomMediaAsset } from "../providers/customMediaProvider";
+import { normalizeCustomMediaAsset, resolveLocalAssetSrc } from "../providers/customMediaProvider";
 import { packageEngine } from "../providers/index";
 import { SilentSddmService } from "../services/silentSddmService";
 import { yieldFrame } from "../services/frameYield";
@@ -1195,10 +1195,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (
         trimmed.startsWith("http://") ||
         trimmed.startsWith("https://") ||
-        trimmed.startsWith("/") ||
+        trimmed.startsWith("asset://") ||
         trimmed.startsWith("data:") ||
         trimmed.startsWith("blob:")
       ) {
+        return trimmed;
+      }
+      if (trimmed.startsWith("~/") || (trimmed.startsWith("/") && !trimmed.startsWith("/packages/") && !trimmed.startsWith("/assets/"))) {
+        return resolveLocalAssetSrc(trimmed);
+      }
+      if (trimmed.startsWith("/")) {
         return trimmed;
       }
       return "/" + trimmed;
@@ -1229,6 +1235,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return {
         ...pkg,
+        subfilter: pkg.subfilter || (pkg.manifest as any)?.subfilter,
         hero_image: normPoster || pkg.hero_image,
         preview_video_url: normVid,
         preview_video: normVid,

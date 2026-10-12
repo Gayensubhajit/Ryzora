@@ -521,11 +521,41 @@ textarea:focus {
 }
 .btn-primary {
   background-color: var(--rz-accent);
-  color: #ffffff;
+  color: var(--rz-accent-contrast, #ffffff);
   border: 1px solid transparent;
 }
 .btn-primary:hover:not(:disabled) {
   background-color: var(--rz-accent-hover);
+  color: var(--rz-accent-contrast, #ffffff);
+}
+.btn-primary svg {
+  color: var(--rz-accent-contrast, #ffffff);
+  stroke: currentColor;
+}
+
+/* Ensure buttons using Tailwind bg-[var(--rz-accent)] or bg-[var(--accent)] always maintain theme-consistent contrast */
+button.bg-\[var\(--rz-accent\)\],
+button.bg-\[var\(--accent\)\],
+a.bg-\[var\(--rz-accent\)\],
+a.bg-\[var\(--accent\)\],
+.btn.bg-\[var\(--rz-accent\)\],
+.btn.bg-\[var\(--accent\)\] {
+  color: var(--rz-accent-contrast, #ffffff) !important;
+}
+button.bg-\[var\(--rz-accent\)\] svg,
+button.bg-\[var\(--accent\)\] svg,
+a.bg-\[var\(--rz-accent\)\] svg,
+a.bg-\[var\(--accent\)\] svg,
+.btn.bg-\[var\(--rz-accent\)\] svg,
+.btn.bg-\[var\(--accent\)\] svg {
+  color: var(--rz-accent-contrast, #ffffff) !important;
+  stroke: currentColor;
+}
+button.bg-\[var\(--rz-accent\)\] span,
+button.bg-\[var\(--accent\)\] span,
+a.bg-\[var\(--rz-accent\)\] span,
+a.bg-\[var\(--accent\)\] span {
+  color: var(--rz-accent-contrast, #ffffff) !important;
 }
 .btn-ghost {
   background-color: var(--rz-surface);

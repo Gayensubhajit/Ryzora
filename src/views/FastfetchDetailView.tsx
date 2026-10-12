@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import { normalizeMediaUrl } from "../components/media/mediaUtils";
+import React, { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Sliders,
   DownloadCloud,
@@ -24,7 +26,7 @@ import { ProductDetailShell } from "../components/detail/ProductDetailShell";
 import { formatDownloads } from "../components/catalogue/catalogueUtils";
 
 export interface FastfetchDetailViewProps {
-  onOpenSettings?: (presetId: string) => void;
+  onOpenSettings?: (presetOrEmblemId: string, type?: "preset" | "emblem") => void;
 }
 
 type TabKey = "overview" | "files" | "dependencies" | "installation" | "changelog";
@@ -40,6 +42,7 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
     isInstalling,
     getPackageTransaction,
     setToast,
+    loadInstalledPackages,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -55,9 +58,34 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
 
   if (!isFastfetch) return null;
 
+  const isEmblem =
+    selectedPackage.subfilter === "Emblems" ||
+    (selectedPackage.category === "fastfetch" && selectedPackage.subfilter === "Emblems") ||
+    selectedPackage.tags?.some((t: string) => t.toLowerCase() === "emblem");
+
+  const [installedEmblemIds, setInstalledEmblemIds] = useState<string[]>([]);
+  useEffect(() => {
+    invoke<any[]>("list_fastfetch_local_emblems")
+      .then((embs) => {
+        if (Array.isArray(embs)) {
+          setInstalledEmblemIds(embs.map((e) => e.id.toLowerCase()));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const isEmblemInstalled =
+    isEmblem &&
+    installedEmblemIds.some(
+      (eid) =>
+        selectedPackage.id.toLowerCase().includes(eid) ||
+        selectedPackage.id.replace("fastfetch-emblem-", "").toLowerCase() === eid
+    );
+
   const isInstalled = Boolean(
     installedPackageIds?.includes(selectedPackage.id) ||
-    installedPackages?.some((p) => p.package_id === selectedPackage.id)
+    installedPackages?.some((p) => p.package_id === selectedPackage.id) ||
+    isEmblemInstalled
   );
 
   const activePresetId =
@@ -67,7 +95,8 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
   const isActive = isInstalled && activePresetId === selectedPackage.id;
 
   const transaction = getPackageTransaction(selectedPackage.id);
-  const isTransactionActive = Boolean(isInstalling || transaction?.operation === "install");
+  const [isLocalInstalling, setIsLocalInstalling] = useState(false);
+  const isTransactionActive = Boolean(isLocalInstalling || isInstalling || transaction?.operation === "install");
 
   const screenshots = selectedPackage.screenshots && selectedPackage.screenshots.length > 0
     ? selectedPackage.screenshots
@@ -80,8 +109,18 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
   };
 
   const handleInstall = async () => {
+    setIsLocalInstalling(true);
     try {
-      await installPackage(selectedPackage);
+      // Lightweight fastfetch configs/emblems do not require whole-system snapshot hashing
+      const skipSnapshot = selectedPackage.category === "fastfetch" || selectedPackage.package_type === "fastfetch";
+      await installPackage(selectedPackage, !skipSnapshot);
+      if (isEmblem) {
+        const embs = await invoke<any[]>("list_fastfetch_local_emblems").catch(() => []);
+        if (Array.isArray(embs)) {
+          setInstalledEmblemIds(embs.map((e) => e.id.toLowerCase()));
+        }
+      }
+      await loadInstalledPackages();
       setToast({
         message: `Successfully installed "${selectedPackage.title}".`,
         type: "success",
@@ -91,6 +130,8 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
         message: `Installation failed: ${err?.message || String(err)}`,
         type: "warning",
       });
+    } finally {
+      setIsLocalInstalling(false);
     }
   };
 
@@ -112,7 +153,7 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
 
   const handleOpenSettings = () => {
     if (onOpenSettings) {
-      onOpenSettings(selectedPackage.id);
+      onOpenSettings(selectedPackage.id, isEmblem ? "emblem" : "preset");
     }
   };
 
@@ -124,42 +165,58 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
     }
   };
 
-  const targetFiles = [
-    {
-      path: `~/.config/fastfetch/presets/${selectedPackage.id}.jsonc`,
-      type: "Preset Configuration Payload",
-      note: "Staged user space preset",
-    },
-    {
-      path: `~/.config/fastfetch/config.jsonc`,
-      type: "Active Symlink / Config Target",
-      note: "Managed desktop Fastfetch target",
-    },
-  ];
+  const targetFiles = isEmblem
+    ? [
+        {
+          path: `~/.config/fastfetch/logos/${selectedPackage.id}/${
+            selectedPackage.hero_image ? selectedPackage.hero_image.split("/").pop() : "emblem.png"
+          }`,
+          type: "Emblem Logo Artwork",
+          note: "High-contrast logo graphic for terminal fetch displays",
+        },
+      ]
+    : [
+        {
+          path: `~/.config/fastfetch/presets/${selectedPackage.id}/config.jsonc`,
+          type: "Preset Configuration Payload",
+          note: "Staged user space preset",
+        },
+      ];
 
-  const dependencies = [
-    { name: "fastfetch", version: ">= 2.8.0", required: true, status: "Installed" },
-    { name: "nerd-fonts", version: "Any (Symbols & Glyphs)", required: false, status: "Recommended" },
-    { name: "terminal-emulator", version: "kitty / alacritty / ghostty", required: true, status: "Available" },
-  ];
+  const dependencies = isEmblem
+    ? [
+        { name: "fastfetch", version: ">= 2.8.0", required: true, status: "Installed" },
+        { name: "kitty / chafa", version: "Graphics protocol support", required: false, status: "Supported" },
+      ]
+    : [
+        { name: "fastfetch", version: ">= 2.8.0", required: true, status: "Installed" },
+        { name: "nerd-fonts", version: "Any (Symbols & Glyphs)", required: false, status: "Recommended" },
+        { name: "terminal-emulator", version: "kitty / alacritty / ghostty", required: true, status: "Available" },
+      ];
 
   return (
     <ProductDetailShell
       onClose={handleClose}
-      bgImage={selectedPackage.hero_image}
-      categoryLabel="Fastfetch"
+      bgImage={normalizeMediaUrl(selectedPackage.hero_image)}
+      categoryLabel={isEmblem ? "Fastfetch Emblems" : "Fastfetch Configs"}
     >
       <div className="space-y-8 pb-12">
         {/* ── Upper Two-Column Hero ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Large Preview Screenshot (60%) */}
           <div className="lg:col-span-7 space-y-3">
-            <div className="relative group rounded-2xl overflow-hidden border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] shadow-xl aspect-video flex items-center justify-center">
+            <div className={`relative group rounded-2xl overflow-hidden border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] shadow-xl aspect-video flex items-center justify-center ${
+              isEmblem ? "p-8" : ""
+            }`}>
               {activeImage ? (
                 <img
-                  src={activeImage}
+                  src={normalizeMediaUrl(activeImage)}
                   alt={selectedPackage.title}
-                  className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-[1.02]"
+                  className={`select-none transition-transform duration-300 ${
+                    isEmblem
+                      ? "max-h-full max-w-full object-contain group-hover:scale-105 drop-shadow-xl"
+                      : "w-full h-full object-cover group-hover:scale-[1.02]"
+                  }`}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center p-8 text-center text-[var(--rz-text-muted)]">
@@ -194,7 +251,7 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
                         : "border-[var(--rz-border-subtle)] opacity-60 hover:opacity-100"
                     }`}
                   >
-                    <img src={shot} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={normalizeMediaUrl(shot)} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>
@@ -205,15 +262,15 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
           <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
             <div className="space-y-4">
               <div>
-                <div className="flex items-center gap-2 text-xs text-[var(--rz-accent)] font-semibold tracking-wide uppercase mb-1">
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>Fastfetch Preset</span>
+                <div className="flex items-center gap-2 text-xs text-[var(--rz-text-muted)] font-semibold tracking-wider uppercase mb-1">
+                  <Terminal className="w-3.5 h-3.5 text-[var(--rz-text-secondary)]" />
+                  <span>{isEmblem ? "Fastfetch Emblem" : "Fastfetch Preset"}</span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--rz-text)]">
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                   {selectedPackage.title}
                 </h1>
                 <p className="text-xs text-[var(--rz-text-secondary)] mt-1">
-                  By <span className="text-[var(--rz-text)] font-medium">{selectedPackage.author?.name || "harilvfs"}</span>
+                  By <span className="text-[var(--rz-text)] font-medium">{selectedPackage.author?.name || "Ryzora Community"}</span>
                 </p>
               </div>
 
@@ -236,36 +293,36 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
               )}
 
               {/* Metadata Pills */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--rz-border-subtle)] text-[11px]">
-                <div className="p-2 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
-                  <span className="text-[10px] text-[var(--rz-text-muted)] block">Rating</span>
-                  <span className="font-semibold text-amber-400 flex items-center gap-1 mt-0.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--rz-border)] text-[11px]">
+                <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)]">
+                  <span className="text-[10px] text-[var(--rz-text-muted)] uppercase tracking-wider font-semibold block">Rating</span>
+                  <span className="font-bold text-amber-400 flex items-center gap-1 mt-0.5">
                     <Star className="w-3 h-3 fill-amber-400" />
                     {selectedPackage.rating ? selectedPackage.rating.toFixed(1) : "5.0"}
                   </span>
                 </div>
-                <div className="p-2 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
-                  <span className="text-[10px] text-[var(--rz-text-muted)] block">Downloads</span>
-                  <span className="font-semibold text-[var(--rz-text)] mt-0.5 block">
+                <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)]">
+                  <span className="text-[10px] text-[var(--rz-text-muted)] uppercase tracking-wider font-semibold block">Downloads</span>
+                  <span className="font-bold text-[var(--rz-text)] mt-0.5 block">
                     {formatDownloads(selectedPackage.downloads || 1200)}
                   </span>
                 </div>
-                <div className="p-2 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
-                  <span className="text-[10px] text-[var(--rz-text-muted)] block">License</span>
-                  <span className="font-semibold text-[var(--rz-text)] mt-0.5 block">
+                <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)]">
+                  <span className="text-[10px] text-[var(--rz-text-muted)] uppercase tracking-wider font-semibold block">License</span>
+                  <span className="font-bold text-[var(--rz-text)] mt-0.5 block">
                     {(selectedPackage as any).license || "MIT"}
                   </span>
                 </div>
-                <div className="p-2 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)]">
-                  <span className="text-[10px] text-[var(--rz-text-muted)] block">Version</span>
-                  <span className="font-semibold font-mono text-[var(--rz-text)] mt-0.5 block">
+                <div className="p-2.5 rounded-xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)]">
+                  <span className="text-[10px] text-[var(--rz-text-muted)] uppercase tracking-wider font-semibold block">Version</span>
+                  <span className="font-bold font-mono text-[var(--rz-text)] mt-0.5 block">
                     v{selectedPackage.version}
                   </span>
                 </div>
               </div>
 
               {/* Environment Info */}
-              <div className="p-3.5 rounded-2xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] space-y-1.5">
+              <div className="p-3.5 rounded-2xl bg-[var(--rz-surface-elevated)] border border-[var(--rz-border)] space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-[var(--rz-text)] flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -273,31 +330,31 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
                   </span>
                   <span className="text-[10px] font-mono text-[var(--rz-text-muted)]">Fastfetch 2.x</span>
                 </div>
-                <div className="text-[11px] text-[var(--rz-text-secondary)] font-mono truncate">
-                  Target: ~/.config/fastfetch/
+                <div className="text-[11px] text-[var(--rz-text-secondary)] font-mono truncate bg-[var(--rz-surface)] px-2.5 py-1 rounded-lg border border-[var(--rz-border-subtle)]">
+                  Target: {isEmblem ? `~/.config/fastfetch/logos/${selectedPackage.id}/` : `~/.config/fastfetch/presets/${selectedPackage.id}/`}
                 </div>
               </div>
             </div>
 
             {/* ── Actions Area ── */}
-            <div className="pt-4 border-t border-[var(--rz-border-subtle)]">
+            <div className="pt-4 border-t border-[var(--rz-border)]">
               {!isInstalled ? (
                 /* NOT INSTALLED: Primary Install Action */
                 <button
                   type="button"
                   disabled={isTransactionActive}
                   onClick={handleInstall}
-                  className="w-full py-3 px-5 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white shadow-lg shadow-[var(--rz-accent)]/20 transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full py-2.5 px-5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-[var(--rz-accent-contrast)] shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-[0.99]"
                 >
                   {isTransactionActive ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>{transaction?.message || "Installing Fastfetch Preset..."}</span>
+                      <Loader2 className="w-4 h-4 animate-spin text-[var(--rz-accent-contrast)]" />
+                      <span className="text-[var(--rz-accent-contrast)] font-bold">{transaction?.message || "Installing Fastfetch Preset..."}</span>
                     </>
                   ) : (
                     <>
-                      <DownloadCloud className="w-4 h-4" />
-                      <span>Install</span>
+                      <DownloadCloud className="w-4 h-4 text-[var(--rz-accent-contrast)]" />
+                      <span className="text-[var(--rz-accent-contrast)] font-bold">Install</span>
                     </>
                   )}
                 </button>
@@ -312,7 +369,7 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
                         Active
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border-subtle)]">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--rz-surface-elevated)] text-[var(--rz-text-secondary)] border border-[var(--rz-border)]">
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
                         Installed
                       </span>
@@ -323,10 +380,10 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
                     <button
                       type="button"
                       onClick={handleOpenSettings}
-                      className="flex-1 py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-white shadow-md shadow-[var(--rz-accent)]/20 transition-all cursor-pointer"
+                      className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-[var(--rz-accent)] hover:bg-[var(--rz-accent-hover)] text-[var(--rz-accent-contrast)] shadow-sm transition-all cursor-pointer active:scale-[0.99]"
                     >
-                      <Sliders className="w-4 h-4" />
-                      <span>Open in Fastfetch Settings</span>
+                      <Sliders className="w-4 h-4 text-[var(--rz-accent-contrast)]" />
+                      <span className="text-[var(--rz-accent-contrast)] font-bold">Open in Fastfetch Settings</span>
                     </button>
 
                     {/* Secondary Overflow Menu [...] */}
@@ -334,10 +391,10 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
                       <button
                         type="button"
                         onClick={() => setShowOverflowMenu(!showOverflowMenu)}
-                        className="p-2.5 rounded-xl border border-[var(--rz-border-subtle)] bg-[var(--rz-surface)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] transition-colors cursor-pointer"
+                        className="p-2.5 rounded-xl border border-[var(--rz-border)] bg-[var(--rz-surface-elevated)] hover:bg-[var(--rz-surface-hover)] text-[var(--rz-text)] transition-colors cursor-pointer"
                         title="More actions"
                       >
-                        <MoreHorizontal className="w-4 h-4" />
+                        <MoreHorizontal className="w-4 h-4 text-[var(--rz-text-secondary)] hover:text-[var(--rz-text)]" />
                       </button>
 
                       {showOverflowMenu && (
@@ -358,7 +415,7 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
                             onClick={() => {
                               setShowOverflowMenu(false);
                               setToast({
-                                message: `Payload directory: ~/.config/fastfetch/presets/${selectedPackage.id}.jsonc`,
+                                message: `Payload directory: ${isEmblem ? `~/.config/fastfetch/logos/${selectedPackage.id}/` : `~/.config/fastfetch/presets/${selectedPackage.id}/`}`,
                                 type: "info",
                               });
                             }}
@@ -522,13 +579,19 @@ export const FastfetchDetailView: React.FC<FastfetchDetailViewProps> = ({ onOpen
             {activeTab === "installation" && (
               <div className="space-y-3">
                 <p className="text-[11px] text-[var(--rz-text-secondary)] leading-relaxed">
-                  Installing stages the preset payload into your user configuration directory at:
+                  {isEmblem
+                    ? "Installing stages the emblem image asset into your Fastfetch logos directory at:"
+                    : "Installing stages the preset payload into your user configuration directory at:"}
                 </p>
                 <div className="p-3 rounded-xl bg-[var(--rz-surface)] border border-[var(--rz-border-subtle)] font-mono text-xs text-[var(--rz-accent)]">
-                  ~/.config/fastfetch/presets/{selectedPackage.id}.jsonc
+                  {isEmblem
+                    ? `~/.config/fastfetch/logos/${selectedPackage.id}/`
+                    : `~/.config/fastfetch/presets/${selectedPackage.id}/config.jsonc`}
                 </div>
                 <p className="text-[11px] text-[var(--rz-text-secondary)] leading-relaxed">
-                  To apply this preset as your primary shell fetch, click <strong>Open in Fastfetch Settings</strong> and customize your emblem, accent colors, and visible modules before saving.
+                  {isEmblem
+                    ? "To configure this emblem as your active terminal logo, click Open in Fastfetch Settings."
+                    : "To apply this preset as your primary shell fetch, click Open in Fastfetch Settings and customize your emblem, accent colors, and visible modules before saving."}
                 </p>
               </div>
             )}

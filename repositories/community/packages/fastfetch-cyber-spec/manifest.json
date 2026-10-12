@@ -30,7 +30,7 @@
   "files": [
     {
       "source": "files/fastfetch/config.jsonc",
-      "target": "~/.config/fastfetch/config.jsonc",
+      "target": "~/.config/fastfetch/presets/fastfetch-cyber-spec/config.jsonc",
       "description": "Fastfetch layout and ASCII styling."
     }
   ]

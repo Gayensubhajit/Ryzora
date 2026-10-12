@@ -26,7 +26,7 @@ function compareSemver(v1: string, v2: string): number {
   return 0;
 }
 
-export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
+export const PackageCard: React.FC<PackageCardProps> = React.memo(({ packageItem }) => {
   const {
     setSelectedPackage,
     installedPackages,
@@ -52,7 +52,11 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
 
   const activation = getLockScreenActivation(packageItem.id);
   const isSddmActive = activation.sddmLogin;
-  const isActive = isSddmActive;
+  const isFastfetchActive =
+    (packageItem.category === "fastfetch" || packageItem.package_type === "fastfetch") &&
+    typeof window !== "undefined" &&
+    localStorage.getItem("ryzora_active_fastfetch_preset") === packageItem.id;
+  const isActive = isSddmActive || isFastfetchActive;
 
   const repo = repositories.find((r) => r.id === packageItem.repository_id);
   // offline status
@@ -88,6 +92,10 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
     (videoSrc ? "video" : animatedSrc ? "animated" : "image");
 
   const [isHovered, setIsHovered] = useState(false);
+  const isEmblem =
+    packageItem.subfilter === "Emblems" ||
+    (packageItem.category === "fastfetch" && packageItem.subfilter === "Emblems") ||
+    packageItem.tags?.some((t) => t.toLowerCase() === "emblem");
 
   return (
     <div
@@ -109,8 +117,13 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
           mode="card"
           isHovered={isHovered}
           aspectRatio="16/9"
+          fit={isEmblem ? "contain" : "cover"}
           showBadge={false}
-          className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          className={
+            isEmblem
+              ? "w-full h-full p-2 transition-transform duration-300 ease-out group-hover:scale-105"
+              : "w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          }
         />
 
         {/* Top-Left: Trust / Provider indicator */}
@@ -132,6 +145,11 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
               <ShieldCheck className="w-2.5 h-2.5 text-blue-400" />
               <span>Verified</span>
             </div>
+          )}
+          {isEmblem && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/30 backdrop-blur-xs shadow-xs">
+              EMBLEM
+            </span>
           )}
           {Boolean(packageItem.tags.includes("custom") || packageItem.id.startsWith("custom:")) && (
             <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-purple-600 text-white shadow-xs">
@@ -157,6 +175,11 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/90 text-white shadow-md border border-emerald-400/30 flex items-center gap-1 backdrop-blur-md animate-in fade-in duration-200">
               <Check className="w-3 h-3 stroke-[2.5]" />
               ACTIVE
+            </span>
+          ) : isInstalled ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center gap-1 backdrop-blur-md animate-in fade-in duration-200">
+              <Check className="w-2.5 h-2.5 stroke-[2.5]" />
+              INSTALLED
             </span>
           ) : isUpdateAvailable ? (
             <div className="px-2 py-0.5 rounded-full text-[9px] font-mono uppercase bg-amber-500/90 text-slate-950 font-bold shadow-sm">
@@ -293,4 +316,4 @@ export const PackageCard: React.FC<PackageCardProps> = ({ packageItem }) => {
       </div>
     </div>
   );
-};
+});

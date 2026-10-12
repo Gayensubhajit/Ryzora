@@ -57,7 +57,7 @@ function getCategoryIcon(cat: string) {
   return <PackageIcon className="w-4 h-4 text-zinc-400" />;
 }
 
-export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
+export const StoreCard: React.FC<StoreCardProps> = React.memo(({ packageItem }) => {
   const {
     setSelectedPackage,
     installedPackages,
@@ -82,7 +82,11 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
       : false;
   const activation = getLockScreenActivation(packageItem.id);
   const isSddmActive = activation.sddmLogin;
-  const isActive = isSddmActive;
+  const isFastfetchActive =
+    (packageItem.category === "fastfetch" || packageItem.package_type === "fastfetch") &&
+    typeof window !== "undefined" &&
+    localStorage.getItem("ryzora_active_fastfetch_preset") === packageItem.id;
+  const isActive = isSddmActive || isFastfetchActive;
 
   const handleClick = () => {
     setSelectedPackage(packageItem);
@@ -97,6 +101,10 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
   );
 
   const isSddmLogin = isLoginScreen(packageItem);
+  const isEmblem =
+    packageItem.subfilter === "Emblems" ||
+    (packageItem.category === "fastfetch" && packageItem.subfilter === "Emblems") ||
+    packageItem.tags?.some((t) => t.toLowerCase() === "emblem");
 
   const posterSrc =
     packageItem.preview_poster_url ||
@@ -143,9 +151,14 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
             mode="card"
             isHovered={isHovered}
             aspectRatio="16/9"
+            fit={isEmblem ? "contain" : "cover"}
             showBadge={false}
             onVideoError={() => {}}
-            className="transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+            className={
+              isEmblem
+                ? "transition-transform duration-300 ease-out group-hover:scale-105"
+                : "transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+            }
           />
         ) : (
           /* Sleek Generative Tech Artwork Fallback */
@@ -201,6 +214,11 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase shadow-sm backdrop-blur-md bg-black/65 text-white/95 border border-white/15 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               Animated
+            </span>
+          )}
+          {isEmblem && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/30 backdrop-blur-xs shadow-xs">
+              EMBLEM
             </span>
           )}
           {isSddmLogin && (
@@ -369,4 +387,4 @@ export const StoreCard: React.FC<StoreCardProps> = ({ packageItem }) => {
       </div>
     </div>
   );
-};
+});

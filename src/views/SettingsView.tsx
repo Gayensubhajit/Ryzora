@@ -137,7 +137,7 @@ export const SettingsView: React.FC = () => {
     },
   ];
 
-  const accents: AccentColor[] = ["blue", "purple", "green", "orange"];
+  const accents: AccentColor[] = ["blue", "silver", "purple", "green", "orange"];
 
   return (
     <div className="view-container">

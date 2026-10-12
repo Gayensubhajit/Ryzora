@@ -3027,6 +3027,7 @@ dependencies = [
  "hex",
  "percent-encoding",
  "rand_core",
+ "ryzora-core",
  "semver",
  "serde",
  "serde_json",
@@ -3037,6 +3038,18 @@ dependencies = [
  "tauri-plugin-opener",
  "tempfile",
  "ureq",
+ "url",
+]
+
+[[package]]
+name = "ryzora-core"
+version = "0.1.0"
+dependencies = [
+ "percent-encoding",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
  "url",
 ]
 

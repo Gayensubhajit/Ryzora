@@ -103,14 +103,24 @@ pub fn launch_fastfetch_terminal_file(config_path: &Path) -> Result<bool, String
     }
 }
 
-pub fn run_fastfetch_preview_file(config_path: &Path) -> Result<String, String> {
+pub fn run_fastfetch_preview_file(config_path: &Path, working_dir: Option<&Path>) -> Result<String, String> {
     if env::var("RYZORA_SYSTEM_ROOT").is_ok() {
         return Ok("silentbyte@slayer\n-----------------\nOS: Garuda Linux x86_64\nHost: ASUS TUF Gaming F15\nKernel: Linux 7.2.9-1-garuda\nUptime: 2 hours\nShell: zsh\nWM: Hyprland".to_string());
     }
 
-    let output_res = Command::new("fastfetch")
-        .args(&["-c", &config_path.to_string_lossy(), "--pipe", "false"])
-        .output();
+    let mut cmd = Command::new("fastfetch");
+    cmd.args(&[
+        "-c",
+        &config_path.to_string_lossy(),
+        "--pipe",
+        "false",
+    ]);
+
+    if let Some(dir) = working_dir {
+        cmd.current_dir(dir);
+    }
+
+    let output_res = cmd.output();
 
     match output_res {
         Ok(out) => {

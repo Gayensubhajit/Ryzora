@@ -6246,6 +6246,7 @@ mod tests {
                 media_type: None,
                 source: None,
                 provenance: None,
+                subfilter: None,
             }],
             fail: false,
             package_dirs: std::collections::HashMap::new(),
@@ -6318,6 +6319,7 @@ mod tests {
                 media_type: None,
                 source: None,
                 provenance: None,
+                subfilter: None,
             }],
             fail: false,
             package_dirs: std::collections::HashMap::new(),
@@ -7573,6 +7575,7 @@ mod tests {
                     media_type: None,
                     source: None,
                     provenance: None,
+                    subfilter: None,
                 }],
             )
             .with_dir("pkg-repo-sel", v2_dir.clone()),
@@ -7619,6 +7622,7 @@ mod tests {
                     media_type: None,
                     source: None,
                     provenance: None,
+                    subfilter: None,
                 }],
             )
             .with_dir("pkg-repo-sel", v3_dir),
@@ -7696,6 +7700,7 @@ mod tests {
                 media_type: None,
                 source: None,
                 provenance: None,
+                subfilter: None,
             }],
         )));
         mgr.add_repository(Box::new(MockUpdateRepo::new(
@@ -7738,6 +7743,7 @@ mod tests {
                 media_type: None,
                 source: None,
                 provenance: None,
+                subfilter: None,
             }],
         )));
 

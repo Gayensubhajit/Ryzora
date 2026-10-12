@@ -97,5 +97,6 @@ pub fn normalize_provider_item(item: ProviderItem) -> FrontendPackageItem {
         media_type: None,
         preview_video_url: None,
         preview_poster_url: None,
+        subfilter: None,
     }
 }

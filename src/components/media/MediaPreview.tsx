@@ -15,6 +15,7 @@ export interface MediaPreviewProps {
   mode?: "card" | "hero";
   isHovered?: boolean;
   aspectRatio?: "16/9" | "4/3" | "square";
+  fit?: "cover" | "contain";
   showBadge?: boolean;
   onVideoError?: (err: any) => void;
   className?: string;
@@ -29,6 +30,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
   mode = "card",
   isHovered = false,
   aspectRatio = "16/9",
+  fit = "cover",
   showBadge = false,
   onVideoError,
   className = "",
@@ -258,7 +260,11 @@ export const MediaPreview: React.FC<MediaPreviewProps> = memo(({
           src={hasAnimatedImage ? finalAnimated : finalPoster}
           alt={alt}
           onError={() => setImgFailed(true)}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          className={`absolute inset-0 w-full h-full pointer-events-none ${
+            fit === "contain"
+              ? "object-contain p-2 drop-shadow-md"
+              : "object-cover"
+          }`}
           loading="lazy"
         />
       ) : (

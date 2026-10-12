@@ -2,14 +2,7 @@ use crate::system::SystemInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompatibilityRequirements {
-    pub supported_distros: Vec<String>,
-    pub supported_desktops: Vec<String>,
-    pub supported_sessions: Vec<String>,
-    pub required_binaries: Vec<String>,
-    pub optional_binaries: Vec<String>,
-}
+pub use ryzora_core::compatibility::CompatibilityRequirements;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CompatibilityLevel {

@@ -3,7 +3,7 @@
   "name": "Needle Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "Minimalist sewing needle and thread emblem for bespoke rice themes.",
   "tags": [
@@ -32,7 +32,7 @@
   "files": [
     {
       "source": "files/needle.png",
-      "target": "~/.config/fastfetch/logos/needle.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-needle/needle.png",
       "description": "Fastfetch Needle Emblem"
     }
   ]

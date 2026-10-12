@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 export type AppearanceMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
-export type AccentColor = "blue" | "purple" | "green" | "orange";
+export type AccentColor = "blue" | "silver" | "purple" | "green" | "orange";
 
 export interface AccessibilitySettings {
   reduceTransparency: boolean;
@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
 
 export const ACCENT_SWATCHES: Record<AccentColor, { name: string; hex: string; bgClass: string }> = {
   blue: { name: "Ocean Blue", hex: "#3478e5", bgClass: "bg-[#3478e5]" },
+  silver: { name: "Deep Silver", hex: "#D9DCE2", bgClass: "bg-[#D9DCE2]" },
   purple: { name: "Amethyst", hex: "#8b5cf6", bgClass: "bg-[#8b5cf6]" },
   green: { name: "Emerald", hex: "#10b981", bgClass: "bg-[#10b981]" },
   orange: { name: "Amber Fire", hex: "#f97316", bgClass: "bg-[#f97316]" },

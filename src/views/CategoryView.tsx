@@ -52,7 +52,7 @@ const LOCKSCREEN_PROVIDER_FILTERS = ["All Engines", "Qylock", "Hyprlock", "Quick
 /** Per-category sub-filter pills */
 const CATEGORY_SUB_FILTERS: Partial<Record<CategoryId, string[]>> = {
   lockscreens: ["All", "Session Lock", "Login Screen", "My Media"],
-  fastfetch: ["All", "Configs", "Emblems"],
+  fastfetch: ["Configs", "Emblems"],
   rices: ["All", "Hyprland", "Sway", "KDE", "GNOME"],
   themes: ["All", "GTK", "Qt", "Application"],
   wallpapers: ["All", "Abstract", "Nature", "Minimal", "Sci-Fi"],
@@ -185,7 +185,10 @@ export const CategoryView: React.FC = () => {
   const useStoreGrid = STORE_GRID_CATEGORIES.has(activeCategory);
   const subFilters = CATEGORY_SUB_FILTERS[activeCategory];
 
-  React.useEffect(() => { setSubFilter("All"); setProviderFilter("All Engines"); }, [activeCategory]);
+  React.useEffect(() => {
+    setSubFilter(activeCategory === "fastfetch" ? "Configs" : "All");
+    setProviderFilter("All Engines");
+  }, [activeCategory]);
 
   const categoryPackages = useMemo(() => {
     let list = packages.filter((pkg) => {
@@ -242,15 +245,14 @@ export const CategoryView: React.FC = () => {
 
         matchesSubFilter = matchesTarget && matchesEngine;
       } else if (activeCategory === "fastfetch") {
-        if (subFilter === "Configs") {
-          matchesSubFilter = (pkg as any).subfilter === "Configs" ||
-            pkg.tags.some((t) => t.toLowerCase() === "config" || t.toLowerCase() === "preset") ||
-            !pkg.tags.some((t) => t.toLowerCase() === "emblem");
-        } else if (subFilter === "Emblems") {
-          matchesSubFilter = (pkg as any).subfilter === "Emblems" ||
-            pkg.tags.some((t) => t.toLowerCase() === "emblem" || t.toLowerCase() === "logo");
+        const effectiveSubFilter = subFilter === "Emblems" ? "Emblems" : "Configs";
+        const pkgSub = pkg.subfilter || (pkg.manifest as any)?.subfilter;
+        if (effectiveSubFilter === "Configs") {
+          matchesSubFilter = pkgSub === "Configs";
+        } else if (effectiveSubFilter === "Emblems") {
+          matchesSubFilter = pkgSub === "Emblems";
         } else {
-          matchesSubFilter = true;
+          matchesSubFilter = false;
         }
       } else {
         matchesSubFilter =
@@ -295,9 +297,17 @@ export const CategoryView: React.FC = () => {
         <div className="flex items-baseline justify-between mb-4">
           <div>
             <h1 className="text-lg font-bold tracking-tight text-[var(--text-primary)] uppercase">
-              {meta.title}
+              {activeCategory === "fastfetch"
+                ? `Fastfetch ${subFilter === "Emblems" ? "Emblems" : "Configs"}`
+                : meta.title}
             </h1>
-            <p className="text-[11px] text-[var(--text-faint)] mt-0.5">{meta.subtitle}</p>
+            <p className="text-[11px] text-[var(--text-faint)] mt-0.5">
+              {activeCategory === "fastfetch"
+                ? (subFilter === "Emblems"
+                    ? "Curated Fastfetch emblem artwork and terminal logos"
+                    : "Curated Fastfetch system fetch layout profiles and configs")
+                : meta.subtitle}
+            </p>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-[11px] font-mono text-[var(--text-faint)]">

@@ -1024,6 +1024,7 @@ pub fn export_to_repository(
         media_type: None,
         source: None,
         provenance: None,
+        subfilter: None,
     };
 
     if let Some(pos) = index.packages.iter().position(|p| p.id == manifest.id) {

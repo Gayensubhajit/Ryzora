@@ -16,30 +16,7 @@ pub const MAX_RESOLVED_NODES: usize = 128;
 // Dependency Data Model (Phase 9 & 9.1)
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DependencyKind {
-    Package,
-    SystemBinary,
-    DesktopCapability,
-    RuntimeCapability,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DependencySpec {
-    pub id: String,
-    pub kind: DependencyKind,
-    #[serde(default)]
-    pub version_req: Option<String>,
-    #[serde(default = "default_true")]
-    pub required: bool,
-    #[serde(default)]
-    pub description: Option<String>,
-}
+pub use ryzora_core::dependency::{default_true, DependencyKind, DependencySpec};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

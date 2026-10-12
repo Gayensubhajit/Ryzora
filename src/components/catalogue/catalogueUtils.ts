@@ -103,6 +103,8 @@ export function getPackageSubtype(pkg: PackageItem): string {
   }
 
   if (pkg.category === "fastfetch" || pkg.package_type === "fastfetch") {
+    if (pkg.subfilter === "Emblems" || allTags.includes("emblem")) return "Emblem";
+    if (pkg.subfilter === "Configs" || allTags.includes("config")) return "Config";
     return "Fastfetch";
   }
 

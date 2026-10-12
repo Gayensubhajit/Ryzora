@@ -55,6 +55,7 @@ pub fn run() {
             system::window_close,
             system::set_window_appearance,
             system::list_fastfetch_local_emblems,
+            system::list_fastfetch_installed_presets,
             system::get_fastfetch_telemetry,
             system::preview_fastfetch_terminal,
             system::apply_fastfetch_configuration,

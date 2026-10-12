@@ -47,47 +47,7 @@ pub const RYZORA_RECOGNIZED_OFFICIAL_ROOT_KEYS: &[&str] = &[RYZORA_DEV_TEST_ROOT
 // Cryptographic Data Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Author / Signer identity recorded inside signature metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SignerIdentity {
-    pub author_id: String,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub handle: Option<String>,
-}
-
-/// Self-contained cryptographic signature metadata for a package release.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PackageSignatureMetadata {
-    pub schema_version: u32,
-    pub algorithm: String,
-    pub key_id: String,
-    pub public_key: String,
-    pub signed_tree_hash: String,
-    pub signature: String,
-    pub signer_identity: SignerIdentity,
-    pub signed_at: String,
-}
-
-/// Cryptographic verification status evaluated through the Ryzora Trust Chain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CryptographicStatus {
-    /// Mathematically verified with Ryzora Core Root key -> Grants Official tier.
-    OfficialVerified,
-    /// Mathematically verified with key in Trusted Community Keyring -> Grants Verified tier.
-    AuthorVerified,
-    /// Mathematically valid Ed25519 signature, but key is unvetted -> Remains Community.
-    SelfSignedUnvetted,
-    /// Package has no signature metadata -> Remains Community or Untrusted.
-    Unsigned,
-    /// Mathematical signature check failed (corrupted or tampered payload) -> BLOCKED.
-    InvalidSignature,
-    /// Signing key is listed on Key Revocation List (fail closed) -> BLOCKED.
-    RevokedKey,
-    /// Package claims Official tier without Ryzora Core Root signature -> BLOCKED.
-    OfficialImpersonation,
-}
+pub use ryzora_core::crypto::{CryptographicStatus, PackageSignatureMetadata, SignerIdentity};
 
 /// Full cryptographic evaluation report used for gating installation and display.
 #[derive(Debug, Clone, Serialize, Deserialize)]

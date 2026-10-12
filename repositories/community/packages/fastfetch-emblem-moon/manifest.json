@@ -3,7 +3,7 @@
   "name": "Moon Emblem",
   "version": "1.0.0",
   "ryzora_spec": "1",
-  "author": "Ryoku",
+  "author": "Ryzora Community",
   "package_type": "fastfetch",
   "description": "Stylized crescent moon emblem for night-mode terminal fetch layouts.",
   "tags": [
@@ -32,7 +32,7 @@
   "files": [
     {
       "source": "files/moon.png",
-      "target": "~/.config/fastfetch/logos/moon.png",
+      "target": "~/.config/fastfetch/logos/fastfetch-emblem-moon/moon.png",
       "description": "Fastfetch Moon Emblem"
     }
   ]

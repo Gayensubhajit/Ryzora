@@ -1,3 +1,4 @@
+import { normalizeMediaUrl } from "./media/mediaUtils";
 import React, { useState, useEffect } from "react";
 import {
   X,
@@ -248,7 +249,7 @@ export const PackageDetailModal: React.FC = () => {
       {selectedPackage.hero_image && (
         <div
           className="absolute inset-0 -z-0 bg-cover bg-center opacity-25 pointer-events-none transition-opacity duration-700"
-          style={{ backgroundImage: `url(${selectedPackage.hero_image})`, filter: "blur(64px) saturate(140%)" }}
+          style={{ backgroundImage: `url(${normalizeMediaUrl(selectedPackage.hero_image)})`, filter: "blur(64px) saturate(140%)" }}
         />
       )}
       <div className="absolute inset-0 -z-0 bg-black/50 pointer-events-none" />
@@ -880,7 +881,7 @@ export const PackageDetailModal: React.FC = () => {
                 <div className="space-y-2">
                   <div className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-[var(--bg-canvas)] relative shadow-xl">
                     <img
-                      src={selectedPackage.screenshots[selectedScreenshotIndex]}
+                      src={normalizeMediaUrl(selectedPackage.screenshots[selectedScreenshotIndex])}
                       alt={selectedPackage.title}
                       className="w-full h-full object-cover"
                     />
@@ -898,7 +899,7 @@ export const PackageDetailModal: React.FC = () => {
                               : "border-[var(--border-subtle)] opacity-60 hover:opacity-100"
                           }`}
                         >
-                          <img src={s} alt="" className="w-full h-full object-cover" />
+                          <img src={normalizeMediaUrl(s)} alt="" className="w-full h-full object-cover" />
                         </button>
                       ))}
                     </div>

@@ -1,0 +1,13 @@
+[package]
+name = "ryzora-core"
+version = "0.1.0"
+edition = "2021"
+description = "UI-independent domain logic, manifest data models, repository discovery, and specification validation for Ryzora"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+semver = "1.0"
+sha2 = "0.10"
+url = "2"
+percent-encoding = "2.3"

@@ -1135,6 +1135,7 @@ pub fn ingest_submission_into_repository(
         media_type: None,
         source: None,
         provenance: None,
+        subfilter: None,
         signature: sig_meta,
     };
 
@@ -1929,6 +1930,7 @@ fake
                 media_type: None,
                 source: None,
                 provenance: None,
+                subfilter: None,
             }],
         };
         fs::write(

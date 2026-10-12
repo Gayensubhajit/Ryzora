@@ -442,6 +442,7 @@ export interface PackageItem {
   targets?: string[];
   lockscreen?: LockscreenManifest;
   customizable?: boolean;
+  subfilter?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

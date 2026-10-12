@@ -1,3 +1,4 @@
+import { normalizeMediaUrl } from "../media/mediaUtils";
 import React from "react";
 
 interface PreviewGalleryProps {
@@ -33,7 +34,7 @@ export const PreviewGallery: React.FC<PreviewGalleryProps> = ({
             aria-label={`View screenshot ${idx + 1} of ${title}`}
           >
             <img
-              src={shot}
+              src={normalizeMediaUrl(shot)}
               alt={`${title} thumbnail ${idx + 1}`}
               className="w-full h-full object-cover"
               loading="lazy"
