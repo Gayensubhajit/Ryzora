@@ -29,3 +29,6 @@ pub use repository::{
 };
 
 pub use snapshot::{create_snapshot_in, restore_snapshot_in, verify_snapshot_in, list_snapshots_in, get_snapshot_in, delete_snapshot_in, apply_retention_policy_in, FileEntry, FileEntryType, RestoreResult, SnapshotMetadata, SnapshotStatus};
+
+pub mod installer;
+pub use installer::{install_package_in, uninstall_package_in, get_installed_package_in, list_installed_packages_in, get_active_lockscreen_state_in, save_active_lockscreen_state_in, InstallResult, UninstallResult, InstalledPackageRecord, InstalledFileEntry, InstalledHistoryEntry, ActiveLockscreenState};

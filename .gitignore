@@ -34,6 +34,9 @@ release-keys/
 release-artifacts/
 
 # Build outputs and targets
+build/
+qt/build/
+**/build/
 crates/**/target/
 crates/target/
 prototypes/**/build/

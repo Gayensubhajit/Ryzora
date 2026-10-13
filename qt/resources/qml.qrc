@@ -1,0 +1,31 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qml/Main.qml</file>
+        <file>qml/Theme.qml</file>
+        <file>qml/components/SideBar.qml</file>
+        <file>qml/components/TopBar.qml</file>
+        <file>qml/components/StoreCard.qml</file>
+        <file>qml/components/PackageCard.qml</file>
+        <file>qml/components/SearchInput.qml</file>
+        <file>qml/components/EmptyState.qml</file>
+        <file>qml/components/ToastNotification.qml</file>
+        <file>qml/components/PackageDetailDrawer.qml</file>
+        <file>qml/components/AboutModal.qml</file>
+        <file>qml/views/HubView.qml</file>
+        <file>qml/views/DiscoverView.qml</file>
+        <file>qml/views/AppsView.qml</file>
+        <file>qml/views/LibraryView.qml</file>
+        <file>qml/views/UpdatesView.qml</file>
+        <file>qml/views/CollectionsView.qml</file>
+        <file>qml/views/RepositoryView.qml</file>
+        <file>qml/views/CreatorsView.qml</file>
+        <file>qml/views/BackupsView.qml</file>
+        <file>qml/views/IntegrityView.qml</file>
+        <file>qml/views/SystemView.qml</file>
+        <file>qml/views/ActivityView.qml</file>
+        <file>qml/views/AuthorView.qml</file>
+        <file>qml/views/SettingsView.qml</file>
+        <file>qml/views/FastfetchView.qml</file>
+        <file>qml/views/LockScreenView.qml</file>
+    </qresource>
+</RCC>

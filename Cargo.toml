@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "crates/ryzora-core",
+    "crates/ryzora-qt-backend",
+    "src-tauri",
+]
+resolver = "2"

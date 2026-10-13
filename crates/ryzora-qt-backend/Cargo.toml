@@ -1,0 +1,18 @@
+[package]
+name = "ryzora-qt-backend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ryzora_qt_backend"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+ryzora-core = { path = "../ryzora-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.5"
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.10"
