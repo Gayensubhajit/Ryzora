@@ -15,6 +15,7 @@ Rectangle {
     property var itemData: null
     signal cardClicked(var itemData)
     signal historyClicked(var itemData)
+    signal customizeClicked(var itemData)
 
     Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 100 } }
     Behavior on border.color { ColorAnimation { duration: theme.reduceMotion ? 0 : 100 } }
@@ -45,9 +46,25 @@ Rectangle {
             Image {
                 id: prevImg
                 anchors.fill: parent
-                source: (card.itemData && card.itemData.preview_url && card.itemData.preview_url.indexOf("://") !== -1) ? card.itemData.preview_url : ""
-                fillMode: (card.itemData && card.itemData.subfilter === "emblem") ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                source: {
+                    if (!card.itemData || !card.itemData.preview_url) return ""
+                    var u = String(card.itemData.preview_url).trim()
+                    if (u.length === 0) return ""
+                    if (u.indexOf("file://") === 0) {
+                        if (u.indexOf("file:///") !== 0 && u.indexOf("file://localhost/") !== 0) {
+                            return "file:///" + u.substring(7)
+                        }
+                        return u
+                    }
+                    if (u.indexOf("http://") === 0 || u.indexOf("https://") === 0) return u
+                    if (u.indexOf("/") === 0) return "file://" + u
+                    return ""
+                }
+                fillMode: (card.itemData && (card.itemData.subfilter === "emblem" || card.itemData.category === "fastfetch")) ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                 asynchronous: true
+                cache: true
+                sourceSize.width: 640
+                sourceSize.height: 480
                 smooth: true
                 mipmap: true
                 visible: status === Image.Ready
@@ -69,9 +86,10 @@ Rectangle {
                 RowLayout {
                     anchors.centerIn: parent
                     spacing: 8
-                    Text {
-                        text: (card.itemData && (card.itemData.package_type === "lockscreen" || card.itemData.category === "lockscreens")) ? "🔒" : "⚡"
-                        font.pixelSize: 20
+                    RyzoraIcon {
+                        name: (card.itemData && (card.itemData.package_type === "lockscreen" || card.itemData.category === "lockscreens")) ? "lock" : "terminal"
+                        size: 18
+                        color: theme.textMuted
                     }
                     Text {
                         text: card.itemData ? card.itemData.name : ""
@@ -123,7 +141,7 @@ Rectangle {
                     color: "#10b981"; border.color: "#34d399"
                     RowLayout {
                         anchors.centerIn: parent; spacing: 2
-                        Text { text: "✓"; font.pixelSize: 9; font.bold: true; color: "#ffffff" }
+                        RyzoraIcon { name: "check"; size: 9; color: "#ffffff" }
                         Text { id: actLabel; text: "ACTIVE"; font.pixelSize: theme.fontBadge; font.bold: true; color: "#ffffff" }
                     }
                 }
@@ -135,7 +153,7 @@ Rectangle {
                     color: "#1e3a2f"; border.color: "#10b981"
                     RowLayout {
                         anchors.centerIn: parent; spacing: 2
-                        Text { text: "✓"; font.pixelSize: 9; font.bold: true; color: "#6ee7b7" }
+                        RyzoraIcon { name: "check"; size: 9; color: "#6ee7b7" }
                         Text { id: instLabel; text: "INSTALLED"; font.pixelSize: theme.fontBadge; font.bold: true; color: "#6ee7b7" }
                     }
                 }
@@ -222,6 +240,42 @@ Rectangle {
 
                     Item { Layout.fillWidth: true }
 
+                    // Customize Studio Action Link (Installed packages)
+                    Rectangle {
+                        visible: Boolean(card.itemData && card.itemData.is_installed)
+                        height: 20
+                        width: custText.width + 16
+                        radius: 4
+                        color: custArea.containsMouse ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.15) : "transparent"
+                        border.color: custArea.containsMouse ? theme.accent : "transparent"
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 3
+                            RyzoraIcon { name: "palette"; size: 10; color: theme.textMuted }
+                            Text {
+                                id: custText
+                                text: "Customize"
+                                font.pixelSize: theme.fontMeta
+                                font.bold: true
+                                color: custArea.containsMouse ? theme.accent : theme.textSecondary
+                            }
+                        }
+
+                        MouseArea {
+                            id: custArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (card.itemData) {
+                                    card.customizeClicked(card.itemData)
+                                }
+                            }
+                        }
+                    }
+
                     // Version History Action Link
                     Rectangle {
                         height: 20
@@ -232,7 +286,7 @@ Rectangle {
                         RowLayout {
                             anchors.centerIn: parent
                             spacing: 3
-                            Text { text: "⏱"; font.pixelSize: 9; color: theme.textMuted }
+                            RyzoraIcon { name: "clock"; size: 10; color: theme.textMuted }
                             Text {
                                 id: histText
                                 text: "History"

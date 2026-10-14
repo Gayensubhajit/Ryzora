@@ -17,13 +17,99 @@ ApplicationWindow {
     // Theme Singleton Component
     Theme {
         id: theme
+        objectName: "theme"
     }
 
     // Navigation History Stack
     property var navHistory: ["discover"]
     property int navHistoryIndex: 0
-    readonly property bool canGoBack: navHistoryIndex > 0
+    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null)
     readonly property bool canGoForward: navHistoryIndex < navHistory.length - 1
+
+    function showPackageDetail(pkg, originTab) {
+        var tab = originTab || stackLayout.currentTab;
+        if (tab === "lockscreens" && lockscreenView) {
+            lockscreenView.setSelectedPackage(pkg);
+        } else {
+            discoverView.setSelectedPackage(pkg);
+            navigateTo("discover");
+        }
+    }
+
+    function openStudio(subpage, pkg) {
+        if (studioView) {
+            studioView.selectSubpage(subpage || "overview", pkg || null);
+        }
+        navigateTo("studio");
+    }
+
+    Connections {
+        target: backend
+        function onNotificationPosted(type, title, message) {
+            toast.show(type, title, message)
+        }
+    }
+
+    function handlePackageAction(action, data, targetOverride) {
+        console.log("[QML Main] handlePackageAction CALLED: action=" + action + " pkg=" + (data ? data.id : "null") + " override=" + targetOverride + " active_targets=" + JSON.stringify(data ? data.active_targets : {}));
+        if (!data) return;
+        if (action === "install") {
+            backend.installPackage(data.id);
+        } else if (action === "apply") {
+            var cat = String(data.category || "").toLowerCase();
+            var target = targetOverride;
+            if (target === "session_lock" || target === "quickshell") {
+                console.warn("[QML Main] Desktop session lock is unmanaged by Ryzora (Dusky/Hyprlock independent)");
+                backend.postNotification("warning", "Desktop Lock Unmanaged", "Desktop session lock is controlled independently by Dusky/Hyprlock.");
+                return;
+            }
+            if (!target) {
+                if (cat === "lockscreens" || cat === "sddm") {
+                    target = "sddm_login";
+                } else if (data.supported_targets && data.supported_targets.length > 0) {
+                    target = data.supported_targets[0];
+                }
+            }
+            if (target) {
+                backend.applyTarget(data.id, target);
+            }
+        } else if (action === "deactivate") {
+            var deactTarget = targetOverride;
+            if (deactTarget === "session_lock" || deactTarget === "quickshell") {
+                console.warn("[QML Main] Deactivating session_lock is a no-op: desktop lock is unmanaged");
+                return;
+            }
+            if (!deactTarget) {
+                var catDeact = String(data.category || "").toLowerCase();
+                if (data.active_targets && data.active_targets.sddm_login) {
+                    deactTarget = "sddm_login";
+                } else if (catDeact === "lockscreens" || catDeact === "sddm") {
+                    deactTarget = "sddm_login";
+                }
+            }
+            if (deactTarget) {
+                backend.deactivateTarget(deactTarget);
+            }
+        } else if (action === "test") {
+            backend.testPackage(data.id);
+        } else if (action === "uninstall") {
+            backend.uninstallPackage(data.id);
+        } else if (action === "open_fastfetch") {
+            detailDrawer.isOpen = false;
+            discoverView.setSelectedPackage(null);
+            window.navigateTo("fastfetch");
+        } else if (action === "open_lockscreen") {
+            detailDrawer.isOpen = false;
+            discoverView.setSelectedPackage(null);
+            window.navigateTo("lockscreens");
+        } else if (action === "open_library") {
+            detailDrawer.isOpen = false;
+            discoverView.setSelectedPackage(null);
+            window.navigateTo("library");
+        } else {
+            backend.postNotification("info", "Package Details", "Package " + data.name + " is selected.");
+        }
+    }
 
     function navigateTo(tab) {
         if (tab === "compat_lab") {
@@ -60,7 +146,15 @@ ApplicationWindow {
     }
 
     function goBack() {
-        if (canGoBack) {
+        if (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) {
+            discoverView.setSelectedPackage(null);
+            return;
+        }
+        if (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) {
+            lockscreenView.setSelectedPackage(null);
+            return;
+        }
+        if (navHistoryIndex > 0) {
             navHistoryIndex--;
             stackLayout.currentTab = navHistory[navHistoryIndex];
         }
@@ -203,8 +297,7 @@ ApplicationWindow {
                         window.navigateTo(tab)
                     }
                     onPackageSelected: function(pkg) {
-                        detailDrawer.packageData = pkg
-                        detailDrawer.isOpen = true
+                        window.showPackageDetail(pkg)
                     }
                 }
 
@@ -214,8 +307,10 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "discover"
                     onPackageSelected: function(pkg) {
-                        detailDrawer.packageData = pkg
-                        detailDrawer.isOpen = true
+                        // DiscoverView manages its own selectedPackage via setSelectedPackage
+                    }
+                    onActionRequested: function(action, data, targetOverride) {
+                        window.handlePackageAction(action, data, targetOverride)
                     }
                     onSearchResetRequested: {
                         topBar.searchQuery = ""
@@ -227,8 +322,7 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "apps"
                     onPackageSelected: function(pkg) {
-                        detailDrawer.packageData = pkg
-                        detailDrawer.isOpen = true
+                        window.showPackageDetail(pkg)
                     }
                     onClearSearchRequested: {
                         topBar.searchQuery = ""
@@ -240,8 +334,10 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "library"
                     onPackageSelected: function(pkg) {
-                        detailDrawer.packageData = pkg
-                        detailDrawer.isOpen = true
+                        window.showPackageDetail(pkg)
+                    }
+                    onCustomizeRequested: function(subpage, pkg) {
+                        window.openStudio(subpage, pkg)
                     }
                     onNavigateRequested: function(tabName) {
                         window.navigateTo(tabName)
@@ -336,8 +432,20 @@ ApplicationWindow {
 
                 LockScreenView {
                     id: lockscreenView
+                    objectName: "lockscreenView"
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "lockscreens"
+                }
+
+                // ── Personalization Studio Hub ──
+                StudioView {
+                    id: studioView
+                    objectName: "studioView"
+                    anchors.fill: parent
+                    visible: stackLayout.currentTab === "studio"
+                    onNavigateRequested: function(tab) {
+                        window.navigateTo(tab)
+                    }
                 }
             }
         }
@@ -346,35 +454,10 @@ ApplicationWindow {
     // Modal Package Detail Drawer Overlay
     PackageDetailDrawer {
         id: detailDrawer
+        objectName: "detailDrawer"
         onCloseRequested: detailDrawer.isOpen = false
         onActionRequested: function(action, data) {
-            if (action === "install") {
-                toast.show("info", "Installing Package", "Initiating installation of " + data.name + "...")
-                backend.installPackage(data.id)
-                detailDrawer.isOpen = false
-            } else if (action === "apply") {
-                var target = (data.category === "sddm") ? "sddm_login" : "session_lock"
-                toast.show("info", "Applying Package", "Activating target " + target + " for " + data.name + "...")
-                backend.applyTarget(data.id, target)
-                detailDrawer.isOpen = false
-            } else if (action === "deactivate") {
-                var deactTarget = (data.category === "sddm") ? "sddm_login" : "session_lock"
-                toast.show("info", "Deactivating Target", "Restoring system default configuration...")
-                backend.deactivateTarget(deactTarget)
-                detailDrawer.isOpen = false
-            } else if (action === "uninstall") {
-                toast.show("warning", "Uninstalling Package", "Requesting uninstallation of " + data.name + "...")
-                backend.uninstallPackage(data.id)
-                detailDrawer.isOpen = false
-            } else if (action === "open_fastfetch") {
-                detailDrawer.isOpen = false
-                window.navigateTo("fastfetch")
-            } else if (action === "open_lockscreen") {
-                detailDrawer.isOpen = false
-                window.navigateTo("lockscreens")
-            } else {
-                toast.show("info", "Package Details", "Package " + data.name + " is active.")
-            }
+            window.handlePackageAction(action, data, null)
         }
     }
 

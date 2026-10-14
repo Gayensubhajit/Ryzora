@@ -7,6 +7,7 @@ pub mod compatibility;
 pub mod crypto;
 pub mod dependency;
 pub mod distribution;
+pub mod hypridle;
 pub mod manifest;
 pub mod repository;
 pub mod snapshot;
@@ -28,7 +29,18 @@ pub use repository::{
     RepositoryPackageEntry, RepositorySourceConfig, RepositorySummary,
 };
 
-pub use snapshot::{create_snapshot_in, restore_snapshot_in, verify_snapshot_in, list_snapshots_in, get_snapshot_in, delete_snapshot_in, apply_retention_policy_in, FileEntry, FileEntryType, RestoreResult, SnapshotMetadata, SnapshotStatus};
+pub use snapshot::{
+    apply_retention_policy_in, create_snapshot_in, delete_snapshot_in, get_snapshot_in,
+    list_snapshots_in, restore_snapshot_in, verify_snapshot_in, FileEntry, FileEntryType,
+    RestoreResult, SnapshotMetadata, SnapshotStatus,
+};
 
 pub mod installer;
-pub use installer::{install_package_in, uninstall_package_in, get_installed_package_in, list_installed_packages_in, get_active_lockscreen_state_in, save_active_lockscreen_state_in, InstallResult, UninstallResult, InstalledPackageRecord, InstalledFileEntry, InstalledHistoryEntry, ActiveLockscreenState};
+pub use installer::{
+    get_active_lockscreen_state_in, get_installed_package_in, install_package_in,
+    list_installed_packages_in, save_active_lockscreen_state_in, uninstall_package_in,
+    ActiveLockscreenState, InstallResult, InstalledFileEntry, InstalledHistoryEntry,
+    InstalledPackageRecord, UninstallResult,
+};
+
+pub mod sddm_helper;

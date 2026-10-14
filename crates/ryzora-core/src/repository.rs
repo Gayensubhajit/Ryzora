@@ -969,11 +969,9 @@ pub fn verify_cached_package_integrity(
     Ok(())
 }
 
-
 pub trait HttpFetcher: Send + Sync {
     fn fetch(&self, url: &str, max_bytes: usize) -> Result<Vec<u8>, String>;
 }
-
 
 pub trait Repository: Send + Sync {
     fn id(&self) -> &str;
@@ -1239,8 +1237,6 @@ impl Repository for LocalRepository {
     }
 }
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Repository Discovery & Catalog Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1365,9 +1361,15 @@ pub fn filter_catalog_items(
     query: Option<&str>,
     desktop: Option<&str>,
 ) -> Vec<FrontendPackageItem> {
-    let cat_filter = category.map(|c| c.trim().to_lowercase()).filter(|c| !c.is_empty() && c != "all");
-    let q_filter = query.map(|q| q.trim().to_lowercase()).filter(|q| !q.is_empty());
-    let desk_filter = desktop.map(|d| d.trim().to_lowercase()).filter(|d| !d.is_empty() && d != "all");
+    let cat_filter = category
+        .map(|c| c.trim().to_lowercase())
+        .filter(|c| !c.is_empty() && c != "all");
+    let q_filter = query
+        .map(|q| q.trim().to_lowercase())
+        .filter(|q| !q.is_empty());
+    let desk_filter = desktop
+        .map(|d| d.trim().to_lowercase())
+        .filter(|d| !d.is_empty() && d != "all");
 
     items
         .iter()
@@ -1379,7 +1381,11 @@ pub fn filter_catalog_items(
             }
 
             if let Some(ref desk) = desk_filter {
-                if !item.supported_desktops.iter().any(|d| d.to_lowercase() == *desk) {
+                if !item
+                    .supported_desktops
+                    .iter()
+                    .any(|d| d.to_lowercase() == *desk)
+                {
                     return false;
                 }
             }
@@ -1442,63 +1448,64 @@ mod tests {
             avatar: "avatar.png".to_string(),
             verified: true,
         };
-        let items = vec![
-            FrontendPackageItem {
-                id: "nord-theme".to_string(),
-                title: "Nord Theme".to_string(),
-                subtitle: "A cold blue theme".to_string(),
-                description: "Clean Arctic palette".to_string(),
-                version: "1.0.0".to_string(),
-                author: author.clone(),
-                category: "themes".to_string(),
-                package_type: PackageType::Theme,
-                tags: vec!["nord".to_string(), "arctic".to_string()],
-                supported_desktops: vec!["hyprland".to_string()],
-                supported_display: vec!["wayland".to_string()],
-                rating: 4.9,
-                rating_count: 10,
-                downloads: 150,
-                hero_image: "".to_string(),
-                screenshots: vec![],
-                featured: Some(true),
-                trending: Some(false),
-                color_palette: vec![],
-                safety_audit: FrontendSafetyAudit {
-                    rating: "verified".to_string(),
-                    changes_system_files: false,
-                    requires_root: false,
-                    sandbox_compatible: true,
-                    files_modified_count: 2,
-                },
-                dependencies: FrontendDependencies { packages: vec![], optional: vec![] },
-                components: vec![],
-                compatibility: CompatibilityRequirements::default(),
-                manifest: None,
-                repository_id: Some("test-repo".to_string()),
-                content_hash: None,
-                package_size_bytes: Some(1024),
-                integrity_status: "verified".to_string(),
-                is_cached: true,
-                release_channel: Some(ReleaseChannel::Stable),
-                trust_tier: Some(TrustTier::Community),
-                moderation_status: Some(ModerationStatus::Approved),
-                trending_score: None,
-                maintainer: None,
-                release_notes: None,
-                signature: None,
-                cryptographic_status: None,
-                provider: None,
-                targets: None,
-                preview_video: None,
-                preview_animated: None,
-                media_type: None,
-                preview_video_url: None,
-                preview_poster_url: None,
-                source: None,
-                provenance: None,
-                subfilter: None,
+        let items = vec![FrontendPackageItem {
+            id: "nord-theme".to_string(),
+            title: "Nord Theme".to_string(),
+            subtitle: "A cold blue theme".to_string(),
+            description: "Clean Arctic palette".to_string(),
+            version: "1.0.0".to_string(),
+            author: author.clone(),
+            category: "themes".to_string(),
+            package_type: PackageType::Theme,
+            tags: vec!["nord".to_string(), "arctic".to_string()],
+            supported_desktops: vec!["hyprland".to_string()],
+            supported_display: vec!["wayland".to_string()],
+            rating: 4.9,
+            rating_count: 10,
+            downloads: 150,
+            hero_image: "".to_string(),
+            screenshots: vec![],
+            featured: Some(true),
+            trending: Some(false),
+            color_palette: vec![],
+            safety_audit: FrontendSafetyAudit {
+                rating: "verified".to_string(),
+                changes_system_files: false,
+                requires_root: false,
+                sandbox_compatible: true,
+                files_modified_count: 2,
             },
-        ];
+            dependencies: FrontendDependencies {
+                packages: vec![],
+                optional: vec![],
+            },
+            components: vec![],
+            compatibility: CompatibilityRequirements::default(),
+            manifest: None,
+            repository_id: Some("test-repo".to_string()),
+            content_hash: None,
+            package_size_bytes: Some(1024),
+            integrity_status: "verified".to_string(),
+            is_cached: true,
+            release_channel: Some(ReleaseChannel::Stable),
+            trust_tier: Some(TrustTier::Community),
+            moderation_status: Some(ModerationStatus::Approved),
+            trending_score: None,
+            maintainer: None,
+            release_notes: None,
+            signature: None,
+            cryptographic_status: None,
+            provider: None,
+            targets: None,
+            preview_video: None,
+            preview_animated: None,
+            media_type: None,
+            preview_video_url: None,
+            preview_poster_url: None,
+            source: None,
+            provenance: None,
+            subfilter: None,
+        }];
 
         let themes = filter_catalog_items(&items, Some("themes"), None, None);
         assert_eq!(themes.len(), 1);
@@ -1510,20 +1517,25 @@ mod tests {
 
     #[test]
     fn test_unsupported_schema_rejected() {
-        let temp_dir = std::env::temp_dir().join(format!("ryzora_test_schema_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("ryzora_test_schema_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
-        let repo_json = r#"{"schema": 99, "id": "test-repo", "name": "Future Repo", "packages": []}"#;
+        let repo_json =
+            r#"{"schema": 99, "id": "test-repo", "name": "Future Repo", "packages": []}"#;
         fs::write(temp_dir.join("repository.json"), repo_json).unwrap();
 
         let res = LocalRepository::load_from_dir(&temp_dir);
         assert!(res.is_err());
-        assert!(res.unwrap_err().contains("Unsupported repository schema 99"));
+        assert!(res
+            .unwrap_err()
+            .contains("Unsupported repository schema 99"));
         let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
     fn test_malformed_index_rejected() {
-        let temp_dir = std::env::temp_dir().join(format!("ryzora_test_malformed_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("ryzora_test_malformed_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         fs::write(temp_dir.join("repository.json"), "NOT_JSON").unwrap();
 
@@ -1535,7 +1547,10 @@ mod tests {
 
     #[test]
     fn test_missing_manifest_rejected() {
-        let temp_dir = std::env::temp_dir().join(format!("ryzora_test_missing_manifest_{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "ryzora_test_missing_manifest_{}",
+            std::process::id()
+        ));
         let _ = fs::create_dir_all(&temp_dir);
         let repo_json = r#"{
             "schema": 1,
@@ -1555,7 +1570,9 @@ mod tests {
 
         let res = LocalRepository::load_from_dir(&temp_dir);
         assert!(res.is_err());
-        assert!(res.unwrap_err().contains("Manifest file not found for package 'missing-pkg'"));
+        assert!(res
+            .unwrap_err()
+            .contains("Manifest file not found for package 'missing-pkg'"));
         let _ = fs::remove_dir_all(&temp_dir);
     }
 
@@ -1564,10 +1581,16 @@ mod tests {
         let dirs = get_default_repository_search_dirs();
         assert!(!dirs.is_empty(), "Search dirs must not be empty");
         let repos = discover_local_repositories(&dirs);
-        assert!(!repos.is_empty(), "Must discover at least one local repository");
+        assert!(
+            !repos.is_empty(),
+            "Must discover at least one local repository"
+        );
         let community = repos.iter().find(|r| r.id() == "community");
         assert!(community.is_some(), "Must discover 'community' repository");
         let entries = community.unwrap().list_entries().expect("list_entries");
-        assert!(!entries.is_empty(), "Community repository must have package entries");
+        assert!(
+            !entries.is_empty(),
+            "Community repository must have package entries"
+        );
     }
 }

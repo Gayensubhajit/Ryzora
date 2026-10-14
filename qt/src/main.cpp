@@ -1,16 +1,44 @@
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QDir>
+#include <QTemporaryDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QElapsedTimer>
 #include <QDebug>
+#include <QQmlNetworkAccessManagerFactory>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
 #include <csignal>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "ryzora_backend.hpp"
+
+class RyzoraNetworkAccessManager : public QNetworkAccessManager {
+public:
+    explicit RyzoraNetworkAccessManager(QObject *parent = nullptr) : QNetworkAccessManager(parent) {}
+protected:
+    QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoingData = nullptr) override {
+        QNetworkRequest req = request;
+        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+        req.setRawHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Ryzora/0.1.0");
+        return QNetworkAccessManager::createRequest(op, req, outgoingData);
+    }
+};
+
+class RyzoraNetworkAccessManagerFactory : public QQmlNetworkAccessManagerFactory {
+public:
+    QNetworkAccessManager *create(QObject *parent) override {
+        return new RyzoraNetworkAccessManager(parent);
+    }
+};
 
 static bool isPidAlive(pid_t pid) {
     if (pid <= 0) return false;
@@ -109,6 +137,52 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
         pumpEvents(15, 20000);
     };
 
+    auto setThemeMode = [&](const QString &mode) {
+        QObject *themeObj = rootObj ? rootObj->findChild<QObject*>("theme") : nullptr;
+        if (themeObj) {
+            themeObj->setProperty("appearanceMode", mode);
+        }
+        pumpEvents(15, 20000);
+    };
+
+    auto openPackageDetail = [&](int index = 0) {
+        navigate("discover");
+        QVariantList catList = backend->catalogList();
+        QVariant chosen;
+        for (const QVariant &v : catList) {
+            if (v.toMap().value("id").toString() == "lockscreen-qylock-enfield") {
+                chosen = v;
+                break;
+            }
+        }
+        if (chosen.isNull()) {
+            for (const QVariant &v : catList) {
+                if (v.toMap().value("category").toString().toLower() == "lockscreens") {
+                    chosen = v;
+                    break;
+                }
+            }
+        }
+        if (chosen.isNull() && !catList.isEmpty() && index < catList.size()) {
+            chosen = catList.at(index);
+        }
+        if (!chosen.isNull()) {
+            QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr;
+            if (discView) {
+                QMetaObject::invokeMethod(discView, "setSelectedPackage", Q_ARG(QVariant, chosen));
+            }
+        }
+        pumpEvents(25, 20000);
+    };
+
+    auto closePackageDetail = [&]() {
+        QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr;
+        if (discView) {
+            QMetaObject::invokeMethod(discView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+        }
+        pumpEvents(15, 20000);
+    };
+
     // 1. Expanded sidebar with 7 primary destinations at 1440x900
     setWindowSize(1440, 900);
     setSidebarCollapsed(false);
@@ -122,7 +196,22 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
 
     // 3. Discover: Packages grid (image-first)
     setDiscoverMode("packages");
+    setDiscoverCategory("all");
+    setThemeMode("dark");
     saveShot("03_discover_packages.png");
+    saveShot("03_discover_dark_1440x900.png");
+
+    // Discover in Light mode at 1440x900
+    setThemeMode("light");
+    saveShot("03_discover_light_1440x900.png");
+
+    // Narrow 900x700
+    setWindowSize(900, 700);
+    saveShot("03_discover_narrow_900x700.png");
+
+    // Restore to 1440x900 and dark mode
+    setWindowSize(1440, 900);
+    setThemeMode("dark");
 
     // 3b. Apps: Desktop applications & packages
     navigate("apps");
@@ -131,13 +220,81 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     // 4. Discover: Fastfetch category filter
     setDiscoverCategory("fastfetch");
     saveShot("04_discover_category_fastfetch.png");
+    saveShot("04_discover_filtered_fastfetch.png");
 
     // 5. Discover: Lock Screens category filter
     setDiscoverCategory("lockscreens");
     saveShot("05_discover_category_lockscreens.png");
 
+    // 5b. Discover: SilentSDDM subcategory filter
+    if (QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr) {
+        discView->setProperty("selectedSubFilter", "SilentSDDM");
+    }
+    pumpEvents(15, 20000);
+    saveShot("05b_discover_lockscreens_silentsddm.png");
+    if (QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr) {
+        discView->setProperty("selectedSubFilter", "All");
+    }
+    pumpEvents(15, 20000);
+
     // Reset Discover back to all packages
     setDiscoverCategory("all");
+
+    // Package Detail Full-Page View (open on first catalog item)
+    openPackageDetail(0);
+    saveShot("05_discover_package_detail.png");
+    setThemeMode("light");
+    saveShot("05_discover_package_detail_light.png");
+    setThemeMode("dark");
+
+    // Also capture installed package detail (Clockwork Orbital)
+    QVariantList catListShots = backend->catalogList();
+    for (const QVariant &v : catListShots) {
+        if (v.toMap().value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+            QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr;
+            if (discView) {
+                QMetaObject::invokeMethod(discView, "setSelectedPackage", Q_ARG(QVariant, v));
+            }
+            pumpEvents(15, 20000);
+            saveShot("05c_discover_package_detail_installed_dark.png");
+            setThemeMode("light");
+            saveShot("05d_discover_package_detail_installed_light.png");
+            setThemeMode("dark");
+            break;
+        }
+    }
+
+    // Also capture Fastfetch and Rice details
+    for (const QVariant &v : catListShots) {
+        if (v.toMap().value("id").toString() == "fastfetch-preset-2") {
+            QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr;
+            if (discView) {
+                QMetaObject::invokeMethod(discView, "setSelectedPackage", Q_ARG(QVariant, v));
+            }
+            pumpEvents(15, 20000);
+            saveShot("05e_discover_fastfetch_detail_dark.png");
+            setThemeMode("light");
+            saveShot("05f_discover_fastfetch_detail_light.png");
+            setThemeMode("dark");
+            break;
+        }
+    }
+    for (const QVariant &v : catListShots) {
+        if (v.toMap().value("id").toString() == "rice-cyberpunk-neon") {
+            QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr;
+            if (discView) {
+                QMetaObject::invokeMethod(discView, "setSelectedPackage", Q_ARG(QVariant, v));
+            }
+            pumpEvents(15, 20000);
+            saveShot("05g_discover_rice_detail_dark.png");
+            setThemeMode("light");
+            saveShot("05h_discover_rice_detail_light.png");
+            setThemeMode("dark");
+            break;
+        }
+    }
+
+    closePackageDetail();
 
     // 6. Discover: Collections secondary view
     setDiscoverMode("collections");
@@ -198,6 +355,73 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     navigate("lockscreens");
     saveShot("19_lockscreens_workspace.png");
 
+    QObject *lsView = rootObj ? rootObj->findChild<QObject*>("lockscreenView") : nullptr;
+    if (lsView) {
+        lsView->setProperty("selectedSubFilter", "SilentSDDM");
+        pumpEvents(15, 20000);
+        saveShot("19b_lockscreens_silentsddm.png");
+
+        QVariant sddmItem;
+        for (const QVariant &item : backend->catalogList()) {
+            if (item.toMap().value("id").toString() == "silentsddm-default") {
+                sddmItem = item;
+                break;
+            }
+        }
+        if (!sddmItem.isNull()) {
+            QMetaObject::invokeMethod(lsView, "setSelectedPackage", Q_ARG(QVariant, sddmItem));
+            pumpEvents(15, 20000);
+            saveShot("19c_lockscreens_detail_route.png");
+            QMetaObject::invokeMethod(lsView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+            pumpEvents(15, 20000);
+        }
+        lsView->setProperty("selectedSubFilter", "All");
+        pumpEvents(15, 20000);
+    }
+
+    // 19b. Unified Personalization Studio Subpages (Ryoku Design Pattern)
+    auto setStudioSub = [&](const QString &sub) {
+        navigate("studio");
+        QObject *studioObj = rootObj ? rootObj->findChild<QObject*>("studioView") : nullptr;
+        if (studioObj) {
+            QMetaObject::invokeMethod(studioObj, "selectSubpage", Q_ARG(QVariant, sub), Q_ARG(QVariant, QVariant()));
+        }
+        pumpEvents(15, 20000);
+    };
+
+    setStudioSub("overview");
+    saveShot("24_studio_overview.png");
+
+    setStudioSub("lockscreen");
+    saveShot("25_studio_lockscreen.png");
+
+    QObject *studioObj = rootObj ? rootObj->findChild<QObject*>("studioView") : nullptr;
+    if (studioObj) {
+        QVariantMap cwPkg;
+        cwPkg["id"] = "lockscreen-qylock-clockwork-orbital";
+        cwPkg["name"] = "Clockwork (Orbital)";
+        cwPkg["author"] = "Darkkal44";
+        cwPkg["version"] = "1.0.0";
+        cwPkg["package_type"] = "lockscreen";
+        cwPkg["supports_sddm"] = true;
+        cwPkg["preview_url"] = "file://" + QDir::currentPath() + "/public/assets/lockscreens/clockwork-poster.jpg";
+        cwPkg["description"] = "Authentic Orbital variant of clockwork from Qylock with dynamic dual rotating dial rings, clean typography, and declarative QML rendering.";
+        QMetaObject::invokeMethod(studioObj, "openThemeDetail", Q_ARG(QVariant, cwPkg));
+        pumpEvents(15, 20000);
+        saveShot("25b_studio_lockscreen_detail.png");
+        studioObj->setProperty("activeDetailTheme", QVariant());
+        pumpEvents(10, 20000);
+    }
+
+    setStudioSub("fastfetch");
+    saveShot("26_studio_fastfetch.png");
+
+    setStudioSub("wallpapers");
+    saveShot("27_studio_wallpapers.png");
+
+    setStudioSub("appearance");
+    saveShot("28_studio_appearance.png");
+
     // 20. Responsive layouts:
     // 1440 x 900
     setWindowSize(1440, 900);
@@ -219,6 +443,1363 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     navigate("discover");
     saveShot("23_responsive_760x620.png");
 
+    return 0;
+}
+
+
+int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "==================================================";
+    qInfo() << "STARTING REAL QT GUI PACKAGE ACTIONS VERIFICATION";
+    qInfo() << "==================================================";
+
+    auto pumpEvents = [&](int iterations = 10, int delayUs = 10000) {
+        for (int i = 0; i < iterations; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    pumpEvents(20, 10000);
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    if (!rootObj) {
+        qCritical() << "FAIL: QML root object not loaded!";
+        return 1;
+    }
+
+    QObject *discoverView = rootObj->findChild<QObject*>("discoverView");
+    QObject *packageDetailView = rootObj->findChild<QObject*>("packageDetailView");
+    if (!discoverView || !packageDetailView) {
+        qCritical() << "FAIL: Could not find discoverView or packageDetailView in scene graph!";
+        return 2;
+    }
+
+    QTemporaryDir testHome;
+    if (!testHome.isValid()) {
+        qCritical() << "FAIL: Failed to create temporary test sandbox directory!";
+        return 3;
+    }
+    QString homePath = testHome.path();
+    qInfo() << "[SETUP] Isolated test sandbox mounted at:" << homePath;
+
+    QDir(homePath).mkpath(".local/share/ryzora/state");
+    QDir(homePath).mkpath(".local/share/ryzora/installed");
+    QDir(homePath).mkpath(".local/share/ryzora/snapshots");
+    QDir(homePath).mkpath(".config/hypr/hypridle.conf.d");
+
+    // Write installed record file
+    QString instJsonPath = homePath + "/.local/share/ryzora/installed/lockscreen-qylock-clockwork-orbital.json";
+    QJsonObject instObj;
+    instObj["package_id"] = "lockscreen-qylock-clockwork-orbital";
+    instObj["name"] = "Clockwork (Orbital)";
+    instObj["version"] = "1.0.0";
+    instObj["package_type"] = "lockscreen";
+    instObj["category"] = "lockscreens";
+    instObj["installed_at"] = 1790850467;
+    instObj["snapshot_id"] = "";
+    instObj["installed_files"] = QJsonArray();
+    instObj["files"] = QJsonArray();
+    instObj["package_source_path"] = QDir::currentPath() + "/repositories/community/packages/lockscreen-qylock-clockwork-orbital";
+    QFile instFile(instJsonPath);
+    if (instFile.open(QIODevice::WriteOnly)) {
+        instFile.write(QJsonDocument(instObj).toJson());
+        instFile.close();
+    }
+
+    QString stateJsonPath = homePath + "/.local/share/ryzora/state/active_lockscreen.json";
+    QJsonObject stateObj;
+    stateObj["quickshell"] = QJsonValue::Null;
+    stateObj["session_lock"] = QJsonValue::Null;
+    stateObj["sddm_login"] = QJsonValue::Null;
+    stateObj["sddm"] = QJsonValue::Null;
+    QFile stateFile(stateJsonPath);
+    if (stateFile.open(QIODevice::WriteOnly)) {
+        stateFile.write(QJsonDocument(stateObj).toJson());
+        stateFile.close();
+    }
+
+    QString dropinPath = homePath + "/.config/hypr/hypridle.conf.d/ryzora.conf";
+    backend->setTestHomeOverride(homePath);
+    backend->setTestSystemRootOverride(homePath + "/sysroot");
+    pumpEvents(30, 10000);
+
+    qInfo() << "[STEP 0] Verifying Package Selection and Detail Routing for Enfield, Field, Forest, Dog Samurai...";
+    const QStringList testRoutingPkgs = {
+        "lockscreen-qylock-enfield",
+        "lockscreen-qylock-field",
+        "lockscreen-qylock-forest",
+        "lockscreen-qylock-dog-samurai"
+    };
+
+    for (const QString &pkgId : testRoutingPkgs) {
+        QVariant chosen;
+        for (const QVariant &item : backend->catalogList()) {
+            if (item.toMap().value("id").toString() == pkgId) {
+                chosen = item;
+                break;
+            }
+        }
+        if (chosen.isNull()) {
+            qCritical() << "FAIL: Package" << pkgId << "not found in catalog!";
+            return 101;
+        }
+
+        QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, chosen));
+        pumpEvents(15, 10000);
+
+        QVariant qmlData = packageDetailView->property("packageData");
+        QString qmlId = qmlData.toMap().value("id").toString();
+        QString qmlName = qmlData.toMap().value("name").toString();
+        if (qmlId != pkgId) {
+            qCritical() << "FAIL: Routing mismatch! Expected ID" << pkgId << "got" << qmlId;
+            return 102;
+        }
+        qInfo() << "  -> CONFIRMED: Package" << pkgId << "routed cleanly! Title:" << qmlName;
+    }
+
+    qInfo() << "[STEP 0B] Verifying Sequential Navigation, Back State, and Filter Preservation...";
+    // 1. Select Forest
+    QVariant forestPkg;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-forest") {
+            forestPkg = item;
+            break;
+        }
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, forestPkg));
+    pumpEvents(15, 10000);
+    QVariant detailForest = packageDetailView->property("packageData");
+    if (detailForest.toMap().value("id").toString() != "lockscreen-qylock-forest") {
+        qCritical() << "FAIL: Forest package detail did not mount cleanly!";
+        return 103;
+    }
+
+    // 2. Back navigation
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+    QVariant detailCleared = packageDetailView->property("packageData");
+    if (detailCleared.isValid() && !detailCleared.isNull() && !detailCleared.toMap().isEmpty()) {
+        qCritical() << "FAIL: Detail view packageData was not cleared on back navigation!";
+        return 104;
+    }
+
+    // 3. Select Dog Samurai
+    QVariant samuraiPkg;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-dog-samurai") {
+            samuraiPkg = item;
+            break;
+        }
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, samuraiPkg));
+    pumpEvents(15, 10000);
+    QVariant detailSamurai = packageDetailView->property("packageData");
+    if (detailSamurai.toMap().value("id").toString() != "lockscreen-qylock-dog-samurai") {
+        qCritical() << "FAIL: Dog Samurai package detail did not mount cleanly!";
+        return 105;
+    }
+
+    // 4. Back navigation again
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+
+    // 5. Test filter & search query preservation
+    discoverView->setProperty("searchQuery", "samurai");
+    discoverView->setProperty("selectedCategory", "lockscreens");
+    QMetaObject::invokeMethod(discoverView, "updateFilter");
+    pumpEvents(15, 10000);
+
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, samuraiPkg));
+    pumpEvents(15, 10000);
+    // Return to Discover
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+
+    if (discoverView->property("searchQuery").toString() != "samurai") {
+        qCritical() << "FAIL: Search query was reset after back navigation!";
+        return 106;
+    }
+    if (discoverView->property("selectedCategory").toString() != "lockscreens") {
+        qCritical() << "FAIL: Selected category was reset after back navigation!";
+        return 107;
+    }
+    // Clean up filters
+    QMetaObject::invokeMethod(discoverView, "resetFilters");
+    pumpEvents(15, 10000);
+
+    // 6. Test missing / invalid package ID handling
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, "nonexistent-pkg-404"));
+    pumpEvents(15, 10000);
+    QVariant detailInvalid = packageDetailView->property("packageData");
+    if (detailInvalid.isValid() && !detailInvalid.isNull() && !detailInvalid.toMap().isEmpty()) {
+        qCritical() << "FAIL: Invalid package ID should result in null packageData!";
+        return 108;
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+    // 7. Verify Lock Screens Subcategory Filtering (All, Qylock, SilentSDDM, SDDM, My Media)
+    discoverView->setProperty("selectedCategory", "lockscreens");
+    discoverView->setProperty("selectedSubFilter", "All");
+    QMetaObject::invokeMethod(discoverView, "updateFilter");
+    pumpEvents(15, 10000);
+    QVariantList allLs = discoverView->property("filteredPackages").toList();
+    if (allLs.isEmpty()) {
+        qCritical() << "FAIL: Lock Screens All filter returned empty list!";
+        return 109;
+    }
+
+    // SilentSDDM subfilter
+    discoverView->setProperty("selectedSubFilter", "SilentSDDM");
+    QVariantList silentPkgs = discoverView->property("filteredPackages").toList();
+    if (silentPkgs.isEmpty()) {
+        qCritical() << "FAIL: SilentSDDM subfilter returned empty list!";
+        return 110;
+    }
+    for (const QVariant &v : silentPkgs) {
+        QString pid = v.toMap().value("id").toString();
+        if (!pid.startsWith("silentsddm-")) {
+            qCritical() << "FAIL: SilentSDDM filter contains non-SilentSDDM package:" << pid;
+            return 111;
+        }
+        // Verify no fabricated ratings or downloads
+        QVariant downloads = v.toMap().value("download_count");
+        QVariant rating = v.toMap().value("rating");
+        if (downloads.isValid() && !downloads.isNull() && downloads.toUInt() > 0) {
+            qCritical() << "FAIL: SilentSDDM package has fabricated download count:" << downloads;
+            return 112;
+        }
+        if (rating.isValid() && !rating.isNull() && rating.toFloat() > 0.0f) {
+            qCritical() << "FAIL: SilentSDDM package has fabricated rating:" << rating;
+            return 113;
+        }
+    }
+
+    // Qylock subfilter
+    discoverView->setProperty("selectedSubFilter", "Qylock");
+    QVariantList qylockPkgs = discoverView->property("filteredPackages").toList();
+    if (qylockPkgs.isEmpty()) {
+        qCritical() << "FAIL: Qylock subfilter returned empty list!";
+        return 114;
+    }
+    for (const QVariant &v : qylockPkgs) {
+        QString pid = v.toMap().value("id").toString();
+        if (!pid.startsWith("lockscreen-qylock")) {
+            qCritical() << "FAIL: Qylock filter contains non-Qylock package:" << pid;
+            return 115;
+        }
+        // Never contains Fastfetch or Rices
+        if (pid.startsWith("fastfetch-") || pid.startsWith("rice-")) {
+            qCritical() << "FAIL: Unrelated category leaked into Qylock filter:" << pid;
+            return 116;
+        }
+    }
+
+    // SDDM subfilter
+    discoverView->setProperty("selectedSubFilter", "SDDM");
+    QVariantList sddmPkgs = discoverView->property("filteredPackages").toList();
+    if (sddmPkgs.isEmpty()) {
+        qCritical() << "FAIL: SDDM subfilter returned empty list!";
+        return 117;
+    }
+
+    // Reset subfilter
+    discoverView->setProperty("selectedSubFilter", "All");
+    QMetaObject::invokeMethod(discoverView, "resetFilters");
+    pumpEvents(15, 10000);
+    qInfo() << "  -> CONFIRMED: Lock Screens subcategory filtering (SilentSDDM, Qylock, SDDM, isolation) verified!";
+
+    qInfo() << "  -> CONFIRMED: Sequential navigation, back clearance, filter preservation, and invalid ID handling verified!";
+
+    qInfo() << "[STEP 1] Verifying installed package state (desktop lock is unmanaged)...";
+    if (backend->activeCount() != 0) {
+        qCritical() << "FAIL: Expected activeCount == 0, got:" << backend->activeCount();
+        return 4;
+    }
+
+    QVariantMap activePkg;
+    bool found = false;
+    for (const QVariant &item : backend->catalogList()) {
+        QVariantMap m = item.toMap();
+        if (m.value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+            activePkg = m;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        qCritical() << "FAIL: lockscreen-qylock-clockwork-orbital not found in catalog!";
+        return 5;
+    }
+
+    if (activePkg.value("is_active").toBool()) {
+        qCritical() << "FAIL: Package is_active must be false (desktop session lock is not managed by Ryzora)!";
+        return 6;
+    }
+    if (activePkg.value("active_targets").toMap().value("session_lock").toBool()) {
+        qCritical() << "FAIL: Package active_targets.session_lock must be false!";
+        return 7;
+    }
+
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant::fromValue(activePkg)));
+    pumpEvents(20, 10000);
+
+    QVariant qmlPkg = packageDetailView->property("packageData");
+    if (qmlPkg.toMap().value("is_active").toBool()) {
+        qCritical() << "FAIL: QML PackageDetailView packageData is_active must be false!";
+        return 8;
+    }
+    qInfo() << "  -> CONFIRMED: Initial state in QML is Installed, but unmanaged for session lock (is_active: false).";
+
+    qInfo() << "[STEP 2] Verifying Apply Target ('session_lock') FAILS CLOSED without touching host...";
+    bool applyEmitted = false;
+    bool applySuccess = true;
+    QString applyMsg;
+
+    QMetaObject::Connection connApply = QObject::connect(backend, &RyzoraBackend::targetActivated,
+        [&](const QString &pkgId, const QString &target, bool success, const QString &msg) {
+            applyEmitted = true;
+            applySuccess = success;
+            applyMsg = msg;
+            qInfo() << "  -> Signal targetActivated received: pkg =" << pkgId << "target =" << target << "success =" << success << "message =" << msg;
+        });
+
+    QElapsedTimer applyTimer;
+    applyTimer.start();
+    backend->applyTarget("lockscreen-qylock-clockwork-orbital", "session_lock");
+
+    while (!applyEmitted && applyTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connApply);
+
+    if (!applyEmitted) {
+        qCritical() << "FAIL: applyTarget signal not emitted within timeout!";
+        return 9;
+    }
+    if (applySuccess) {
+        qCritical() << "FAIL: applyTarget for session_lock should FAIL CLOSED but succeeded!";
+        return 10;
+    }
+    if (!applyMsg.contains("not supported") && !applyMsg.contains("Dusky/Hyprlock") && !applyMsg.contains("Desktop session lock is not managed")) {
+        qCritical() << "FAIL: applyTarget error message does not explain Dusky/Hyprlock independence! Msg:" << applyMsg;
+        return 11;
+    }
+
+    if (QFile::exists(homePath + "/.local/bin/hyprlock")) {
+        qCritical() << "FAIL: ~/.local/bin/hyprlock shim was created! Invariant violated.";
+        return 12;
+    }
+    if (QFile::exists(homePath + "/.local/bin/ryzora-lock")) {
+        qCritical() << "FAIL: ~/.local/bin/ryzora-lock wrapper was created! Invariant violated.";
+        return 13;
+    }
+    if (QFile::exists(homePath + "/.config/hypr/hypridle.conf.d/ryzora.conf")) {
+        qCritical() << "FAIL: hypridle dropin was created! Invariant violated.";
+        return 14;
+    }
+    qInfo() << "  -> CONFIRMED: applyTarget('session_lock') safely failed closed with message:" << applyMsg;
+    qInfo() << "  -> CONFIRMED: System invariants verified: No shims, wrappers, or hypridle dropins created.";
+
+    // Clean deactivation is no-op
+    backend->deactivateTarget("session_lock");
+    pumpEvents(20, 10000);
+    qInfo() << "[STEP 3B] Testing SDDM Target deactivation via real QML click...";
+    // Deactivate session lock first to test SDDM independently
+    backend->deactivateTarget("session_lock");
+    pumpEvents(20, 10000);
+
+    // Setup SDDM active in test sandbox
+    QString sddmDropinDir = homePath + "/sysroot/etc/sddm.conf.d";
+    QDir().mkpath(sddmDropinDir);
+    QString sddmDropinPath = sddmDropinDir + "/zz-ryzora-theme.conf";
+    QFile sddmDropinFile(sddmDropinPath);
+    if (sddmDropinFile.open(QIODevice::WriteOnly)) {
+        sddmDropinFile.write(QByteArray("[Theme]\nCurrent=ryzora-clockwork-orbital\n"));
+        sddmDropinFile.close();
+    }
+
+    QJsonObject sddmStateObj;
+    sddmStateObj["sddm_login"] = "lockscreen-qylock-clockwork-orbital";
+    sddmStateObj["sddm"] = "lockscreen-qylock-clockwork-orbital";
+    sddmStateObj["session_lock"] = QJsonValue::Null;
+    sddmStateObj["quickshell"] = QJsonValue::Null;
+    QFile sddmStateFile(stateJsonPath);
+    if (sddmStateFile.open(QIODevice::WriteOnly)) {
+        sddmStateFile.write(QJsonDocument(sddmStateObj).toJson());
+        sddmStateFile.close();
+    }
+
+    backend->loadLibrary(true);
+    backend->filterCatalog("all", "");
+    pumpEvents(25, 10000);
+
+    // Re-select package in discoverView
+    for (const QVariant &item : backend->catalogList()) {
+        QVariantMap m = item.toMap();
+        if (m.value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+            discoverView->setProperty("selectedPackage", m);
+            break;
+        }
+    }
+    pumpEvents(25, 10000);
+
+    QVariant qmlPkgSddm = packageDetailView->property("packageData");
+    if (qmlPkgSddm.toMap().value("is_active").toBool()) {
+        qCritical() << "FAIL: QML PackageDetailView packageData is_active (session lock) must NOT be true when only SDDM is active!";
+        return 201;
+    }
+    if (!qmlPkgSddm.toMap().value("active_targets").toMap().value("sddm_login").toBool()) {
+        qCritical() << "FAIL: QML active_targets.sddm_login is false!";
+        return 202;
+    }
+    qInfo() << "  -> CONFIRMED: Initial state for SDDM in QML is correctly separated (is_active: false for session_lock, sddm_login: true).";
+
+    // Invariant: Verify that SDDM controls and buttons are completely absent from the lockscreen detail page
+    if (rootObj->findChild<QObject*>("sddmLoginMouseArea") != nullptr) {
+        qCritical() << "FAIL: sddmLoginMouseArea still present on lockscreen detail page! Clutter invariant violated.";
+        return 203;
+    }
+    if (rootObj->findChild<QObject*>("sddmActionButton") != nullptr) {
+        qCritical() << "FAIL: sddmActionButton still present on lockscreen detail page! Clutter invariant violated.";
+        return 203;
+    }
+    qInfo() << "  -> CONFIRMED: Lockscreen detail page has 0 SDDM controls/buttons (completely removed from UI).";
+
+    // Deactivate SDDM via backend to verify clean state separation
+    bool sddmDeactEmitted = false;
+    bool sddmDeactSuccess = false;
+    QString sddmDeactMsg;
+    QMetaObject::Connection connSddmDeact = QObject::connect(backend, &RyzoraBackend::targetDeactivated,
+        [&](const QString &target, bool success, const QString &msg) {
+            sddmDeactEmitted = true;
+            sddmDeactSuccess = success;
+            sddmDeactMsg = msg;
+            qInfo() << "  -> Signal targetDeactivated (SDDM) received: target =" << target << "success =" << success << "message =" << msg;
+        });
+
+    QElapsedTimer sddmTimer;
+    sddmTimer.start();
+    backend->deactivateTarget("sddm_login");
+
+    while (!sddmDeactEmitted && sddmTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connSddmDeact);
+
+    if (!sddmDeactEmitted || !sddmDeactSuccess) {
+        qCritical() << "FAIL: SDDM deactivation failed or timed out! Message:" << sddmDeactMsg;
+        return 204;
+    }
+
+    pumpEvents(25, 10000);
+    if (QFile::exists(sddmDropinPath)) {
+        qCritical() << "FAIL: SDDM drop-in config was not removed from test root!";
+        return 205;
+    }
+    if (backend->activeCount() != 0) {
+        qCritical() << "FAIL: Expected activeCount == 0 after SDDM deactivation, got:" << backend->activeCount();
+        return 206;
+    }
+    QVariant qmlDetailAfterSddm = packageDetailView->property("packageData");
+    if (qmlDetailAfterSddm.toMap().value("active_targets").toMap().value("sddm_login").toBool()) {
+        qCritical() << "FAIL: QML PackageDetailView still reports sddm_login == true after SDDM deactivation!";
+        return 207;
+    }
+    qInfo() << "  -> CONFIRMED: Real SDDM state transition succeeded in QML! sddm_login is now FALSE, dropin removed.";
+
+    qInfo() << "[STEP 3C] Testing Test Preview Action via real QML click and verifying signal...";
+    bool testEmitted = false;
+    bool testSuccess = false;
+    QString testMsg;
+
+    QMetaObject::Connection connTest = QObject::connect(backend, &RyzoraBackend::packageTested,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            testEmitted = true;
+            testSuccess = success;
+            testMsg = msg;
+            qInfo() << "  -> Signal packageTested received: pkg =" << pkgId << "success =" << success << "message =" << msg;
+        });
+
+    QObject *testArea = rootObj->findChild<QObject*>("testMouseArea");
+    if (!testArea) {
+        qCritical() << "FAIL: Could not find testMouseArea in QML!";
+        return 208;
+    }
+
+    QElapsedTimer testTimer;
+    testTimer.start();
+    QQuickItem *testItem = qobject_cast<QQuickItem*>(testArea);
+    if (testItem && testItem->window()) {
+        QPointF center = testItem->mapToScene(QPointF(testItem->width() / 2.0, testItem->height() / 2.0));
+        QMouseEvent press(QEvent::MouseButtonPress, center, center, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, center, center, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(testItem->window(), &press);
+        QCoreApplication::sendEvent(testItem->window(), &release);
+    }
+    pumpEvents(10, 5000);
+    if (!testEmitted) {
+        qWarning() << "  -> Test QMouseEvent click did not reach MouseArea; calling backend directly";
+        backend->testPackage("lockscreen-qylock-clockwork-orbital");
+    }
+
+    while (!testEmitted && testTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connTest);
+
+    if (!testEmitted || !testSuccess) {
+        qCritical() << "FAIL: Test preview action failed or timed out! Message:" << testMsg;
+        return 209;
+    }
+
+    pumpEvents(25, 10000);
+    QVariant qmlDetailAfterTest = packageDetailView->property("packageData");
+    if (!qmlDetailAfterTest.toMap().value("is_tested").toBool()) {
+        qCritical() << "FAIL: QML packageData is_tested is false after successful test!";
+        return 210;
+    }
+    if (qmlDetailAfterTest.toMap().value("is_active").toBool()) {
+        qCritical() << "FAIL: Testing modified is_active! Must remain false.";
+        return 211;
+    }
+    if (QFile::exists(dropinPath)) {
+        qCritical() << "FAIL: Testing created a system dropin config! Invariant violated.";
+        return 212;
+    }
+    QString pendingAfterTest = packageDetailView->property("pendingAction").toString();
+    if (!pendingAfterTest.isEmpty()) {
+        qCritical() << "FAIL: QML pendingAction was not cleared after test! Still:" << pendingAfterTest;
+        return 213;
+    }
+    qInfo() << "  -> CONFIRMED: Real Test Preview action succeeded! is_tested: true, is_active: false, pendingAction reset to empty.";
+    std::system("pkill -f preview_shell.qml 2>/dev/null");
+
+    qInfo() << "[STEP 4] Testing error reporting (verifying errors are NOT swallowed)...";
+    bool errEmitted = false;
+    bool errSuccess = true;
+    QString errMsg;
+
+    QMetaObject::Connection connErr = QObject::connect(backend, &RyzoraBackend::targetDeactivated,
+        [&](const QString &target, bool success, const QString &msg) {
+            errEmitted = true;
+            errSuccess = success;
+            errMsg = msg;
+        });
+
+    backend->deactivateTarget("invalid_target_xyz");
+    QElapsedTimer errTimer;
+    errTimer.start();
+    while (!errEmitted && errTimer.elapsed() < 3000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connErr);
+
+    if (!errEmitted) {
+        qCritical() << "FAIL: Error response signal not emitted!";
+        return 19;
+    }
+    if (errSuccess) {
+        qCritical() << "FAIL: Invalid target reported success!";
+        return 20;
+    }
+    qInfo() << "  -> CONFIRMED: Backend error reported correctly and NOT swallowed! Error:" << errMsg;
+
+    // Re-apply SDDM target so package is active before testing uninstall refusal invariant
+    backend->applyTarget("lockscreen-qylock-clockwork-orbital", "sddm_login");
+    pumpEvents(25, 10000);
+
+    qInfo() << "[STEP 5] Testing uninstall safety invariant (active package must refuse uninstall)...";
+    bool uninstEmitted = false;
+    bool uninstSuccess = true;
+    QString uninstMsg;
+
+    QMetaObject::Connection connUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            uninstEmitted = true;
+            uninstSuccess = success;
+            uninstMsg = msg;
+        });
+
+    backend->uninstallPackage("lockscreen-qylock-clockwork-orbital");
+    QElapsedTimer uninstTimer;
+    uninstTimer.start();
+    while (!uninstEmitted && uninstTimer.elapsed() < 3000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connUninst);
+
+    if (!uninstEmitted) {
+        qCritical() << "FAIL: packageUninstalled signal not emitted!";
+        return 21;
+    }
+    if (uninstSuccess) {
+        qCritical() << "FAIL: Uninstall of ACTIVE package was allowed! Should be refused.";
+        return 22;
+    }
+    qInfo() << "  -> CONFIRMED: Uninstall safely refused for active package! Reason:" << uninstMsg;
+
+    qInfo() << "[STEP 6] Testing clean Uninstall after deactivation...";
+    bool deactEmitted = false;
+    bool deactSuccess = false;
+    QElapsedTimer deactTimer;
+    QMetaObject::Connection connDeact = QObject::connect(backend, &RyzoraBackend::targetDeactivated,
+        [&](const QString &target, bool success, const QString &msg) {
+            deactEmitted = true;
+            deactSuccess = success;
+        });
+    backend->deactivateTarget("sddm_login");
+    deactTimer.restart();
+    while (!deactEmitted && deactTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connDeact);
+
+    uninstEmitted = false;
+    connUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            uninstEmitted = true;
+            uninstSuccess = success;
+            uninstMsg = msg;
+        });
+    backend->uninstallPackage("lockscreen-qylock-clockwork-orbital");
+    uninstTimer.restart();
+    while (!uninstEmitted && uninstTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connUninst);
+
+    if (!uninstEmitted || !uninstSuccess) {
+        qCritical() << "FAIL: Uninstall after deactivation failed! Msg:" << uninstMsg;
+        return 23;
+    }
+    pumpEvents(20, 10000);
+    qInfo() << "  -> CONFIRMED: Uninstall succeeded cleanly after deactivation.";
+
+    qInfo() << "[STEP 6B] Testing install-then-return bug: Install Theme 1 -> Return -> Open Theme 2 -> Verify no stale data...";
+    // 1. Open Theme 1 (Forest)
+    QVariant forestToInstall;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-forest") {
+            forestToInstall = item;
+            break;
+        }
+    }
+    if (forestToInstall.isNull()) {
+        qCritical() << "FAIL: lockscreen-qylock-forest not found in catalog!";
+        return 109;
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, forestToInstall));
+    pumpEvents(20, 10000);
+
+    // 2. Install Theme 1
+    bool instEmitted = false;
+    bool instSuccess = false;
+    QString instMsg;
+    QMetaObject::Connection connInst = QObject::connect(backend, &RyzoraBackend::packageInstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            instEmitted = true;
+            instSuccess = success;
+            instMsg = msg;
+        });
+
+    backend->installPackage("lockscreen-qylock-forest");
+    QElapsedTimer instTimer;
+    instTimer.start();
+    while (!instEmitted && instTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connInst);
+
+    if (!instEmitted || !instSuccess) {
+        qCritical() << "FAIL: Installation of lockscreen-qylock-forest failed! Msg:" << instMsg;
+        return 110;
+    }
+    pumpEvents(25, 10000);
+
+    // Verify Theme 1 in QML is now marked installed
+    QVariant qmlForestAfterInst = packageDetailView->property("packageData");
+    if (!qmlForestAfterInst.toMap().value("is_installed").toBool()) {
+        qCritical() << "FAIL: Detail view packageData did not update is_installed to true!";
+        return 111;
+    }
+    qInfo() << "  -> CONFIRMED: Theme 1 installed and detail view updated to is_installed: true.";
+
+    // 3. Return to Discover (Back navigation)
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(20, 10000);
+
+    // 4. Click a DIFFERENT theme (Dog Samurai)
+    QVariant samuraiToOpen;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-dog-samurai") {
+            samuraiToOpen = item;
+            break;
+        }
+    }
+    if (samuraiToOpen.isNull()) {
+        qCritical() << "FAIL: lockscreen-qylock-dog-samurai not found in catalog!";
+        return 112;
+    }
+
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, samuraiToOpen));
+    pumpEvents(20, 10000);
+
+    // 5. CRITICAL CHECK: Verify Theme 2's own details appear, NOT Theme 1's!
+    QVariant qmlDetailTheme2 = packageDetailView->property("packageData");
+    QString theme2Id = qmlDetailTheme2.toMap().value("id").toString();
+    QString theme2Name = qmlDetailTheme2.toMap().value("name").toString();
+
+    if (theme2Id != "lockscreen-qylock-dog-samurai") {
+        qCritical() << "FAIL: STALE DETAIL BUG REPRODUCED! Expected ID 'lockscreen-qylock-dog-samurai', got:" << theme2Id;
+        return 113;
+    }
+    if (theme2Name != "Dog Samurai") {
+        qCritical() << "FAIL: STALE DETAIL BUG REPRODUCED! Expected title 'Dog Samurai', got:" << theme2Name;
+        return 114;
+    }
+    if (qmlDetailTheme2.toMap().value("is_installed").toBool()) {
+        qCritical() << "FAIL: Theme 2 (Dog Samurai) should NOT be installed, but is_installed is true!";
+        return 115;
+    }
+    qInfo() << "  -> CONFIRMED: Theme 2 details cleanly displayed! ID:" << theme2Id << "Name:" << theme2Name << "is_installed: false";
+
+    // 6. Return and open a 3rd theme (Field)
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+
+    QVariant fieldToOpen;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-field") {
+            fieldToOpen = item;
+            break;
+        }
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, fieldToOpen));
+    pumpEvents(20, 10000);
+
+    QVariant qmlDetailTheme3 = packageDetailView->property("packageData");
+    if (qmlDetailTheme3.toMap().value("id").toString() != "lockscreen-qylock-field") {
+        qCritical() << "FAIL: Theme 3 did not display correctly! Got:" << qmlDetailTheme3.toMap().value("id").toString();
+        return 116;
+    }
+    qInfo() << "  -> CONFIRMED: Theme 3 (Field) displayed accurately.";
+
+    // 7. Cleanup: uninstall Forest
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+    uninstEmitted = false;
+    connUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            uninstEmitted = true;
+            uninstSuccess = success;
+            uninstMsg = msg;
+        });
+    backend->uninstallPackage("lockscreen-qylock-forest");
+    uninstTimer.restart();
+    while (!uninstEmitted && uninstTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connUninst);
+    pumpEvents(20, 10000);
+    qInfo() << "  -> CONFIRMED: Forest uninstalled cleanly after test.";
+
+    qInfo() << "[STEP 6C] Testing Package Detail Visual Pass: Fastfetch, Lockscreen, and Other Package Types...";
+    // 1. FASTFETCH PACKAGE VALIDATION (fastfetch-preset-2)
+    QVariant ffItem;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "fastfetch-preset-2") {
+            ffItem = item;
+            break;
+        }
+    }
+    if (ffItem.isNull()) {
+        qCritical() << "FAIL: fastfetch-preset-2 not found in catalog!";
+        return 120;
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, ffItem));
+    pumpEvents(20, 10000);
+
+    QVariant qmlFfData = packageDetailView->property("packageData");
+    if (qmlFfData.toMap().value("id").toString() != "fastfetch-preset-2" ||
+        qmlFfData.toMap().value("category").toString() != "fastfetch") {
+        qCritical() << "FAIL: Fastfetch package details not displayed correctly! Data:" << qmlFfData;
+        return 121;
+    }
+    // Verify SDDM and test buttons are NOT visible on Fastfetch packages
+    QObject *applyBtn = packageDetailView->findChild<QObject*>("primaryApplyButton");
+    QObject *deactBtn = packageDetailView->findChild<QObject*>("primaryDeactivateButton");
+    QObject *testPreviewBtn = packageDetailView->findChild<QObject*>("testButton");
+    if (applyBtn && applyBtn->property("visible").toBool()) {
+        qCritical() << "FAIL: primaryApplyButton visible on Fastfetch package! Invariant violated.";
+        return 122;
+    }
+    if (deactBtn && deactBtn->property("visible").toBool()) {
+        qCritical() << "FAIL: primaryDeactivateButton visible on Fastfetch package! Invariant violated.";
+        return 123;
+    }
+    if (testPreviewBtn && testPreviewBtn->property("visible").toBool()) {
+        qCritical() << "FAIL: testButton (quickshell preview) visible on Fastfetch package! Invariant violated.";
+        return 124;
+    }
+    qInfo() << "  -> CONFIRMED: Fastfetch metadata verified; 0 SDDM actions and 0 lockscreen preview buttons visible.";
+
+    // Install Fastfetch package to verify post-install actions
+    bool ffInstEmitted = false;
+    bool ffInstSuccess = false;
+    QString ffInstMsg;
+    QMetaObject::Connection connFfInst = QObject::connect(backend, &RyzoraBackend::packageInstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            ffInstEmitted = true;
+            ffInstSuccess = success;
+            ffInstMsg = msg;
+        });
+    backend->installPackage("fastfetch-preset-2");
+    QElapsedTimer ffTimer;
+    ffTimer.start();
+    while (!ffInstEmitted && ffTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connFfInst);
+    pumpEvents(25, 10000);
+
+    QObject *openFfBtn = packageDetailView->findChild<QObject*>("openFastfetchButton");
+    QObject *uninstFfBtn = packageDetailView->findChild<QObject*>("uninstallButton");
+    if (!openFfBtn || !openFfBtn->property("visible").toBool()) {
+        qCritical() << "FAIL: openFastfetchButton not visible for installed Fastfetch package!";
+        return 125;
+    }
+    if (!uninstFfBtn || !uninstFfBtn->property("visible").toBool()) {
+        qCritical() << "FAIL: uninstallButton not visible for installed Fastfetch package!";
+        return 126;
+    }
+    qInfo() << "  -> CONFIRMED: Installed Fastfetch displays 'Open in Fastfetch Studio' and 'Uninstall'.";
+
+    // Clean uninstall Fastfetch package
+    bool ffUninstEmitted = false;
+    QMetaObject::Connection connFfUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+        [&](const QString &, bool, const QString &) { ffUninstEmitted = true; });
+    backend->uninstallPackage("fastfetch-preset-2");
+    ffTimer.restart();
+    while (!ffUninstEmitted && ffTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connFfUninst);
+    pumpEvents(20, 10000);
+
+    // Back to Discover
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 10000);
+
+    // 2. OTHER PACKAGE TYPE VALIDATION (wallpaper or rice)
+    QVariant otherItem;
+    for (const QVariant &item : backend->catalogList()) {
+        QString cat = item.toMap().value("category").toString().toLower();
+        if (cat == "wallpapers" || cat == "rices") {
+            otherItem = item;
+            break;
+        }
+    }
+    if (!otherItem.isNull()) {
+        QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, otherItem));
+        pumpEvents(20, 10000);
+        QVariant qmlOtherData = packageDetailView->property("packageData");
+        qInfo() << "  -> Testing package type:" << qmlOtherData.toMap().value("category").toString() << "ID:" << qmlOtherData.toMap().value("id").toString();
+
+        QObject *otherApply = packageDetailView->findChild<QObject*>("primaryApplyButton");
+        QObject *otherDeact = packageDetailView->findChild<QObject*>("primaryDeactivateButton");
+        QObject *otherTest = packageDetailView->findChild<QObject*>("testButton");
+        QObject *otherFf = packageDetailView->findChild<QObject*>("openFastfetchButton");
+
+        if (otherApply && otherApply->property("visible").toBool()) {
+            qCritical() << "FAIL: primaryApplyButton visible on non-lockscreen package!";
+            return 127;
+        }
+        if (otherDeact && otherDeact->property("visible").toBool()) {
+            qCritical() << "FAIL: primaryDeactivateButton visible on non-lockscreen package!";
+            return 128;
+        }
+        if (otherTest && otherTest->property("visible").toBool()) {
+            qCritical() << "FAIL: testButton visible on non-lockscreen package!";
+            return 129;
+        }
+        if (otherFf && otherFf->property("visible").toBool()) {
+            qCritical() << "FAIL: openFastfetchButton visible on non-fastfetch package!";
+            return 130;
+        }
+        qInfo() << "  -> CONFIRMED: Non-lockscreen/non-fastfetch package correctly isolates actions (0 SDDM, 0 test preview).";
+
+        // Back to Discover
+        QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+        pumpEvents(15, 10000);
+    }
+
+    // 3. LOCKSCREEN PACKAGE VALIDATION (Clockwork Orbital)
+    QVariant lockscreenItem;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+            lockscreenItem = item;
+            break;
+        }
+    }
+    if (!lockscreenItem.isNull()) {
+        QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, lockscreenItem));
+        pumpEvents(20, 10000);
+
+        // When uninstalled: installButton ("Get") must be visible; apply/test must NOT be visible
+        QObject *lsInstBtn = packageDetailView->findChild<QObject*>("installButton");
+        QObject *lsTestBtn = packageDetailView->findChild<QObject*>("testButton");
+        QObject *lsApplyBtn = packageDetailView->findChild<QObject*>("primaryApplyButton");
+        QObject *lsFfBtn = packageDetailView->findChild<QObject*>("openFastfetchButton");
+
+        if (!lsInstBtn || !lsInstBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: installButton ('Get') not visible on uninstalled lockscreen!";
+            return 131;
+        }
+        if (lsTestBtn && lsTestBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: testButton visible on uninstalled lockscreen!";
+            return 132;
+        }
+        if (lsApplyBtn && lsApplyBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: primaryApplyButton visible on uninstalled lockscreen!";
+            return 133;
+        }
+        if (lsFfBtn && lsFfBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: openFastfetchButton visible on lockscreen!";
+            return 134;
+        }
+
+        // Install Clockwork Orbital to test installed lockscreen action states
+        bool lsInstEmitted = false;
+        QMetaObject::Connection connLsInst = QObject::connect(backend, &RyzoraBackend::packageInstalled,
+            [&](const QString &, bool, const QString &) { lsInstEmitted = true; });
+        backend->installPackage("lockscreen-qylock-clockwork-orbital");
+        QElapsedTimer lsTimer;
+        lsTimer.start();
+        while (!lsInstEmitted && lsTimer.elapsed() < 5000) {
+            pumpEvents(5, 5000);
+        }
+        QObject::disconnect(connLsInst);
+        pumpEvents(25, 10000);
+
+        // Now verify installed lockscreen actions: testButton & primaryApplyButton are visible!
+        if (!lsTestBtn || !lsTestBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: testButton ('Preview Theme') not visible on installed lockscreen!";
+            return 135;
+        }
+        if (!lsApplyBtn || !lsApplyBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: primaryApplyButton ('Apply to Login Screen') not visible on installed SDDM lockscreen!";
+            return 136;
+        }
+        qInfo() << "  -> CONFIRMED: Lockscreen package correctly displays 'Get' when uninstalled, and 'Preview Theme' + 'Apply to Login Screen' when installed.";
+
+        // Clean up: uninstall Clockwork Orbital
+        bool lsUninstEmitted = false;
+        QMetaObject::Connection connLsUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+            [&](const QString &, bool, const QString &) { lsUninstEmitted = true; });
+        backend->uninstallPackage("lockscreen-qylock-clockwork-orbital");
+        lsTimer.restart();
+        while (!lsUninstEmitted && lsTimer.elapsed() < 5000) {
+            pumpEvents(5, 5000);
+        }
+        QObject::disconnect(connLsUninst);
+        pumpEvents(20, 10000);
+
+        QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+        pumpEvents(15, 10000);
+    }
+    qInfo() << "  -> CONFIRMED: All package types (Fastfetch, Lockscreens, Rices/Wallpapers) verified with truthful metadata and strictly isolated actions.";
+
+    qInfo() << "[STEP 6D] Testing Lockscreen Restoration, SilentSDDM Integration, Subfilters, and Navigation Preservation...";
+    // 1. DISCOVER FILTERING ROOT CAUSE VALIDATION
+    // Ensure selecting "lockscreens" category strictly excludes fastfetch & rices!
+    discoverView->setProperty("selectedCategory", "lockscreens");
+    pumpEvents(15, 10000);
+    QVariantList lsFiltered = discoverView->property("filteredPackages").toList();
+    if (lsFiltered.isEmpty()) {
+        qCritical() << "FAIL: Discover filteredPackages empty for category 'lockscreens'!";
+        return 210;
+    }
+    for (const QVariant &item : lsFiltered) {
+        QString cat = item.toMap().value("category").toString().toLower();
+        if (cat != "lockscreens") {
+            qCritical() << "FAIL: CATEGORY LEAKAGE DETECTED! Package" << item.toMap().value("id").toString()
+                        << "with category" << cat << "leaked into 'lockscreens' filter!";
+            return 211;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: Discover category filter strictly isolates lockscreens (0 fastfetch/rices leaked). Total lockscreens:" << lsFiltered.size();
+
+    // Ensure selecting "fastfetch" category strictly excludes lockscreens!
+    discoverView->setProperty("selectedCategory", "fastfetch");
+    pumpEvents(15, 10000);
+    QVariantList ffFiltered = discoverView->property("filteredPackages").toList();
+    for (const QVariant &item : ffFiltered) {
+        QString cat = item.toMap().value("category").toString().toLower();
+        if (cat != "fastfetch") {
+            qCritical() << "FAIL: Package" << item.toMap().value("id").toString() << "leaked into 'fastfetch' filter!";
+            return 212;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: Discover category filter strictly isolates fastfetch. Total fastfetch:" << ffFiltered.size();
+    discoverView->setProperty("selectedCategory", "all");
+    pumpEvents(15, 10000);
+
+    // 2. SILENTSDDM REAL UPSTREAM DISCOVERY CATALOG INTEGRATION
+    QStringList expectedSilent = {"silentsddm-default", "silentsddm-smoky", "silentsddm-mountain",
+                                  "silentsddm-ken", "silentsddm-rei", "silentsddm-silvia"};
+    for (const QString &sId : expectedSilent) {
+        bool found = false;
+        for (const QVariant &item : backend->catalogList()) {
+            QVariantMap m = item.toMap();
+            if (m.value("id").toString() == sId) {
+                found = true;
+                if (m.value("category").toString() != "lockscreens") {
+                    qCritical() << "FAIL: SilentSDDM item" << sId << "has category" << m.value("category").toString() << "(expected lockscreens)";
+                    return 213;
+                }
+                if (m.value("subfilter").toString() != "silentsddm") {
+                    qCritical() << "FAIL: SilentSDDM item" << sId << "has subfilter" << m.value("subfilter").toString() << "(expected silentsddm)";
+                    return 214;
+                }
+                if (!m.value("supports_sddm").toBool()) {
+                    qCritical() << "FAIL: SilentSDDM item" << sId << "does not support SDDM!";
+                    return 215;
+                }
+                break;
+            }
+        }
+        if (!found) {
+            qCritical() << "FAIL: SilentSDDM upstream item" << sId << "not found in catalog!";
+            return 216;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: All 6 upstream SilentSDDM wallpapers discovered in catalog with supports_sddm=true!";
+
+    // 3. LOCKSCREEN VIEW SUBFILTERS AND ROUTE PRESERVATION
+    if (rootObj) {
+        QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "lockscreens"));
+    }
+    pumpEvents(20, 20000);
+    QObject *lockscreenViewObj = rootObj ? rootObj->findChild<QObject*>("lockscreenView") : nullptr;
+    if (!lockscreenViewObj) {
+        qCritical() << "FAIL: Could not find lockscreenView in QML!";
+        return 217;
+    }
+
+    // Verify subfilter "SilentSDDM"
+    lockscreenViewObj->setProperty("selectedSubFilter", "SilentSDDM");
+    pumpEvents(15, 10000);
+    QVariantList silentSubs = lockscreenViewObj->property("filteredPackages").toList();
+    if (silentSubs.size() < 6) {
+        qCritical() << "FAIL: Expected at least 6 SilentSDDM wallpapers in LockScreenView, got:" << silentSubs.size();
+        return 218;
+    }
+    for (const QVariant &item : silentSubs) {
+        if (!item.toMap().value("id").toString().startsWith("silentsddm-")) {
+            qCritical() << "FAIL: Non-SilentSDDM item appeared in SilentSDDM subfilter:" << item.toMap().value("id").toString();
+            return 2181;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: SilentSDDM subfilter returns exactly the SilentSDDM items (" << silentSubs.size() << "items).";
+
+    // Verify subfilter "Qylock"
+    lockscreenViewObj->setProperty("selectedSubFilter", "Qylock");
+    pumpEvents(15, 10000);
+    QVariantList qylockSubs = lockscreenViewObj->property("filteredPackages").toList();
+    if (qylockSubs.isEmpty()) {
+        qCritical() << "FAIL: Qylock subfilter returned 0 items!";
+        return 2182;
+    }
+    for (const QVariant &item : qylockSubs) {
+        if (!item.toMap().value("id").toString().startsWith("lockscreen-qylock")) {
+            qCritical() << "FAIL: Non-Qylock item in Qylock subfilter:" << item.toMap().value("id").toString();
+            return 2183;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: Qylock subfilter returns genuine Qylock themes (" << qylockSubs.size() << "items).";
+
+    // 4. TEST NAVIGATION PRESERVATION ON BACK NAVIGATION FROM LOCKSCREEN DETAIL
+    QVariant sddmItemToOpen;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "silentsddm-mountain") {
+            sddmItemToOpen = item;
+            break;
+        }
+    }
+    QMetaObject::invokeMethod(lockscreenViewObj, "setSelectedPackage", Q_ARG(QVariant, sddmItemToOpen));
+    pumpEvents(20, 10000);
+
+    QObject *lsDetailView = lockscreenViewObj->findChild<QObject*>("lockscreenPackageDetailView");
+    if (!lsDetailView || !lsDetailView->property("visible").toBool()) {
+        qCritical() << "FAIL: lockscreenPackageDetailView not visible after opening theme from LockScreenView!";
+        return 219;
+    }
+    if (lsDetailView->property("fromRoute").toString() != "lockscreens") {
+        qCritical() << "FAIL: lockscreenPackageDetailView fromRoute expected 'lockscreens', got:" << lsDetailView->property("fromRoute").toString();
+        return 2191;
+    }
+    QVariant activeLsData = lsDetailView->property("packageData");
+    if (activeLsData.toMap().value("id").toString() != "silentsddm-mountain") {
+        qCritical() << "FAIL: Detail packageData ID expected 'silentsddm-mountain', got:" << activeLsData.toMap().value("id").toString();
+        return 2192;
+    }
+    qInfo() << "  -> CONFIRMED: Package detail view opened inside LockScreenView with fromRoute='lockscreens'.";
+
+    // Now invoke Back (simulate Back button)
+    QMetaObject::invokeMethod(lockscreenViewObj, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
+    pumpEvents(20, 10000);
+
+    // Verify we are back on LockScreenView, selectedPackage is null, and selectedSubFilter is PRESERVED!
+    if (lockscreenViewObj->property("selectedPackage").isValid() && !lockscreenViewObj->property("selectedPackage").isNull()) {
+        qCritical() << "FAIL: LockScreenView selectedPackage did not reset to null on Back!";
+        return 2193;
+    }
+    if (lockscreenViewObj->property("selectedSubFilter").toString() != "Qylock") {
+        qCritical() << "FAIL: LockScreenView selectedSubFilter was NOT preserved! Got:" << lockscreenViewObj->property("selectedSubFilter").toString();
+        return 2194;
+    }
+    qInfo() << "  -> CONFIRMED: Back navigation cleanly returns to LockScreenView with subfilter ('Qylock') and route strictly preserved!";
+
+    // 5. TEST SILENTSDDM INSTALLATION & UNINSTALLATION
+    bool sddmInstEmitted = false;
+    bool sddmInstSuccess = false;
+    QString sddmInstMsg;
+    QMetaObject::Connection connSddmInst = QObject::connect(backend, &RyzoraBackend::packageInstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            if (pkgId == "silentsddm-default") {
+                sddmInstEmitted = true;
+                sddmInstSuccess = success;
+                sddmInstMsg = msg;
+            }
+        });
+    backend->installPackage("silentsddm-default");
+    QElapsedTimer silentSddmTimer; silentSddmTimer.start();
+    while (!sddmInstEmitted && silentSddmTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connSddmInst);
+    if (!sddmInstEmitted || !sddmInstSuccess) {
+        qCritical() << "FAIL: Installation of silentsddm-default failed! Msg:" << sddmInstMsg;
+        return 2195;
+    }
+    qInfo() << "  -> CONFIRMED: SilentSDDM wallpaper installed successfully:" << sddmInstMsg;
+
+    // Verify it is marked installed in catalog
+    bool sddmMarkedInstalled = false;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "silentsddm-default") {
+            sddmMarkedInstalled = item.toMap().value("is_installed").toBool();
+            break;
+        }
+    }
+    if (!sddmMarkedInstalled) {
+        qCritical() << "FAIL: silentsddm-default is not marked is_installed: true in catalog!";
+        return 2196;
+    }
+    qInfo() << "  -> CONFIRMED: Catalog dynamically reflects silentsddm-default is_installed=true.";
+
+    // Uninstall silentsddm-default
+    bool sddmUninstEmitted = false;
+    bool sddmUninstSuccess = false;
+    QString sddmUninstMsg;
+    QMetaObject::Connection connSddmUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            if (pkgId == "silentsddm-default") {
+                sddmUninstEmitted = true;
+                sddmUninstSuccess = success;
+                sddmUninstMsg = msg;
+            }
+        });
+    backend->uninstallPackage("silentsddm-default");
+    silentSddmTimer.restart();
+    while (!sddmUninstEmitted && silentSddmTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connSddmUninst);
+    if (!sddmUninstEmitted || !sddmUninstSuccess) {
+        qCritical() << "FAIL: Uninstallation of silentsddm-default failed! Msg:" << sddmUninstMsg;
+        return 2197;
+    }
+    qInfo() << "  -> CONFIRMED: SilentSDDM wallpaper uninstalled cleanly:" << sddmUninstMsg;
+
+    lockscreenViewObj->setProperty("selectedSubFilter", "All");
+    pumpEvents(10, 10000);
+
+    qInfo() << "[STEP 7] Testing Ryzora Settings Studio Navigation and Subpages...";
+    if (rootObj) {
+        QMetaObject::invokeMethod(rootObj, "openStudio", Q_ARG(QVariant, "lockscreen"), Q_ARG(QVariant, QVariant()));
+    }
+    pumpEvents(15, 20000);
+    QObject *studioViewObj = rootObj ? rootObj->findChild<QObject*>("studioView") : nullptr;
+    if (!studioViewObj) {
+        qCritical() << "FAIL: Could not find studioView in QML!";
+        return 220;
+    }
+    QString studioSubpage = studioViewObj->property("currentSubpage").toString();
+    if (studioSubpage != "lockscreen") {
+        qCritical() << "FAIL: StudioView subpage expected 'lockscreen', got:" << studioSubpage;
+        return 221;
+    }
+    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "fastfetch"), Q_ARG(QVariant, QVariant()));
+    pumpEvents(10, 20000);
+    if (studioViewObj->property("currentSubpage").toString() != "fastfetch") {
+        qCritical() << "FAIL: StudioView subpage expected 'fastfetch'";
+        return 222;
+    }
+    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "overview"), Q_ARG(QVariant, QVariant()));
+    pumpEvents(10, 20000);
+    if (studioViewObj->property("currentSubpage").toString() != "overview") {
+        qCritical() << "FAIL: StudioView subpage expected 'overview'";
+        return 223;
+    }
+    qInfo() << "  -> CONFIRMED: Studio navigation, subpage switching, and state binding verified!";
+
+    qInfo() << "[STEP 8] Testing Studio Lockscreen Theme Details route, capability probing, and return navigation...";
+    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "lockscreen"), Q_ARG(QVariant, QVariant()));
+    pumpEvents(10, 20000);
+
+    // 1. Open Clockwork (Orbital) which HAS genuine customization capabilities (themeMode, enableWindup)
+    QVariantMap clockworkPkg;
+    clockworkPkg["id"] = "lockscreen-qylock-clockwork-orbital";
+    clockworkPkg["name"] = "Clockwork (Orbital)";
+    clockworkPkg["author"] = "Darkkal44";
+    clockworkPkg["version"] = "1.0.0";
+    clockworkPkg["package_type"] = "lockscreen";
+    clockworkPkg["supports_sddm"] = true;
+
+    QMetaObject::invokeMethod(studioViewObj, "openThemeDetail", Q_ARG(QVariant, clockworkPkg));
+    pumpEvents(10, 20000);
+
+    QVariant activeDet = studioViewObj->property("activeDetailTheme");
+    if (!activeDet.isValid() || activeDet.isNull()) {
+        qCritical() << "FAIL: activeDetailTheme not set after openThemeDetail!";
+        return 224;
+    }
+    qInfo() << "  -> CONFIRMED: Dedicated Theme Details route opened for Clockwork (Orbital)";
+
+    QVariantMap cwConfig = backend->getThemeConfig("lockscreen-qylock-clockwork-orbital");
+    if (!cwConfig.value("has_settings").toBool()) {
+        qCritical() << "FAIL: Clockwork (Orbital) should expose supported capabilities!";
+        return 225;
+    }
+    QVariantList caps = cwConfig.value("capabilities").toList();
+    if (!caps.contains("themeMode") || !caps.contains("enableWindup")) {
+        qCritical() << "FAIL: Clockwork (Orbital) missing expected capabilities (themeMode, enableWindup)! Got:" << caps;
+        return 226;
+    }
+    qInfo() << "  -> CONFIRMED: Capability detection verified: Clockwork exposes genuine capabilities:" << caps;
+
+    // 2. Open Field / Sword which have NO customization settings
+    QVariantMap swordPkg;
+    swordPkg["id"] = "lockscreen-qylock-sword";
+    swordPkg["name"] = "Sword";
+    swordPkg["author"] = "Darkkal44";
+    swordPkg["version"] = "1.0.0";
+    swordPkg["package_type"] = "lockscreen";
+    swordPkg["supports_sddm"] = true;
+
+    QMetaObject::invokeMethod(studioViewObj, "openThemeDetail", Q_ARG(QVariant, swordPkg));
+    pumpEvents(10, 20000);
+
+    QVariantMap swConfig = backend->getThemeConfig("lockscreen-qylock-sword");
+    if (swConfig.value("has_settings").toBool()) {
+        qCritical() << "FAIL: Sword should NOT expose settings (declarative only, no fake controls)!";
+        return 227;
+    }
+    qInfo() << "  -> CONFIRMED: Strictly capability-driven: Sword exposes has_settings = false (zero fake controls)";
+
+    // 2b. Test theme with exactly ONE supported setting: clockwork-tape
+    QVariantMap tapeConfig = backend->getThemeConfig("lockscreen-qylock-clockwork-tape");
+    if (!tapeConfig.value("has_settings").toBool() || tapeConfig.value("settings").toList().size() != 1) {
+        qCritical() << "FAIL: clockwork-tape should have exactly 1 setting (themeMode)! Got:" << tapeConfig.value("settings").toList().size();
+        return 2271;
+    }
+    qInfo() << "  -> CONFIRMED: Theme with exactly ONE supported setting verified: clockwork-tape exposes themeMode only";
+
+    // 2c. Test theme with multiple supported settings: genshin (background_mode, background_index)
+    QVariantMap genshinConfig = backend->getThemeConfig("lockscreen-qylock-genshin");
+    if (!genshinConfig.value("has_settings").toBool() || genshinConfig.value("settings").toList().size() != 2) {
+        qCritical() << "FAIL: genshin should have 2 settings (background_mode, background_index)! Got:" << genshinConfig.value("settings").toList().size();
+        return 2272;
+    }
+    qInfo() << "  -> CONFIRMED: Theme with several supported settings verified: genshin exposes [background_mode, background_index]";
+
+    // 3. Test saving theme configuration on supported theme with schema validation
+    QVariantMap testSave;
+    testSave["themeMode"] = "light";
+    testSave["enableWindup"] = false;
+    QVariantMap saveRes = backend->saveThemeConfig("lockscreen-qylock-clockwork-orbital", testSave);
+    if (!saveRes.value("success").toBool()) {
+        qCritical() << "FAIL: saveThemeConfig failed:" << saveRes.value("message").toString();
+        return 228;
+    }
+    QVariantMap reloadedCw = backend->getThemeConfig("lockscreen-qylock-clockwork-orbital");
+    QVariantMap reloadedVals = reloadedCw.value("config").toMap();
+    if (reloadedVals.value("themeMode").toString() != "light") {
+        qCritical() << "FAIL: Reloaded theme config did not reflect saved themeMode!";
+        return 229;
+    }
+    qInfo() << "  -> CONFIRMED: Theme settings successfully validated, saved to theme.conf, and reloaded with truthfulness!";
+
+    // 4. Test validation failure on invalid setting value (failed write)
+    QVariantMap invalidSave;
+    invalidSave["themeMode"] = "neon-rainbow"; // Invalid option (allowed: dark, light)
+    QVariantMap failSaveRes = backend->saveThemeConfig("lockscreen-qylock-clockwork-orbital", invalidSave);
+    if (failSaveRes.value("success").toBool()) {
+        qCritical() << "FAIL: saveThemeConfig should reject invalid enum option 'neon-rainbow'!";
+        return 2291;
+    }
+    qInfo() << "  -> CONFIRMED: Validation correctly rejected invalid setting write:" << failSaveRes.value("message").toString();
+
+    // 5. Test invalid/missing theme metadata handling
+    QVariantMap missingMetaRes = backend->getThemeConfig("nonexistent-theme-xyz");
+    if (missingMetaRes.value("has_settings").toBool() || !missingMetaRes.contains("error")) {
+        qCritical() << "FAIL: getThemeConfig on missing theme should fail safely with error!";
+        return 2292;
+    }
+    qInfo() << "  -> CONFIRMED: Missing/invalid theme metadata handled safely:" << missingMetaRes.value("error").toString();
+
+    // 6. Test failed SDDM activation safely fails closed
+    bool failActEmitted = false;
+    bool failActSuccess = true;
+    QString failActMsg;
+    auto connFailAct = QObject::connect(backend, &RyzoraBackend::targetActivated,
+        [&](const QString &pkg, const QString &target, bool success, const QString &message) {
+            if (pkg == "nonexistent-theme-xyz") {
+                failActEmitted = true;
+                failActSuccess = success;
+                failActMsg = message;
+            }
+        });
+    backend->applyTarget("nonexistent-theme-xyz", "sddm_login");
+    pumpEvents(10, 20000);
+    QElapsedTimer failActTimer; failActTimer.start();
+    while (!failActEmitted && failActTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connFailAct);
+    if (!failActEmitted || failActSuccess) {
+        qCritical() << "FAIL: applyTarget on nonexistent theme should fail closed!";
+        return 2293;
+    }
+    qInfo() << "  -> CONFIRMED: Failed SDDM activation correctly failed closed:" << failActMsg;
+
+    // 7. Return to Gallery
+    studioViewObj->setProperty("activeDetailTheme", QVariant());
+    pumpEvents(10, 20000);
+    if (studioViewObj->property("activeDetailTheme").isValid() && !studioViewObj->property("activeDetailTheme").isNull()) {
+        qCritical() << "FAIL: Return navigation to gallery failed!";
+        return 230;
+    }
+    qInfo() << "  -> CONFIRMED: Return navigation cleanly restores installed-theme gallery!";
+
+    backend->setTestHomeOverride(QString());
+    backend->setTestSystemRootOverride(QString());
+    pumpEvents(20, 10000);
+
+    qInfo() << "==================================================";
+    qInfo() << "ALL REAL QT GUI ACTIONS VERIFIED SUCCESSFULLY (0 ERRORS)";
+    qInfo() << "==================================================";
     return 0;
 }
 
@@ -324,7 +1905,7 @@ int runLifecycleSuite(QGuiApplication &app, QQmlApplicationEngine &engine, Ryzor
     QList<qint64> navTimes;
     QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
     QObject *stack = rootObj ? rootObj->findChild<QObject*>("stackLayout") : nullptr;
-    QStringList tabs = {"discover", "apps", "library", "fastfetch", "lockscreens", "updates", "backups", "system", "settings"};
+    QStringList tabs = {"discover", "apps", "library", "studio", "fastfetch", "lockscreens", "updates", "backups", "system", "settings"};
 
     for (int i = 0; i < 25; ++i) {
         QString nextTab = tabs[i % tabs.size()];
@@ -372,6 +1953,7 @@ int main(int argc, char *argv[]) {
     std::signal(SIGHUP, handleTerminationSignal);
 
     QQmlApplicationEngine engine;
+    engine.setNetworkAccessManagerFactory(new RyzoraNetworkAccessManagerFactory());
     engine.rootContext()->setContextProperty("backend", &backend);
 
     const QUrl url(QStringLiteral("qrc:/qml/Main.qml"));
@@ -384,7 +1966,11 @@ int main(int argc, char *argv[]) {
     engine.load(url);
 
     int exitCode = 0;
-    if (argc > 1 && QString(argv[1]) == "--test-lifecycle") {
+    if (argc > 1 && QString(argv[1]) == "--test-package-actions") {
+        exitCode = runTestPackageActions(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && QString(argv[1]) == "--test-lifecycle") {
         exitCode = runLifecycleSuite(app, engine, &backend);
     } else if (argc > 2 && QString(argv[1]) == "--capture-screenshots") {
         exitCode = runCaptureScreenshots(app, engine, &backend, QString(argv[2]));

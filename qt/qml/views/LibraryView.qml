@@ -8,6 +8,7 @@ Item {
 
     signal packageSelected(var packageData)
     signal navigateRequested(string tabName)
+    signal customizeRequested(string subpage, var packageData)
 
     ScrollView {
         anchors.fill: parent
@@ -195,20 +196,6 @@ Item {
 
                             // Target Pills
                             Rectangle {
-                                visible: Boolean(backend.activeConfiguration && backend.activeConfiguration.session_lock_active)
-                                height: 18
-                                width: 76
-                                radius: 4
-                                color: "#312e81"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Session Lock"
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    color: "#c7d2fe"
-                                }
-                            }
-                            Rectangle {
                                 visible: Boolean(backend.activeConfiguration && backend.activeConfiguration.sddm_login_active)
                                 height: 18
                                 width: 76
@@ -234,30 +221,40 @@ Item {
                         }
                     }
 
-                    // Verified Safe Deactivate Action (NEVER UNINSTALLS)
-                    Rectangle {
-                        height: 30
-                        width: deactTxt.implicitWidth + 20
-                        radius: theme.radiusSm
-                        color: deactArea.containsMouse ? "#3b1219" : theme.surface
-                        border.color: deactArea.containsMouse ? "#ef4444" : theme.borderStrong
-                        border.width: 1
+                    RowLayout {
+                        spacing: 8
 
-                        Text {
-                            id: deactTxt
-                            anchors.centerIn: parent
-                            text: "Deactivate"
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: deactArea.containsMouse ? "#f87171" : theme.textMuted
+                        ActionButton {
+                            label: "Customize in Studio"
+                            iconText: "🎨"
+                            onClicked: root.customizeRequested("lockscreen", null)
                         }
 
-                        MouseArea {
-                            id: deactArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: backend.deactivateTarget("all")
+                        // Verified Safe Deactivate Action (NEVER UNINSTALLS)
+                        Rectangle {
+                            height: 30
+                            width: deactTxt.implicitWidth + 20
+                            radius: theme.radiusSm
+                            color: deactArea.containsMouse ? "#3b1219" : theme.surface
+                            border.color: deactArea.containsMouse ? "#ef4444" : theme.borderStrong
+                            border.width: 1
+
+                            Text {
+                                id: deactTxt
+                                anchors.centerIn: parent
+                                text: "Deactivate"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: deactArea.containsMouse ? "#f87171" : theme.textMuted
+                            }
+
+                            MouseArea {
+                                id: deactArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: backend.deactivateTarget("all")
+                            }
                         }
                     }
                 }
@@ -383,6 +380,11 @@ Item {
                         itemData: modelData
                         onCardClicked: root.packageSelected(modelData)
                         onHistoryClicked: root.navigateRequested("backups")
+                        onCustomizeClicked: {
+                            var cat = String(modelData.category || "").toLowerCase()
+                            var sub = (cat === "lockscreens" || cat === "sddm") ? "lockscreen" : (cat === "fastfetch" ? "fastfetch" : (cat === "wallpapers" ? "wallpapers" : "overview"))
+                            root.customizeRequested(sub, modelData)
+                        }
                     }
                 }
             }

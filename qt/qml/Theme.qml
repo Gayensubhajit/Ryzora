@@ -56,40 +56,46 @@ QtObject {
     readonly property color accentFaint: Qt.rgba(accent.r, accent.g, accent.b, 0.12)
 
     // Surfaces & Canvas (Monochrome Deep Black Hierarchy matching --rz-* tokens)
-    readonly property color bg: resolvedTheme === "light" ? "#F5F6F8" : "#17191D"
-    readonly property color sidebarBg: resolvedTheme === "light" ? "#ECEEF2" : "#131519"
-    readonly property color surface: resolvedTheme === "light" ? "#FFFFFF" : "#202329"
-    readonly property color surfaceElevated: resolvedTheme === "light" ? "#FFFFFF" : "#282C34"
-    readonly property color surfaceHover: resolvedTheme === "light" ? "#F0F2F5" : "#282C34"
-    readonly property color surfaceActive: resolvedTheme === "light" ? "#E4E7EB" : "#30343C"
+    readonly property color bg: resolvedTheme === "light" ? "#F5F6F9" : "#14161A"
+    readonly property color sidebarBg: resolvedTheme === "light" ? "#EBECEF" : "#101215"
+    readonly property color surface: resolvedTheme === "light" ? "#FFFFFF" : "#1C1F24"
+    readonly property color surfaceElevated: resolvedTheme === "light" ? "#FFFFFF" : "#242830"
+    readonly property color surfaceHover: resolvedTheme === "light" ? "#F2F4F7" : "#262A33"
+    readonly property color surfaceActive: resolvedTheme === "light" ? "#E5E7EB" : "#2C313B"
 
-    // Borders
-    readonly property color border: increaseContrast ? (resolvedTheme === "light" ? "rgba(0, 0, 0, 0.25)" : "#3D424D") : (resolvedTheme === "light" ? "rgba(20, 24, 30, 0.08)" : "#30343C")
-    readonly property color borderSubtle: increaseContrast ? (resolvedTheme === "light" ? "rgba(0, 0, 0, 0.20)" : "#30343C") : (resolvedTheme === "light" ? "rgba(20, 24, 30, 0.05)" : "#282B33")
-    readonly property color borderStrong: increaseContrast ? (resolvedTheme === "light" ? "rgba(0, 0, 0, 0.35)" : "#475569") : (resolvedTheme === "light" ? "rgba(20, 24, 30, 0.16)" : "#3D424D")
+    // Borders (Pure Hex / Valid Colors - Never invalid CSS rgba strings)
+    readonly property color border: increaseContrast ? (resolvedTheme === "light" ? "#B0B5C0" : "#4A505E") : (resolvedTheme === "light" ? "#D8DBE2" : "#2E333C")
+    readonly property color borderSubtle: increaseContrast ? (resolvedTheme === "light" ? "#C8CCD6" : "#3D4350") : (resolvedTheme === "light" ? "#E5E7EB" : "#252830")
+    readonly property color borderStrong: increaseContrast ? (resolvedTheme === "light" ? "#9096A4" : "#5A6172") : (resolvedTheme === "light" ? "#C2C6D1" : "#3D4350")
+
+    // Dedicated Card Tokens
+    readonly property color cardBg: surface
+    readonly property color cardBorder: borderSubtle
+    readonly property color cardBorderHover: borderStrong
+    readonly property color cardHoverBg: surfaceHover
 
     // Typography
-    readonly property color text: resolvedTheme === "light" ? "#1A1C20" : "#E8EAF0"
-    readonly property color textSecondary: increaseContrast ? (resolvedTheme === "light" ? "#272a30" : "#d1d5db") : (resolvedTheme === "light" ? "#5f6368" : "#969BA6")
-    readonly property color textMuted: increaseContrast ? (resolvedTheme === "light" ? "#3a3f4a" : "#9ca3af") : (resolvedTheme === "light" ? "#80868b" : "#7A808C")
-    readonly property color textFaint: resolvedTheme === "light" ? "#9aa0a6" : "#555A66"
+    readonly property color text: resolvedTheme === "light" ? "#111827" : "#F1F3F7"
+    readonly property color textSecondary: increaseContrast ? (resolvedTheme === "light" ? "#1F2937" : "#E5E7EB") : (resolvedTheme === "light" ? "#4B5563" : "#9CA3AF")
+    readonly property color textMuted: increaseContrast ? (resolvedTheme === "light" ? "#374151" : "#D1D5DB") : (resolvedTheme === "light" ? "#6B7280" : "#6B7280")
+    readonly property color textFaint: resolvedTheme === "light" ? "#9CA3AF" : "#4B5563"
 
     // Semantic Status Colors
     readonly property color success: "#10b981"
-    readonly property color successBg: resolvedTheme === "light" ? "rgba(16, 185, 129, 0.10)" : "#064e3b"
+    readonly property color successBg: resolvedTheme === "light" ? "#ECFDF5" : "#064e3b"
     readonly property color warning: "#f59e0b"
-    readonly property color warningBg: resolvedTheme === "light" ? "rgba(245, 158, 11, 0.10)" : "#451a03"
+    readonly property color warningBg: resolvedTheme === "light" ? "#FFFBEB" : "#451a03"
     readonly property color error: "#ef4444"
-    readonly property color errorBg: resolvedTheme === "light" ? "rgba(239, 68, 68, 0.10)" : "#7f1d1d"
+    readonly property color errorBg: resolvedTheme === "light" ? "#FEF2F2" : "#7f1d1d"
     readonly property color info: "#3b82f6"
-    readonly property color infoBg: resolvedTheme === "light" ? "rgba(59, 130, 246, 0.10)" : "#1e3a8a"
+    readonly property color infoBg: resolvedTheme === "light" ? "#EFF6FF" : "#1e3a8a"
 
     // Nav tokens
-    readonly property color navItem: resolvedTheme === "light" ? "#35373c" : "#A0A5AF"
-    readonly property color navItemHover: resolvedTheme === "light" ? "#17181b" : "#F2F3F5"
+    readonly property color navItem: resolvedTheme === "light" ? "#374151" : "#A0A5AF"
+    readonly property color navItemHover: resolvedTheme === "light" ? "#111827" : "#F2F3F5"
     readonly property color navItemActiveBg: resolvedTheme === "light" ? "#E2E5EC" : "#202329"
-    readonly property color navItemActiveText: resolvedTheme === "light" ? "#1A1C20" : "#E8EAF0"
-    readonly property color navSectionLabel: resolvedTheme === "light" ? "#7c828f" : "#737985"
+    readonly property color navItemActiveText: resolvedTheme === "light" ? "#111827" : "#F1F3F7"
+    readonly property color navSectionLabel: resolvedTheme === "light" ? "#6B7280" : "#737985"
 
     // Geometry & Radii
     readonly property int radiusSm: 6

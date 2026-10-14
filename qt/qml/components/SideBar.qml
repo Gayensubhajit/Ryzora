@@ -75,10 +75,10 @@ Rectangle {
                     radius: theme.radiusSm
                     color: colMouse.containsMouse ? theme.surfaceHover : "transparent"
 
-                    Text {
+                    RyzoraIcon {
                         anchors.centerIn: parent
-                        text: "◀"
-                        font.pixelSize: 10
+                        name: "chevron-left"
+                        size: 10
                         color: theme.textMuted
                     }
 
@@ -139,35 +139,17 @@ Rectangle {
                 SectionHeader { label: "STORE"; collapsed: root.isCollapsed }
 
                 NavButton {
-                    label: "Home"
-                    iconSymbol: "🌐"
-                    tabId: "hub"
-                    isActive: root.currentTab === "hub"
-                    collapsed: root.isCollapsed
-                    onClicked: root.tabSelected("hub")
-                }
-
-                NavButton {
                     label: "Discover"
-                    iconSymbol: "🧭"
+                    iconName: "compass"
                     tabId: "discover"
-                    isActive: root.currentTab === "discover" || root.currentTab === "fastfetch" || root.currentTab === "lockscreens" || root.currentTab === "collections" || root.currentTab === "creators" || root.currentTab === "repositories"
+                    isActive: root.currentTab === "discover" || root.currentTab === "collections" || root.currentTab === "creators" || root.currentTab === "repositories"
                     collapsed: root.isCollapsed
                     onClicked: root.tabSelected("discover")
                 }
 
                 NavButton {
-                    label: "Apps"
-                    iconSymbol: "🪟"
-                    tabId: "apps"
-                    isActive: root.currentTab === "apps"
-                    collapsed: root.isCollapsed
-                    onClicked: root.tabSelected("apps")
-                }
-
-                NavButton {
                     label: "Library"
-                    iconSymbol: "📚"
+                    iconName: "book"
                     tabId: "library"
                     badgeCount: backend.libraryCount
                     isActive: root.currentTab === "library"
@@ -177,7 +159,7 @@ Rectangle {
 
                 NavButton {
                     label: "Updates"
-                    iconSymbol: "⬆️"
+                    iconName: "arrow-up"
                     tabId: "updates"
                     badgeCount: backend.updatesCount
                     isActive: root.currentTab === "updates"
@@ -185,12 +167,24 @@ Rectangle {
                     onClicked: root.tabSelected("updates")
                 }
 
-                // Group 2: TOOLS
+                // Group 2: PERSONALIZE
+                SectionHeader { label: "PERSONALIZE"; collapsed: root.isCollapsed }
+
+                NavButton {
+                    label: "Studio"
+                    iconName: "palette"
+                    tabId: "studio"
+                    isActive: root.currentTab === "studio" || root.currentTab === "lockscreens" || root.currentTab === "fastfetch"
+                    collapsed: root.isCollapsed
+                    onClicked: root.tabSelected("studio")
+                }
+
+                // Group 3: TOOLS
                 SectionHeader { label: "TOOLS"; collapsed: root.isCollapsed }
 
                 NavButton {
                     label: "Backups"
-                    iconSymbol: "🛡️"
+                    iconName: "shield"
                     tabId: "backups"
                     badgeCount: backend.snapshotsCount
                     isActive: root.currentTab === "backups"
@@ -200,7 +194,7 @@ Rectangle {
 
                 NavButton {
                     label: "Diagnostics"
-                    iconSymbol: "💻"
+                    iconName: "desktop"
                     tabId: "system"
                     isActive: root.currentTab === "system" || root.currentTab === "compat_lab" || root.currentTab === "integrity" || root.currentTab === "activity" || root.currentTab === "author"
                     collapsed: root.isCollapsed
@@ -209,7 +203,7 @@ Rectangle {
 
                 NavButton {
                     label: "Settings"
-                    iconSymbol: "⚙️"
+                    iconName: "settings"
                     tabId: "settings"
                     isActive: root.currentTab === "settings"
                     collapsed: root.isCollapsed
@@ -310,10 +304,11 @@ Rectangle {
                     radius: theme.radiusSm
                     color: sysIconMouse.containsMouse ? theme.surfaceHover : "transparent"
 
-                    Text {
+                    RyzoraIcon {
                         anchors.centerIn: parent
-                        text: "💻"
-                        font.pixelSize: 14
+                        name: "desktop"
+                        size: 14
+                        color: theme.textMuted
                     }
 
                     MouseArea {
@@ -331,10 +326,10 @@ Rectangle {
                     radius: theme.radiusSm
                     color: expMouse.containsMouse ? theme.surfaceHover : "transparent"
 
-                    Text {
+                    RyzoraIcon {
                         anchors.centerIn: parent
-                        text: "▶"
-                        font.pixelSize: 10
+                        name: "chevron-right"
+                        size: 10
                         color: theme.textMuted
                     }
 
@@ -383,7 +378,7 @@ Rectangle {
         id: navBtn
         objectName: "navBtn_" + navBtn.tabId
         property string label: ""
-        property string iconSymbol: ""
+        property string iconName: "compass"
         property string tabId: ""
         property int badgeCount: 0
         property string badgeText: ""
@@ -430,10 +425,10 @@ Rectangle {
             anchors.rightMargin: 10
             spacing: 10
 
-            Text {
-                text: navBtn.iconSymbol
-                font.pixelSize: 13
-                color: isActive ? theme.accent : theme.textMuted
+            RyzoraIcon {
+                name: (navBtn.iconName && navBtn.iconName.length > 0) ? navBtn.iconName : "compass"
+                size: 14
+                color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textMuted)
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -495,10 +490,11 @@ Rectangle {
             visible: navBtn.collapsed
             anchors.fill: parent
 
-            Text {
+            RyzoraIcon {
                 anchors.centerIn: parent
-                text: navBtn.iconSymbol
-                font.pixelSize: 14
+                name: (navBtn.iconName && navBtn.iconName.length > 0) ? navBtn.iconName : "compass"
+                size: 14
+                color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textMuted)
             }
 
             Rectangle {

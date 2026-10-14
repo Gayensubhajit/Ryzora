@@ -129,10 +129,10 @@ Rectangle {
                 anchors.rightMargin: 10
                 spacing: 8
 
-                Text {
-                    text: "🔍"
-                    font.pixelSize: 12
-                    opacity: 0.7
+                RyzoraIcon {
+                    name: "search"
+                    size: 13
+                    color: theme.textMuted
                 }
 
                 TextInput {
@@ -158,12 +158,15 @@ Rectangle {
                     }
                 }
 
-                Text {
+                Item {
                     visible: searchInput.text.length > 0
-                    text: "✕"
-                    font.pixelSize: 11
-                    color: clearMouse.containsMouse ? theme.text : theme.textMuted
-
+                    width: 14; height: 14
+                    RyzoraIcon {
+                        anchors.centerIn: parent
+                        name: "x"
+                        size: 9
+                        color: clearMouse.containsMouse ? theme.text : theme.textMuted
+                    }
                     MouseArea {
                         id: clearMouse
                         anchors.fill: parent
@@ -198,9 +201,10 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 6
 
-                Text {
-                    text: "📚"
-                    font.pixelSize: 13
+                RyzoraIcon {
+                    name: "book"
+                    size: 13
+                    color: theme.text
                 }
 
                 Text {
@@ -230,10 +234,11 @@ Rectangle {
             border.color: theme.borderSubtle
             border.width: 1
 
-            Text {
+            RyzoraIcon {
                 anchors.centerIn: parent
-                text: theme.appearanceMode === "light" ? "☀️" : (theme.appearanceMode === "dark" ? "🌙" : "🖥️")
-                font.pixelSize: 14
+                name: theme.appearanceMode === "light" ? "sun" : (theme.appearanceMode === "dark" ? "moon" : "desktop")
+                size: 14
+                color: theme.text
             }
 
             MouseArea {
@@ -280,9 +285,9 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { id: "dark", label: "Dark", icon: "🌙" },
-                        { id: "light", label: "Light", icon: "☀️" },
-                        { id: "system", label: "Auto", icon: "🖥️" }
+                        { id: "dark", label: "Dark", icon: "moon" },
+                        { id: "light", label: "Light", icon: "sun" },
+                        { id: "system", label: "Auto", icon: "desktop" }
                     ]
                     delegate: Rectangle {
                         property bool isCur: theme.appearanceMode === modelData.id
@@ -295,8 +300,12 @@ Rectangle {
 
                         RowLayout {
                             anchors.centerIn: parent
-                            spacing: 4
-                            Text { text: modelData.icon; font.pixelSize: 11 }
+                            spacing: 6
+                            RyzoraIcon {
+                                name: modelData.icon
+                                size: 12
+                                color: isCur ? theme.accent : theme.textSecondary
+                            }
                             Text {
                                 text: modelData.label
                                 font.pixelSize: 11
@@ -345,12 +354,11 @@ Rectangle {
                         border.color: isSel ? "#ffffff" : "transparent"
                         border.width: isSel ? 2 : 0
 
-                        Text {
+                        RyzoraIcon {
                             visible: isSel
                             anchors.centerIn: parent
-                            text: "✓"
-                            font.pixelSize: 11
-                            font.bold: true
+                            name: "check"
+                            size: 11
                             color: "#ffffff"
                         }
 

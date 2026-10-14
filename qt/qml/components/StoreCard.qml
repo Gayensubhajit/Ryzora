@@ -4,30 +4,34 @@ import QtQuick.Layouts
 
 Rectangle {
     id: card
-    radius: theme.radiusLg
-    color: mouseArea.containsMouse ? theme.surfaceHover : theme.surface
-    border.color: card.activeFocus ? theme.accent : (mouseArea.containsMouse ? theme.borderStrong : theme.borderSubtle)
-    border.width: 1
+    radius: 10
     clip: true
-    activeFocusOnTab: true
+    color: mouseArea.containsMouse ? theme.surfaceHover : theme.surface
+    border.color: mouseArea.containsMouse ? theme.accent : theme.borderSubtle
+    border.width: 1
 
     property var itemData: null
-    signal cardClicked(var itemData)
 
-    Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
-    Behavior on border.color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
+    signal cardClicked(var itemData)
+    signal actionClicked(string action, var itemData)
+
+    Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 80 } }
+    Behavior on border.color { ColorAnimation { duration: theme.reduceMotion ? 0 : 80 } }
 
     Keys.onReturnPressed: if (card.itemData) card.cardClicked(card.itemData)
     Keys.onSpacePressed: if (card.itemData) card.cardClicked(card.itemData)
 
     MouseArea {
         id: mouseArea
+        objectName: "storeCardMouseArea"
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+        z: 1
         onClicked: {
             if (card.itemData) {
-                card.cardClicked(card.itemData)
+                console.log("[QML StoreCard] Card clicked: " + card.itemData.id);
+                card.cardClicked(card.itemData);
             }
         }
     }
@@ -36,56 +40,45 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        // ── 1. Image Preview Section (75–80% of Card Area) ──
+        // ── 1. Image Preview Section (Dominant Landscape Area) ──
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
 
-            // Real Artwork Image Preview
-            Image {
-                id: previewImg
-                anchors.fill: parent
-                source: (card.itemData && card.itemData.preview_url && card.itemData.preview_url.indexOf("://") !== -1) ? card.itemData.preview_url : ""
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                smooth: true
-                mipmap: true
-                visible: status === Image.Ready
-
-                scale: mouseArea.containsMouse ? 1.02 : 1.0
-                Behavior on scale { NumberAnimation { duration: theme.reduceMotion ? 0 : 250; easing.type: Easing.OutQuad } }
-            }
-
-            // Restrained Category Placeholder (Neutral native fallback)
+            // Clean Fallback Graphic when artwork is loading or unavailable
             Rectangle {
                 anchors.fill: parent
                 visible: previewImg.status !== Image.Ready
-                color: "#181A20"
+                color: theme.resolvedTheme === "light" ? "#F0F2F5" : "#1A1D23"
 
                 ColumnLayout {
                     anchors.centerIn: parent
                     spacing: 6
 
-                    Text {
+                    RyzoraIcon {
                         Layout.alignment: Qt.AlignHCenter
-                        text: {
-                            if (!card.itemData || !card.itemData.category) return "📦"
-                            var cat = card.itemData.category.toLowerCase()
-                            if (cat === "lockscreens") return "🔒"
-                            if (cat === "fastfetch") return "⚡"
-                            if (cat === "themes") return "🎨"
-                            if (cat === "wallpapers") return "🖼️"
-                            if (cat === "rices") return "🍱"
-                            return "📦"
+                        name: {
+                            if (!card.itemData || !card.itemData.category) return "package"
+                            var cat = String(card.itemData.category).toLowerCase()
+                            if (cat === "lockscreens" || cat === "lockscreen") return "lock"
+                            if (cat === "fastfetch") return "terminal"
+                            if (cat === "themes" || cat === "theme") return "palette"
+                            if (cat === "wallpapers" || cat === "wallpaper") return "image"
+                            if (cat === "rices" || cat === "rice") return "sliders"
+                            return "package"
                         }
-                        font.pixelSize: 24
-                        opacity: 0.65
+                        size: 24
+                        color: theme.textMuted
+                        opacity: previewImg.status === Image.Loading ? 0.40 : 0.70
                     }
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: card.itemData ? (card.itemData.category ? card.itemData.category.toUpperCase() : "PACKAGE") : "PACKAGE"
+                        text: {
+                            if (previewImg.status === Image.Loading) return "LOADING…"
+                            return card.itemData ? (card.itemData.category ? String(card.itemData.category).toUpperCase() : "PACKAGE") : "PACKAGE"
+                        }
                         font.pixelSize: 10
                         font.letterSpacing: 1.0
                         font.bold: true
@@ -94,7 +87,63 @@ Rectangle {
                 }
             }
 
-            // Subtle inner bottom border line separating image from metadata
+            // Real Artwork Image Preview
+            Image {
+                id: previewImg
+                anchors.fill: parent
+                source: {
+                    if (!card.itemData || !card.itemData.preview_url) return ""
+                    var u = String(card.itemData.preview_url).trim()
+                    if (!u || u === "file://" || u === "file:///" || u === "http://" || u === "https://") return ""
+                    if (u.indexOf("file:///") === 0) return u
+                    if (u.indexOf("file://") === 0) {
+                        var rest = u.substring(7).trim()
+                        if (!rest || rest === "/") return ""
+                        if (rest.indexOf("/") === 0) return "file://" + rest
+                        return ""
+                    }
+                    if (u.indexOf("http://") === 0) return u.length > 7 ? u : ""
+                    if (u.indexOf("https://") === 0) return u.length > 8 ? u : ""
+                    if (u.indexOf("/") === 0) return "file://" + u
+                    return ""
+                }
+                fillMode: (card.itemData && (card.itemData.subfilter === "emblem" || card.itemData.category === "fastfetch")) ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                asynchronous: true
+                cache: true
+                sourceSize.width: 640
+                sourceSize.height: 480
+                smooth: true
+                visible: status === Image.Ready
+            }
+
+            // Category Badge Pill (Top-Left)
+            Rectangle {
+                visible: Boolean(card.itemData && card.itemData.category)
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.margins: 8
+                height: 18
+                width: catBadgeText.implicitWidth + 12
+                radius: 4
+                color: Qt.rgba(0, 0, 0, 0.55)
+                border.color: Qt.rgba(255, 255, 255, 0.12)
+                border.width: 1
+
+                Text {
+                    id: catBadgeText
+                    anchors.centerIn: parent
+                    text: {
+                        if (!card.itemData || !card.itemData.category) return "PACKAGE"
+                        return String(card.itemData.category).toUpperCase()
+                    }
+                    font.pixelSize: 9
+                    font.letterSpacing: 0.5
+                    font.bold: true
+                    color: "#FFFFFF"
+                }
+            }
+
+            // Subtle divider line separating image from metadata
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
@@ -103,23 +152,23 @@ Rectangle {
                 color: theme.borderSubtle
             }
 
-            // Subtle Status Indicator (Top-Right: Small Dot + Optional Text)
+            // Subtle Status Indicator (Top-Right: Small Dot + Status Text)
             Rectangle {
-                visible: card.itemData && (card.itemData.is_active || card.itemData.is_installed)
+                visible: Boolean(card.itemData && (card.itemData.is_active || card.itemData.is_installed))
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.margins: 8
-                height: 18
-                width: statusRow.implicitWidth + 10
-                radius: 9
+                height: 20
+                width: statusRow.implicitWidth + 14
+                radius: 10
                 color: Qt.rgba(0, 0, 0, 0.65)
-                border.color: card.itemData && card.itemData.is_active ? theme.accent : "#30343C"
+                border.color: card.itemData && card.itemData.is_active ? theme.accent : Qt.rgba(255, 255, 255, 0.22)
                 border.width: 1
 
                 RowLayout {
                     id: statusRow
                     anchors.centerIn: parent
-                    spacing: 4
+                    spacing: 5
 
                     Rectangle {
                         width: 6
@@ -132,63 +181,109 @@ Rectangle {
                         text: card.itemData && card.itemData.is_active ? "Active" : "Installed"
                         font.pixelSize: 10
                         font.bold: true
-                        color: "#E8EAF0"
+                        color: "#FFFFFF"
                     }
                 }
             }
         }
 
-        // ── 2. Minimal Metadata Section (20–25% of Card Area) ──
+        // ── 2. Minimal Metadata & Contextual Action Section ──
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            Layout.minimumHeight: 56
-            Layout.maximumHeight: 56
+            Layout.preferredHeight: 58
+            Layout.minimumHeight: 58
+            Layout.maximumHeight: 58
             color: "transparent"
 
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
                 anchors.topMargin: 8
                 anchors.bottomMargin: 8
-                spacing: 3
+                spacing: 8
 
-                // Title (14–16px semibold, soft off-white)
-                Text {
-                    text: card.itemData ? card.itemData.name : ""
-                    font.pixelSize: theme.fontCardTitle
-                    font.bold: true
-                    color: mouseArea.containsMouse ? theme.accent : theme.text
-                    elide: Text.ElideRight
+                // Title & Subtitle Info (Fills remaining width)
+                ColumnLayout {
                     Layout.fillWidth: true
-                }
-
-                // Single short metadata line (11–12px muted gray) + Details action
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
+                    spacing: 2
 
                     Text {
-                        text: {
-                            if (!card.itemData) return ""
-                            var cat = card.itemData.category ? (card.itemData.category.charAt(0).toUpperCase() + card.itemData.category.slice(1)) : "Theme"
-                            var author = card.itemData.author || "Community"
-                            return cat + " · " + author
-                        }
-                        font.pixelSize: theme.fontMeta
-                        color: theme.textSecondary
+                        text: card.itemData ? String(card.itemData.name) : ""
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: mouseArea.containsMouse ? theme.accent : theme.text
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
 
-                    // Hover Details Indicator
                     Text {
-                        visible: mouseArea.containsMouse
-                        text: "Details ›"
+                        text: {
+                            if (!card.itemData) return ""
+                            var cat = card.itemData.category ? (String(card.itemData.category).charAt(0).toUpperCase() + String(card.itemData.category).slice(1)) : "Customization"
+                            var author = card.itemData.author ? (typeof card.itemData.author === "object" ? (card.itemData.author.name || "Community") : String(card.itemData.author)) : "Community"
+                            return cat + " · " + author
+                        }
                         font.pixelSize: 11
+                        color: theme.textSecondary
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // PureDesk / macOS Contextual Action Pill Beneath Preview
+                Rectangle {
+                    height: 24
+                    width: cardActionText.implicitWidth + 18
+                    radius: 12
+                    color: {
+                        if (!card.itemData) return "transparent"
+                        if (card.itemData.is_active) return theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B"
+                        if (card.itemData.is_installed) return theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E3A8A"
+                        return pillMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#E5E7EB" : "#2A2F3A") : (theme.resolvedTheme === "light" ? "#F3F4F6" : "#22262E")
+                    }
+                    border.color: {
+                        if (!card.itemData) return "transparent"
+                        if (card.itemData.is_active) return "#10B981"
+                        if (card.itemData.is_installed) return "#3B82F6"
+                        return pillMouse.containsMouse ? theme.accent : theme.borderSubtle
+                    }
+                    border.width: 1
+
+                    Text {
+                        id: cardActionText
+                        anchors.centerIn: parent
+                        text: {
+                            if (!card.itemData) return ""
+                            if (card.itemData.is_active) return "ACTIVE"
+                            if (card.itemData.is_installed) return "OPEN"
+                            return "GET"
+                        }
+                        font.pixelSize: 10
                         font.bold: true
-                        color: theme.accent
+                        color: {
+                            if (!card.itemData) return theme.textMuted
+                            if (card.itemData.is_active) return theme.resolvedTheme === "light" ? "#047857" : "#34D399"
+                            if (card.itemData.is_installed) return theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD"
+                            return theme.accent
+                        }
+                    }
+
+                    MouseArea {
+                        id: pillMouse
+                        objectName: "storeCardPillMouse"
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        z: 2
+                        onClicked: {
+                            if (!card.itemData) return;
+                            if (!card.itemData.is_installed) {
+                                card.actionClicked("install", card.itemData);
+                            } else {
+                                card.cardClicked(card.itemData);
+                            }
+                        }
                     }
                 }
             }

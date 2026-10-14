@@ -4,7 +4,8 @@ import QtQuick.Layouts
 
 Item {
     id: root
-    property string icon: "📦"
+    property string icon: ""
+    property string iconName: icon.length > 0 ? icon : "package"
     property string title: "No items found"
     property string message: "There are currently no items available in this view."
     property string actionLabel: ""
@@ -14,10 +15,11 @@ Item {
         anchors.centerIn: parent
         spacing: 12
 
-        Text {
+        RyzoraIcon {
             Layout.alignment: Qt.AlignHCenter
-            text: root.icon
-            font.pixelSize: 42
+            name: root.iconName
+            size: 36
+            color: theme.textMuted
         }
 
         Text {

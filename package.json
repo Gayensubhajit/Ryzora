@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
     "test": "node --import jiti/register --test src/tests/*.test.ts",
-    "setup:system": "sudo ./scripts/setup-system-integration.sh"
+    "setup:system": "sudo ./scripts/setup-system-integration.sh",
+    "qt": "./qt/build/ryzora"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

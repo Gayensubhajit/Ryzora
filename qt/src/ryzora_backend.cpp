@@ -1,3 +1,4 @@
+#include <QSettings>
 #include "ryzora_backend.hpp"
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -10,6 +11,8 @@
 // Declarations of Rust C-ABI functions
 extern "C" {
     void ryzora_init();
+    void ryzora_set_test_home_override(const char* path);
+    void ryzora_set_test_system_root_override(const char* path);
     uint64_t ryzora_allocate_request_id();
     bool ryzora_is_process_active();
     uint32_t ryzora_active_pid();
@@ -32,6 +35,7 @@ extern "C" {
     char* ryzora_load_updates();
     char* ryzora_list_presets();
     char* ryzora_install_package(const char* package_id);
+    char* ryzora_test_package(const char* package_id);
     char* ryzora_uninstall_package(const char* package_id);
     char* ryzora_apply_target(const char* package_id, const char* target);
     char* ryzora_deactivate_target(const char* target);
@@ -475,6 +479,75 @@ void RyzoraBackend::postNotification(const QString &type, const QString &title, 
     emit notificationPosted(type, title, message);
 }
 
+void RyzoraBackend::setTestHomeOverride(const QString &path) {
+    if (path.isEmpty()) {
+        ryzora_set_test_home_override(nullptr);
+    } else {
+        QByteArray b = path.toUtf8();
+        ryzora_set_test_home_override(b.constData());
+    }
+    loadLibrary(true);
+    filterCatalog("all", "");
+    loadSnapshots();
+}
+
+void RyzoraBackend::setTestSystemRootOverride(const QString &path) {
+    if (path.isEmpty()) {
+        ryzora_set_test_system_root_override(nullptr);
+    } else {
+        QByteArray b = path.toUtf8();
+        ryzora_set_test_system_root_override(b.constData());
+    }
+}
+
+struct FreshStatePayload {
+    QVariantList catalogList;
+    QVariantList libraryList;
+    int activeCount{0};
+    QVariantMap activeConfig;
+};
+
+static FreshStatePayload fetchFreshStatePayload() {
+    FreshStatePayload payload;
+
+    char *rawLib = ryzora_load_library(true);
+    if (rawLib) {
+        QString libStr = QString::fromUtf8(rawLib);
+        ryzora_free_string(rawLib);
+        QJsonDocument libDoc = QJsonDocument::fromJson(libStr.toUtf8());
+        if (libDoc.isArray()) {
+            payload.libraryList = libDoc.array().toVariantList();
+            for (const QVariant &item : payload.libraryList) {
+                if (item.toMap().value("is_active").toBool()) {
+                    payload.activeCount++;
+                }
+            }
+        }
+    }
+
+    char *rawCfg = ryzora_load_active_configuration();
+    if (rawCfg) {
+        QString cfgStr = QString::fromUtf8(rawCfg);
+        ryzora_free_string(rawCfg);
+        QJsonDocument cfgDoc = QJsonDocument::fromJson(cfgStr.toUtf8());
+        payload.activeConfig = cfgDoc.object().toVariantMap();
+    }
+
+    QString repoRoot = QDir::currentPath();
+    QByteArray bRoot = repoRoot.toUtf8();
+    char *rawCat = ryzora_query_catalog(bRoot.constData(), "all", "");
+    if (rawCat) {
+        QString catStr = QString::fromUtf8(rawCat);
+        ryzora_free_string(rawCat);
+        QJsonDocument catDoc = QJsonDocument::fromJson(catStr.toUtf8());
+        if (catDoc.isArray()) {
+            payload.catalogList = catDoc.array().toVariantList();
+        }
+    }
+
+    return payload;
+}
+
 void RyzoraBackend::installPackage(const QString &packageId) {
     if (m_isShutdown.load()) return;
     QPointer<RyzoraBackend> self = this;
@@ -488,13 +561,26 @@ void RyzoraBackend::installPackage(const QString &packageId) {
             bool success = doc.object().value("success").toBool();
             QString msg = doc.object().value("message").toString();
 
-            QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+            FreshStatePayload fresh;
+            if (success) {
+                fresh = fetchFreshStatePayload();
+            }
+
+            QMetaObject::invokeMethod(qApp, [self, success, msg, packageId, fresh]() {
                 if (self) {
+                    if (success) {
+                        self->m_libraryList = fresh.libraryList;
+                        self->m_catalogList = fresh.catalogList;
+                        self->m_activeCount = fresh.activeCount;
+                        self->m_activeConfiguration = fresh.activeConfig;
+                        emit self->catalogChanged();
+                        emit self->libraryChanged();
+                        emit self->activeConfigurationChanged();
+                    }
                     self->postNotification(success ? "success" : "error",
                                            success ? "Installation Complete" : "Installation Failed",
                                            msg);
-                    self->loadLibrary(true);
-                    self->filterCatalog("all", "");
+                    emit self->packageInstalled(packageId, success, msg);
                 }
             });
         }
@@ -514,16 +600,64 @@ void RyzoraBackend::uninstallPackage(const QString &packageId) {
             bool success = doc.object().value("success").toBool();
             QString msg = doc.object().value("message").toString();
 
-            QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+            FreshStatePayload fresh;
+            if (success) {
+                fresh = fetchFreshStatePayload();
+            }
+
+            QMetaObject::invokeMethod(qApp, [self, success, msg, packageId, fresh]() {
                 if (self) {
+                    if (success) {
+                        self->m_libraryList = fresh.libraryList;
+                        self->m_catalogList = fresh.catalogList;
+                        self->m_activeCount = fresh.activeCount;
+                        self->m_activeConfiguration = fresh.activeConfig;
+                        emit self->catalogChanged();
+                        emit self->libraryChanged();
+                        emit self->activeConfigurationChanged();
+                    }
                     self->postNotification(success ? "info" : "error",
                                            success ? "Uninstalled" : "Uninstall Refused",
                                            msg);
-                    self->loadLibrary(true);
-                    self->filterCatalog("all", "");
+                    emit self->packageUninstalled(packageId, success, msg);
                 }
             });
         }
+    });
+}
+
+void RyzoraBackend::testPackage(const QString &packageId) {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self(this);
+    m_threadPool.start([self, packageId]() {
+        QByteArray idBa = packageId.toUtf8();
+        char *rawRes = ryzora_test_package(idBa.constData());
+        if (!rawRes) return;
+        QString resStr = QString::fromUtf8(rawRes);
+        ryzora_free_string(rawRes);
+        QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
+        bool success = doc.object().value("success").toBool();
+        QString msg = doc.object().value("message").toString();
+
+        FreshStatePayload fresh;
+        if (success) {
+            fresh = fetchFreshStatePayload();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, success, msg, packageId, fresh]() {
+            if (self) {
+                if (success) {
+                    self->m_libraryList = fresh.libraryList;
+                    self->m_catalogList = fresh.catalogList;
+                    emit self->catalogChanged();
+                    emit self->libraryChanged();
+                }
+                self->postNotification(success ? "success" : "error",
+                                       success ? "Preview Launched" : "Preview Failed",
+                                       msg);
+                emit self->packageTested(packageId, success, msg);
+            }
+        });
     });
 }
 
@@ -541,36 +675,65 @@ void RyzoraBackend::applyTarget(const QString &packageId, const QString &target)
         bool success = doc.object().value("success").toBool();
         QString msg = doc.object().value("message").toString();
 
-        QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+        FreshStatePayload fresh;
+        if (success) {
+            fresh = fetchFreshStatePayload();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, success, msg, packageId, target, fresh]() {
             if (self) {
+                if (success) {
+                    self->m_libraryList = fresh.libraryList;
+                    self->m_catalogList = fresh.catalogList;
+                    self->m_activeCount = fresh.activeCount;
+                    self->m_activeConfiguration = fresh.activeConfig;
+                    emit self->catalogChanged();
+                    emit self->libraryChanged();
+                    emit self->activeConfigurationChanged();
+                }
                 self->postNotification(success ? "success" : "error",
                                        success ? "Target Activated" : "Activation Failed",
                                        msg);
-                self->loadLibrary(true);
-                self->filterCatalog("all", "");
+                emit self->targetActivated(packageId, target, success, msg);
             }
         });
     });
 }
 
 void RyzoraBackend::deactivateTarget(const QString &target) {
+    qInfo() << "[BACKEND C++] deactivateTarget called for target:" << target;
     if (m_isShutdown.load()) return;
     QPointer<RyzoraBackend> self(this);
     m_threadPool.start([self, target]() {
         QByteArray targetBa = target.toUtf8();
         char *rawRes = ryzora_deactivate_target(targetBa.constData());
+qInfo() << "[BACKEND C++] ryzora_deactivate_target finished. rawRes =" << (rawRes ? rawRes : "NULL");
         QString resStr = QString::fromUtf8(rawRes);
         ryzora_free_string(rawRes);
         QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
         bool success = doc.object().value("success").toBool();
         QString msg = doc.object().value("message").toString();
 
-        QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+        FreshStatePayload fresh;
+        if (success) {
+            fresh = fetchFreshStatePayload();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, success, msg, target, fresh]() {
             if (self) {
+                if (success) {
+                    self->m_libraryList = fresh.libraryList;
+                    self->m_catalogList = fresh.catalogList;
+                    self->m_activeCount = fresh.activeCount;
+                    self->m_activeConfiguration = fresh.activeConfig;
+                    emit self->catalogChanged();
+                    emit self->libraryChanged();
+                    emit self->activeConfigurationChanged();
+                }
                 self->postNotification(success ? "success" : "error",
                                        success ? "Target Deactivated" : "Deactivation Failed",
                                        msg);
-                self->loadLibrary(true);
+                emit self->targetDeactivated(target, success, msg);
             }
         });
     });
@@ -742,3 +905,338 @@ QString RyzoraBackend::exportManifest(const QString &manifestJson, const QString
     file.close();
     return QString("OK:%1").arg(filePath);
 }
+
+
+QVariantMap RyzoraBackend::getThemeConfig(const QString &packageId) {
+    QVariantMap result;
+    result["has_settings"] = false;
+    result["capabilities"] = QVariantList();
+    result["settings"] = QVariantList();
+    result["config"] = QVariantMap();
+    result["package_id"] = packageId;
+
+    if (packageId.isEmpty() || packageId.contains("..") || packageId.contains("/") || packageId.contains("\\")) {
+        result["error"] = "Invalid package identifier";
+        return result;
+    }
+
+    QString slug = packageId;
+    if (slug.startsWith("lockscreen-qylock-")) {
+        slug = slug.mid(18);
+    } else if (slug.startsWith("lockscreen-")) {
+        slug = slug.mid(11);
+    }
+    result["slug"] = slug;
+
+    QString home = QDir::homePath();
+    QStringList confCandidates = {
+        home + "/.local/share/ryzora/lockscreens/qylock/" + slug + "/theme.conf",
+        home + "/.local/share/ryzora/installed/" + packageId + "/files/theme.conf",
+        QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/theme.conf",
+        QDir::currentPath() + "/repositories/community/packages/" + packageId + "/theme.conf"
+    };
+
+    QString foundConfPath;
+    for (const QString &c : confCandidates) {
+        if (QFile::exists(c)) {
+            foundConfPath = c;
+            break;
+        }
+    }
+
+    QStringList mainCandidates = {
+        home + "/.local/share/ryzora/lockscreens/qylock/" + slug + "/Main.qml",
+        home + "/.local/share/ryzora/installed/" + packageId + "/files/Main.qml",
+        QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/Main.qml",
+        QDir::currentPath() + "/repositories/community/packages/" + packageId + "/Main.qml"
+    };
+
+    bool hasMainQml = false;
+    for (const QString &m : mainCandidates) {
+        if (QFile::exists(m)) {
+            hasMainQml = true;
+            break;
+        }
+    }
+
+    if (!hasMainQml || foundConfPath.isEmpty()) {
+        result["error"] = "Theme files or configuration missing";
+        return result;
+    }
+
+    // Parse existing theme.conf while preserving all raw key-value pairs
+    QSettings settings(foundConfPath, QSettings::IniFormat);
+    settings.beginGroup("General");
+    QStringList keys = settings.allKeys();
+    QVariantMap rawConfig;
+    for (const QString &k : keys) {
+        rawConfig[k] = settings.value(k);
+    }
+    settings.endGroup();
+    result["config"] = rawConfig;
+    result["config_path"] = foundConfPath;
+
+    // Define typed capability model based on verified theme engine integration
+    QVariantList settingsList;
+    QVariantList capsList;
+
+    if (slug == "clockwork-orbital") {
+        capsList.append("themeMode");
+        capsList.append("enableWindup");
+
+        QVariantMap sMode;
+        sMode["id"] = "themeMode";
+        sMode["label"] = "Color Mode";
+        sMode["help"] = "Choose dark or light background and dial styling";
+        sMode["type"] = "enum";
+        sMode["options"] = QVariantList{"dark", "light"};
+        sMode["default_value"] = "dark";
+        QString curMode = rawConfig.value("themeMode", "dark").toString();
+        if (curMode != "dark" && curMode != "light") curMode = "dark";
+        sMode["current_value"] = curMode;
+        sMode["live_preview_supported"] = true;
+        sMode["requires_activation"] = true;
+        sMode["category"] = "Appearance";
+        settingsList.append(sMode);
+
+        QVariantMap sWindup;
+        sWindup["id"] = "enableWindup";
+        sWindup["label"] = "Dial Windup Animation";
+        sWindup["help"] = "Play dynamic sweep animation when the login screen initializes";
+        sWindup["type"] = "bool";
+        sWindup["default_value"] = true;
+        bool curWindup = true;
+        if (rawConfig.contains("enableWindup")) {
+            QString v = rawConfig.value("enableWindup").toString().toLower();
+            curWindup = (v != "false" && v != "0");
+        }
+        sWindup["current_value"] = curWindup;
+        sWindup["live_preview_supported"] = true;
+        sWindup["requires_activation"] = true;
+        sWindup["category"] = "Animation";
+        settingsList.append(sWindup);
+    } else if (slug == "clockwork-tape") {
+        capsList.append("themeMode");
+
+        QVariantMap sMode;
+        sMode["id"] = "themeMode";
+        sMode["label"] = "Color Mode";
+        sMode["help"] = "Choose dark or light background and cassette tape styling";
+        sMode["type"] = "enum";
+        sMode["options"] = QVariantList{"dark", "light"};
+        sMode["default_value"] = "dark";
+        QString curMode = rawConfig.value("themeMode", "dark").toString();
+        if (curMode != "dark" && curMode != "light") curMode = "dark";
+        sMode["current_value"] = curMode;
+        sMode["live_preview_supported"] = true;
+        sMode["requires_activation"] = true;
+        sMode["category"] = "Appearance";
+        settingsList.append(sMode);
+    } else if (slug == "genshin") {
+        capsList.append("background_mode");
+        capsList.append("background_index");
+
+        QVariantMap sBgMode;
+        sBgMode["id"] = "background_mode";
+        sBgMode["label"] = "Wallpaper Cycle Mode";
+        sBgMode["help"] = "Cycle scenic backdrops according to real-world time or randomly";
+        sBgMode["type"] = "enum";
+        sBgMode["options"] = QVariantList{"time", "random"};
+        sBgMode["default_value"] = "time";
+        QString curMode = rawConfig.value("background_mode", "time").toString();
+        if (curMode != "time" && curMode != "random") curMode = "time";
+        sBgMode["current_value"] = curMode;
+        sBgMode["live_preview_supported"] = true;
+        sBgMode["requires_activation"] = true;
+        sBgMode["category"] = "Wallpaper";
+        settingsList.append(sBgMode);
+
+        QVariantMap sBgIdx;
+        sBgIdx["id"] = "background_index";
+        sBgIdx["label"] = "Scene Selection";
+        sBgIdx["help"] = "Manual scene index (1: Morning, 2: Day, 3: Sunset, 4: Night, 5: Late Night, 6: Dawn)";
+        sBgIdx["type"] = "int";
+        sBgIdx["min"] = 1;
+        sBgIdx["max"] = 6;
+        sBgIdx["default_value"] = 2;
+        int curIdx = rawConfig.value("background_index", 2).toInt();
+        if (curIdx < 1 || curIdx > 6) curIdx = 2;
+        sBgIdx["current_value"] = curIdx;
+        sBgIdx["live_preview_supported"] = true;
+        sBgIdx["requires_activation"] = true;
+        sBgIdx["category"] = "Wallpaper";
+        settingsList.append(sBgIdx);
+    } else if (slug == "terraria") {
+        capsList.append("background_mode");
+        capsList.append("background_index");
+
+        QVariantMap sBgMode;
+        sBgMode["id"] = "background_mode";
+        sBgMode["label"] = "Wallpaper Cycle Mode";
+        sBgMode["help"] = "Cycle biome backdrops randomly or maintain manual selection";
+        sBgMode["type"] = "enum";
+        sBgMode["options"] = QVariantList{"random", "manual"};
+        sBgMode["default_value"] = "random";
+        QString curMode = rawConfig.value("background_mode", "random").toString();
+        if (curMode != "random" && curMode != "manual") curMode = "random";
+        sBgMode["current_value"] = curMode;
+        sBgMode["live_preview_supported"] = true;
+        sBgMode["requires_activation"] = true;
+        sBgMode["category"] = "Wallpaper";
+        settingsList.append(sBgMode);
+
+        QVariantMap sBgIdx;
+        sBgIdx["id"] = "background_index";
+        sBgIdx["label"] = "Biome Scene";
+        sBgIdx["help"] = "Selected Terraria biome background (1 to 5)";
+        sBgIdx["type"] = "int";
+        sBgIdx["min"] = 1;
+        sBgIdx["max"] = 5;
+        sBgIdx["default_value"] = 1;
+        int curIdx = rawConfig.value("background_index", 1).toInt();
+        if (curIdx < 1 || curIdx > 5) curIdx = 1;
+        sBgIdx["current_value"] = curIdx;
+        sBgIdx["live_preview_supported"] = true;
+        sBgIdx["requires_activation"] = true;
+        sBgIdx["category"] = "Wallpaper";
+        settingsList.append(sBgIdx);
+    } else if (slug == "osu" || slug == "osumania") {
+        capsList.append("gameMode");
+
+        QVariantMap sGm;
+        sGm["id"] = "gameMode";
+        sGm["label"] = "Interactive Mode";
+        sGm["help"] = "Playable rhythm mini-game or clean static display";
+        sGm["type"] = "enum";
+        sGm["options"] = QVariantList{"game", "menu"};
+        sGm["default_value"] = "game";
+        QString curMode = rawConfig.value("gameMode", "game").toString();
+        if (curMode != "game" && curMode != "menu") curMode = "game";
+        sGm["current_value"] = curMode;
+        sGm["live_preview_supported"] = true;
+        sGm["requires_activation"] = true;
+        sGm["category"] = "Gameplay";
+        settingsList.append(sGm);
+    }
+
+    result["has_settings"] = !settingsList.isEmpty();
+    result["capabilities"] = capsList;
+    result["settings"] = settingsList;
+    return result;
+}
+
+QVariantMap RyzoraBackend::saveThemeConfig(const QString &packageId, const QVariantMap &config) {
+    QVariantMap res;
+    res["success"] = false;
+    if (m_isShutdown.load()) {
+        res["message"] = "Application is shutting down.";
+        return res;
+    }
+
+    if (packageId.isEmpty() || packageId.contains("..") || packageId.contains("/") || packageId.contains("\\")) {
+        res["message"] = "Invalid package identifier.";
+        return res;
+    }
+
+    QVariantMap themeModel = getThemeConfig(packageId);
+    if (!themeModel.value("has_settings").toBool()) {
+        res["message"] = QString("Theme '%1' does not declare configurable capabilities.").arg(packageId);
+        return res;
+    }
+
+    QVariantList settingsList = themeModel.value("settings").toList();
+    QMap<QString, QVariantMap> specMap;
+    for (const QVariant &s : settingsList) {
+        QVariantMap sm = s.toMap();
+        specMap[sm.value("id").toString()] = sm;
+    }
+
+    // Validate all submitted fields against their capability schema
+    QVariantMap validatedUpdates;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        QString key = it.key();
+        if (!specMap.contains(key)) continue; // ignore non-capability keys
+
+        QVariantMap spec = specMap[key];
+        QString type = spec.value("type").toString();
+        QVariant val = it.value();
+
+        if (type == "enum") {
+            QString strVal = val.toString();
+            QStringList allowed;
+            for (const QVariant &opt : spec.value("options").toList()) {
+                allowed.append(opt.toString());
+            }
+            if (!allowed.contains(strVal)) {
+                res["message"] = QString("Validation Error: '%1' is not a valid option for '%2' (allowed: %3)")
+                                     .arg(strVal, key, allowed.join(", "));
+                return res;
+            }
+            validatedUpdates[key] = strVal;
+        } else if (type == "bool") {
+            bool boolVal = (val.toString().toLower() != "false" && val.toBool() != false);
+            validatedUpdates[key] = boolVal ? "true" : "false";
+        } else if (type == "int") {
+            int intVal = val.toInt();
+            int minVal = spec.value("min").toInt();
+            int maxVal = spec.value("max").toInt();
+            if (intVal < minVal || intVal > maxVal) {
+                res["message"] = QString("Validation Error: '%1' must be an integer between %2 and %3 (got %4)")
+                                     .arg(key).arg(minVal).arg(maxVal).arg(intVal);
+                return res;
+            }
+            validatedUpdates[key] = QString::number(intVal);
+        }
+    }
+
+    if (validatedUpdates.isEmpty()) {
+        res["message"] = "No valid configurable parameters were provided.";
+        return res;
+    }
+
+    QString slug = themeModel.value("slug").toString();
+    QString userThemeDir = QDir::homePath() + "/.local/share/ryzora/lockscreens/qylock/" + slug;
+    QString userConf = userThemeDir + "/theme.conf";
+    QFileInfo fi(userConf);
+    if (!fi.dir().exists()) {
+        fi.dir().mkpath(".");
+    }
+
+    // Preserve all existing configuration without evaluating arbitrary code
+    QSettings settings(userConf, QSettings::IniFormat);
+    settings.beginGroup("General");
+    for (auto it = validatedUpdates.constBegin(); it != validatedUpdates.constEnd(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    settings.endGroup();
+    settings.sync();
+
+    if (settings.status() != QSettings::NoError) {
+        res["message"] = QString("Filesystem Error: Failed to write configuration to '%1'").arg(userConf);
+        return res;
+    }
+
+    // Check if this theme is currently active in SDDM
+    bool isActiveInSddm = false;
+    QString activeSddmPkg = m_activeConfiguration.value("sddm_login").toString();
+    if (activeSddmPkg == packageId || m_activeConfiguration.value("active_package_id").toString() == packageId) {
+        isActiveInSddm = true;
+    }
+
+    if (isActiveInSddm) {
+        // Re-apply to update live SDDM theme staging safely via the privileged helper
+        applyTarget(packageId, "sddm_login");
+        res["message"] = "Theme customization saved. Preview updated immediately; active SDDM login screen re-synchronized.";
+    } else {
+        res["message"] = "Theme customization saved. Preview updated immediately.";
+    }
+
+    res["success"] = true;
+    res["active_in_sddm"] = isActiveInSddm;
+    res["live_preview_ready"] = true;
+    res["updated_keys"] = validatedUpdates.keys();
+
+    postNotification("success", "Customization Saved", res.value("message").toString());
+    return res;
+}
+

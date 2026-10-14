@@ -112,9 +112,10 @@ const MainLayout: React.FC = () => {
 
       {/* Dedicated Lock Screen / Fastfetch Product Views vs Generic Package Detail Modal */}
       {selectedPackage && (selectedPackage.category === "lockscreens" || selectedPackage.package_type === "lockscreen") ? (
-        <LockScreenDetailView />
+        <LockScreenDetailView key={selectedPackage.id} />
       ) : selectedPackage && (selectedPackage.category === "fastfetch" || selectedPackage.package_type === "fastfetch") ? (
         <FastfetchDetailView
+          key={selectedPackage.id}
           onOpenSettings={(targetId, type) => {
             if (type === "emblem") {
               setFastfetchSettingsEmblemId(targetId);
@@ -128,7 +129,7 @@ const MainLayout: React.FC = () => {
           }}
         />
       ) : selectedPackage ? (
-        <PackageDetailModal />
+        <PackageDetailModal key={selectedPackage.id} />
       ) : null}
 
       {/* Compact Native About Modal */}

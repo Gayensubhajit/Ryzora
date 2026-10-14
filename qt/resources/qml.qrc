@@ -11,6 +11,7 @@
         <file>qml/components/ToastNotification.qml</file>
         <file>qml/components/PackageDetailDrawer.qml</file>
         <file>qml/components/AboutModal.qml</file>
+        <file>qml/components/RyzoraIcon.qml</file>
         <file>qml/views/HubView.qml</file>
         <file>qml/views/DiscoverView.qml</file>
         <file>qml/views/AppsView.qml</file>
@@ -27,5 +28,7 @@
         <file>qml/views/SettingsView.qml</file>
         <file>qml/views/FastfetchView.qml</file>
         <file>qml/views/LockScreenView.qml</file>
+        <file>qml/views/StudioView.qml</file>
+        <file>qml/views/PackageDetailView.qml</file>
     </qresource>
 </RCC>

@@ -99,6 +99,7 @@ public:
     Q_INVOKABLE void loadCompatibilityProfiles();
     Q_INVOKABLE void installPackage(const QString &packageId);
     Q_INVOKABLE void uninstallPackage(const QString &packageId);
+    Q_INVOKABLE void testPackage(const QString &packageId);
     Q_INVOKABLE void applyTarget(const QString &packageId, const QString &target);
     Q_INVOKABLE void deactivateTarget(const QString &target);
     Q_INVOKABLE void createSnapshot(const QString &reason);
@@ -107,7 +108,11 @@ public:
     Q_INVOKABLE void applyUpdate(const QString &packageId);
     Q_INVOKABLE void applyAllUpdates();
     Q_INVOKABLE void postNotification(const QString &type, const QString &title, const QString &message);
+    Q_INVOKABLE void setTestHomeOverride(const QString &path);
+    Q_INVOKABLE void setTestSystemRootOverride(const QString &path);
     Q_INVOKABLE QString exportManifest(const QString &manifestJson, const QString &packageId, const QString &customPath = QString());
+    Q_INVOKABLE QVariantMap getThemeConfig(const QString &packageId);
+    Q_INVOKABLE QVariantMap saveThemeConfig(const QString &packageId, const QVariantMap &config);
     Q_INVOKABLE bool isProcessActive() const;
     Q_INVOKABLE uint32_t activePid() const;
     Q_INVOKABLE void shutdown();
@@ -138,6 +143,12 @@ signals:
     void statusMessageChanged();
 
     void notificationPosted(const QString &type, const QString &title, const QString &message);
+
+    void targetDeactivated(const QString &target, bool success, const QString &message);
+    void packageTested(const QString &packageId, bool success, const QString &message);
+    void targetActivated(const QString &packageId, const QString &target, bool success, const QString &message);
+    void packageInstalled(const QString &packageId, bool success, const QString &message);
+    void packageUninstalled(const QString &packageId, bool success, const QString &message);
 
 private:
     void updateMonotonicReqId(std::atomic<uint64_t> &target, uint64_t newId);

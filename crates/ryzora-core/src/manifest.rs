@@ -119,7 +119,11 @@ impl TargetEntry {
     pub fn to_definition(&self, target_name: &str) -> TargetDefinition {
         match self {
             TargetEntry::Boolean(b) => {
-                let default_scope = if target_name == "sddm" { "system" } else { "user" };
+                let default_scope = if target_name == "sddm" {
+                    "system"
+                } else {
+                    "user"
+                };
                 let default_deps = if *b {
                     vec![target_name.to_string()]
                 } else {
@@ -192,12 +196,24 @@ pub type PackageManifest = RyzoraManifest;
 
 impl RyzoraManifest {
     pub fn get_target_definition(&self, target_name: &str) -> Option<TargetDefinition> {
-        self.targets.get(target_name).map(|entry| entry.to_definition(target_name))
+        self.targets
+            .get(target_name)
+            .map(|entry| entry.to_definition(target_name))
     }
 
     pub fn supports_target(&self, target_name: &str) -> bool {
-        if let Some(def) = self.get_target_definition(target_name) {
+        let lower = target_name.trim().to_lowercase();
+        let norm = match lower.as_str() {
+            "session_lock" | "sessionlock" => "quickshell",
+            "sddm_login" | "sddmlogin" => "sddm",
+            other => other,
+        };
+        if let Some(def) = self.get_target_definition(norm) {
             def.supported
+        } else if norm == "quickshell" {
+            self.targets.contains_key("quickshell")
+        } else if norm == "sddm" {
+            self.targets.contains_key("sddm")
         } else {
             false
         }
@@ -223,7 +239,10 @@ impl RyzoraManifest {
                                         kind: DependencyKind::SystemBinary,
                                         version_req: None,
                                         required: true,
-                                        description: Some(format!("Required for target '{}': {}", tname, dep_name)),
+                                        description: Some(format!(
+                                            "Required for target '{}': {}",
+                                            tname, dep_name
+                                        )),
                                     });
                                 }
                             }
@@ -234,46 +253,65 @@ impl RyzoraManifest {
             }
             Some("quickshell") => {
                 if !self.supports_target("quickshell") {
-                    return Err(format!("Package '{}' does not support target 'quickshell'", self.id));
+                    return Err(format!(
+                        "Package '{}' does not support target 'quickshell'",
+                        self.id
+                    ));
                 }
                 let def = self.get_target_definition("quickshell").unwrap();
-                let deps = def.dependencies.into_iter().map(|dep_name| {
-                    DependencySpec {
+                let deps = def
+                    .dependencies
+                    .into_iter()
+                    .map(|dep_name| DependencySpec {
                         id: dep_name.clone(),
                         kind: DependencyKind::SystemBinary,
                         version_req: None,
                         required: true,
-                        description: Some(format!("Required for Quickshell session lock: {}", dep_name)),
-                    }
-                }).collect();
+                        description: Some(format!(
+                            "Required for Quickshell session lock: {}",
+                            dep_name
+                        )),
+                    })
+                    .collect();
                 Ok(deps)
             }
             Some("sddm") | Some("sddmLogin") | Some("sddmlogin") | Some("sddm_login") => {
                 if !self.supports_target("sddm") {
-                    return Err(format!("Package '{}' does not support target 'sddm'", self.id));
+                    return Err(format!(
+                        "Package '{}' does not support target 'sddm'",
+                        self.id
+                    ));
                 }
                 let def = self.get_target_definition("sddm").unwrap();
-                let deps = def.dependencies.into_iter().map(|dep_name| {
-                    DependencySpec {
+                let deps = def
+                    .dependencies
+                    .into_iter()
+                    .map(|dep_name| DependencySpec {
                         id: dep_name.clone(),
                         kind: DependencyKind::SystemBinary,
                         version_req: None,
                         required: true,
                         description: Some(format!("Required for SDDM login screen: {}", dep_name)),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 Ok(deps)
             }
             Some("sddm_lock") | Some("sddmLock") | Some("sddmlock") => {
                 if self.supports_target("sddm") {
                     self.target_dependencies(Some("sddm"))
                 } else {
-                    Err(format!("Package '{}' does not support target 'sddm_lock'", self.id))
+                    Err(format!(
+                        "Package '{}' does not support target 'sddm_lock'",
+                        self.id
+                    ))
                 }
             }
             Some("both") | Some("sddm_both") | Some("both_screens") => {
                 if !self.supports_target("quickshell") && !self.supports_target("sddm") {
-                    return Err(format!("Package '{}' does not support target 'both'", self.id));
+                    return Err(format!(
+                        "Package '{}' does not support target 'both'",
+                        self.id
+                    ));
                 }
                 let mut result = Vec::new();
                 let mut seen = HashSet::new();
@@ -288,7 +326,10 @@ impl RyzoraManifest {
                                         kind: DependencyKind::SystemBinary,
                                         version_req: None,
                                         required: true,
-                                        description: Some(format!("Required for target '{}': {}", t, dep_name)),
+                                        description: Some(format!(
+                                            "Required for target '{}': {}",
+                                            t, dep_name
+                                        )),
                                     });
                                 }
                             }
@@ -300,20 +341,31 @@ impl RyzoraManifest {
             Some(other) => {
                 if let Some(def) = self.get_target_definition(other) {
                     if !def.supported {
-                        return Err(format!("Package '{}' target '{}' is marked unsupported", self.id, other));
+                        return Err(format!(
+                            "Package '{}' target '{}' is marked unsupported",
+                            self.id, other
+                        ));
                     }
-                    let deps = def.dependencies.into_iter().map(|dep_name| {
-                        DependencySpec {
+                    let deps = def
+                        .dependencies
+                        .into_iter()
+                        .map(|dep_name| DependencySpec {
                             id: dep_name.clone(),
                             kind: DependencyKind::SystemBinary,
                             version_req: None,
                             required: true,
-                            description: Some(format!("Required for target '{}': {}", other, dep_name)),
-                        }
-                    }).collect();
+                            description: Some(format!(
+                                "Required for target '{}': {}",
+                                other, dep_name
+                            )),
+                        })
+                        .collect();
                     Ok(deps)
                 } else {
-                    Err(format!("Package '{}' does not support target '{}'", self.id, other))
+                    Err(format!(
+                        "Package '{}' does not support target '{}'",
+                        self.id, other
+                    ))
                 }
             }
         }
@@ -334,15 +386,21 @@ impl RyzoraManifest {
                 }
                 Ok(self.files.clone())
             }
-            Some("quickshell") | Some("sessionLock") | Some("sessionlock") => {
+            Some("quickshell") | Some("sessionLock") | Some("sessionlock")
+            | Some("session_lock") => {
                 if !self.supports_target("quickshell") {
-                    return Err(format!("Package '{}' does not support target 'quickshell'", self.id));
+                    return Err(format!(
+                        "Package '{}' does not support target 'quickshell'",
+                        self.id
+                    ));
                 }
                 let def = self.get_target_definition("quickshell").unwrap();
                 if !def.files.is_empty() {
                     Ok(def.files)
                 } else {
-                    let qfiles: Vec<ManifestFile> = self.files.iter()
+                    let qfiles: Vec<ManifestFile> = self
+                        .files
+                        .iter()
                         .filter(|f| f.target.starts_with("~/"))
                         .cloned()
                         .collect();
@@ -351,31 +409,45 @@ impl RyzoraManifest {
             }
             Some("sddm") | Some("sddmLogin") | Some("sddmlogin") | Some("sddm_login") => {
                 if !self.supports_target("sddm") {
-                    return Err(format!("Package '{}' does not support target 'sddm'", self.id));
+                    return Err(format!(
+                        "Package '{}' does not support target 'sddm'",
+                        self.id
+                    ));
                 }
                 let def = self.get_target_definition("sddm").unwrap();
                 if !def.files.is_empty() {
                     Ok(def.files)
                 } else {
-                    let sddm_files: Vec<ManifestFile> = self.files.iter()
+                    let sddm_files: Vec<ManifestFile> = self
+                        .files
+                        .iter()
                         .filter(|f| f.target.starts_with("/usr/share/sddm/themes/"))
                         .cloned()
                         .collect();
                     if !sddm_files.is_empty() {
                         Ok(sddm_files)
                     } else {
-                        let theme_id = self.id.trim_start_matches("lockscreen-qylock-").trim_start_matches("lockscreen-");
+                        let theme_id = self
+                            .id
+                            .trim_start_matches("lockscreen-qylock-")
+                            .trim_start_matches("lockscreen-");
                         Ok(vec![
                             ManifestFile {
                                 source: "files/config".to_string(),
-                                target: format!("/usr/share/sddm/themes/ryzora-{}/Main.qml", theme_id),
+                                target: format!(
+                                    "/usr/share/sddm/themes/ryzora-{}/Main.qml",
+                                    theme_id
+                                ),
                                 description: format!("SDDM greeter QML for {}", self.name),
                             },
                             ManifestFile {
                                 source: "files/config".to_string(),
-                                target: format!("/usr/share/sddm/themes/ryzora-{}/metadata.desktop", theme_id),
+                                target: format!(
+                                    "/usr/share/sddm/themes/ryzora-{}/metadata.desktop",
+                                    theme_id
+                                ),
                                 description: format!("SDDM theme metadata for {}", self.name),
-                            }
+                            },
                         ])
                     }
                 }
@@ -384,7 +456,10 @@ impl RyzoraManifest {
                 if self.supports_target("sddm") {
                     self.target_files(Some("sddm"))
                 } else {
-                    Err(format!("Package '{}' does not support target 'sddm_lock'", self.id))
+                    Err(format!(
+                        "Package '{}' does not support target 'sddm_lock'",
+                        self.id
+                    ))
                 }
             }
             Some("both") | Some("sddm_both") | Some("both_screens") => {
@@ -398,14 +473,20 @@ impl RyzoraManifest {
                     all_files.append(&mut sf);
                 }
                 if all_files.is_empty() {
-                    return Err(format!("Package '{}' has no files for target 'both'", self.id));
+                    return Err(format!(
+                        "Package '{}' has no files for target 'both'",
+                        self.id
+                    ));
                 }
                 Ok(all_files)
             }
             Some(other) => {
                 if let Some(def) = self.get_target_definition(other) {
                     if !def.supported {
-                        return Err(format!("Target '{}' is unsupported for package '{}'", other, self.id));
+                        return Err(format!(
+                            "Target '{}' is unsupported for package '{}'",
+                            other, self.id
+                        ));
                     }
                     if !def.files.is_empty() {
                         Ok(def.files)
@@ -413,7 +494,10 @@ impl RyzoraManifest {
                         Ok(self.files.clone())
                     }
                 } else {
-                    Err(format!("Package '{}' does not support target '{}'", self.id, other))
+                    Err(format!(
+                        "Package '{}' does not support target '{}'",
+                        self.id, other
+                    ))
                 }
             }
         }

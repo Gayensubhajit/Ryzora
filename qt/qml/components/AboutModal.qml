@@ -5,6 +5,7 @@ import QtQuick.Layouts
 Rectangle {
     id: root
     visible: false
+    enabled: visible
     anchors.fill: parent
     color: "#80000000"
     z: 100

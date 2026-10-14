@@ -25,9 +25,9 @@ Rectangle {
         anchors.rightMargin: 10
         spacing: 8
 
-        Text {
-            text: "🔍"
-            font.pixelSize: 12
+        RyzoraIcon {
+            name: "search"
+            size: 13
             color: theme.textMuted
         }
 
@@ -57,10 +57,10 @@ Rectangle {
             radius: 10
             color: clearMouse.containsMouse ? theme.surfaceHover : "transparent"
 
-            Text {
+            RyzoraIcon {
                 anchors.centerIn: parent
-                text: "✕"
-                font.pixelSize: 10
+                name: "x"
+                size: 9
                 color: theme.textMuted
             }
 
