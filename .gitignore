@@ -42,3 +42,8 @@ crates/target/
 prototypes/**/build/
 prototypes/**/target/
 .directory
+
+# Generated screenshots & internal notes
+screenshots/
+.planning/
+.agents/
