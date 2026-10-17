@@ -132,6 +132,20 @@ Item {
         contentWidth: availableWidth
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
+        WheelHandler {
+            target: null
+            acceptedDevices: PointerDevice.Mouse
+            blocking: true
+            onWheel: (event) => {
+                var fl = mainScroll.contentItem
+                if (fl && fl.contentHeight > fl.height) {
+                    var delta = event.angleDelta.y
+                    var step = -delta * (80.0 / 120.0) * 1.18
+                    fl.contentY = Math.max(0, Math.min(fl.contentHeight - fl.height, fl.contentY + step))
+                }
+            }
+        }
+
 
 
         ColumnLayout {

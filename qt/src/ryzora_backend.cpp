@@ -1067,6 +1067,13 @@ QString RyzoraBackend::themePreviewMainUrl(const QString &packageId) const {
                     if (trimmed.startsWith("display =") && ovr.contains("dateDisplay")) {
                         out << "display = " << (asBool(ovr.value("dateDisplay")) ? "true" : "false") << "\n"; continue;
                     }
+                } else if (curSec == "[LockScreen.Message]") {
+                    if (trimmed.startsWith("display =") && ovr.contains("messageDisplay")) {
+                        out << "display = " << (asBool(ovr.value("messageDisplay")) ? "true" : "false") << "\n"; continue;
+                    }
+                    if (trimmed.startsWith("text =") && ovr.contains("messageText")) {
+                        out << "text = \"" << ovr.value("messageText").toString() << "\"\n"; continue;
+                    }
                 } else if (curSec == "[LoginScreen.LoginArea]") {
                     if (trimmed.startsWith("position =") && ovr.contains("loginAreaPosition")) {
                         out << "position = \"" << ovr.value("loginAreaPosition").toString() << "\"\n"; continue;
@@ -1916,6 +1923,15 @@ void RyzoraBackend::updatePreviewDraft(const QString &packageId, const QVariantM
                         result += "format = \"" + draft.value("dateFormat").toString() + "\"\n";
                         continue;
                     }
+                } else if (curSec == "[LockScreen.Message]") {
+                    if (trimmed.startsWith("display =") && draft.contains("messageDisplay")) {
+                        result += QString("display = %1\n").arg(asBool(draft.value("messageDisplay")) ? "true" : "false");
+                        continue;
+                    }
+                    if (trimmed.startsWith("text =") && draft.contains("messageText")) {
+                        result += "text = \"" + draft.value("messageText").toString() + "\"\n";
+                        continue;
+                    }
                 } else if (curSec == "[LoginScreen.LoginArea]") {
                     if (trimmed.startsWith("position =") && draft.contains("loginAreaPosition")) {
                         result += "position = \"" + draft.value("loginAreaPosition").toString() + "\"\n";
@@ -1988,7 +2004,7 @@ QVariantMap RyzoraBackend::saveThemeConfig(const QString &packageId, const QVari
             validatedUpdates[key] = strVal;
         } else if (type == "bool") {
             bool boolVal = (val.toString().toLower() != "false" && val.toBool() != false);
-            validatedUpdates[key] = boolVal ? "true" : "false";
+            validatedUpdates[key] = boolVal;
         } else if (type == "int") {
             int intVal = val.toInt();
             int minVal = spec.value("min").toInt();
@@ -1998,7 +2014,7 @@ QVariantMap RyzoraBackend::saveThemeConfig(const QString &packageId, const QVari
                                      .arg(key).arg(minVal).arg(maxVal).arg(intVal);
                 return res;
             }
-            validatedUpdates[key] = QString::number(intVal);
+            validatedUpdates[key] = intVal;
         }
     }
 
@@ -2044,16 +2060,16 @@ QVariantMap RyzoraBackend::saveThemeConfig(const QString &packageId, const QVari
         if (validatedUpdates.contains("brightness")) lockObj["brightness"] = validatedUpdates.value("brightness").toString();
         if (validatedUpdates.contains("saturation")) lockObj["saturation"] = validatedUpdates.value("saturation").toString();
         QJsonObject clkObj = lockObj.value("clock").toObject();
-        if (validatedUpdates.contains("clockDisplay")) clkObj["display"] = (validatedUpdates.value("clockDisplay").toString() == "true");
+        if (validatedUpdates.contains("clockDisplay")) clkObj["display"] = validatedUpdates.value("clockDisplay").toBool();
         if (validatedUpdates.contains("clockPosition")) clkObj["position"] = validatedUpdates.value("clockPosition").toString();
         if (validatedUpdates.contains("clockFormat")) clkObj["format"] = validatedUpdates.value("clockFormat").toString();
         lockObj["clock"] = clkObj;
         QJsonObject dtObj = lockObj.value("date").toObject();
-        if (validatedUpdates.contains("dateDisplay")) dtObj["display"] = (validatedUpdates.value("dateDisplay").toString() == "true");
+        if (validatedUpdates.contains("dateDisplay")) dtObj["display"] = validatedUpdates.value("dateDisplay").toBool();
         if (validatedUpdates.contains("dateFormat")) dtObj["format"] = validatedUpdates.value("dateFormat").toString();
         lockObj["date"] = dtObj;
         QJsonObject msgObj = lockObj.value("message").toObject();
-        if (validatedUpdates.contains("messageDisplay")) msgObj["display"] = (validatedUpdates.value("messageDisplay").toString() == "true");
+        if (validatedUpdates.contains("messageDisplay")) msgObj["display"] = validatedUpdates.value("messageDisplay").toBool();
         if (validatedUpdates.contains("messageText")) msgObj["text"] = validatedUpdates.value("messageText").toString();
         lockObj["message"] = msgObj;
         rootObj["lock_screen"] = lockObj;

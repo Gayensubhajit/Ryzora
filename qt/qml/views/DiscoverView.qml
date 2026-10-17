@@ -576,8 +576,19 @@ Item {
                 clip: true
                 visible: root.filteredPackages.length > 0
                 boundsBehavior: Flickable.StopAtBounds
-                flickDeceleration: 2500
-                maximumFlickVelocity: 4000
+                flickDeceleration: 1800
+                maximumFlickVelocity: 4500
+
+                WheelHandler {
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse
+                    blocking: true
+                    onWheel: (event) => {
+                        var delta = event.angleDelta.y
+                        var step = -delta * (80.0 / 120.0) * 1.18
+                        grid.contentY = Math.max(0, Math.min(grid.contentHeight - grid.height, grid.contentY + step))
+                    }
+                }
 
                 // Responsive columns: 4 columns >= 1150px, 3 columns >= 820px, 2 columns >= 520px, 1 column below
                 // Width minus 18 ensures right-hand cards do not touch the scrollbar thumb

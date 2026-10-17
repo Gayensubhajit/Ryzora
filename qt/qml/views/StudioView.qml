@@ -52,6 +52,14 @@ Item {
     }
     property var themeConfig: ({})
     property var draftConfig: ({})
+
+    function isTruthy(v) {
+        if (v === true || v === 1) return true;
+        if (v === false || v === 0) return false;
+        if (v === undefined || v === null) return false;
+        var s = String(v).trim().toLowerCase();
+        return s === "true" || s === "1" || s === "yes" || s === "on";
+    }
     property string pendingAction: ""
 
     function triggerApply() {
@@ -676,6 +684,20 @@ Item {
 
             ScrollView {
                 id: studioScroll
+
+                WheelHandler {
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse
+                    blocking: true
+                    onWheel: (event) => {
+                        var fl = studioScroll.contentItem
+                        if (fl && fl.contentHeight > fl.height) {
+                            var delta = event.angleDelta.y
+                            var step = -delta * (80.0 / 120.0) * 1.18
+                            fl.contentY = Math.max(0, Math.min(fl.contentHeight - fl.height, fl.contentY + step))
+                        }
+                    }
+                }
                 anchors.top: editorToolbar.visible ? editorToolbar.bottom : (studioTabsBar.visible ? studioTabsBar.bottom : parent.top)
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -803,15 +825,15 @@ Item {
                                 model: root.installedThemes
                                 StoreCard {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 240
-                                    Layout.minimumHeight: 220
+                                    Layout.preferredHeight: 230
+                                    Layout.minimumHeight: 210
                                     Layout.minimumWidth: 260
                                     itemData: modelData
-                                    actionLabel: "CUSTOMIZE"
+                                    hideActionButton: true
+                                    hideCategoryBadge: true
                                     isPageVisible: root.visible && root.currentSubpage === "lockscreen" && root.activeDetailTheme === null
                                     allowAutoplay: true
                                     onCardClicked: (pkg) => root.openThemeDetail(pkg)
-                                    onActionClicked: (action, pkg) => root.openThemeDetail(pkg)
                                 }
                             }
                         }
@@ -1219,7 +1241,7 @@ Item {
 
                                         // Save / Reset block for settings changes
                                         RowLayout {
-                                            visible: root.hasUnsavedChanges
+                                            visible: root.hasUnsavedChanges || Boolean(root.themeConfig && root.themeConfig.is_modified)
                                             Layout.fillWidth: true
                                             spacing: 8
 
@@ -2250,6 +2272,8 @@ Item {
             Repeater {
                 model: sgc.settingsList
                 delegate: ColumnLayout {
+                    id: settingCol
+                    property var settingDef: modelData
                     Layout.fillWidth: true
                     spacing: 12
 
@@ -2261,13 +2285,13 @@ Item {
                             Layout.fillWidth: true
                             spacing: 3
                             Text {
-                                text: modelData.label || ""
+                                text: settingCol.settingDef.label || ""
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: theme.text
                             }
                             Text {
-                                text: modelData.help || ""
+                                text: settingCol.settingDef.help || ""
                                 font.pixelSize: 11
                                 color: theme.textMuted
                                 wrapMode: Text.WordWrap
@@ -2277,12 +2301,12 @@ Item {
 
                         // 1. Boolean Toggle Switch
                         Item {
-                            visible: modelData.type === "bool"
+                            visible: settingCol.settingDef.type === "bool"
                             width: 44
                             height: 24
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
-                            property bool checked: Boolean(root.draftConfig[modelData.id]) === true
+                            property bool checked: root.isTruthy(root.draftConfig[settingCol.settingDef.id])
 
                             Rectangle {
                                 anchors.fill: parent
@@ -2310,24 +2334,24 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.updateDraft(modelData.id, !parent.checked)
+                                onClicked: root.updateDraft(settingCol.settingDef.id, !parent.checked)
                             }
                         }
 
                         // 2. Blur Slider with Numeric Readout
                         RowLayout {
-                            visible: modelData.id === "blur"
+                            visible: settingCol.settingDef.id === "blur"
                             spacing: 8
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                             Slider {
                                 id: bSlider
                                 implicitWidth: 120
-                                from: modelData.min !== undefined ? modelData.min : 0
-                                to: modelData.max !== undefined ? modelData.max : 100
+                                from: settingCol.settingDef.min !== undefined ? settingCol.settingDef.min : 0
+                                to: settingCol.settingDef.max !== undefined ? settingCol.settingDef.max : 100
                                 stepSize: 1
-                                value: parseInt(root.draftConfig[modelData.id] !== undefined ? root.draftConfig[modelData.id] : (modelData.default_value || 0))
-                                onMoved: root.updateDraft(modelData.id, Math.round(value))
+                                value: parseInt(root.draftConfig[settingCol.settingDef.id] !== undefined ? root.draftConfig[settingCol.settingDef.id] : (settingCol.settingDef.default_value || 0))
+                                onMoved: root.updateDraft(settingCol.settingDef.id, Math.round(value))
                             }
 
                             Rectangle {
@@ -2351,7 +2375,7 @@ Item {
 
                         // 3. Clock Position 3x3 Pad
                         RowLayout {
-                            visible: modelData.id === "clockPosition"
+                            visible: settingCol.settingDef.id === "clockPosition"
                             spacing: 8
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
@@ -2373,7 +2397,7 @@ Item {
                                         { id: "bottom-right", tip: "Bottom Right" }
                                     ]
                                     delegate: Rectangle {
-                                        property bool isCur: String(root.draftConfig["clockPosition"]) === modelData.id
+                                        property bool isCur: String(root.draftConfig[settingCol.settingDef.id]) === modelData.id
                                         width: 22
                                         height: 22
                                         radius: 4
@@ -2394,7 +2418,7 @@ Item {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.updateDraft("clockPosition", modelData.id)
+                                            onClicked: root.updateDraft(settingCol.settingDef.id, modelData.id)
                                         }
                                     }
                                 }
@@ -2412,7 +2436,7 @@ Item {
                                     id: posValTxt
                                     anchors.centerIn: parent
                                     text: {
-                                        var p = String(root.draftConfig["clockPosition"] || "top-center")
+                                        var p = String(root.draftConfig[settingCol.settingDef.id] || "top-center")
                                         return p.replace("-", " ").toUpperCase()
                                     }
                                     font.pixelSize: 10
@@ -2424,7 +2448,7 @@ Item {
 
                         // 4. Segmented Control for Other Enums
                         Rectangle {
-                            visible: modelData.type === "enum" && modelData.id !== "clockPosition"
+                            visible: settingCol.settingDef.type === "enum" && settingCol.settingDef.id !== "clockPosition"
                             height: 30
                             radius: theme.radiusSm
                             color: theme.surfaceElevated
@@ -2439,10 +2463,10 @@ Item {
                                 spacing: 2
 
                                 Repeater {
-                                    model: modelData.options || []
+                                    model: settingCol.settingDef.options || []
                                     delegate: Rectangle {
                                         id: segItem
-                                        property bool isCur: String(root.draftConfig[modelData.id]) === String(modelData)
+                                        property bool isCur: String(root.draftConfig[settingCol.settingDef.id]) === String(modelData)
                                         height: 24
                                         radius: 4
                                         implicitWidth: Math.max(42, segTxt.implicitWidth + 12)
@@ -2478,7 +2502,7 @@ Item {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.updateDraft(modelData.id, String(modelData))
+                                            onClicked: root.updateDraft(settingCol.settingDef.id, String(modelData))
                                         }
                                     }
                                 }

@@ -63,6 +63,8 @@ Rectangle {
     readonly property bool hasVideo: videoSource !== ""
     readonly property bool isLocalVideo: videoSource.indexOf("file://") === 0
     property string actionLabel: ""
+    property bool hideActionButton: false
+    property bool hideCategoryBadge: false
 
     property bool inViewport: false
     property bool allowAutoplay: true
@@ -101,7 +103,7 @@ Rectangle {
         return card.inViewport
     }
 
-    readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && isLocalVideo && videoSource !== "" && (isHovered || allowAutoplay)
+    readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && isLocalVideo && videoSource !== "" && allowAutoplay
 
     property bool hasDecoderSlot: false
 
@@ -109,7 +111,7 @@ Rectangle {
         if (hasDecoderSlot) return true
         if (typeof window !== "undefined" && window) {
             if (window.activeDecoderCount === undefined) window.activeDecoderCount = 0
-            if (isHovered || window.activeDecoderCount < 3) {
+            if (window.activeDecoderCount < 8) {
                 window.activeDecoderCount++
                 hasDecoderSlot = true
                 return true
@@ -118,6 +120,15 @@ Rectangle {
         }
         hasDecoderSlot = true
         return true
+    }
+
+    Connections {
+        target: (typeof window !== "undefined") ? window : null
+        function onActiveDecoderCountChanged() {
+            if (card.shouldPlayVideo && !card.playVideoActive && !card.hasDecoderSlot) {
+                playDebounceTimer.restart()
+            }
+        }
     }
 
     function releaseSlot() {
@@ -154,13 +165,7 @@ Rectangle {
         }
     }
 
-    onIsHoveredChanged: {
-        if (isHovered && shouldPlayVideo && !playVideoActive) {
-            if (card.tryAcquireSlot()) {
-                card.playVideoActive = true
-            }
-        }
-    }
+    // Hover does not trigger or interrupt continuous autoplay
 
     signal cardClicked(var itemData)
     signal actionClicked(string action, var itemData)
@@ -263,7 +268,7 @@ Rectangle {
                 sourceSize.width: 640
                 sourceSize.height: 480
                 smooth: true
-                visible: status === Image.Ready
+                visible: status === Image.Ready && (!videoLoader.item || !videoLoader.item.isPlaying)
             }
 
             // Recorded Demo / Cursor Tutorial Video Preview on Hover (Old Tauri Behavior)
@@ -304,7 +309,7 @@ Rectangle {
 
             // Video Indicator Badge Pill (Top-Right)
             Rectangle {
-                visible: card.hasVideo
+                visible: card.hasVideo && Boolean(videoLoader.item && videoLoader.item.isPlaying)
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.margins: 8
@@ -336,7 +341,7 @@ Rectangle {
 
             // Category Badge Pill (Top-Left)
             Rectangle {
-                visible: Boolean(card.itemData && card.itemData.category)
+                visible: !card.hideCategoryBadge && Boolean(card.itemData && card.itemData.category)
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.margins: 8
@@ -419,6 +424,7 @@ Rectangle {
 
                 // PureDesk / macOS Contextual Action Pill Beneath Preview
                 Rectangle {
+                    visible: !card.hideActionButton && (card.actionLabel !== "NONE")
                     property bool isSddm: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.sddm_login)
                     property bool isLock: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.session_lock)
                     property bool isAct: Boolean(card.itemData && (card.itemData.is_active || isSddm || isLock))

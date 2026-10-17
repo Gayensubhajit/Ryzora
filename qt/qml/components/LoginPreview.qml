@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
 import QtMultimedia
+import QtQuick.Effects
 
 // Shared lockscreen preview used by Studio and the package detail page.
 //  - SilentSDDM & Qylock themes: renders the theme's own Main.qml against inert greeter stubs.
@@ -23,6 +24,14 @@ Rectangle {
     readonly property bool videoPlaying: player.playbackState === MediaPlayer.PlayingState && player.error === MediaPlayer.NoError && player.mediaStatus !== MediaPlayer.NoMedia
     readonly property bool isPlaying: isReal ? (realLoader.status === Loader.Ready) : videoPlaying
     property bool isLoginScreenState: false
+
+    function isTruthy(v) {
+        if (v === true || v === 1) return true;
+        if (v === false || v === 0) return false;
+        if (v === undefined || v === null) return false;
+        var s = String(v).trim().toLowerCase();
+        return s === "true" || s === "1" || s === "yes" || s === "on";
+    }
     property string modeLabel: {
         if (realUrl !== "" && realLoader.status === Loader.Error) return "Poster fallback (Engine error)"
         if (isReal && realLoader.status === Loader.Ready) return "Live theme render"
@@ -177,35 +186,64 @@ Rectangle {
         anchors.fill: parent
         visible: !root.isReal
 
-        Image {
-            id: poster
+        Item {
+            id: bgContainer
             anchors.fill: parent
-            source: root.packageData ? root.posterFor(root.packageData) : ""
-            fillMode: String(root.config.fillMode || "fill") === "fit" ? Image.PreserveAspectFit
-                    : (String(root.config.fillMode) === "stretch" ? Image.Stretch : Image.PreserveAspectCrop)
-            asynchronous: true
-            cache: true
-            visible: status === Image.Ready && (!root.hasVideo || !root.videoPlaying)
+            visible: false
+            Image {
+                id: poster
+                anchors.fill: parent
+                source: root.packageData ? root.posterFor(root.packageData) : ""
+                fillMode: String(root.config.fillMode || "fill") === "fit" ? Image.PreserveAspectFit
+                        : (String(root.config.fillMode) === "stretch" ? Image.Stretch : Image.PreserveAspectCrop)
+                asynchronous: true
+                cache: true
+                visible: status === Image.Ready && (!root.hasVideo || !root.videoPlaying)
+            }
+            VideoOutput {
+                id: vout
+                anchors.fill: parent
+                visible: root.hasVideo && root.videoPlaying
+                fillMode: String(root.config.fillMode || "fill") === "fit" ? VideoOutput.PreserveAspectFit
+                        : (String(root.config.fillMode) === "stretch" ? VideoOutput.Stretch : VideoOutput.PreserveAspectCrop)
+            }
         }
+
+        MultiEffect {
+            source: bgContainer
+            anchors.fill: bgContainer
+            visible: !root.isReal
+            blurEnabled: Number(root.config.blur || 0) > 0
+            blur: Math.min(1.0, Math.max(0.0, Number(root.config.blur || 0) / 100.0))
+            blurMax: 48
+            brightness: {
+                var b = String(root.config.brightness || "neutral")
+                if (b === "dark") return -0.4
+                if (b === "dim") return -0.2
+                if (b === "bright") return 0.2
+                return 0.0
+            }
+            saturation: {
+                var s = String(root.config.saturation || "neutral")
+                if (s === "grayscale") return -1.0
+                if (s === "muted") return -0.5
+                if (s === "vibrant") return 0.3
+                return 0.0
+            }
+        }
+
         MediaPlayer {
             id: player
             videoOutput: vout
             audioOutput: AudioOutput { muted: true; volume: 0.0 }
             loops: MediaPlayer.Infinite
-            source: (root.active && !root.isReal && root.hasVideo) ? root.videoSource : ""
+            source: (root.active && !root.isReal && root.hasVideo && root.isTruthy(root.config.enableAnimations !== undefined ? root.config.enableAnimations : true)) ? root.videoSource : ""
             Component.onCompleted: if (root.active && !root.isReal && source != "") play()
             onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && root.active && !root.isReal) play()
             onSourceChanged: {
                 if (source == "") stop()
                 else if (root.active && !root.isReal) play()
             }
-        }
-        VideoOutput {
-            id: vout
-            anchors.fill: parent
-            visible: root.hasVideo && root.videoPlaying
-            fillMode: String(root.config.fillMode || "fill") === "fit" ? VideoOutput.PreserveAspectFit
-                    : (String(root.config.fillMode) === "stretch" ? VideoOutput.Stretch : VideoOutput.PreserveAspectCrop)
         }
 
         Item {
@@ -238,14 +276,14 @@ Rectangle {
             // Lock Screen Mode: Clock & Date
             ColumnLayout {
                 id: clockCol
-                visible: !overlay.showLoginPanel && (String(overlay.cfg.clockDisplay) !== "false" || String(overlay.cfg.dateDisplay) !== "false")
+                visible: !overlay.showLoginPanel && (root.isTruthy(overlay.cfg.clockDisplay !== undefined ? overlay.cfg.clockDisplay : true) || root.isTruthy(overlay.cfg.dateDisplay !== undefined ? overlay.cfg.dateDisplay : true))
                 spacing: 2
                 property string pos: String(overlay.cfg.clockPosition || "top-center")
                 property real m: 24
                 x: pos.indexOf("left") >= 0 ? m : (pos.indexOf("right") >= 0 ? parent.width - width - m : (parent.width - width) / 2)
                 y: pos.indexOf("top") >= 0 ? m : (pos.indexOf("bottom") >= 0 ? parent.height - height - m : (parent.height - height) / 2)
                 Text {
-                    visible: String(overlay.cfg.clockDisplay) !== "false"
+                    visible: root.isTruthy(overlay.cfg.clockDisplay !== undefined ? overlay.cfg.clockDisplay : true)
                     Layout.alignment: Qt.AlignHCenter
                     text: Qt.formatTime(overlay.now, String(overlay.cfg.clockFormat || "hh:mm"))
                     font.pixelSize: Math.max(28, overlay.height * 0.16)
@@ -254,9 +292,9 @@ Rectangle {
                     style: Text.Raised; styleColor: "#66000000"
                 }
                 Text {
-                    visible: String(overlay.cfg.dateDisplay) !== "false"
+                    visible: root.isTruthy(overlay.cfg.dateDisplay !== undefined ? overlay.cfg.dateDisplay : true)
                     Layout.alignment: Qt.AlignHCenter
-                    text: Qt.formatDate(overlay.now, String(overlay.cfg.dateFormat || "dddd, MMMM d"))
+                    text: Qt.formatDate(overlay.now, String(overlay.cfg.dateFormat || "dddd, MMMM dd, yyyy"))
                     font.pixelSize: Math.max(11, overlay.height * 0.045)
                     color: "#e5e7eb"
                     style: Text.Raised; styleColor: "#66000000"
@@ -265,11 +303,11 @@ Rectangle {
 
             // Lock Screen message
             Text {
-                visible: !overlay.showLoginPanel
+                visible: !overlay.showLoginPanel && root.isTruthy(overlay.cfg.messageDisplay !== undefined ? overlay.cfg.messageDisplay : true)
                 anchors.bottom: parent.bottom
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottomMargin: 20
-                text: String(overlay.cfg.messageText || "Click to preview login panel")
+                text: String(overlay.cfg.messageText || "Press any key to unlock")
                 font.pixelSize: Math.max(10, overlay.height * 0.038)
                 color: Qt.rgba(1, 1, 1, 0.75)
                 style: Text.Raised; styleColor: "#66000000"

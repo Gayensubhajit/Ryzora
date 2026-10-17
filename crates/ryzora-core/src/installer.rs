@@ -922,7 +922,7 @@ shape = "circle"
                         continue;
                     }
                     if trimmed.starts_with("blur =") {
-                        if let Some(bl) = ovr.get("blur").and_then(|v| v.as_i64()) {
+                        if let Some(bl) = ovr.get("blur").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))) {
                             active_conf_lines.push(format!("blur = {}", bl));
                             continue;
                         }
@@ -975,6 +975,20 @@ shape = "circle"
                             continue;
                         }
                     }
+                } else if cur_sec == "[LockScreen.Message]" {
+                    if trimmed.starts_with("display =") {
+                        if let Some(md) = ovr.get("messageDisplay") {
+                            let b = md.as_bool().unwrap_or_else(|| md.as_str().map(|s| s == "true" || s == "1").unwrap_or(true));
+                            active_conf_lines.push(format!("display = {}", if b { "true" } else { "false" }));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("text =") {
+                        if let Some(mt) = ovr.get("messageText").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("text = \"{}\"", mt));
+                            continue;
+                        }
+                    }
                 } else if cur_sec == "[LoginScreen]" {
                     if trimmed.starts_with("background =") {
                         active_conf_lines.push(format!("background = \"{}\"", wp_filename));
@@ -982,7 +996,7 @@ shape = "circle"
                         continue;
                     }
                     if trimmed.starts_with("blur =") {
-                        if let Some(bl) = ovr.get("blur").and_then(|v| v.as_i64()) {
+                        if let Some(bl) = ovr.get("blur").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))) {
                             active_conf_lines.push(format!("blur = {}", bl));
                             continue;
                         }

@@ -749,6 +749,8 @@ pub fn resolve_video_url(repo_root: &Path, home_opt: Option<&Path>, package_id: 
     let recorded_candidates = [
         repo_root.join("public/assets/lockscreens").join(format!("{}-preview.mp4", slug)),
         repo_root.join("public/assets/lockscreens").join(format!("{}.mp4", slug)),
+        repo_root.join("dist/assets/lockscreens").join(format!("{}-preview.mp4", slug)),
+        repo_root.join("dist/assets/lockscreens").join(format!("{}.mp4", slug)),
     ];
     for c in &recorded_candidates {
         if c.is_file() {
