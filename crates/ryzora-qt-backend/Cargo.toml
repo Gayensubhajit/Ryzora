@@ -8,6 +8,7 @@ name = "ryzora_qt_backend"
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
+tempfile = "3.10"
 ryzora-core = { path = "../ryzora-core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

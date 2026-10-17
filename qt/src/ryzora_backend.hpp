@@ -8,6 +8,8 @@
 #include <QThreadPool>
 #include <atomic>
 
+class PreviewConfig;
+
 class RyzoraBackend : public QObject {
     Q_OBJECT
 
@@ -45,6 +47,7 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(QVariantMap systemInfo READ systemInfo NOTIFY systemInfoChanged)
     Q_PROPERTY(QVariantList compatibilityProfiles READ compatibilityProfiles NOTIFY compatibilityProfilesChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
+    Q_PROPERTY(bool isSilentEngineInstalled READ isSilentEngineInstalled NOTIFY silentEngineInstalledChanged)
 
 public:
     explicit RyzoraBackend(QObject *parent = nullptr);
@@ -112,10 +115,21 @@ public:
     Q_INVOKABLE void setTestSystemRootOverride(const QString &path);
     Q_INVOKABLE QString exportManifest(const QString &manifestJson, const QString &packageId, const QString &customPath = QString());
     Q_INVOKABLE QVariantMap getThemeConfig(const QString &packageId);
+    // file:// URL of an installed real SDDM theme Main.qml usable for in-app preview, or "".
+    Q_INVOKABLE QString themePreviewMainUrl(const QString &packageId) const;
+    PreviewConfig *previewConfig() const { return m_previewConfig; }
+    void setPreviewConfig(PreviewConfig *cfg) { m_previewConfig = cfg; }
+    Q_INVOKABLE void updatePreviewDraft(const QString &packageId, const QVariantMap &draft);
     Q_INVOKABLE QVariantMap saveThemeConfig(const QString &packageId, const QVariantMap &config);
+    Q_INVOKABLE QVariantMap resetThemeConfig(const QString &packageId);
     Q_INVOKABLE bool isProcessActive() const;
     Q_INVOKABLE uint32_t activePid() const;
     Q_INVOKABLE void shutdown();
+    Q_INVOKABLE bool isSilentEngineInstalled() const;
+    Q_INVOKABLE void installSilentEngine();
+    Q_INVOKABLE void uninstallSilentEngine();
+
+    Q_INVOKABLE QString resolveHomePath() const;
 
 signals:
     void catalogChanged();
@@ -149,9 +163,12 @@ signals:
     void targetActivated(const QString &packageId, const QString &target, bool success, const QString &message);
     void packageInstalled(const QString &packageId, bool success, const QString &message);
     void packageUninstalled(const QString &packageId, bool success, const QString &message);
+    void silentEngineInstalled(bool success, const QString &message);
+    void silentEngineInstalledChanged();
 
 private:
     void updateMonotonicReqId(std::atomic<uint64_t> &target, uint64_t newId);
+    QString resolveSystemRoot() const;
 
     QVariantList m_catalogList;
     QVariantList m_libraryList;
@@ -186,4 +203,7 @@ private:
 
     QThreadPool m_threadPool;
     std::atomic<bool> m_isShutdown{false};
+    QString m_testHomeOverride;
+    QString m_testSystemRootOverride;
+    mutable PreviewConfig *m_previewConfig = nullptr;
 };

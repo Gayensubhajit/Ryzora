@@ -132,6 +132,8 @@ Item {
         contentWidth: availableWidth
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
+
+
         ColumnLayout {
             width: mainScroll.availableWidth
             spacing: 20
@@ -300,6 +302,9 @@ Item {
                             anchors.fill: parent
                             anchors.margins: 8
                             itemData: modelData
+                            isPageVisible: root.visible && root.selectedPackage === null
+                            inViewport: root.visible && root.selectedPackage === null && (parent.y + parent.height >= lockGrid.contentY - 20) && (parent.y <= lockGrid.contentY + lockGrid.height + 20)
+                            allowAutoplay: true
                             onCardClicked: function(data) {
                                 root.setSelectedPackage(data)
                                 root.packageSelected(root.selectedPackage || data)

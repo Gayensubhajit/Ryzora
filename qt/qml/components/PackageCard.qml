@@ -1,3 +1,4 @@
+import QtMultimedia
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -13,6 +14,100 @@ Rectangle {
     clip: true
 
     property var itemData: null
+    readonly property string videoSource: {
+        if (!card.itemData) return ""
+        var vu = card.itemData.video_url ? String(card.itemData.video_url).trim() : ""
+        if (vu.length === 0 && card.itemData.preview_video) vu = String(card.itemData.preview_video).trim()
+        if (vu.length === 0 && card.itemData.id) {
+            var lists = [backend.catalogList || [], backend.libraryList || []]
+            for (var li = 0; li < lists.length && vu.length === 0; ++li) {
+                for (var ci = 0; ci < lists[li].length; ++ci) {
+                    if (lists[li][ci].id === card.itemData.id) {
+                        if (lists[li][ci].video_url) { vu = String(lists[li][ci].video_url).trim(); break }
+                        if (lists[li][ci].preview_video) { vu = String(lists[li][ci].preview_video).trim(); break }
+                    }
+                }
+            }
+        }
+        if (vu.length === 0 && card.itemData.preview_url) {
+            var pu = String(card.itemData.preview_url).trim()
+            if (pu.indexOf(".mp4") >= 0 || pu.indexOf(".webm") >= 0 || pu.indexOf(".mov") >= 0) vu = pu
+        }
+        if (vu.length === 0) return ""
+        if (vu.indexOf("file://") === 0) {
+            if (vu.indexOf("file:///") !== 0 && vu.indexOf("file://localhost/") !== 0) return "file:///" + vu.substring(7)
+            return vu
+        }
+        if (vu.indexOf("http://") === 0 || vu.indexOf("https://") === 0) return vu
+        if (vu.indexOf("/") === 0) return "file://" + vu
+        return ""
+    }
+    readonly property bool hasVideo: videoSource !== ""
+    readonly property bool isLocalVideo: videoSource.indexOf("file://") === 0
+    property bool allowAutoplay: true
+    property bool playVideoActive: false
+    readonly property bool isHovered: mouseArea.containsMouse
+    readonly property bool shouldPlayVideo: hasVideo && isLocalVideo && videoSource !== "" && (isHovered || allowAutoplay)
+
+    property bool hasDecoderSlot: false
+
+    function tryAcquireSlot() {
+        if (hasDecoderSlot) return true
+        if (typeof window !== "undefined" && window) {
+            if (window.activeDecoderCount === undefined) window.activeDecoderCount = 0
+            if (isHovered || window.activeDecoderCount < 3) {
+                window.activeDecoderCount++
+                hasDecoderSlot = true
+                return true
+            }
+            return false
+        }
+        hasDecoderSlot = true
+        return true
+    }
+
+    function releaseSlot() {
+        if (hasDecoderSlot) {
+            hasDecoderSlot = false
+            if (typeof window !== "undefined" && window && window.activeDecoderCount > 0) {
+                window.activeDecoderCount--
+            }
+        }
+    }
+
+    Component.onDestruction: releaseSlot()
+
+    Timer {
+        id: playDebounceTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            if (card.shouldPlayVideo) {
+                if (card.tryAcquireSlot()) {
+                    card.playVideoActive = true
+                }
+            }
+        }
+    }
+
+    onShouldPlayVideoChanged: {
+        if (shouldPlayVideo) {
+            playDebounceTimer.restart()
+        } else {
+            playDebounceTimer.stop()
+            card.playVideoActive = false
+            card.releaseSlot()
+        }
+    }
+
+    onIsHoveredChanged: {
+        if (isHovered && shouldPlayVideo && !playVideoActive) {
+            if (card.tryAcquireSlot()) {
+                card.playVideoActive = true
+            }
+        }
+    }
+
     signal cardClicked(var itemData)
     signal historyClicked(var itemData)
     signal customizeClicked(var itemData)
@@ -42,6 +137,35 @@ Rectangle {
             Layout.preferredHeight: Math.min(135, Math.round(card.width * 9 / 16))
             color: "#0a0c10"
             clip: true
+
+            Loader {
+                id: videoLoader
+                anchors.fill: parent
+                active: card.playVideoActive && card.shouldPlayVideo
+                sourceComponent: demoVideoComp
+            }
+
+            Component {
+                id: demoVideoComp
+                Item {
+                    anchors.fill: parent
+                    VideoOutput {
+                        id: cardVideoOutput
+                        anchors.fill: parent
+                        fillMode: VideoOutput.PreserveAspectCrop
+                        visible: cardPlayer.playbackState === MediaPlayer.PlayingState
+                    }
+                    MediaPlayer {
+                        id: cardPlayer
+                        videoOutput: cardVideoOutput
+                        audioOutput: AudioOutput { muted: true; volume: 0.0 }
+                        loops: MediaPlayer.Infinite
+                        source: card.videoSource
+                        Component.onCompleted: play()
+                        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
+                    }
+                }
+            }
 
             Image {
                 id: prevImg

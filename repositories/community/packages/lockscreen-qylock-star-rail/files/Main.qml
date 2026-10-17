@@ -64,7 +64,7 @@ Rectangle {
     Item {
         id: bgContainer; anchors.fill: parent; clip: true
         MediaPlayer {
-            id: bgVideoPlayer; source: "bg.mp4"; loops: MediaPlayer.Infinite; autoPlay: true; videoOutput: bgVideoOutput
+            id: bgVideoPlayer; source: "bg.mp4"; loops: MediaPlayer.Infinite; videoOutput: bgVideoOutput; Component.onCompleted: play(); onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
         }
         VideoOutput { id: bgVideoOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectCrop }
 

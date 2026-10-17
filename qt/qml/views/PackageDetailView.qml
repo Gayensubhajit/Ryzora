@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtMultimedia
 import "../components"
 
 Item {
@@ -15,11 +16,80 @@ Item {
     property string pendingAction: ""
     property string errorMessage: ""
 
+    // Lockscreen themes use the shared LoginPreview (its own autoplaying player); this view's
+    // legacy player stays idle for them so two decoders never fight over one source.
+    readonly property bool useLoginPreview: !!root.packageData && root.isLockscreen() && root.supportsSddm()
+    readonly property string videoSource: {
+        if (!root.packageData || root.useLoginPreview) return ""
+        var vu = root.packageData.video_url ? String(root.packageData.video_url).trim() : ""
+        if (vu.length === 0) return ""
+        if (vu.indexOf("file://") === 0) {
+            if (vu.indexOf("file:///") !== 0 && vu.indexOf("file://localhost/") !== 0) {
+                return "file:///" + vu.substring(7)
+            }
+            return vu
+        }
+        if (vu.indexOf("http://") === 0 || vu.indexOf("https://") === 0) return vu
+        if (vu.indexOf("/") === 0) return "file://" + vu
+        return ""
+    }
+    readonly property bool hasVideo: videoSource !== ""
+    readonly property bool isNarrow: detailScroll.width < 880
+    property bool isEngineInstalled: (typeof backend !== "undefined" && backend) ? backend.isSilentEngineInstalled : false
+    property bool engineActionPending: false
+    readonly property bool isVideoPlaying: root.hasVideo && videoPlayer.playbackState === MediaPlayer.PlayingState && videoPlayer.error === MediaPlayer.NoError
+
+    MediaPlayer {
+        id: videoPlayer
+        videoOutput: videoOutput
+        audioOutput: AudioOutput {
+            muted: true
+            volume: 0.0
+        }
+        loops: MediaPlayer.Infinite
+        source: root.videoSource
+        onErrorOccurred: function(error, errorString) {
+            console.warn("VideoPlayer error [" + error + "]: " + errorString)
+        }
+        onSourceChanged: {
+            if (source !== "") {
+                play()
+            } else {
+                stop()
+            }
+        }
+        Component.onDestruction: stop()
+    }
+
     onPackageDataChanged: {
+        root.syncThemeConfig()
         root.errorMessage = ""
         root.pendingAction = ""
+        root.engineActionPending = false
+        if (typeof backend !== "undefined" && backend) {
+            root.isEngineInstalled = backend.isSilentEngineInstalled
+        }
+        if (root.hasVideo && root.videoSource !== "") {
+            videoPlayer.source = root.videoSource
+            videoPlayer.play()
+        } else {
+            videoPlayer.stop()
+            videoPlayer.source = ""
+        }
         if (detailScroll) {
             detailScroll.ScrollBar.vertical.position = 0
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            if (root.hasVideo && root.videoSource !== "" && videoPlayer.playbackState !== MediaPlayer.PlayingState) {
+                videoPlayer.play()
+            }
+        } else {
+            if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+                videoPlayer.stop()
+            }
         }
     }
 
@@ -45,6 +115,47 @@ Item {
         }
     }
 
+    function applyCurrentPackage() {
+        if (root.packageData && root.pendingAction === "") {
+            if (root.isSilentSddm() && !root.isEngineInstalled) {
+                root.errorMessage = "SilentSDDM base theme engine is not installed at /usr/share/sddm/themes/ryzora-silent. Please click 'Install SilentSDDM Base Theme' above before applying."
+                return
+            }
+            root.errorMessage = ""; root.pendingAction = "apply"
+            root.actionRequested("apply", root.packageData, "sddm_login")
+        }
+    }
+
+    function installBaseEngine() {
+        root.engineActionPending = true
+        root.errorMessage = ""
+        backend.installSilentEngine()
+    }
+
+    property var themeConfig: ({})
+    property var draftConfig: ({})
+    property string customSuccess: ""
+    property string customError: ""
+
+    function syncThemeConfig() {
+        if (root.packageData) {
+            root.themeConfig = backend.getThemeConfig(root.packageData.id)
+            var draft = {}
+            if (root.themeConfig && root.themeConfig.settings) {
+                for (var i = 0; i < root.themeConfig.settings.length; ++i) {
+                    var s = root.themeConfig.settings[i]
+                    draft[s.id] = s.current_value
+                }
+            }
+            root.draftConfig = draft
+        } else {
+            root.themeConfig = ({})
+            root.draftConfig = ({})
+        }
+        root.customSuccess = ""
+        root.customError = ""
+    }
+
     function syncPackageData() {
         if (!root.packageData || !root.packageData.id) return
         var pkgId = String(root.packageData.id)
@@ -66,12 +177,30 @@ Item {
             }
         }
         if (updated) {
-            root.packageData = updated
+            root.packageData = Object.assign({}, updated)
         }
+        root.syncThemeConfig()
     }
 
     Connections {
         target: backend
+        function onSilentEngineInstalledChanged() {
+            if (backend) {
+                root.isEngineInstalled = backend.isSilentEngineInstalled
+            }
+        }
+        function onSilentEngineInstalled(success, message) {
+            root.engineActionPending = false
+            if (backend) {
+                root.isEngineInstalled = backend.isSilentEngineInstalled
+            }
+            if (!success) {
+                root.errorMessage = message || "SilentSDDM base theme engine installation failed."
+            } else {
+                root.errorMessage = ""
+            }
+            root.syncPackageData()
+        }
         function onPackageTested(packageId, success, message) {
             if (root.packageData && packageId && String(packageId) !== String(root.packageData.id)) return
             root.pendingAction = ""
@@ -143,8 +272,7 @@ Item {
 
     function isAnyActive() {
         if (!root.packageData) return false
-        var cat = String(root.packageData.category || "").toLowerCase()
-        if (cat === "lockscreens" || cat === "sddm") {
+        if (root.isLockscreen()) {
             return Boolean(root.packageData.active_targets && root.packageData.active_targets.sddm_login)
         }
         return Boolean(root.packageData.is_active)
@@ -153,7 +281,11 @@ Item {
     function isLockscreen() {
         if (!root.packageData) return false
         var cat = String(root.packageData.category || "").toLowerCase()
-        return cat === "lockscreens" || cat === "sddm"
+        var pt = String(root.packageData.package_type || "").toLowerCase()
+        var id = String(root.packageData.id || "")
+        return cat === "lockscreens" || cat === "lockscreen" || cat === "sddm" ||
+               pt === "lockscreens" || pt === "lockscreen" || pt === "sddm" ||
+               id.indexOf("lockscreen-") === 0 || id.indexOf("silentsddm-") === 0 || id.indexOf("custom:") === 0
     }
 
     function isFastfetch() {
@@ -168,6 +300,45 @@ Item {
         var id = String(root.packageData.id || "")
         if (id.indexOf("swaylock") !== -1 || id.indexOf("hyprlock") !== -1) return false
         return true
+    }
+
+    function isSilentSddm() {
+        if (!root.packageData) return false
+        var sf = String(root.packageData.subfilter || "")
+        var id = String(root.packageData.id || "")
+        return sf === "silentsddm" || id.indexOf("silentsddm-") === 0
+    }
+
+    function isConfigurableLockscreen() {
+        if (!root.isLockscreen()) return false
+        return true
+    }
+
+    function getStudioSubpage() {
+        if (!root.packageData) return "overview"
+        var cat = String(root.packageData.category || "").toLowerCase()
+        var pt = String(root.packageData.package_type || "").toLowerCase()
+        var sf = String(root.packageData.subfilter || "").toLowerCase()
+        var id = String(root.packageData.id || "")
+        var isSilent = sf === "silentsddm" || id.indexOf("silentsddm-") === 0
+        if (isSilent || cat === "lockscreens" || cat === "lockscreen" || cat === "sddm" || pt === "lockscreen" || pt === "lockscreens" || root.packageData.supports_sddm) {
+            return "lockscreen"
+        }
+        if (cat === "fastfetch" || pt === "fastfetch") {
+            return "fastfetch"
+        }
+        if (cat === "wallpapers" || cat === "wallpaper" || pt === "wallpaper" || cat === "rices" || cat === "themes") {
+            return "wallpapers"
+        }
+        return "overview"
+    }
+
+    function getStudioButtonLabel() {
+        var sp = root.getStudioSubpage()
+        if (sp === "lockscreen") return "Open in Lockscreen Studio"
+        if (sp === "fastfetch") return "Open in Fastfetch Studio"
+        if (sp === "wallpapers") return "Open in Wallpaper Studio"
+        return "Open in Studio"
     }
 
     function getRelatedPackages() {
@@ -189,8 +360,9 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // ── 1. Top Navigation & Breadcrumb Header (macOS Clean Bar) ──
+        // ── 1. Top Navigation Header (macOS Clean Breadcrumb Bar) ──
         Rectangle {
+            id: navHeader
             Layout.fillWidth: true
             height: 52
             color: theme.bg
@@ -244,7 +416,12 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.backRequested()
+                        onClicked: {
+                            if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+                                videoPlayer.stop()
+                            }
+                            root.backRequested()
+                        }
                     }
                 }
 
@@ -255,7 +432,7 @@ Item {
                     color: theme.borderSubtle
                 }
 
-                // Breadcrumb Path
+                // Breadcrumb Path (Discover > Category > Item Name)
                 RowLayout {
                     spacing: 8
                     Layout.fillWidth: true
@@ -264,7 +441,12 @@ Item {
                         implicitWidth: discTxt.implicitWidth
                         implicitHeight: discTxt.implicitHeight
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.backRequested()
+                        onClicked: {
+                            if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+                                videoPlayer.stop()
+                            }
+                            root.backRequested()
+                        }
                         Text {
                             id: discTxt
                             text: "Discover"
@@ -307,89 +489,22 @@ Item {
                         font.bold: true
                         color: theme.text
                         elide: Text.ElideRight
-                        Layout.maximumWidth: 280
-                    }
-                }
-
-                // Header Status Pill (macOS restrained badge)
-                Rectangle {
-                    visible: root.packageData !== null
-                    height: 26
-                    implicitWidth: headStatRow.implicitWidth + 20
-                    radius: 13
-                    color: {
-                        if (!root.packageData) return "transparent"
-                        if (root.isAnyActive()) {
-                            return theme.resolvedTheme === "light" ? "#ECFDF5" : "#064E3B"
-                        }
-                        if (root.isInstalled()) return theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E293B"
-                        return theme.resolvedTheme === "light" ? "#F9FAFB" : "#1F242D"
-                    }
-                    border.color: {
-                        if (!root.packageData) return "transparent"
-                        if (root.isAnyActive()) {
-                            return theme.resolvedTheme === "light" ? "#A7F3D0" : "#059669"
-                        }
-                        if (root.isInstalled()) return theme.resolvedTheme === "light" ? "#BFDBFE" : "#3B82F6"
-                        return theme.resolvedTheme === "light" ? "#E5E7EB" : "#374151"
-                    }
-                    border.width: 1
-
-                    RowLayout {
-                        id: headStatRow
-                        anchors.centerIn: parent
-                        spacing: 6
-
-                        Rectangle {
-                            width: 6
-                            height: 6
-                            radius: 3
-                            color: {
-                                if (!root.packageData) return "#9CA3AF"
-                                if (root.isAnyActive()) return "#10B981"
-                                if (root.isInstalled()) return "#3B82F6"
-                                return "#9CA3AF"
-                            }
-                        }
-
-                        Text {
-                            text: {
-                                if (!root.packageData) return ""
-                                if (root.isAnyActive()) {
-                                    var cat = String(root.packageData.category || "").toLowerCase()
-                                    return (cat === "lockscreens" || cat === "sddm") ? "Active on Login Screen" : "Active on System"
-                                }
-                                if (root.isInstalled()) return "Installed"
-                                return "Available"
-                            }
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: {
-                                if (!root.packageData) return theme.textSecondary
-                                if (root.isAnyActive()) {
-                                    return theme.resolvedTheme === "light" ? "#047857" : "#6EE7B7"
-                                }
-                                if (root.isInstalled()) {
-                                    return theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD"
-                                }
-                                return theme.resolvedTheme === "light" ? "#4B5563" : "#9CA3AF"
-                            }
-                        }
+                        Layout.maximumWidth: 320
                     }
                 }
             }
         }
 
-        // ── 2. Scrollable Detail Page Body ──
-        ScrollView {
+        // ── 2. Scrollable Body Content (Full Available Viewport Width) ──
+        Flickable {
             id: detailScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentWidth: detailScroll.width
             contentHeight: detailScrollContent.implicitHeight + 40
             clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
             Item {
                 id: detailScrollContent
@@ -398,30 +513,49 @@ Item {
 
                 ColumnLayout {
                     id: detailMainCol
-                    width: Math.min(1280, detailScroll.width - 64)
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: Math.max(24, Math.min(32, (detailScroll.width - 1440) / 2))
+                    anchors.rightMargin: Math.max(24, Math.min(32, (detailScroll.width - 1440) / 2))
                     y: 20
                     spacing: 28
 
-                    // ── Hero Section (2-Column Desktop Grid) ──
-                    RowLayout {
+                    // ── Hero Section (2-Column Desktop Grid or 1-Column Responsive) ──
+                    GridLayout {
                         Layout.fillWidth: true
-                        spacing: 28
+                        columns: root.isNarrow ? 1 : 2
+                        columnSpacing: 28
+                        rowSpacing: 24
 
-                        // ── LEFT COLUMN: Media Preview & Art Showcase (~56% width) ──
+                        // ── LEFT COLUMN: Media Preview & Art Showcase (~58% width) ──
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.preferredWidth: root.isNarrow ? detailMainCol.width : Math.floor(detailMainCol.width * 0.58)
+                            Layout.minimumWidth: root.isNarrow ? 260 : 420
                             Layout.alignment: Qt.AlignTop
                             spacing: 12
 
                             Rectangle {
+                                id: heroPreviewBox
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: Math.max(260, Math.min(460, detailScroll.width * 0.35))
+                                Layout.preferredHeight: Math.min(520, Math.max(280, Math.round(width * 9 / 16)))
                                 radius: theme.radiusLg
                                 color: theme.surfaceElevated
                                 border.color: theme.borderSubtle
                                 border.width: 1
                                 clip: true
+
+                                LoginPreview {
+                                    id: detailLoginPreview
+                                    anchors.fill: parent
+                                    z: 5
+                                    visible: root.useLoginPreview
+                                    radius: 0
+                                    border.width: 0
+                                    packageData: root.packageData
+                                    config: root.draftConfig
+                                    active: root.visible && root.useLoginPreview
+                                }
 
                                 // Ambient subtle blurred backdrop
                                 Image {
@@ -436,6 +570,7 @@ Item {
                                     visible: mainHeroImg.status === Image.Ready
                                 }
 
+                                // Poster Image / Static Preview
                                 Image {
                                     id: mainHeroImg
                                     anchors.fill: parent
@@ -458,14 +593,71 @@ Item {
                                     asynchronous: true
                                     cache: true
                                     smooth: true
-                                    visible: status === Image.Ready
+                                    visible: !root.useLoginPreview && status === Image.Ready && (!root.hasVideo || videoPlayer.playbackState === MediaPlayer.StoppedState || videoPlayer.error !== MediaPlayer.NoError)
                                 }
 
-                                // Understated Fallback State when image is missing or loading
+                                // Qt Multimedia Live Video Output
+                                VideoOutput {
+                                    id: videoOutput
+                                    anchors.fill: parent
+                                    fillMode: VideoOutput.PreserveAspectCrop
+                                    visible: root.hasVideo && (videoPlayer.playbackState === MediaPlayer.PlayingState || videoPlayer.playbackState === MediaPlayer.PausedState)
+                                }
+
+                                // Playback Control Overlay Badge
+                                Rectangle {
+                                    id: playPauseOverlay
+                                    visible: root.hasVideo
+                                    anchors.bottom: parent.bottom
+                                    anchors.left: parent.left
+                                    anchors.margins: 12
+                                    height: 28
+                                    implicitWidth: playPauseRow.implicitWidth + 18
+                                    radius: 14
+                                    color: playPauseMouse.containsMouse
+                                        ? (theme.resolvedTheme === "light" ? "rgba(255,255,255,0.92)" : "rgba(15,23,42,0.85)")
+                                        : (theme.resolvedTheme === "light" ? "rgba(255,255,255,0.78)" : "rgba(15,23,42,0.70)")
+                                    border.color: theme.resolvedTheme === "light" ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.18)"
+                                    border.width: 1
+
+                                    RowLayout {
+                                        id: playPauseRow
+                                        anchors.centerIn: parent
+                                        spacing: 6
+
+                                        RyzoraIcon {
+                                            name: root.isVideoPlaying ? "pause" : "play"
+                                            size: 11
+                                            color: theme.text
+                                        }
+                                        Text {
+                                            text: root.isVideoPlaying ? "Live Video Preview" : (videoPlayer.playbackState === MediaPlayer.PausedState ? "Paused" : "Play Video")
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            color: theme.text
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: playPauseMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+                                                videoPlayer.pause()
+                                            } else {
+                                                videoPlayer.play()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Fallback State when media is loading or missing
                                 ColumnLayout {
                                     anchors.centerIn: parent
                                     spacing: 8
-                                    visible: mainHeroImg.status !== Image.Ready
+                                    visible: !root.useLoginPreview && mainHeroImg.status !== Image.Ready && !root.isVideoPlaying
 
                                     RyzoraIcon {
                                         Layout.alignment: Qt.AlignHCenter
@@ -557,6 +749,8 @@ Item {
                                         anchors.centerIn: parent
                                         text: {
                                             if (!root.packageData) return "Asset"
+                                            if (root.hasVideo) return "1080p Live Video Wallpaper"
+                                            if (root.isSilentSddm()) return "SilentSDDM Background Asset"
                                             if (root.isLockscreen()) return "Quickshell QML Component"
                                             if (root.isFastfetch()) return "JSON Terminal Config"
                                             var cat = String(root.packageData.category || "").toLowerCase()
@@ -571,38 +765,162 @@ Item {
                                 }
 
                                 Item { Layout.fillWidth: true }
+
+                                // Dynamic Preview Status Indicator
+                                RowLayout {
+                                    spacing: 6
+                                    Rectangle {
+                                        width: 6
+                                        height: 6
+                                        radius: 3
+                                        color: {
+                                            if (root.isVideoPlaying) return "#10B981"
+                                            if (root.hasVideo && videoPlayer.error !== MediaPlayer.NoError) return "#EF4444"
+                                            if (mainHeroImg.status === Image.Ready) return "#10B981"
+                                            if (mainHeroImg.status === Image.Loading || (root.hasVideo && videoPlayer.playbackState === MediaPlayer.PlayingState)) return "#F59E0B"
+                                            return "#64748B"
+                                        }
+                                    }
+                                    Text {
+                                        text: {
+                                            if (root.isVideoPlaying) return "Live Video Preview (Playing)"
+                                            if (root.hasVideo && videoPlayer.error !== MediaPlayer.NoError) return "Video Unavailable (Poster Fallback)"
+                                            if (root.hasVideo && videoPlayer.playbackState === MediaPlayer.PausedState) return "Video Paused"
+                                            if (root.hasVideo && mainHeroImg.status === Image.Ready) return "Video Poster Ready"
+                                            if (mainHeroImg.status === Image.Ready) return "Preview Ready"
+                                            if (mainHeroImg.status === Image.Loading) return "Loading Preview…"
+                                            return "Preview Unavailable"
+                                        }
+                                        font.pixelSize: 11
+                                        color: theme.textMuted
+                                    }
+                                }
                             }
                         }
 
-                        // ── RIGHT COLUMN: Information, Actions & Technical Specs (~44% width) ──
+                        // ── RIGHT COLUMN: Information, Actions & Technical Specs (~42% width) ──
                         ColumnLayout {
-                            Layout.preferredWidth: Math.max(380, Math.min(520, detailScroll.width * 0.40))
-                            Layout.minimumWidth: 360
-                            Layout.maximumWidth: 540
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: root.isNarrow ? detailMainCol.width : Math.floor(detailMainCol.width * 0.42)
+                            Layout.minimumWidth: root.isNarrow ? 260 : 340
+                            Layout.maximumWidth: root.isNarrow ? 9999 : 560
                             Layout.alignment: Qt.AlignTop
                             spacing: 16
 
-                            // Title, Version, Category, Author & Status Badges
+                            // Title & Single Authoritative Status Badge Row
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 6
 
-                                Text {
-                                    text: root.packageData ? String(root.packageData.name) : "Package Details"
-                                    font.pixelSize: 22
-                                    font.bold: true
-                                    color: theme.text
-                                    wrapMode: Text.WordWrap
+                                RowLayout {
                                     Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Text {
+                                        text: root.packageData ? String(root.packageData.name) : "Package Details"
+                                        font.pixelSize: 22
+                                        font.bold: true
+                                        color: theme.text
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    // Single Authoritative Status Badge (Beside Package Title)
+                                    Rectangle {
+                                        id: authStatusPill
+                                        objectName: "authStatusPill"
+                                        visible: root.packageData !== null
+                                        height: 26
+                                        implicitWidth: authStatRow.implicitWidth + 18
+                                        radius: 13
+                                        color: {
+                                            if (!root.packageData) return "transparent"
+                                            if (root.isAnyActive()) return theme.resolvedTheme === "light" ? "#ECFDF5" : "#064E3B"
+                                            if (root.isInstalled()) {
+                                                if (root.isSilentSddm() && !root.isEngineInstalled) {
+                                                    return theme.resolvedTheme === "light" ? "#FEF3C7" : "#451A03"
+                                                }
+                                                return theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E293B"
+                                            }
+                                            return theme.resolvedTheme === "light" ? "#F9FAFB" : "#242830"
+                                        }
+                                        border.color: {
+                                            if (!root.packageData) return "transparent"
+                                            if (root.isAnyActive()) return theme.resolvedTheme === "light" ? "#A7F3D0" : "#059669"
+                                            if (root.isInstalled()) {
+                                                if (root.isSilentSddm() && !root.isEngineInstalled) {
+                                                    return theme.resolvedTheme === "light" ? "#FCD34D" : "#B45309"
+                                                }
+                                                return theme.resolvedTheme === "light" ? "#BFDBFE" : "#3B82F6"
+                                            }
+                                            return theme.resolvedTheme === "light" ? "#E5E7EB" : "#3B4252"
+                                        }
+                                        border.width: 1
+
+                                        RowLayout {
+                                            id: authStatRow
+                                            anchors.centerIn: parent
+                                            spacing: 5
+
+                                            Rectangle {
+                                                width: 6
+                                                height: 6
+                                                radius: 3
+                                                color: {
+                                                    if (!root.packageData) return "#9CA3AF"
+                                                    if (root.isAnyActive()) return theme.resolvedTheme === "light" ? "#059669" : "#34D399"
+                                                    if (root.isInstalled()) {
+                                                        if (root.isSilentSddm() && !root.isEngineInstalled) {
+                                                            return theme.resolvedTheme === "light" ? "#D97706" : "#FBBF24"
+                                                        }
+                                                        return theme.resolvedTheme === "light" ? "#2563EB" : "#60A5FA"
+                                                    }
+                                                    return theme.textMuted
+                                                }
+                                            }
+
+                                            Text {
+                                                text: {
+                                                    if (!root.packageData) return ""
+                                                    if (root.isAnyActive()) {
+                                                        var cat = String(root.packageData.category || "").toLowerCase()
+                                                        return (cat === "lockscreens" || cat === "sddm") ? "Active on Login Screen" : "Active on System"
+                                                    }
+                                                    if (root.isInstalled()) {
+                                                        if (root.isSilentSddm() && !root.isEngineInstalled) {
+                                                            return "Installed (Engine Required)"
+                                                        }
+                                                        return "Installed"
+                                                    }
+                                                    return "Available"
+                                                }
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                color: {
+                                                    if (!root.packageData) return theme.textMuted
+                                                    if (root.isAnyActive()) return theme.resolvedTheme === "light" ? "#047857" : "#6EE7B7"
+                                                    if (root.isInstalled()) {
+                                                        if (root.isSilentSddm() && !root.isEngineInstalled) {
+                                                            return theme.resolvedTheme === "light" ? "#92400E" : "#FDE68A"
+                                                        }
+                                                        return theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD"
+                                                    }
+                                                    return theme.textMuted
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
+                                // Secondary Line: Version · Category · Author
                                 Text {
                                     text: {
                                         if (!root.packageData) return ""
                                         var parts = []
                                         if (root.packageData.version) parts.push("v" + root.packageData.version)
-                                        var cat = root.packageData.category ? (root.packageData.category.charAt(0).toUpperCase() + root.packageData.category.slice(1)) : "Theme"
-                                        if (cat === "Lockscreens") cat = "Lock Screens"
+                                        var isSilent = root.isSilentSddm()
+                                        var cat = isSilent ? "SDDM Wallpaper" : (root.packageData.category ? (root.packageData.category.charAt(0).toUpperCase() + root.packageData.category.slice(1)) : "Theme")
+                                        if (cat === "Lockscreens") cat = "Lock Screen"
                                         parts.push(cat)
                                         var author = root.packageData.author ? (typeof root.packageData.author === "object" ? (root.packageData.author.name || "Community") : String(root.packageData.author)) : "Community"
                                         parts.push("by " + author)
@@ -613,124 +931,11 @@ Item {
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
                                 }
-
-                                // Status Badges Row: [Active] [Installed] [Preview verified]
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 6
-
-                                    // Active Pill
-                                    Rectangle {
-                                        visible: root.isAnyActive()
-                                        height: 24
-                                        implicitWidth: actPillTxt.implicitWidth + 24
-                                        radius: 12
-                                        color: theme.resolvedTheme === "light" ? "#ECFDF5" : "#064E3B"
-                                        border.color: theme.resolvedTheme === "light" ? "#A7F3D0" : "#059669"
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 4
-                                            Rectangle {
-                                                width: 6
-                                                height: 6
-                                                radius: 3
-                                                color: theme.resolvedTheme === "light" ? "#059669" : "#34D399"
-                                            }
-                                            Text {
-                                                id: actPillTxt
-                                                text: {
-                                                    var cat = String(root.packageData ? root.packageData.category || "" : "").toLowerCase()
-                                                    return (cat === "lockscreens" || cat === "sddm") ? "Active on Login Screen" : "Active on System"
-                                                }
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: theme.resolvedTheme === "light" ? "#047857" : "#6EE7B7"
-                                            }
-                                        }
-                                    }
-
-                                    // Installed Pill
-                                    Rectangle {
-                                        visible: root.isInstalled() && !root.isAnyActive()
-                                        height: 24
-                                        implicitWidth: instPillTxt.implicitWidth + 20
-                                        radius: 12
-                                        color: theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E293B"
-                                        border.color: theme.resolvedTheme === "light" ? "#BFDBFE" : "#3B82F6"
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 4
-                                            RyzoraIcon {
-                                                name: "check"
-                                                size: 10
-                                                color: theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD"
-                                            }
-                                            Text {
-                                                id: instPillTxt
-                                                text: "Installed"
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD"
-                                            }
-                                        }
-                                    }
-
-                                    // Preview Verified Pill (Lock screens)
-                                    Rectangle {
-                                        visible: root.isLockscreen() && root.isTested()
-                                        height: 24
-                                        implicitWidth: testedPillTxt.implicitWidth + 20
-                                        radius: 12
-                                        color: theme.resolvedTheme === "light" ? "#F5F3FF" : "#2E1065"
-                                        border.color: theme.resolvedTheme === "light" ? "#DDD6FE" : "#7C3AED"
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 4
-                                            RyzoraIcon {
-                                                name: "eye"
-                                                size: 11
-                                                color: theme.resolvedTheme === "light" ? "#6D28D9" : "#C4B5FD"
-                                            }
-                                            Text {
-                                                id: testedPillTxt
-                                                text: "Preview verified"
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: theme.resolvedTheme === "light" ? "#6D28D9" : "#C4B5FD"
-                                            }
-                                        }
-                                    }
-
-                                    // Available in Catalog Pill
-                                    Rectangle {
-                                        visible: !root.isInstalled()
-                                        height: 24
-                                        implicitWidth: availPillTxt.implicitWidth + 16
-                                        radius: 12
-                                        color: theme.resolvedTheme === "light" ? "#F3F4F6" : "#1F242D"
-                                        border.color: theme.resolvedTheme === "light" ? "#E5E7EB" : "#374151"
-                                        border.width: 1
-
-                                        Text {
-                                            id: availPillTxt
-                                            anchors.centerIn: parent
-                                            text: "Available in Catalog"
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                            color: theme.textMuted
-                                        }
-                                    }
-                                }
                             }
 
-                            // ── Primary Action Box (macOS Clean Panel) ──
+                            // ── ACTION PANEL ──
                             Rectangle {
+                                id: actionBox
                                 Layout.fillWidth: true
                                 implicitHeight: actBoxCol.implicitHeight + 32
                                 radius: theme.radiusMd
@@ -804,6 +1009,87 @@ Item {
                                         }
                                     }
 
+                                    // ── PREREQUISITE CARD: SILENTSDDM BASE THEME ENGINE REQUIRED ──
+                                    Rectangle {
+                                        id: prerequisiteEngineCard
+                                        objectName: "prerequisiteEngineCard"
+                                        visible: Boolean(root.packageData && root.isInstalled() && !root.isAnyActive() && root.isSilentSddm() && !root.isEngineInstalled)
+                                        Layout.fillWidth: true
+                                        radius: theme.radiusSm
+                                        color: theme.resolvedTheme === "light" ? "#FFFBEB" : "rgba(180, 83, 9, 0.16)"
+                                        border.color: theme.resolvedTheme === "light" ? "#FCD34D" : "rgba(245, 158, 11, 0.40)"
+                                        border.width: 1
+                                        implicitHeight: prereqCol.implicitHeight + 20
+
+                                        ColumnLayout {
+                                            id: prereqCol
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            RowLayout {
+                                                spacing: 8
+                                                Layout.fillWidth: true
+                                                RyzoraIcon {
+                                                    name: "alert"
+                                                    size: 14
+                                                    color: "#F59E0B"
+                                                }
+                                                Text {
+                                                    text: "Base Engine Required"
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    color: theme.resolvedTheme === "light" ? "#B45309" : "#FBBF24"
+                                                }
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: "SilentSDDM wallpapers run inside the 'ryzora-silent' base theme. The engine must be installed to /usr/share/sddm/themes/ryzora-silent before applying."
+                                                font.pixelSize: 11
+                                                color: theme.resolvedTheme === "light" ? "#92400E" : "#CBD5E1"
+                                                wrapMode: Text.WordWrap
+                                            }
+
+                                            Rectangle {
+                                                id: installEngineBtn
+                                                objectName: "installEngineButton"
+                                                Layout.fillWidth: true
+                                                height: 32
+                                                radius: theme.radiusSm
+                                                color: instEngMouse.pressed
+                                                    ? "#B45309"
+                                                    : (instEngMouse.containsMouse ? "#D97706" : (theme.resolvedTheme === "light" ? "#D97706" : "#B45309"))
+
+                                                RowLayout {
+                                                    anchors.centerIn: parent
+                                                    spacing: 6
+                                                    RyzoraIcon {
+                                                        name: root.engineActionPending ? "refresh" : "download"
+                                                        size: 12
+                                                        color: "#FFFFFF"
+                                                    }
+                                                    Text {
+                                                        text: root.engineActionPending ? "Installing Base Engine…" : "Install SilentSDDM Base Theme"
+                                                        font.pixelSize: 11
+                                                        font.bold: true
+                                                        color: "#FFFFFF"
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    id: instEngMouse
+                                                    objectName: "installEngineMouseArea"
+                                                    anchors.fill: parent
+                                                    hoverEnabled: !root.engineActionPending
+                                                    enabled: !root.engineActionPending
+                                                    cursorShape: !root.engineActionPending ? Qt.PointingHandCursor : Qt.WaitCursor
+                                                    onClicked: root.installBaseEngine()
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // ── STATE 2A: INSTALLED LOCKSCREEN (SDDM SUPPORTED) & INACTIVE -> APPLY TO LOGIN SCREEN ──
                                     Rectangle {
                                         id: primApplyBtn
@@ -812,12 +1098,26 @@ Item {
                                         Layout.fillWidth: true
                                         height: 38
                                         radius: theme.radiusSm
-                                        color: primApplyMouse.pressed
-                                            ? (theme.resolvedTheme === "light" ? "#0051A8" : "#005BB5")
-                                            : (primApplyMouse.containsMouse
-                                                ? (theme.resolvedTheme === "light" ? "#0062CC" : "#0071E3")
-                                                : (theme.resolvedTheme === "light" ? "#007AFF" : "#0A84FF"))
-                                        border.color: theme.resolvedTheme === "light" ? "#005BB5" : "#0A84FF"
+                                        color: {
+                                            var needEngine = root.isSilentSddm() && !root.isEngineInstalled
+                                            if (needEngine) {
+                                                return primApplyMouse.containsMouse
+                                                    ? (theme.resolvedTheme === "light" ? "#F3F4F6" : "#334155")
+                                                    : (theme.resolvedTheme === "light" ? "#F9FAFB" : "#1E293B")
+                                            }
+                                            return primApplyMouse.pressed
+                                                ? (theme.resolvedTheme === "light" ? "#0051A8" : "#005BB5")
+                                                : (primApplyMouse.containsMouse
+                                                    ? (theme.resolvedTheme === "light" ? "#0062CC" : "#0071E3")
+                                                    : (theme.resolvedTheme === "light" ? "#007AFF" : "#0A84FF"))
+                                        }
+                                        border.color: {
+                                            var needEngine = root.isSilentSddm() && !root.isEngineInstalled
+                                            if (needEngine) {
+                                                return theme.resolvedTheme === "light" ? "#D1D5DB" : "#475569"
+                                            }
+                                            return theme.resolvedTheme === "light" ? "#005BB5" : "#0A84FF"
+                                        }
                                         border.width: 1
 
                                         RowLayout {
@@ -826,13 +1126,17 @@ Item {
                                             RyzoraIcon {
                                                 name: root.pendingAction === "apply" ? "refresh" : "desktop"
                                                 size: 13
-                                                color: "#FFFFFF"
+                                                color: (root.isSilentSddm() && !root.isEngineInstalled) ? theme.textMuted : "#FFFFFF"
                                             }
                                             Text {
-                                                text: root.pendingAction === "apply" ? "Applying…" : "Apply to Login Screen"
+                                                text: {
+                                                    if (root.pendingAction === "apply") return "Applying…"
+                                                    if (root.isSilentSddm() && !root.isEngineInstalled) return "Apply to Login Screen (Engine Required)"
+                                                    return "Apply to Login Screen"
+                                                }
                                                 font.pixelSize: 13
                                                 font.bold: true
-                                                color: "#FFFFFF"
+                                                color: (root.isSilentSddm() && !root.isEngineInstalled) ? theme.textMuted : "#FFFFFF"
                                             }
                                         }
 
@@ -843,16 +1147,11 @@ Item {
                                             hoverEnabled: root.pendingAction === ""
                                             enabled: root.pendingAction === ""
                                             cursorShape: root.pendingAction === "" ? Qt.PointingHandCursor : Qt.WaitCursor
-                                            onClicked: {
-                                                if (root.packageData && root.pendingAction === "") {
-                                                    root.errorMessage = ""; root.pendingAction = "apply"
-                                                    root.actionRequested("apply", root.packageData, "sddm_login")
-                                                }
-                                            }
+                                            onClicked: root.applyCurrentPackage()
                                         }
                                     }
 
-                                    // ── STATE 2B: INSTALLED LOCKSCREEN (SDDM SUPPORTED) & ACTIVE -> DEACTIVATE THEME ──
+                                    // ── STATE 2B: ACTIVE LOCKSCREEN -> ACTIVE BADGE & RESTORE BUTTON ──
                                     Rectangle {
                                         id: primDeactBtn
                                         objectName: "primaryDeactivateButton"
@@ -860,27 +1159,31 @@ Item {
                                         Layout.fillWidth: true
                                         height: 38
                                         radius: theme.radiusSm
-                                        color: primDeactMouse.pressed
-                                            ? (theme.resolvedTheme === "light" ? "#FCA5A5" : "#4A1B1E")
-                                            : (primDeactMouse.containsMouse
-                                                ? (theme.resolvedTheme === "light" ? "#FEE2E2" : "#3B181A")
-                                                : (theme.resolvedTheme === "light" ? "#FFFFFF" : "#2C313A"))
-                                        border.color: primDeactMouse.containsMouse ? "#EF4444" : (theme.resolvedTheme === "light" ? "#D1D5DB" : "#474F5D")
+                                        color: theme.resolvedTheme === "light" ? "#ECFDF5" : "#064E3B"
+                                        border.color: primDeactMouse.containsMouse
+                                            ? (theme.resolvedTheme === "light" ? "#FCA5A5" : "#EF4444")
+                                            : (theme.resolvedTheme === "light" ? "#A7F3D0" : "#059669")
                                         border.width: 1
 
                                         RowLayout {
                                             anchors.centerIn: parent
                                             spacing: 8
                                             RyzoraIcon {
-                                                name: root.pendingAction === "deactivate" ? "refresh" : "stop"
-                                                size: 12
-                                                color: primDeactMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#DC2626" : "#FCA5A5") : (theme.resolvedTheme === "light" ? "#111827" : "#F9FAFB")
+                                                name: primDeactMouse.containsMouse ? "x" : (root.pendingAction === "deactivate" ? "refresh" : "check")
+                                                size: 13
+                                                color: primDeactMouse.containsMouse
+                                                    ? (theme.resolvedTheme === "light" ? "#DC2626" : "#F87171")
+                                                    : (theme.resolvedTheme === "light" ? "#047857" : "#34D399")
                                             }
                                             Text {
-                                                text: root.pendingAction === "deactivate" ? "Deactivating…" : "Deactivate Theme"
+                                                text: root.pendingAction === "deactivate"
+                                                    ? "Restoring Default Greeter…"
+                                                    : (primDeactMouse.containsMouse ? "Deactivate (Restore Default SDDM)" : "Active on Login Screen")
                                                 font.pixelSize: 13
                                                 font.bold: true
-                                                color: primDeactMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#DC2626" : "#FCA5A5") : (theme.resolvedTheme === "light" ? "#111827" : "#F9FAFB")
+                                                color: primDeactMouse.containsMouse
+                                                    ? (theme.resolvedTheme === "light" ? "#DC2626" : "#F87171")
+                                                    : (theme.resolvedTheme === "light" ? "#047857" : "#34D399")
                                             }
                                         }
 
@@ -900,36 +1203,22 @@ Item {
                                         }
                                     }
 
-                                    // ── STATE 2C: INSTALLED LOCKSCREEN -> PREVIEW THEME BUTTON ──
+                                    // ── STATE 2C: PREVIEW THEME BUTTON ──
                                     Rectangle {
                                         id: testBtn
                                         objectName: "testButton"
-                                        visible: Boolean(root.packageData && root.isInstalled() && root.isLockscreen())
+                                        visible: Boolean(root.packageData && root.isInstalled() && !root.isFastfetch())
                                         Layout.fillWidth: true
-                                        height: 36
+                                        height: 38
                                         radius: theme.radiusSm
-                                        color: {
-                                            if (primApplyBtn.visible) {
-                                                return testBtnMouse.pressed
-                                                    ? (theme.resolvedTheme === "light" ? "#D1D5DB" : "#404856")
-                                                    : (testBtnMouse.containsMouse
-                                                        ? (theme.resolvedTheme === "light" ? "#E5E7EB" : "#363C47")
-                                                        : (theme.resolvedTheme === "light" ? "#F3F4F6" : "#242830"))
-                                            } else {
-                                                return testBtnMouse.pressed
-                                                    ? (theme.resolvedTheme === "light" ? "#0051A8" : "#005BB5")
-                                                    : (testBtnMouse.containsMouse
-                                                        ? (theme.resolvedTheme === "light" ? "#0062CC" : "#0071E3")
-                                                        : (theme.resolvedTheme === "light" ? "#007AFF" : "#0A84FF"))
-                                            }
-                                        }
-                                        border.color: {
-                                            if (primApplyBtn.visible) {
-                                                return testBtnMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#9CA3AF" : "#60697B") : (theme.resolvedTheme === "light" ? "#D1D5DB" : "#3E4450")
-                                            } else {
-                                                return theme.resolvedTheme === "light" ? "#005BB5" : "#0A84FF"
-                                            }
-                                        }
+                                        color: testBtnMouse.pressed
+                                            ? (theme.resolvedTheme === "light" ? "#D1D5DB" : "#404856")
+                                            : (testBtnMouse.containsMouse
+                                                ? (theme.resolvedTheme === "light" ? "#E5E7EB" : "#363C47")
+                                                : (theme.resolvedTheme === "light" ? "#F3F4F6" : "#242830"))
+                                        border.color: testBtnMouse.containsMouse
+                                            ? (theme.resolvedTheme === "light" ? "#9CA3AF" : "#60697B")
+                                            : (theme.resolvedTheme === "light" ? "#D1D5DB" : "#3E4450")
                                         border.width: 1
 
                                         RowLayout {
@@ -938,13 +1227,13 @@ Item {
                                             RyzoraIcon {
                                                 name: root.pendingAction === "test" ? "refresh" : "play"
                                                 size: 12
-                                                color: primApplyBtn.visible ? (theme.resolvedTheme === "light" ? "#111827" : "#F9FAFB") : "#FFFFFF"
+                                                color: theme.text
                                             }
                                             Text {
                                                 text: root.pendingAction === "test" ? "Opening Preview…" : "Preview Theme"
                                                 font.pixelSize: 13
                                                 font.bold: true
-                                                color: primApplyBtn.visible ? (theme.resolvedTheme === "light" ? "#111827" : "#F9FAFB") : "#FFFFFF"
+                                                color: theme.text
                                             }
                                         }
 
@@ -960,6 +1249,57 @@ Item {
                                                     console.log("[QML PackageDetailView] Test clicked! package:", root.packageData.id);
                                                     root.errorMessage = ""; root.pendingAction = "test"
                                                     root.actionRequested("test", root.packageData, null)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ── STATE 2D: OPEN IN STUDIO (For All Installed Packages) ──
+                                    Rectangle {
+                                        id: openStudioBtn
+                                        objectName: "openStudioButton"
+                                        visible: Boolean(root.packageData && root.isInstalled())
+                                        Layout.fillWidth: true
+                                        height: 38
+                                        radius: theme.radiusSm
+                                        color: openStudioMouse.pressed
+                                            ? (theme.resolvedTheme === "light" ? "#D1D5DB" : "#404856")
+                                            : (openStudioMouse.containsMouse
+                                                ? (theme.resolvedTheme === "light" ? "#E5E7EB" : "#363C47")
+                                                : (theme.resolvedTheme === "light" ? "#F3F4F6" : "#242830"))
+                                        border.color: openStudioMouse.containsMouse
+                                            ? (theme.resolvedTheme === "light" ? "#9CA3AF" : "#60697B")
+                                            : (theme.resolvedTheme === "light" ? "#D1D5DB" : "#3E4450")
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 8
+                                            RyzoraIcon {
+                                                name: "sliders"
+                                                size: 13
+                                                color: theme.text
+                                            }
+                                            Text {
+                                                text: root.getStudioButtonLabel()
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: theme.text
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: openStudioMouse
+                                            objectName: "openStudioMouseArea"
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (root.packageData) {
+                                                    if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+                                                        videoPlayer.stop()
+                                                    }
+                                                    root.actionRequested("open_studio", root.packageData, null)
                                                 }
                                             }
                                         }
@@ -1057,6 +1397,14 @@ Item {
                                                 }
                                             }
                                         }
+                                    }
+
+                                    // Subtle Divider before Destructive Actions
+                                    Rectangle {
+                                        visible: Boolean(root.packageData && root.isInstalled())
+                                        Layout.fillWidth: true
+                                        height: 1
+                                        color: theme.borderSubtle
                                     }
 
                                     // ── COMMON ACTION: UNINSTALL PACKAGE ──
@@ -1159,8 +1507,8 @@ Item {
                                                 RyzoraIcon {
                                                     anchors.centerIn: parent
                                                     name: "x"
-                                                    size: 10
-                                                    color: theme.resolvedTheme === "light" ? "#991B1B" : "#FCA5A5"
+                                                    size: 12
+                                                    color: theme.resolvedTheme === "light" ? "#DC2626" : "#F87171"
                                                 }
                                             }
                                         }
@@ -1168,22 +1516,351 @@ Item {
                                 }
                             }
 
-                            // ── Description ("About this Customization") ──
+                            // ── Theme Customization Card (Matches Tauri Lock Screen Config Panel) ──
+                            Rectangle {
+                                id: detailThemeConfigCard
+                                visible: Boolean(root.packageData && root.isInstalled() && (root.isLockscreen() || root.isSilentSddm()) && root.themeConfig && root.themeConfig.has_settings === true)
+                                Layout.fillWidth: true
+                                implicitHeight: detailThemeCol.implicitHeight + 36
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                ColumnLayout {
+                                    id: detailThemeCol
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 14
+
+                                    RowLayout {
+                                        spacing: 8
+                                        RyzoraIcon { name: "sliders"; size: 14; color: theme.accent }
+                                        Text {
+                                            text: "LOGIN SCREEN CUSTOMIZATION"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            font.letterSpacing: 1.0
+                                            color: theme.accent
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Text {
+                                            visible: root.customSuccess !== ""
+                                            text: root.customSuccess
+                                            font.pixelSize: 11
+                                            color: "#34d399"
+                                        }
+                                        Text {
+                                            visible: root.customError !== ""
+                                            text: root.customError
+                                            font.pixelSize: 11
+                                            color: "#f87171"
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "Customize visual parameters and layout directly for this login screen. Changes apply immediately to live SDDM and preview."
+                                        font.pixelSize: 12
+                                        color: theme.textSecondary
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    // Dynamic Settings Controls
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        Repeater {
+                                            model: (root.themeConfig && root.themeConfig.settings) ? root.themeConfig.settings : []
+                                            delegate: RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 14
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+                                                    RowLayout {
+                                                        spacing: 6
+                                                        Text {
+                                                            text: modelData.label
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: theme.text
+                                                        }
+                                                        Rectangle {
+                                                            visible: modelData.category !== undefined && modelData.category !== ""
+                                                            height: 16
+                                                            width: catTxt.implicitWidth + 8
+                                                            radius: 3
+                                                            color: theme.surfaceElevated
+                                                            border.color: theme.borderSubtle
+                                                            border.width: 1
+                                                            Text {
+                                                                id: catTxt
+                                                                anchors.centerIn: parent
+                                                                text: modelData.category || ""
+                                                                font.pixelSize: 9
+                                                                color: theme.textMuted
+                                                            }
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: modelData.help || ""
+                                                        font.pixelSize: 11
+                                                        color: theme.textMuted
+                                                        wrapMode: Text.WordWrap
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+
+                                                // 1. Enum options
+                                                RowLayout {
+                                                    visible: modelData.type === "enum"
+                                                    spacing: 4
+                                                    Repeater {
+                                                        model: modelData.options
+                                                        delegate: Rectangle {
+                                                            property bool isCur: String(root.draftConfig[modelData.id]) === String(modelData)
+                                                            height: 28
+                                                            width: Math.max(56, optTxt.implicitWidth + 16)
+                                                            radius: theme.radiusSm
+                                                            color: isCur ? theme.accent : (enumM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                                            border.color: isCur ? theme.accent : theme.borderSubtle
+                                                            border.width: 1
+
+                                                            Text {
+                                                                id: optTxt
+                                                                anchors.centerIn: parent
+                                                                text: String(modelData).charAt(0).toUpperCase() + String(modelData).slice(1)
+                                                                font.pixelSize: 11
+                                                                font.bold: true
+                                                                color: parent.isCur ? "#000000" : theme.text
+                                                            }
+
+                                                            MouseArea {
+                                                                id: enumM
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    var d = Object.assign({}, root.draftConfig)
+                                                                    d[modelData.id] = String(modelData)
+                                                                    root.draftConfig = d
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // 2. Boolean toggle
+                                                RowLayout {
+                                                    visible: modelData.type === "bool"
+                                                    spacing: 4
+                                                    Rectangle {
+                                                        property bool isCur: Boolean(root.draftConfig[modelData.id]) === true
+                                                        height: 28
+                                                        width: 64
+                                                        radius: theme.radiusSm
+                                                        color: isCur ? theme.accent : (bTrueM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                                        border.color: isCur ? theme.accent : theme.borderSubtle
+                                                        border.width: 1
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "Enabled"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: parent.isCur ? "#000000" : theme.text
+                                                        }
+                                                        MouseArea {
+                                                            id: bTrueM
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                var d = Object.assign({}, root.draftConfig)
+                                                                d[modelData.id] = true
+                                                                root.draftConfig = d
+                                                            }
+                                                        }
+                                                    }
+                                                    Rectangle {
+                                                        property bool isCur: Boolean(root.draftConfig[modelData.id]) === false
+                                                        height: 28
+                                                        width: 64
+                                                        radius: theme.radiusSm
+                                                        color: isCur ? theme.accent : (bFalseM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                                        border.color: isCur ? theme.accent : theme.borderSubtle
+                                                        border.width: 1
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "Disabled"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: parent.isCur ? "#000000" : theme.text
+                                                        }
+                                                        MouseArea {
+                                                            id: bFalseM
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                var d = Object.assign({}, root.draftConfig)
+                                                                d[modelData.id] = false
+                                                                root.draftConfig = d
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // 3. Integer range
+                                                RowLayout {
+                                                    visible: modelData.type === "int"
+                                                    spacing: 8
+
+                                                    RowLayout {
+                                                        visible: (modelData.max !== undefined && modelData.min !== undefined && (modelData.max - modelData.min <= 10))
+                                                        spacing: 4
+                                                        Repeater {
+                                                            model: (modelData.max !== undefined && modelData.min !== undefined && (modelData.max - modelData.min <= 10)) ? (modelData.max - modelData.min + 1) : 0
+                                                            delegate: Rectangle {
+                                                                property int val: modelData.min + index
+                                                                property bool isCur: parseInt(root.draftConfig[modelData.id]) === val
+                                                                height: 28
+                                                                width: 32
+                                                                radius: theme.radiusSm
+                                                                color: isCur ? theme.accent : (intM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                                                border.color: isCur ? theme.accent : theme.borderSubtle
+                                                                border.width: 1
+                                                                Text {
+                                                                    anchors.centerIn: parent
+                                                                    text: String(parent.val)
+                                                                    font.pixelSize: 11
+                                                                    font.bold: true
+                                                                    color: parent.isCur ? "#000000" : theme.text
+                                                                }
+                                                                MouseArea {
+                                                                    id: intM
+                                                                    anchors.fill: parent
+                                                                    hoverEnabled: true
+                                                                    cursorShape: Qt.PointingHandCursor
+                                                                    onClicked: {
+                                                                        var d = Object.assign({}, root.draftConfig)
+                                                                        d[modelData.id] = parent.val
+                                                                        root.draftConfig = d
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    RowLayout {
+                                                        visible: (modelData.max !== undefined && modelData.min !== undefined && (modelData.max - modelData.min > 10))
+                                                        spacing: 10
+                                                        Slider {
+                                                            id: intSlider
+                                                            from: modelData.min || 0
+                                                            to: modelData.max || 100
+                                                            stepSize: 1
+                                                            value: parseInt(root.draftConfig[modelData.id] !== undefined ? root.draftConfig[modelData.id] : (modelData.default_value || modelData.min || 0))
+                                                            onMoved: {
+                                                                var d = Object.assign({}, root.draftConfig)
+                                                                d[modelData.id] = Math.round(value)
+                                                                root.draftConfig = d
+                                                            }
+                                                        }
+                                                        Rectangle {
+                                                            height: 26
+                                                            width: Math.max(34, valTxt.implicitWidth + 12)
+                                                            radius: 4
+                                                            color: theme.surfaceElevated
+                                                            border.color: theme.borderSubtle
+                                                            border.width: 1
+                                                            Text {
+                                                                id: valTxt
+                                                                anchors.centerIn: parent
+                                                                text: String(Math.round(intSlider.value))
+                                                                font.pixelSize: 11
+                                                                font.bold: true
+                                                                color: theme.accent
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Save Button Row
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Item { Layout.fillWidth: true }
+
+                                        Rectangle {
+                                            height: 32
+                                            width: saveCfgTxt.implicitWidth + 24
+                                            radius: theme.radiusSm
+                                            color: saveCfgM.containsMouse ? theme.surfaceActive : theme.surfaceElevated
+                                            border.color: theme.accent
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                RyzoraIcon { name: "check"; size: 11; color: theme.accent }
+                                                Text {
+                                                    id: saveCfgTxt
+                                                    text: "Save Customization"
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                    color: theme.accent
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: saveCfgM
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (root.packageData) {
+                                                        root.customSuccess = ""
+                                                        root.customError = ""
+                                                        var res = backend.saveThemeConfig(root.packageData.id, root.draftConfig)
+                                                        if (res.success) {
+                                                            root.customSuccess = "Customization saved!"
+                                                            root.syncThemeConfig()
+                                                        } else {
+                                                            root.customError = res.message || "Failed to save."
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── About & Information Card ──
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 6
+                                spacing: 8
 
                                 Text {
-                                    text: "About this Customization"
-                                    font.pixelSize: 14
+                                    text: "About"
+                                    font.pixelSize: 15
                                     font.bold: true
                                     color: theme.text
                                 }
 
                                 Text {
-                                    text: (root.packageData && root.packageData.description && root.packageData.description.trim().length > 0)
-                                        ? String(root.packageData.description)
-                                        : "No description provided for this package."
+                                    text: {
+                                        if (root.isSilentSddm()) {
+                                            return "Minimalist SDDM login screen wallpaper background from upstream SilentSDDM integration. Seamlessly materializes into the system greeter background directory upon installation."
+                                        }
+                                        return (root.packageData && root.packageData.description && root.packageData.description.trim().length > 0)
+                                            ? String(root.packageData.description)
+                                            : "No description provided for this package."
+                                    }
                                     font.pixelSize: 13
                                     lineHeight: 1.35
                                     color: theme.textSecondary
@@ -1213,6 +1890,7 @@ Item {
                                         label: "Category"
                                         value: {
                                             if (!root.packageData || !root.packageData.category) return "—"
+                                            if (root.isSilentSddm()) return "SDDM Wallpaper Asset"
                                             var cat = String(root.packageData.category)
                                             if (cat === "lockscreens") return "Lock Screens"
                                             if (cat === "fastfetch") return "Fastfetch"
@@ -1240,6 +1918,7 @@ Item {
                                         label: "Compatibility"
                                         value: {
                                             if (!root.packageData) return "—"
+                                            if (root.isSilentSddm()) return "SDDM Login Greeter Background"
                                             if (root.isLockscreen()) {
                                                 return root.supportsSddm() ? "SDDM Login Greeter (Quickshell)" : "Quickshell Desktop Preview"
                                             }
@@ -1363,6 +2042,8 @@ Item {
                                     StoreCard {
                                         anchors.fill: parent
                                         itemData: modelData
+                                        isPageVisible: root.visible
+                                        allowAutoplay: true
                                         onCardClicked: function(data) {
                                             root.packageSelected(data)
                                         }

@@ -1,18 +1,170 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtMultimedia
 import "../components"
 
 Item {
     id: root
 
     property string currentSubpage: "lockscreen" // Default to Lockscreen Studio
+    property string returnRoute: ""
     property var activeDetailTheme: null
+    property var installedThemes: []
+    property bool isSecurityExpanded: false
+
+    function updateInstalledThemes() {
+        var res = []
+        var list = backend.libraryList || []
+        for (var i = 0; i < list.length; ++i) {
+            var item = list[i]
+            if (!item || !item.id) continue
+            var pid = String(item.id)
+            var cat = String(item.category || item.package_type || "").toLowerCase()
+            var isSilent = pid.indexOf("silentsddm-") === 0 || String(item.subfilter || "") === "silentsddm"
+            var isQylock = pid.indexOf("lockscreen-qylock-") === 0 || String(item.subfilter || "") === "qylock"
+            var isCustom = pid.indexOf("custom:") === 0
+            var isLock = cat === "lockscreens" || cat === "lockscreen" || cat === "sddm" || isSilent || isQylock
+            var isWp = String(item.package_type || "") === "wallpaper" && !isSilent && !item.supports_sddm
+            var supportsSddm = Boolean(item.supports_sddm) || isSilent || (isQylock && !pid.includes("swaylock") && !pid.includes("hyprlock"))
+
+            if (isLock && !isWp && !isCustom && supportsSddm) {
+                res.push(item)
+            }
+        }
+        root.installedThemes = res
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            updateInstalledThemes()
+            if (!backend.libraryList || backend.libraryList.length === 0) {
+                backend.loadLibrary(false)
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        if (!backend.libraryList || backend.libraryList.length === 0) {
+            backend.loadLibrary(false)
+        }
+        updateInstalledThemes()
+    }
     property var themeConfig: ({})
     property var draftConfig: ({})
     property string pendingAction: ""
+
+    function triggerApply() {
+        if (root.activeDetailTheme && root.pendingAction === "") {
+            root.actionError = ""
+            root.actionSuccess = ""
+            if (root.hasUnsavedChanges) {
+                var saveRes = backend.saveThemeConfig(root.activeDetailTheme.id, root.draftConfig)
+                if (!saveRes.success) {
+                    root.actionError = saveRes.message || "Failed to save customization before applying."
+                    return
+                }
+                root.themeConfig = backend.getThemeConfig(root.activeDetailTheme.id)
+            }
+            root.pendingAction = "apply"
+            backend.applyTarget(root.activeDetailTheme.id, "sddm_login")
+        }
+    }
+
+    function triggerDeactivate() {
+        if (root.pendingAction === "") {
+            root.actionError = ""
+            root.actionSuccess = ""
+            root.pendingAction = "deactivate"
+            backend.deactivateTarget("sddm_login")
+        }
+    }
+
+    function triggerPreview() {
+        if (root.activeDetailTheme && root.pendingAction === "") {
+            root.actionError = ""
+            root.pendingAction = "preview"
+            backend.testPackage(root.activeDetailTheme.id)
+        }
+    }
+
+    function triggerSave() {
+        if (root.activeDetailTheme && root.pendingAction === "") {
+            root.actionError = ""
+            root.actionSuccess = ""
+            var res = backend.saveThemeConfig(root.activeDetailTheme.id, root.draftConfig)
+            if (res.success) {
+                root.actionSuccess = res.message || "Customization saved successfully."
+                root.themeConfig = backend.getThemeConfig(root.activeDetailTheme.id)
+                backend.updatePreviewDraft(root.activeDetailTheme.id, root.draftConfig)
+            } else {
+                root.actionError = res.message || "Failed to save customization."
+            }
+        }
+    }
+
+    function triggerReset() {
+        if (root.activeDetailTheme && root.pendingAction === "") {
+            root.actionError = ""
+            root.actionSuccess = ""
+            var res = backend.resetThemeConfig(root.activeDetailTheme.id)
+            if (res.success) {
+                root.themeConfig = res
+                var d = {}
+                if (res.settings) {
+                    for (var i = 0; i < res.settings.length; ++i) {
+                        d[res.settings[i].id] = res.settings[i].current_value
+                    }
+                }
+                root.draftConfig = d
+                backend.updatePreviewDraft(root.activeDetailTheme.id, d)
+                root.actionSuccess = "Settings restored to theme defaults."
+            } else {
+                root.actionError = res.message || "Failed to reset theme settings."
+            }
+        }
+    }
     property string actionError: ""
     property string actionSuccess: ""
+
+    readonly property bool hasUnsavedChanges: {
+        if (!root.themeConfig || !root.themeConfig.settings || !root.draftConfig) return false
+        for (var i = 0; i < root.themeConfig.settings.length; ++i) {
+            var s = root.themeConfig.settings[i]
+            var savedVal = s.current_value
+            var curVal = root.draftConfig[s.id]
+            if (curVal !== undefined && String(curVal) !== String(savedVal)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    function updateDraft(key, value) {
+        var d = Object.assign({}, root.draftConfig)
+        d[key] = value
+        root.draftConfig = d
+        if (root.activeDetailTheme && root.activeDetailTheme.id) {
+            backend.updatePreviewDraft(root.activeDetailTheme.id, d)
+        }
+    }
+
+    onDraftConfigChanged: {
+        if (root.activeDetailTheme && root.activeDetailTheme.id) {
+            backend.updatePreviewDraft(root.activeDetailTheme.id, root.draftConfig)
+        }
+    }
+
+    function getCategorySettings(catName) {
+        if (!root.themeConfig || !root.themeConfig.settings) return []
+        var res = []
+        for (var i = 0; i < root.themeConfig.settings.length; ++i) {
+            if (root.themeConfig.settings[i].category === catName) {
+                res.push(root.themeConfig.settings[i])
+            }
+        }
+        return res
+    }
 
     onActiveDetailThemeChanged: {
         if (activeDetailTheme) {
@@ -55,14 +207,90 @@ Item {
 
     signal navigateRequested(string tabName)
 
+    function goBackInStudio() {
+        root.actionError = ""
+        root.actionSuccess = ""
+        if (root.returnRoute !== "") {
+            var r = root.returnRoute
+            root.returnRoute = ""
+            root.activeDetailTheme = null
+            root.navigateRequested(r)
+            return
+        }
+        if (root.activeDetailTheme !== null) {
+            root.activeDetailTheme = null
+            return
+        }
+        if (root.currentSubpage !== "lockscreen") {
+            root.selectSubpage("lockscreen", null)
+            return
+        }
+        if (typeof window !== "undefined" && window && window.navHistoryIndex > 0) {
+            window.goBack()
+        }
+    }
+
     function selectSubpage(page, pkg) {
         root.currentSubpage = page
         root.actionError = ""
+        root.actionSuccess = ""
         root.pendingAction = ""
+        root.updateInstalledThemes()
+
         if (page === "lockscreen") {
-            root.activeDetailTheme = pkg || null
+            var pkgId = typeof pkg === "string" ? pkg : (pkg ? pkg.id : "")
+            if (pkgId && pkgId.length > 0) {
+                var found = null
+                var lib = backend.libraryList || []
+                for (var i = 0; i < lib.length; ++i) {
+                    if (lib[i].id === pkgId || lib[i].id.replace(/^lockscreen-qylock-/, "") === pkgId || pkgId.replace(/^lockscreen-qylock-/, "") === lib[i].id) {
+                        found = lib[i]
+                        break
+                    }
+                }
+                if (found) {
+                    root.activeDetailTheme = found
+                } else {
+                    var catFound = null
+                    var catList = backend.catalogList || []
+                    for (var j = 0; j < catList.length; ++j) {
+                        if (catList[j].id === pkgId || catList[j].id.replace(/^lockscreen-qylock-/, "") === pkgId || pkgId.replace(/^lockscreen-qylock-/, "") === catList[j].id) {
+                            catFound = catList[j]
+                            break
+                        }
+                    }
+                    if (catFound) {
+                        root.activeDetailTheme = catFound
+                        root.actionError = "Theme '" + catFound.name + "' is not installed yet. Install it to configure theme options."
+                    } else if (pkg && typeof pkg === "object") {
+                        root.activeDetailTheme = pkg
+                    } else {
+                        root.activeDetailTheme = null
+                    }
+                }
+            } else {
+                root.activeDetailTheme = null
+            }
+        } else if (page === "fastfetch") {
+            root.activeDetailTheme = null
+            var ffId = typeof pkg === "string" ? pkg : (pkg ? pkg.id : "")
+            if (ffId) {
+                var preset = ffId.replace(/^fastfetch-/, "")
+                root.selectedFastfetchPreset = preset
+                backend.requestFastfetchPreview(preset)
+            }
         } else if (page === "wallpapers") {
-            root.selectedWallpaper = pkg || null
+            root.activeDetailTheme = null
+            var wpId = typeof pkg === "string" ? pkg : (pkg ? pkg.id : "")
+            var wpFound = null
+            var all = backend.catalogList || []
+            for (var k = 0; k < all.length; ++k) {
+                if (all[k].id === wpId) {
+                    wpFound = all[k]
+                    break
+                }
+            }
+            root.selectedWallpaper = wpFound || (typeof pkg === "object" ? pkg : null)
         }
     }
 
@@ -145,8 +373,9 @@ Item {
             }
         }
         function onLibraryChanged() {
+            root.updateInstalledThemes()
             if (root.activeDetailTheme) {
-                var lib = backend.libraryList
+                var lib = backend.libraryList || []
                 for (var i = 0; i < lib.length; ++i) {
                     if (lib[i].id === root.activeDetailTheme.id) {
                         root.activeDetailTheme = Object.assign({}, lib[i])
@@ -159,81 +388,67 @@ Item {
 
     // Filter installed SDDM-compatible lockscreen themes
     function getInstalledSddmThemes() {
-        var res = []
-        var list = backend.libraryList
-        for (var i = 0; i < list.length; ++i) {
-            var item = list[i]
-            var cat = String(item.category || item.package_type || "").toLowerCase()
-            if ((cat === "lockscreens" || cat === "lockscreen" || cat === "sddm") && item.supports_sddm) {
-                res.push(item)
-            }
+        if (!root.installedThemes || root.installedThemes.length === 0) {
+            root.updateInstalledThemes()
         }
-        return res
+        return root.installedThemes
     }
 
-    function isThemeActive(item) {
+    function isThemeSddmActive(item) {
         if (!item) return false
-        if (item.active_targets && item.active_targets.sddm_login) return true
         if (backend.activeConfiguration && backend.activeConfiguration.sddm_login_active) {
             return backend.activeConfiguration.active_package_id === item.id
         }
-        return false
+        return Boolean(item.active_targets && item.active_targets.sddm_login)
     }
 
-    RowLayout {
-        anchors.fill: parent
-        spacing: 0
+    function isThemeLockActive(item) {
+        if (!item) return false
+        if (backend.activeConfiguration && backend.activeConfiguration.session_lock_active) {
+            return backend.activeConfiguration.active_lock_package_id === item.id
+        }
+        return Boolean(item.active_targets && item.active_targets.session_lock)
+    }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // 1. RYOKU-STYLE PERSISTENT CATEGORY SIDEBAR
-        // ══════════════════════════════════════════════════════════════════════
-        Rectangle {
-            Layout.preferredWidth: 200
-            Layout.minimumWidth: 175
-            Layout.maximumWidth: 220
-            Layout.fillHeight: true
-            color: theme.sidebarBg
-            border.color: theme.borderSubtle
-            border.width: 1
+    function isThemeActive(item) {
+        return isThemeSddmActive(item)
+    }
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 12
+    // ══════════════════════════════════════════════════════════════════════
+    // COMPACT HORIZONTAL STUDIO NAVIGATION TABS (macOS System Settings style)
+    // ══════════════════════════════════════════════════════════════════════
+    Rectangle {
+        id: studioTabsBar
+        visible: root.activeDetailTheme === null
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 48
+        z: 10
+        color: theme.surface
+        border.color: theme.borderSubtle
+        border.width: 1
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 24
+            anchors.rightMargin: 24
+            spacing: 8
+
+            // Segmented / Pill Navigation Tabs
+            RowLayout {
                 spacing: 4
 
-                // Section Label
-                Text {
-                    text: "CUSTOMIZATION"
-                    font.pixelSize: 10
-                    font.bold: true
-                    font.letterSpacing: 1.2
-                    color: theme.textMuted
-                    Layout.leftMargin: 8
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 6
-                }
-
-                // Subpage Nav Items (Real Icons, No Emoji)
-                StudioSubpageButton {
-                    iconName: "sliders"
-                    title: "Overview"
-                    desc: "Studio dashboard"
-                    isActive: root.currentSubpage === "overview"
-                    onClicked: root.selectSubpage("overview", null)
-                }
-
-                StudioSubpageButton {
+                StudioTabButton {
                     iconName: "lock"
-                    title: "Lockscreen"
-                    desc: "SDDM login themes"
+                    label: "Lockscreen"
                     isActive: root.currentSubpage === "lockscreen"
                     onClicked: root.selectSubpage("lockscreen", null)
                 }
 
-                StudioSubpageButton {
+                StudioTabButton {
                     iconName: "terminal"
-                    title: "Fastfetch"
-                    desc: "Terminal modules"
+                    label: "Fastfetch"
                     isActive: root.currentSubpage === "fastfetch"
                     onClicked: {
                         root.selectSubpage("fastfetch", null)
@@ -243,79 +458,235 @@ Item {
                     }
                 }
 
-                StudioSubpageButton {
+                StudioTabButton {
                     iconName: "image"
-                    title: "Wallpapers"
-                    desc: "Backgrounds & fit"
+                    label: "Wallpapers"
                     isActive: root.currentSubpage === "wallpapers"
                     onClicked: root.selectSubpage("wallpapers", null)
                 }
 
-                StudioSubpageButton {
+                StudioTabButton {
                     iconName: "palette"
-                    title: "Appearance"
-                    desc: "Colors & theme"
+                    label: "Appearance"
                     isActive: root.currentSubpage === "appearance"
                     onClicked: root.selectSubpage("appearance", null)
                 }
+            }
 
-                Item { Layout.fillHeight: true }
+            Item { Layout.fillWidth: true }
 
-                // Quick Status Card in Left Nav
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 64
-                    radius: theme.radiusMd
-                    color: theme.surface
-                    border.color: theme.borderSubtle
-                    border.width: 1
+            // Subtle inline active greeter status badge on the right
+            Rectangle {
+                property bool isSddmAct: Boolean(backend.activeConfiguration && backend.activeConfiguration.sddm_login_active)
+                height: 24
+                radius: 12
+                implicitWidth: quickSddmRow.implicitWidth + 16
+                color: isSddmAct ? Qt.rgba(16/255, 185/255, 129/255, 0.12) : Qt.rgba(100/255, 116/255, 139/255, 0.12)
+                border.color: isSddmAct ? "#10B981" : theme.borderSubtle
+                border.width: 1
 
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 3
-
-                        RowLayout {
-                            spacing: 6
-                            Rectangle {
-                                width: 6; height: 6; radius: 3
-                                color: (backend.activeConfiguration && backend.activeConfiguration.sddm_login_active) ? "#10b981" : "#64748b"
-                            }
-                            Text {
-                                text: "SDDM Greeter"
-                                font.pixelSize: 10
-                                font.bold: true
-                                color: theme.text
-                            }
-                        }
-
-                        Text {
-                            text: (backend.activeConfiguration && backend.activeConfiguration.sddm_login_active)
-                                ? (backend.activeConfiguration.active_title || "Active Theme")
-                                : "System Default"
-                            font.pixelSize: 10
-                            color: theme.textMuted
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
+                RowLayout {
+                    id: quickSddmRow
+                    anchors.centerIn: parent
+                    spacing: 6
+                    Rectangle {
+                        width: 6; height: 6; radius: 3
+                        color: parent.parent.isSddmAct ? "#10B981" : "#64748B"
+                    }
+                    Text {
+                        text: parent.parent.isSddmAct
+                            ? "SDDM: " + (backend.activeConfiguration.active_title || "Active Theme")
+                            : "SDDM: Default"
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: parent.parent.isSddmAct ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399") : theme.textMuted
                     }
                 }
             }
         }
+    }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // 2. MAIN WORKSPACE CONTENT AREA
-        // ══════════════════════════════════════════════════════════════════════
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            // Persistent top toolbar for theme editor (macOS style)
+            Rectangle {
+                id: editorToolbar
+                visible: root.currentSubpage === "lockscreen" && root.activeDetailTheme !== null
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 52
+                z: 10
+                color: theme.surface
+                border.color: theme.borderSubtle
+                border.width: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 20
+                    anchors.rightMargin: 20
+                    spacing: 12
+
+                    // Back to gallery button
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: theme.radiusSm
+                        color: backBtnM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                        border.color: theme.borderSubtle
+                        border.width: 1
+
+                        RyzoraIcon {
+                            anchors.centerIn: parent
+                            name: "chevron-left"
+                            size: 14
+                            color: theme.text
+                        }
+
+                        MouseArea {
+                            id: backBtnM
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.goBackInStudio()
+                        }
+                    }
+
+                    // Theme Name
+                    Text {
+                        text: root.activeDetailTheme ? root.activeDetailTheme.name : ""
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: theme.text
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 260
+                    }
+
+                    // Single Truthful Status Badge
+                    Rectangle {
+                        property bool isSddmAct: root.isThemeSddmActive(root.activeDetailTheme)
+                        property bool isLockAct: root.isThemeLockActive(root.activeDetailTheme)
+                        height: 22
+                        width: statusRowHdr.implicitWidth + 14
+                        radius: 11
+                        color: isSddmAct
+                            ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B")
+                            : (isLockAct
+                                ? (theme.resolvedTheme === "light" ? "#EDE9FE" : Qt.rgba(139/255, 92/255, 246/255, 0.25))
+                                : (theme.resolvedTheme === "light" ? "#F1F5F9" : "#1E293B"))
+                        border.color: isSddmAct ? "#10B981" : (isLockAct ? "#8B5CF6" : theme.borderSubtle)
+                        border.width: 1
+
+                        RowLayout {
+                            id: statusRowHdr
+                            anchors.centerIn: parent
+                            spacing: 5
+
+                            Rectangle {
+                                width: 6; height: 6; radius: 3
+                                color: parent.parent.isSddmAct ? "#10B981" : (parent.parent.isLockAct ? "#8B5CF6" : "#64748B")
+                            }
+
+                            Text {
+                                text: parent.parent.isSddmAct ? "Active at SDDM Login" : (parent.parent.isLockAct ? "Active on Desktop Lock" : "Installed")
+                                font.pixelSize: 10
+                                font.bold: true
+                                color: parent.parent.isSddmAct
+                                    ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399")
+                                    : (parent.parent.isLockAct
+                                        ? (theme.resolvedTheme === "light" ? "#6D28D9" : "#A78BFA")
+                                        : theme.textSecondary)
+                            }
+                        }
+                    }
+
+                    // Unsaved Changes Indicator
+                    Rectangle {
+                        visible: root.hasUnsavedChanges
+                        height: 22
+                        width: unsavedRow.implicitWidth + 12
+                        radius: 11
+                        color: theme.resolvedTheme === "light" ? "#FEF3C7" : "#78350F"
+                        border.color: "#F59E0B"
+                        border.width: 1
+
+                        RowLayout {
+                            id: unsavedRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            Rectangle { width: 5; height: 5; radius: 2.5; color: "#F59E0B" }
+                            Text {
+                                text: "Unsaved Changes"
+                                font.pixelSize: 10
+                                font.bold: true
+                                color: theme.resolvedTheme === "light" ? "#B45309" : "#FDE68A"
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Status / Action feedback message
+                    Text {
+                        visible: (root.actionError !== "" || root.actionSuccess !== "" || root.pendingAction !== "") && width > 40
+                        text: {
+                            if (root.pendingAction === "apply") return "Applying to SDDM greeter…"
+                            if (root.pendingAction === "preview") return "Launching fullscreen preview…"
+                            if (root.pendingAction === "deactivate") return "Restoring default SDDM…"
+                            if (root.actionError !== "") return root.actionError
+                            if (root.actionSuccess !== "") return root.actionSuccess
+                            return ""
+                        }
+                        font.pixelSize: 11
+                        font.bold: root.actionError !== ""
+                        color: root.actionError !== "" ? "#EF4444" : (root.actionSuccess !== "" ? "#10B981" : "#3B82F6")
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 300
+                    }
+
+                    // Save Button in Header (only when unsaved changes exist)
+                    Rectangle {
+                        visible: root.hasUnsavedChanges
+                        height: 28
+                        width: saveTxtHdr.implicitWidth + 20
+                        radius: theme.radiusSm
+                        color: theme.accent
+                        opacity: root.pendingAction !== "" ? 0.5 : 1.0
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 5
+                            RyzoraIcon { name: "check"; size: 12; color: "#FFFFFF" }
+                            Text {
+                                id: saveTxtHdr
+                                text: "Save Changes"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: "#FFFFFF"
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.triggerSave()
+                        }
+                    }
+                }
+            }
+
+            ScrollView {
+                id: studioScroll
+                anchors.top: editorToolbar.visible ? editorToolbar.bottom : (studioTabsBar.visible ? studioTabsBar.bottom : parent.top)
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
             clip: true
-            contentWidth: availableWidth
             ScrollBar.vertical.policy: ScrollBar.AsNeeded
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             ColumnLayout {
-                width: parent.width
-                anchors.margins: 28
+                x: 24
+                width: Math.max(300, studioScroll.availableWidth - 48)
                 spacing: 22
 
                 // Global Action Error Banner
@@ -364,317 +735,90 @@ Item {
                         Layout.fillWidth: true
                         spacing: 18
 
-                        // 1. Compact Header Row with Action Buttons
+                        // 1. Compact Header Row (macOS System Settings style)
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 16
 
                             ColumnLayout {
-                                spacing: 4
                                 Layout.fillWidth: true
-
-                                RowLayout {
-                                    spacing: 8
-                                    Text {
-                                        text: "—  PERSONALIZATION"
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        font.letterSpacing: 1.5
-                                        color: theme.textMuted
-                                    }
-                                }
+                                spacing: 2
 
                                 Text {
                                     text: "Lockscreen"
-                                    font.pixelSize: 26
+                                    font.pixelSize: 22
                                     font.bold: true
                                     color: theme.text
                                 }
 
                                 Text {
-                                    text: "Pick the skin your lock and sign-in screens wear. It only swaps the look, never your login; applying reskins the sign-in screen too, so you will be asked for your password."
+                                    text: "Installed SDDM login greeter themes and animated lockscreen skins."
                                     font.pixelSize: 12
                                     color: theme.textMuted
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
-                                    Layout.maximumWidth: 800
                                 }
                             }
 
-                            // Top-Right Action Buttons (Ryoku style)
-                            RowLayout {
-                                spacing: 8
-                                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                            // Single Browse Store action pill
+                            Rectangle {
+                                height: 32
+                                radius: theme.radiusSm
+                                implicitWidth: browseStoreRow.implicitWidth + 20
+                                color: browseStoreMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                border.color: browseStoreMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
+                                border.width: 1
 
-                                HeaderPillButton {
-                                    label: "FILES"
-                                    iconName: "sliders"
-                                    onClicked: root.navigateRequested("library")
+                                RowLayout {
+                                    id: browseStoreRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    RyzoraIcon { name: "store"; size: 12; color: theme.text }
+                                    Text {
+                                        text: "Browse Store"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Medium
+                                        color: theme.text
+                                    }
                                 }
 
-                                HeaderPillButton {
-                                    label: "UPDATES"
-                                    iconName: "refresh"
-                                    onClicked: root.navigateRequested("updates")
-                                }
-
-                                HeaderPillButton {
-                                    label: "BROWSE STORE"
-                                    iconName: "store"
+                                MouseArea {
+                                    id: browseStoreMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: root.navigateRequested("discover")
                                 }
                             }
                         }
 
-                        // 2. Restrained Security / Status Strip (Ryoku style)
-                        Rectangle {
+                        // 3. Responsive Gallery of Installed SDDM Theme Cards (Full Width Grid & Hover Effects)
+                        GridLayout {
+                            id: galleryGrid
                             Layout.fillWidth: true
-                            height: 40
-                            radius: theme.radiusSm
-                            color: theme.surface
-                            border.color: theme.borderSubtle
-                            border.width: 1
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                spacing: 10
-
-                                RowLayout {
-                                    spacing: 6
-                                    RyzoraIcon { name: "key"; size: 13; color: theme.textMuted }
-                                    Text {
-                                        text: "Sign-in, Fingerprint & Security key"
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        color: theme.text
-                                    }
-                                    RyzoraIcon { name: "chevron-right"; size: 10; color: theme.textMuted }
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                RowLayout {
-                                    spacing: 8
-                                    Rectangle {
-                                        width: 6; height: 6; radius: 3
-                                        color: (backend.activeConfiguration && backend.activeConfiguration.sddm_login_active) ? "#10b981" : "#64748b"
-                                    }
-                                    Text {
-                                        text: "SDDM drop-in verified · polkit helper active · desktop lock (Dusky/Hyprlock) untouched"
-                                        font.pixelSize: 11
-                                        color: theme.textMuted
-                                    }
-                                }
-                            }
-                        }
-
-                        // 3. Responsive Gallery of Installed SDDM Theme Cards
-                        Flow {
-                            id: galleryFlow
-                            Layout.fillWidth: true
-                            spacing: 18
-                            visible: root.getInstalledSddmThemes().length > 0
+                            rowSpacing: 18
+                            columnSpacing: 18
+                            columns: Math.max(1, Math.floor((width + 18) / 320))
+                            visible: root.installedThemes.length > 0
 
                             Repeater {
-                                model: root.getInstalledSddmThemes()
-
-                                Rectangle {
-                                    id: cardRect
-                                    width: 300
-                                    height: 290
-                                    radius: theme.radiusMd
-                                    color: root.isThemeActive(modelData)
-                                        ? (theme.resolvedTheme === "light" ? "#F0F4FF" : Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.08))
-                                        : (cardMouse.containsMouse ? theme.surfaceElevated : theme.surface)
-                                    border.color: root.isThemeActive(modelData)
-                                        ? theme.accent
-                                        : (cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle)
-                                    border.width: 1
-
-                                    Behavior on border.color { ColorAnimation { duration: 100 } }
-                                    Behavior on color { ColorAnimation { duration: 100 } }
-
-                                    ColumnLayout {
-                                        anchors.fill: parent
-                                        anchors.margins: 12
-                                        spacing: 8
-
-                                        // ── Landscape Preview Box (16:9) ──
-                                        Rectangle {
-                                            Layout.fillWidth: true
-                                            Layout.preferredHeight: 155
-                                            radius: theme.radiusSm
-                                            color: theme.surfaceElevated
-                                            border.color: theme.borderSubtle
-                                            border.width: 1
-                                            clip: true
-
-                                            Image {
-                                                id: thumbImg
-                                                anchors.fill: parent
-                                                source: {
-                                                    var u = String(modelData.preview_url || "").trim()
-                                                    if (u.length === 0) return ""
-                                                    if (u.indexOf("file://") === 0) {
-                                                        if (u.indexOf("file:///") !== 0 && u.indexOf("file://localhost/") !== 0) {
-                                                            return "file:///" + u.substring(7)
-                                                        }
-                                                        return u
-                                                    }
-                                                    if (u.indexOf("http://") === 0 || u.indexOf("https://") === 0) return u
-                                                    if (u.indexOf("/") === 0) return "file://" + u
-                                                    return ""
-                                                }
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
-                                                smooth: true
-                                                visible: status === Image.Ready
-                                            }
-
-                                            // Fallback Artwork (Clean and Theme-Aware)
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                visible: thumbImg.status !== Image.Ready
-                                                color: theme.surfaceElevated
-
-                                                ColumnLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 4
-                                                    RyzoraIcon { name: "lock"; size: 22; color: theme.textMuted; Layout.alignment: Qt.AlignHCenter }
-                                                    Text {
-                                                        text: modelData.name
-                                                        font.pixelSize: 11
-                                                        font.bold: true
-                                                        color: theme.textMuted
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                    }
-                                                }
-                                            }
-
-                                            // Subtle Quick Preview Scrim on Hover (Ryoku style)
-                                            Rectangle {
-                                                anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                                                height: 22
-                                                width: pvRow.implicitWidth + 12
-                                                radius: 4
-                                                color: Qt.rgba(0, 0, 0, 0.70)
-                                                border.color: Qt.rgba(255, 255, 255, 0.20)
-                                                border.width: 1
-                                                opacity: cardMouse.containsMouse ? 1 : 0
-                                                Behavior on opacity { NumberAnimation { duration: 120 } }
-
-                                                RowLayout {
-                                                    id: pvRow
-                                                    anchors.centerIn: parent
-                                                    spacing: 4
-                                                    RyzoraIcon { name: "play"; size: 9; color: "#ffffff" }
-                                                    Text {
-                                                        text: "Preview"
-                                                        font.pixelSize: 10
-                                                        font.bold: true
-                                                        color: "#ffffff"
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // ── Metadata & Status Section ──
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 3
-
-                                            // Top Row: Ordinal + Active Indicator
-                                            RowLayout {
-                                                Layout.fillWidth: true
-
-                                                Text {
-                                                    text: (index < 9 ? "0" : "") + (index + 1)
-                                                    font.pixelSize: 12
-                                                    font.bold: true
-                                                    font.family: "monospace"
-                                                    color: theme.textMuted
-                                                }
-
-                                                Text {
-                                                    text: "·  " + (modelData.author || "COMMUNITY").toUpperCase()
-                                                    font.pixelSize: 9
-                                                    font.bold: true
-                                                    font.letterSpacing: 0.8
-                                                    color: theme.textMuted
-                                                    elide: Text.ElideRight
-                                                    Layout.fillWidth: true
-                                                }
-
-                                                // Restrained Active Indicator (small dot + label)
-                                                Rectangle {
-                                                    visible: root.isThemeActive(modelData)
-                                                    height: 18
-                                                    width: pillText.implicitWidth + 14
-                                                    radius: 4
-                                                    color: theme.resolvedTheme === "light" ? "#DCFCE7" : Qt.rgba(16/255, 185/255, 129/255, 0.15)
-                                                    border.color: theme.resolvedTheme === "light" ? "#86EFAC" : "#10b981"
-                                                    border.width: 1
-
-                                                    RowLayout {
-                                                        anchors.centerIn: parent
-                                                        spacing: 4
-                                                        Rectangle {
-                                                            width: 5; height: 5; radius: 2.5
-                                                            color: "#10b981"
-                                                        }
-                                                        Text {
-                                                            id: pillText
-                                                            text: "ACTIVE"
-                                                            font.pixelSize: 8
-                                                            font.bold: true
-                                                            font.letterSpacing: 0.6
-                                                            color: theme.resolvedTheme === "light" ? "#15803D" : "#34d399"
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Theme Title
-                                            Text {
-                                                text: modelData.name
-                                                font.pixelSize: 14
-                                                font.bold: true
-                                                color: cardMouse.containsMouse ? theme.accent : theme.text
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-
-                                            // Description / Summary Snippet
-                                            Text {
-                                                text: modelData.description || "Interactive SDDM login greeter theme with custom typography."
-                                                font.pixelSize: 11
-                                                color: theme.textSecondary
-                                                maximumLineCount: 2
-                                                wrapMode: Text.WordWrap
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-                                        }
-
-                                        Item { Layout.fillHeight: true }
-                                    }
-
-                                    MouseArea {
-                                        id: cardMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.openThemeDetail(modelData)
-                                    }
+                                model: root.installedThemes
+                                StoreCard {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 240
+                                    Layout.minimumHeight: 220
+                                    Layout.minimumWidth: 260
+                                    itemData: modelData
+                                    actionLabel: "CUSTOMIZE"
+                                    isPageVisible: root.visible && root.currentSubpage === "lockscreen" && root.activeDetailTheme === null
+                                    allowAutoplay: true
+                                    onCardClicked: (pkg) => root.openThemeDetail(pkg)
+                                    onActionClicked: (action, pkg) => root.openThemeDetail(pkg)
                                 }
                             }
                         }
 
                         // 4. Empty State (When no SDDM themes installed)
                         Rectangle {
-                            visible: root.getInstalledSddmThemes().length === 0
+                            visible: root.installedThemes.length === 0
                             Layout.fillWidth: true
                             height: 220
                             radius: theme.radiusMd
@@ -717,106 +861,13 @@ Item {
                     ColumnLayout {
                         visible: root.activeDetailTheme !== null
                         Layout.fillWidth: true
-                        spacing: 20
+                        spacing: 18
 
-                        // Breadcrumb Navigation Back to Gallery & Status Badge
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-
-                            Rectangle {
-                                width: 32; height: 32; radius: 16
-                                color: backMouse.containsMouse ? theme.surfaceHover : theme.surface
-                                border.color: backMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
-                                border.width: 1
-
-                                RyzoraIcon {
-                                    anchors.centerIn: parent
-                                    name: "chevron-left"
-                                    size: 14
-                                    color: backMouse.containsMouse ? theme.accent : theme.text
-                                }
-
-                                MouseArea {
-                                    id: backMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.activeDetailTheme = null
-                                        root.actionError = ""
-                                    }
-                                }
-                            }
-
-                            RowLayout {
-                                spacing: 8
-                                Text {
-                                    text: "Lockscreen Studio"
-                                    font.pixelSize: 12
-                                    color: theme.textMuted
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.activeDetailTheme = null
-                                    }
-                                }
-                                Text { text: "/"; font.pixelSize: 12; color: theme.borderStrong }
-                                Text {
-                                    text: "Themes"
-                                    font.pixelSize: 12
-                                    color: theme.textMuted
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.activeDetailTheme = null
-                                    }
-                                }
-                                Text { text: "/"; font.pixelSize: 12; color: theme.borderStrong }
-                                Text {
-                                    text: root.activeDetailTheme ? root.activeDetailTheme.name : ""
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: theme.text
-                                }
-                            }
-
-                            Item { Layout.fillWidth: true }
-
-                            // SDDM Login Status Pill
-                            Rectangle {
-                                property bool isActive: root.isThemeActive(root.activeDetailTheme)
-                                height: 26
-                                width: topStatusTxt.implicitWidth + 24
-                                radius: 13
-                                color: isActive ? Qt.rgba(16/255, 185/255, 129/255, 0.15) : theme.surfaceElevated
-                                border.color: isActive ? "#10b981" : theme.borderSubtle
-                                border.width: 1
-
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    Rectangle {
-                                        width: 6; height: 6; radius: 3
-                                        color: parent.parent.isActive ? "#10b981" : theme.textMuted
-                                    }
-                                    Text {
-                                        id: topStatusTxt
-                                        text: parent.parent.isActive ? "ACTIVE AT LOGIN (SDDM)" : "INSTALLED · READY TO APPLY"
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.letterSpacing: 0.6
-                                        color: parent.parent.isActive ? "#34d399" : theme.textMuted
-                                    }
-                                }
-                            }
-                        }
-
-                        // Action Error Alert Banner (if any)
+                        // 1. Action Error Banner (if any)
                         Rectangle {
                             visible: root.actionError !== ""
                             Layout.fillWidth: true
-                            height: 40
+                            height: 38
                             radius: theme.radiusSm
                             color: Qt.rgba(239/255, 68/255, 68/255, 0.15)
                             border.color: "#ef4444"
@@ -834,578 +885,520 @@ Item {
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                 }
-                                MouseArea {
-                                    width: 18; height: 18
-                                    cursorShape: Qt.PointingHandCursor
+                                Rectangle {
+                                    width: 18; height: 18; radius: 9
+                                    color: "transparent"
                                     RyzoraIcon { anchors.centerIn: parent; name: "x"; size: 10; color: "#fca5a5" }
-                                    onClicked: root.actionError = ""
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.actionError = "" }
                                 }
                             }
                         }
 
-                        // Hero Detail Card (Balanced Desktop Layout)
-                        Rectangle {
+                        // 2. Responsive Hero Section (Left Preview + Right Context Summary)
+                        RowLayout {
                             Layout.fillWidth: true
-                            implicitHeight: heroRow.implicitHeight + 40
-                            radius: theme.radiusLg
-                            color: theme.surface
-                            border.color: theme.borderSubtle
-                            border.width: 1
+                            spacing: 18
+                            Layout.alignment: Qt.AlignTop
 
-                            RowLayout {
-                                id: heroRow
-                                anchors.fill: parent
-                                anchors.margins: 20
-                                spacing: 24
+                            // Left Pane: Left-aligned Preview Container using available width (aspect 16:9)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: studioScroll.width >= 920 ? 3 : 1
+                                Layout.minimumWidth: 320
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+                                implicitHeight: previewCol.implicitHeight + 20
 
-                                // Large Theme Preview (16:9)
-                                Rectangle {
-                                    Layout.preferredWidth: 380
-                                    Layout.preferredHeight: 214
-                                    radius: theme.radiusMd
-                                    color: theme.surfaceElevated
-                                    border.color: theme.borderSubtle
-                                    border.width: 1
-                                    clip: true
-
-                                    Image {
-                                        id: detailHeroImg
-                                        anchors.fill: parent
-                                        source: {
-                                            if (!root.activeDetailTheme) return ""
-                                            var u = String(root.activeDetailTheme.preview_url || "").trim()
-                                            if (u.indexOf("file://") === 0) {
-                                                if (u.indexOf("file:///") !== 0 && u.indexOf("file://localhost/") !== 0) {
-                                                    return "file:///" + u.substring(7)
-                                                }
-                                                return u
-                                            }
-                                            if (u.indexOf("http://") === 0 || u.indexOf("https://") === 0) return u
-                                            if (u.indexOf("/") === 0) return "file://" + u
-                                            return ""
-                                        }
-                                        fillMode: Image.PreserveAspectCrop
-                                        visible: status === Image.Ready
-                                    }
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        visible: detailHeroImg.status !== Image.Ready
-                                        color: theme.surfaceElevated
-                                        ColumnLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 6
-                                            RyzoraIcon { name: "lock"; size: 32; color: theme.textMuted; Layout.alignment: Qt.AlignHCenter }
-                                            Text {
-                                                text: root.activeDetailTheme ? root.activeDetailTheme.name : ""
-                                                font.pixelSize: 12
-                                                font.bold: true
-                                                color: theme.textMuted
-                                                Layout.alignment: Qt.AlignHCenter
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Detail Information & Actions Area
                                 ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
+                                    id: previewCol
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 8
 
-                                    // Author & Version Tag
-                                    Text {
-                                        text: ((root.activeDetailTheme && root.activeDetailTheme.author) ? String(root.activeDetailTheme.author).toUpperCase() : "COMMUNITY") + "  ·  v" + (root.activeDetailTheme ? (root.activeDetailTheme.version || "1.0.0") : "1.0.0") + "  ·  SDDM Theme"
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.letterSpacing: 0.8
-                                        color: theme.textMuted
-                                    }
-
-                                    Text {
-                                        text: root.activeDetailTheme ? root.activeDetailTheme.name : ""
-                                        font.pixelSize: 20
-                                        font.bold: true
-                                        color: theme.text
-                                    }
-
-                                    Text {
-                                        text: root.activeDetailTheme ? (root.activeDetailTheme.description || "") : ""
-                                        font.pixelSize: 12
-                                        color: theme.textSecondary
-                                        wrapMode: Text.WordWrap
+                                    LoginPreview {
+                                        id: studioPreview
                                         Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.round(width / aspect)
+                                        radius: theme.radiusSm
+                                        border.color: theme.borderSubtle
+                                        packageData: root.activeDetailTheme
+                                        config: root.draftConfig
+                                        hasUnsaved: root.hasUnsavedChanges
+                                        active: root.visible && root.activeDetailTheme !== null
                                     }
 
-                                    // Compact System Status Row
                                     RowLayout {
-                                        spacing: 16
-                                        Layout.topMargin: 4
-                                        Layout.bottomMargin: 4
-
-                                        RowLayout {
-                                            spacing: 6
-                                            Rectangle {
-                                                width: 6; height: 6; radius: 3
-                                                color: root.isThemeActive(root.activeDetailTheme) ? "#10b981" : theme.textMuted
-                                            }
-                                            Text {
-                                                text: root.isThemeActive(root.activeDetailTheme) ? "Active at SDDM Login" : "Installed · Ready to apply"
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: root.isThemeActive(root.activeDetailTheme) ? (theme.resolvedTheme === "light" ? "#15803D" : "#34d399") : theme.textMuted
-                                            }
-                                        }
-
-                                        Text { text: "·"; font.pixelSize: 11; color: theme.borderStrong }
-
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        RyzoraIcon { name: "info"; size: 12; color: theme.textMuted }
                                         Text {
-                                            text: "Desktop lock: Dusky / Hyprlock (Untouched)"
+                                            text: studioPreview.isReal
+                                                ? "Rendered with theme’s live engine. Edits update preview dynamically."
+                                                : "Simulated login composition driven by your draft settings."
                                             font.pixelSize: 11
                                             color: theme.textMuted
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
                                         }
                                     }
 
-                                    // Compact Action Buttons
+                                    // Quick Actions Row under Preview Canvas (fallback for narrow screens when sidebar is hidden)
                                     RowLayout {
-                                        spacing: 10
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        visible: studioScroll.width < 920
 
-                                        // Apply Theme Button (When not active)
                                         Rectangle {
-                                            visible: !root.isThemeActive(root.activeDetailTheme)
-                                            height: 34
-                                            width: applyBtnTxt.implicitWidth + 28
+                                            Layout.fillWidth: true
+                                            height: 32
                                             radius: theme.radiusSm
-                                            color: applyBtnM.containsMouse ? "#059669" : "#10b981"
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 6
-                                                RyzoraIcon { name: "check"; size: 12; color: "#ffffff" }
-                                                Text {
-                                                    id: applyBtnTxt
-                                                    text: root.pendingAction === "apply" ? "Applying…" : "Apply Theme"
-                                                    font.pixelSize: 12
-                                                    font.bold: true
-                                                    color: "#ffffff"
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: applyBtnM
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (root.activeDetailTheme && root.pendingAction === "") {
-                                                        root.actionError = ""
-                                                        root.pendingAction = "apply"
-                                                        backend.applyTarget(root.activeDetailTheme.id, "sddm_login")
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Deactivate Theme Button (When active)
-                                        Rectangle {
-                                            visible: root.isThemeActive(root.activeDetailTheme)
-                                            height: 34
-                                            width: deactBtnTxt.implicitWidth + 28
-                                            radius: theme.radiusSm
-                                            color: deactBtnM.containsMouse ? "#3b1219" : theme.surfaceElevated
-                                            border.color: deactBtnM.containsMouse ? "#ef4444" : theme.borderStrong
-                                            border.width: 1
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 6
-                                                RyzoraIcon { name: "x"; size: 12; color: deactBtnM.containsMouse ? "#f87171" : theme.textMuted }
-                                                Text {
-                                                    id: deactBtnTxt
-                                                    text: root.pendingAction === "deactivate" ? "Deactivating…" : "Deactivate Theme"
-                                                    font.pixelSize: 12
-                                                    font.bold: true
-                                                    color: deactBtnM.containsMouse ? "#f87171" : theme.textMuted
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: deactBtnM
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (root.pendingAction === "") {
-                                                        root.actionError = ""
-                                                        root.pendingAction = "deactivate"
-                                                        backend.deactivateTarget("sddm_login")
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Preview Theme Button
-                                        Rectangle {
-                                            height: 34
-                                            width: prevBtnTxt.implicitWidth + 26
-                                            radius: theme.radiusSm
-                                            color: prevBtnM.containsMouse ? theme.surfaceActive : theme.surfaceElevated
+                                            color: fsQuickMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                                             border.color: theme.borderSubtle
                                             border.width: 1
 
                                             RowLayout {
                                                 anchors.centerIn: parent
                                                 spacing: 6
-                                                RyzoraIcon { name: "play"; size: 11; color: theme.text }
+                                                RyzoraIcon { name: "maximize-2"; size: 12; color: theme.textSecondary }
                                                 Text {
-                                                    id: prevBtnTxt
-                                                    text: root.pendingAction === "preview" ? "Opening Preview…" : "Preview Theme"
-                                                    font.pixelSize: 12
-                                                    font.bold: true
+                                                    text: "Fullscreen Preview"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Medium
                                                     color: theme.text
                                                 }
                                             }
 
                                             MouseArea {
-                                                id: prevBtnM
+                                                id: fsQuickMouse
                                                 anchors.fill: parent
+                                                hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (root.activeDetailTheme && root.pendingAction === "") {
-                                                        root.actionError = ""
-                                                        root.pendingAction = "preview"
-                                                        backend.testPackage(root.activeDetailTheme.id)
-                                                    }
-                                                }
+                                                onClicked: root.triggerPreview()
                                             }
                                         }
 
-                                        // Uninstall Package Button
                                         Rectangle {
-                                            property bool isAct: root.isThemeActive(root.activeDetailTheme)
-                                            height: 34
-                                            width: uninstBtnTxt.implicitWidth + 24
+                                            Layout.fillWidth: true
+                                            height: 32
                                             radius: theme.radiusSm
-                                            opacity: isAct ? 0.45 : 1.0
-                                            color: (!isAct && uninstBtnM.containsMouse) ? "#2b1114" : theme.surfaceElevated
-                                            border.color: (!isAct && uninstBtnM.containsMouse) ? "#ef4444" : theme.borderSubtle
-                                            border.width: 1
+                                            property bool isApplied: root.isThemeSddmActive(root.activeDetailTheme)
+                                            property bool needsApply: !isApplied || root.hasUnsavedChanges
+                                            color: (!needsApply && isApplied) ? Qt.rgba(16/255, 185/255, 129/255, 0.15) : (applyQuickMouse.containsMouse ? theme.accentHover : theme.accent)
+                                            border.color: (!needsApply && isApplied) ? "#10B981" : "transparent"
+                                            border.width: (!needsApply && isApplied) ? 1 : 0
 
                                             RowLayout {
                                                 anchors.centerIn: parent
                                                 spacing: 6
                                                 RyzoraIcon {
-                                                    name: "trash"
+                                                    name: (!parent.parent.needsApply && parent.parent.isApplied) ? "check" : "shield"
                                                     size: 12
-                                                    color: (!parent.parent.isAct && uninstBtnM.containsMouse) ? "#ef4444" : theme.textMuted
+                                                    color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
                                                 }
                                                 Text {
-                                                    id: uninstBtnTxt
-                                                    text: root.pendingAction === "uninstall" ? "Removing…" : "Uninstall"
-                                                    font.pixelSize: 12
-                                                    font.bold: true
-                                                    color: (!parent.parent.isAct && uninstBtnM.containsMouse) ? "#ef4444" : theme.textMuted
+                                                    text: root.pendingAction === "apply" ? "Applying…" : (root.hasUnsavedChanges ? "Save & Apply" : (parent.parent.isApplied ? "Active on SDDM" : "Apply to Login Screen"))
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.SemiBold
+                                                    color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
                                                 }
                                             }
 
                                             MouseArea {
-                                                id: uninstBtnM
+                                                id: applyQuickMouse
                                                 anchors.fill: parent
-                                                cursorShape: parent.isAct ? Qt.ForbiddenCursor : Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (parent.isAct) {
-                                                        root.actionError = "Cannot uninstall active theme. Deactivate it first to restore system defaults safely."
-                                                        return
-                                                    }
-                                                    if (root.activeDetailTheme && root.pendingAction === "") {
-                                                        root.actionError = ""
-                                                        root.pendingAction = "uninstall"
-                                                        backend.uninstallPackage(root.activeDetailTheme.id)
-                                                    }
-                                                }
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                enabled: root.pendingAction !== "apply" && parent.needsApply
+                                                onClicked: root.triggerApply()
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            // Right Pane: Contextual Theme Summary Card (when width >= 920)
+                            Rectangle {
+                                visible: studioScroll.width >= 920
+                                Layout.preferredWidth: 260
+                                Layout.minimumWidth: 220
+                                Layout.maximumWidth: 320
+                                Layout.fillHeight: true
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 14
+                                    spacing: 10
+
+                                    Text {
+                                        text: "ABOUT THEME"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        font.letterSpacing: 1.2
+                                        color: theme.textMuted
+                                    }
+
+                                    Text {
+                                        text: root.activeDetailTheme ? root.activeDetailTheme.name : ""
+                                        font.pixelSize: 16
+                                        font.bold: true
+                                        color: theme.text
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: root.activeDetailTheme ? (root.activeDetailTheme.description || "Authentic SDDM login theme.") : ""
+                                        font.pixelSize: 11
+                                        color: theme.textSecondary
+                                        wrapMode: Text.WordWrap
+                                        maximumLineCount: 3
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 1
+                                        color: theme.borderSubtle
+                                    }
+
+                                    ColumnLayout {
+                                        spacing: 6
+                                        Layout.fillWidth: true
+
+                                        RowLayout {
+                                            spacing: 6
+                                            Text { text: "Author:"; font.pixelSize: 11; color: theme.textMuted; Layout.preferredWidth: 55 }
+                                            Text {
+                                                text: root.activeDetailTheme ? (typeof root.activeDetailTheme.author === "object" ? (root.activeDetailTheme.author.name || "Community") : String(root.activeDetailTheme.author || "Community")) : "Community"
+                                                font.pixelSize: 11; font.bold: true; color: theme.text
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 6
+                                            Text { text: "Target:"; font.pixelSize: 11; color: theme.textMuted; Layout.preferredWidth: 55 }
+                                            Text { text: "SDDM Greeter"; font.pixelSize: 11; font.bold: true; color: theme.text }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 6
+                                            Text { text: "Status:"; font.pixelSize: 11; color: theme.textMuted; Layout.preferredWidth: 55 }
+                                            Text {
+                                                text: root.isThemeSddmActive(root.activeDetailTheme) ? "Active at SDDM Login" : (root.isThemeLockActive(root.activeDetailTheme) ? "Active on Desktop Lock" : "Installed")
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                color: root.isThemeSddmActive(root.activeDetailTheme) ? "#10b981" : (root.isThemeLockActive(root.activeDetailTheme) ? "#8b5cf6" : theme.textSecondary)
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 1
+                                        color: theme.borderSubtle
+                                    }
+
+                                    // Action Buttons in Side Panel
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        // Primary CTA: Apply to SDDM Login Screen
+                                        Rectangle {
+                                            id: applyCtaBtn
+                                            Layout.fillWidth: true
+                                            height: 38
+                                            radius: theme.radiusSm
+                                            property bool isApplied: root.isThemeSddmActive(root.activeDetailTheme)
+                                            property bool isBusy: root.pendingAction === "apply"
+                                            property bool needsApply: !isApplied || root.hasUnsavedChanges
+                                            color: (!needsApply && isApplied)
+                                                   ? Qt.rgba(16/255, 185/255, 129/255, 0.15)
+                                                   : (applyCtaMouse.containsMouse ? theme.accentHover : theme.accent)
+                                            border.color: (!needsApply && isApplied) ? "#10B981" : "transparent"
+                                            border.width: (!needsApply && isApplied) ? 1 : 0
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 8
+                                                RyzoraIcon {
+                                                    name: (!applyCtaBtn.needsApply && applyCtaBtn.isApplied) ? "check" : "shield"
+                                                    size: 14
+                                                    color: (!applyCtaBtn.needsApply && applyCtaBtn.isApplied) ? "#10B981" : "#FFFFFF"
+                                                }
+                                                Text {
+                                                    text: applyCtaBtn.isBusy ? "Applying…" : (root.hasUnsavedChanges ? "Save & Apply Customization" : (applyCtaBtn.isApplied ? "Applied to SDDM" : "Apply to Login Screen"))
+                                                    font.pixelSize: 12
+                                                    font.weight: Font.SemiBold
+                                                    color: (!applyCtaBtn.needsApply && applyCtaBtn.isApplied) ? "#10B981" : "#FFFFFF"
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: applyCtaMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                enabled: !applyCtaBtn.isBusy && applyCtaBtn.needsApply
+                                                onClicked: root.triggerApply()
+                                            }
+                                        }
+
+                                        // Deactivate Button (Visible if applied)
+                                        Rectangle {
+                                            visible: root.isThemeSddmActive(root.activeDetailTheme)
+                                            Layout.fillWidth: true
+                                            height: 32
+                                            radius: theme.radiusSm
+                                            color: deactMouse.containsMouse ? theme.surfaceHover : "transparent"
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                RyzoraIcon { name: "x"; size: 12; color: "#EF4444" }
+                                                Text {
+                                                    text: root.pendingAction === "deactivate" ? "Deactivating…" : "Deactivate (Restore Default)"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Medium
+                                                    color: "#EF4444"
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: deactMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                enabled: root.pendingAction !== "deactivate"
+                                                onClicked: root.triggerDeactivate()
+                                            }
+                                        }
+
+                                        // Fullscreen Test Button
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 32
+                                            radius: theme.radiusSm
+                                            color: fsBtnMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                RyzoraIcon { name: "maximize-2"; size: 12; color: theme.textSecondary }
+                                                Text {
+                                                    text: "Test Fullscreen Preview"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Medium
+                                                    color: theme.text
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: fsBtnMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.triggerPreview()
+                                            }
+                                        }
+
+                                        // Save / Reset block for settings changes
+                                        RowLayout {
+                                            visible: root.hasUnsavedChanges
+                                            Layout.fillWidth: true
+                                            spacing: 8
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                height: 30
+                                                radius: theme.radiusSm
+                                                color: saveSideMouse.containsMouse ? theme.accentHover : theme.accent
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "Save Settings"
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                    color: "#FFFFFF"
+                                                }
+                                                MouseArea {
+                                                    id: saveSideMouse
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.triggerSave()
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                height: 30
+                                                radius: theme.radiusSm
+                                                color: resetSideMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                                border.color: theme.borderSubtle
+                                                border.width: 1
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "Reset"
+                                                    font.pixelSize: 11
+                                                    color: theme.textSecondary
+                                                }
+                                                MouseArea {
+                                                    id: resetSideMouse
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.triggerReset()
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Item { Layout.fillHeight: true }
+                                }
+                            }
                         }
 
-                        // Theme Configuration Section: Dynamically Built from Validated Capability Model
-                        Rectangle {
-                            visible: root.themeConfig && root.themeConfig.has_settings === true
+                        // 3. Responsive Grouped Settings Cards
+                        // 3A. Wide Layout (width >= 860): 2 Columns
+                        RowLayout {
+                            visible: Boolean(root.themeConfig && root.themeConfig.has_settings === true && studioScroll.width >= 860)
                             Layout.fillWidth: true
-                            implicitHeight: themeCustomCol.implicitHeight + 40
-                            radius: theme.radiusLg
+                            spacing: 16
+                            Layout.alignment: Qt.AlignTop
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 16
+
+                                SettingsGroupCard {
+                                    title: "Background"
+                                    iconName: "image"
+                                    settingsList: root.getCategorySettings("Background")
+                                }
+
+                                SettingsGroupCard {
+                                    title: "Login Panel"
+                                    iconName: "user"
+                                    settingsList: root.getCategorySettings("Login Panel")
+                                }
+
+                                SettingsGroupCard {
+                                    title: "Appearance"
+                                    iconName: "sliders"
+                                    settingsList: root.getCategorySettings("Appearance")
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 16
+
+                                SettingsGroupCard {
+                                    title: "Clock & Date"
+                                    iconName: "clock"
+                                    settingsList: root.getCategorySettings("Clock & Date")
+                                }
+
+                                SettingsGroupCard {
+                                    title: "Unlock Hint"
+                                    iconName: "lock"
+                                    settingsList: root.getCategorySettings("Unlock Hint")
+                                }
+
+                                SettingsGroupCard {
+                                    title: "Animation"
+                                    iconName: "play"
+                                    settingsList: root.getCategorySettings("Animation")
+                                }
+                            }
+                        }
+
+                        // 3B. Narrow Layout (width < 860): Stacked 1 Column
+                        ColumnLayout {
+                            visible: Boolean(root.themeConfig && root.themeConfig.has_settings === true && studioScroll.width < 860)
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            SettingsGroupCard {
+                                title: "Background"
+                                iconName: "image"
+                                settingsList: root.getCategorySettings("Background")
+                            }
+
+                            SettingsGroupCard {
+                                title: "Login Panel"
+                                iconName: "user"
+                                settingsList: root.getCategorySettings("Login Panel")
+                            }
+
+                            SettingsGroupCard {
+                                title: "Clock & Date"
+                                iconName: "clock"
+                                settingsList: root.getCategorySettings("Clock & Date")
+                            }
+
+                            SettingsGroupCard {
+                                title: "Unlock Hint"
+                                iconName: "lock"
+                                settingsList: root.getCategorySettings("Unlock Hint")
+                            }
+
+                            SettingsGroupCard {
+                                title: "Appearance"
+                                iconName: "sliders"
+                                settingsList: root.getCategorySettings("Appearance")
+                            }
+
+                            SettingsGroupCard {
+                                title: "Animation"
+                                iconName: "play"
+                                settingsList: root.getCategorySettings("Animation")
+                            }
+                        }
+
+                        // 4. Informational card when theme has no configurable parameters
+                        Rectangle {
+                            visible: Boolean(root.activeDetailTheme && root.themeConfig && root.themeConfig.has_settings === false && !root.themeConfig.error)
+                            Layout.fillWidth: true
+                            height: 48
+                            radius: theme.radiusSm
                             color: theme.surface
                             border.color: theme.borderSubtle
                             border.width: 1
 
-                            ColumnLayout {
-                                id: themeCustomCol
+                            RowLayout {
                                 anchors.fill: parent
-                                anchors.margins: 20
-                                spacing: 16
-
-                                RowLayout {
-                                    spacing: 8
-                                    RyzoraIcon { name: "sliders"; size: 14; color: theme.accent }
-                                    Text {
-                                        text: "THEME CUSTOMIZATION"
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        font.letterSpacing: 1.0
-                                        color: theme.accent
-                                    }
-                                }
-
+                                anchors.margins: 12
+                                spacing: 10
+                                RyzoraIcon { name: "sliders"; size: 14; color: theme.textMuted }
                                 Text {
-                                    text: "Configure parameters declared and supported by this theme's QML engine. Changes apply immediately to local preview and SDDM login screen."
-                                    font.pixelSize: 12
+                                    text: "Default Configuration: This theme operates with integrated styling and does not require additional configuration parameters."
+                                    font.pixelSize: 11
                                     color: theme.textSecondary
-                                }
-
-                                // Dynamic Settings Controls
-                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 14
-
-                                    Repeater {
-                                        model: (root.themeConfig && root.themeConfig.settings) ? root.themeConfig.settings : []
-                                        delegate: RowLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 16
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 2
-                                                RowLayout {
-                                                    spacing: 6
-                                                    Text {
-                                                        text: modelData.label
-                                                        font.pixelSize: 13
-                                                        font.bold: true
-                                                        color: theme.text
-                                                    }
-                                                    Rectangle {
-                                                        visible: modelData.category !== undefined && modelData.category !== ""
-                                                        height: 16
-                                                        width: catTxt.implicitWidth + 8
-                                                        radius: 3
-                                                        color: theme.surfaceElevated
-                                                        border.color: theme.borderSubtle
-                                                        border.width: 1
-                                                        Text {
-                                                            id: catTxt
-                                                            anchors.centerIn: parent
-                                                            text: modelData.category || ""
-                                                            font.pixelSize: 9
-                                                            color: theme.textMuted
-                                                        }
-                                                    }
-                                                }
-                                                Text {
-                                                    text: modelData.help || ""
-                                                    font.pixelSize: 11
-                                                    color: theme.textMuted
-                                                    wrapMode: Text.WordWrap
-                                                    Layout.fillWidth: true
-                                                }
-                                            }
-
-                                            // 1. Enum options
-                                            RowLayout {
-                                                visible: modelData.type === "enum"
-                                                spacing: 4
-                                                Repeater {
-                                                    model: modelData.options
-                                                    delegate: Rectangle {
-                                                        property bool isCur: String(root.draftConfig[modelData.id]) === String(modelData)
-                                                        height: 30
-                                                        width: Math.max(64, optTxt.implicitWidth + 20)
-                                                        radius: theme.radiusSm
-                                                        color: isCur ? theme.accent : (enumM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                                        border.color: isCur ? theme.accent : theme.borderSubtle
-                                                        border.width: 1
-
-                                                        Text {
-                                                            id: optTxt
-                                                            anchors.centerIn: parent
-                                                            text: String(modelData).charAt(0).toUpperCase() + String(modelData).slice(1)
-                                                            font.pixelSize: 11
-                                                            font.bold: true
-                                                            color: parent.isCur ? "#000000" : theme.text
-                                                        }
-
-                                                        MouseArea {
-                                                            id: enumM
-                                                            anchors.fill: parent
-                                                            hoverEnabled: true
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: {
-                                                                var d = Object.assign({}, root.draftConfig)
-                                                                d[modelData.id] = String(modelData)
-                                                                root.draftConfig = d
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // 2. Boolean toggle
-                                            RowLayout {
-                                                visible: modelData.type === "bool"
-                                                spacing: 4
-                                                Rectangle {
-                                                    property bool isCur: Boolean(root.draftConfig[modelData.id]) === true
-                                                    height: 30
-                                                    width: 72
-                                                    radius: theme.radiusSm
-                                                    color: isCur ? theme.accent : (bTrueM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                                    border.color: isCur ? theme.accent : theme.borderSubtle
-                                                    border.width: 1
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "Enabled"
-                                                        font.pixelSize: 11
-                                                        font.bold: true
-                                                        color: parent.isCur ? "#000000" : theme.text
-                                                    }
-                                                    MouseArea {
-                                                        id: bTrueM
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            var d = Object.assign({}, root.draftConfig)
-                                                            d[modelData.id] = true
-                                                            root.draftConfig = d
-                                                        }
-                                                    }
-                                                }
-                                                Rectangle {
-                                                    property bool isCur: Boolean(root.draftConfig[modelData.id]) === false
-                                                    height: 30
-                                                    width: 72
-                                                    radius: theme.radiusSm
-                                                    color: isCur ? theme.accent : (bFalseM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                                    border.color: isCur ? theme.accent : theme.borderSubtle
-                                                    border.width: 1
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "Disabled"
-                                                        font.pixelSize: 11
-                                                        font.bold: true
-                                                        color: parent.isCur ? "#000000" : theme.text
-                                                    }
-                                                    MouseArea {
-                                                        id: bFalseM
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            var d = Object.assign({}, root.draftConfig)
-                                                            d[modelData.id] = false
-                                                            root.draftConfig = d
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // 3. Integer range
-                                            RowLayout {
-                                                visible: modelData.type === "int"
-                                                spacing: 4
-                                                Repeater {
-                                                    model: (modelData.max !== undefined && modelData.min !== undefined) ? (modelData.max - modelData.min + 1) : 0
-                                                    delegate: Rectangle {
-                                                        property int val: modelData.min + index
-                                                        property bool isCur: parseInt(root.draftConfig[modelData.id]) === val
-                                                        height: 30
-                                                        width: 34
-                                                        radius: theme.radiusSm
-                                                        color: isCur ? theme.accent : (intM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                                        border.color: isCur ? theme.accent : theme.borderSubtle
-                                                        border.width: 1
-                                                        Text {
-                                                            anchors.centerIn: parent
-                                                            text: String(parent.val)
-                                                            font.pixelSize: 11
-                                                            font.bold: true
-                                                            color: parent.isCur ? "#000000" : theme.text
-                                                        }
-                                                        MouseArea {
-                                                            id: intM
-                                                            anchors.fill: parent
-                                                            hoverEnabled: true
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: {
-                                                                var d = Object.assign({}, root.draftConfig)
-                                                                d[modelData.id] = parent.val
-                                                                root.draftConfig = d
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Action feedback / Save Button Row
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Text {
-                                        visible: root.actionSuccess !== ""
-                                        text: root.actionSuccess
-                                        font.pixelSize: 11
-                                        color: "#34d399"
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                    }
-                                    Item { Layout.fillWidth: true; visible: root.actionSuccess === "" }
-
-                                    Rectangle {
-                                        height: 32
-                                        width: saveCfgTxt.implicitWidth + 24
-                                        radius: theme.radiusSm
-                                        color: saveCfgM.containsMouse ? theme.surfaceActive : theme.surfaceElevated
-                                        border.color: theme.accent
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 6
-                                            RyzoraIcon { name: "check"; size: 11; color: theme.accent }
-                                            Text {
-                                                id: saveCfgTxt
-                                                text: "Save Customization"
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: theme.accent
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: saveCfgM
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (root.activeDetailTheme) {
-                                                    root.actionError = ""
-                                                    root.actionSuccess = ""
-                                                    var res = backend.saveThemeConfig(root.activeDetailTheme.id, root.draftConfig)
-                                                    if (res.success) {
-                                                        root.actionSuccess = res.message || "Customization saved successfully."
-                                                        root.themeConfig = backend.getThemeConfig(root.activeDetailTheme.id)
-                                                    } else {
-                                                        root.actionError = res.message || "Failed to save customization."
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                                    elide: Text.ElideRight
                                 }
                             }
                         }
 
-                        // System Integration Invariant Note
+                        // 5. System Integration Safety Note
                         Rectangle {
                             Layout.fillWidth: true
                             height: 48
@@ -1432,123 +1425,6 @@ Item {
                 }
 
                 // ──────────────────────────────────────────────────────────────
-                // SUBPAGE 1: OVERVIEW DASHBOARD
-                // ──────────────────────────────────────────────────────────────
-                ColumnLayout {
-                    visible: root.currentSubpage === "overview"
-                    Layout.fillWidth: true
-                    spacing: 18
-
-                    // Header
-                    ColumnLayout {
-                        spacing: 4
-                        Text {
-                            text: "—  PERSONALIZATION"
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.letterSpacing: 1.5
-                            color: theme.textMuted
-                        }
-                        Text {
-                            text: "Studio"
-                            font.pixelSize: 26
-                            font.bold: true
-                            color: theme.text
-                        }
-                        Text {
-                            text: "Your desktop, your style. Configure every part of your Ryzora experience."
-                            font.pixelSize: 12
-                            color: theme.textMuted
-                        }
-                    }
-
-                    // 2x2 Grid of Rich Studio Cards
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: width >= 720 ? 2 : 1
-                        rowSpacing: 16
-                        columnSpacing: 16
-
-                        // Card 1: Lockscreen Studio
-                        StudioHubCard {
-                            title: "Lockscreen"
-                            desc: "Login screen themes and options"
-                            iconName: "lock"
-                            statusBadge: (backend.activeConfiguration && backend.activeConfiguration.sddm_login_active) ? "ACTIVE THEME" : "SYSTEM DEFAULT"
-                            statusColor: (backend.activeConfiguration && backend.activeConfiguration.sddm_login_active) ? "#10b981" : "#64748b"
-                            previewColor: "#1e1b4b"
-                            onOpenClicked: root.selectSubpage("lockscreen", null)
-                        }
-
-                        // Card 2: Fastfetch Studio
-                        StudioHubCard {
-                            title: "Fastfetch"
-                            desc: "Terminal layout and modules"
-                            iconName: "terminal"
-                            statusBadge: (root.selectedFastfetchPreset || "default").toUpperCase()
-                            statusColor: theme.accent
-                            previewColor: "#0f172a"
-                            onOpenClicked: {
-                                root.selectSubpage("fastfetch", null)
-                                if (!backend.fastfetchHtml || backend.fastfetchHtml.length === 0) {
-                                    backend.requestFastfetchPreview(root.selectedFastfetchPreset)
-                                }
-                            }
-                        }
-
-                        // Card 3: Wallpaper Studio
-                        StudioHubCard {
-                            title: "Wallpapers"
-                            desc: "Backgrounds and collections"
-                            iconName: "image"
-                            statusBadge: "READY"
-                            statusColor: "#8b5cf6"
-                            previewColor: "#2e1065"
-                            onOpenClicked: root.selectSubpage("wallpapers", null)
-                        }
-
-                        // Card 4: Appearance Studio
-                        StudioHubCard {
-                            title: "Appearance"
-                            desc: "Colors and visual preferences"
-                            iconName: "palette"
-                            statusBadge: theme.appearanceMode.toUpperCase() + " · " + theme.accentName.toUpperCase()
-                            statusColor: theme.accent
-                            previewColor: "#18181b"
-                            onOpenClicked: root.selectSubpage("appearance", null)
-                        }
-                    }
-
-                    // Bottom info card
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 56
-                        radius: theme.radiusMd
-                        color: theme.surface
-                        border.color: theme.borderSubtle
-                        border.width: 1
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 16
-                            spacing: 12
-                            RyzoraIcon { name: "info"; size: 16; color: theme.accent }
-                            Text {
-                                text: "Installed packages stay safely preserved in Library; live preview, configuration, and integration live here in Studio."
-                                font.pixelSize: 12
-                                color: theme.textMuted
-                                Layout.fillWidth: true
-                            }
-                            ActionButton {
-                                label: "View Library"
-                                iconName: "sliders"
-                                onClicked: root.navigateRequested("library")
-                            }
-                        }
-                    }
-                }
-
-                // ──────────────────────────────────────────────────────────────
                 // SUBPAGE 3: FASTFETCH STUDIO
                 // ──────────────────────────────────────────────────────────────
                 ColumnLayout {
@@ -1556,11 +1432,36 @@ Item {
                     Layout.fillWidth: true
                     spacing: 18
 
-                    ColumnLayout {
-                        spacing: 4
-                        Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
-                        Text { text: "Fastfetch Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
-                        Text { text: "Terminal layout and modules configuration."; font.pixelSize: 12; color: theme.textMuted }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            Layout.alignment: Qt.AlignTop
+                            color: ffBackM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                            border.color: ffBackM.containsMouse ? theme.borderStrong : theme.borderSubtle
+                            border.width: 1
+                            RyzoraIcon {
+                                anchors.centerIn: parent
+                                name: "chevron-left"
+                                size: 14
+                                color: ffBackM.containsMouse ? theme.accent : theme.text
+                            }
+                            MouseArea {
+                                id: ffBackM
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.goBackInStudio()
+                            }
+                        }
+                        ColumnLayout {
+                            spacing: 4
+                            Layout.fillWidth: true
+                            Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
+                            Text { text: "Fastfetch Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
+                            Text { text: "Terminal layout and modules configuration."; font.pixelSize: 12; color: theme.textMuted }
+                        }
                     }
 
                     // Presets bar
@@ -1730,11 +1631,36 @@ Item {
                     Layout.fillWidth: true
                     spacing: 18
 
-                    ColumnLayout {
-                        spacing: 4
-                        Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
-                        Text { text: "Wallpaper Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
-                        Text { text: "Backgrounds and collections."; font.pixelSize: 12; color: theme.textMuted }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            Layout.alignment: Qt.AlignTop
+                            color: wpBackM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                            border.color: wpBackM.containsMouse ? theme.borderStrong : theme.borderSubtle
+                            border.width: 1
+                            RyzoraIcon {
+                                anchors.centerIn: parent
+                                name: "chevron-left"
+                                size: 14
+                                color: wpBackM.containsMouse ? theme.accent : theme.text
+                            }
+                            MouseArea {
+                                id: wpBackM
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.goBackInStudio()
+                            }
+                        }
+                        ColumnLayout {
+                            spacing: 4
+                            Layout.fillWidth: true
+                            Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
+                            Text { text: "Wallpaper Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
+                            Text { text: "Backgrounds and collections."; font.pixelSize: 12; color: theme.textMuted }
+                        }
                     }
 
                     Rectangle {
@@ -1753,6 +1679,22 @@ Item {
                                 GradientStop { position: 0.5; color: "#1e1b4b" }
                                 GradientStop { position: 1.0; color: "#09090b" }
                             }
+                        }
+
+                        Image {
+                            id: wpCanvasImg
+                            anchors.fill: parent
+                            source: {
+                                if (!root.selectedWallpaper) return ""
+                                var u = String(root.selectedWallpaper.preview_url || "").trim()
+                                if (u.length === 0) return ""
+                                if (u.indexOf("file://") === 0) return u
+                                if (u.indexOf("http://") === 0 || u.indexOf("https://") === 0) return u
+                                if (u.indexOf("/") === 0) return "file://" + u
+                                return ""
+                            }
+                            fillMode: root.wallpaperFit === "fit" ? Image.PreserveAspectFit : (root.wallpaperFit === "stretch" ? Image.Stretch : Image.PreserveAspectCrop)
+                            visible: status === Image.Ready
                         }
 
                         ColumnLayout {
@@ -1784,11 +1726,36 @@ Item {
                     Layout.fillWidth: true
                     spacing: 18
 
-                    ColumnLayout {
-                        spacing: 4
-                        Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
-                        Text { text: "Appearance Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
-                        Text { text: "Colors and visual preferences."; font.pixelSize: 12; color: theme.textMuted }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            Layout.alignment: Qt.AlignTop
+                            color: apBackM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                            border.color: apBackM.containsMouse ? theme.borderStrong : theme.borderSubtle
+                            border.width: 1
+                            RyzoraIcon {
+                                anchors.centerIn: parent
+                                name: "chevron-left"
+                                size: 14
+                                color: apBackM.containsMouse ? theme.accent : theme.text
+                            }
+                            MouseArea {
+                                id: apBackM
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.goBackInStudio()
+                            }
+                        }
+                        ColumnLayout {
+                            spacing: 4
+                            Layout.fillWidth: true
+                            Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
+                            Text { text: "Appearance Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
+                            Text { text: "Colors and visual preferences."; font.pixelSize: 12; color: theme.textMuted }
+                        }
                     }
 
                     Rectangle {
@@ -1888,7 +1855,6 @@ Item {
                 }
             }
         }
-    }
 
     function persistAppearance() {
         var appObj = {
@@ -1904,6 +1870,50 @@ Item {
     // ──────────────────────────────────────────────────────────────────────────
     // REUSABLE SUBCOMPONENTS (Clean Vector Icons, No Emoji)
     // ──────────────────────────────────────────────────────────────────────────
+    component StudioTabButton : Rectangle {
+        id: tabBtn
+        property string iconName: "sliders"
+        property string label: ""
+        property bool isActive: false
+        signal clicked()
+
+        height: 32
+        implicitWidth: tabRow.implicitWidth + 24
+        radius: 6
+        color: isActive
+            ? (theme.resolvedTheme === "light" ? theme.surfaceElevated : Qt.rgba(255, 255, 255, 0.10))
+            : (tabMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#F1F5F9" : Qt.rgba(255, 255, 255, 0.05)) : "transparent")
+        border.color: isActive ? theme.borderSubtle : "transparent"
+        border.width: isActive ? 1 : 0
+
+        RowLayout {
+            id: tabRow
+            anchors.centerIn: parent
+            spacing: 6
+
+            RyzoraIcon {
+                name: tabBtn.iconName
+                size: 13
+                color: tabBtn.isActive ? theme.accent : (tabMouse.containsMouse ? theme.text : theme.textSecondary)
+            }
+
+            Text {
+                text: tabBtn.label
+                font.pixelSize: 12
+                font.weight: tabBtn.isActive ? Font.SemiBold : Font.Normal
+                color: tabBtn.isActive ? theme.text : (tabMouse.containsMouse ? theme.text : theme.textSecondary)
+            }
+        }
+
+        MouseArea {
+            id: tabMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tabBtn.clicked()
+        }
+    }
+
     component StudioSubpageButton : Rectangle {
         id: subBtn
         property string iconName: "sliders"
@@ -2085,9 +2095,9 @@ Item {
 
             Text {
                 text: pillBtn.label
-                font.pixelSize: 10
-                font.bold: true
-                font.letterSpacing: 0.8
+                font.pixelSize: 11
+                font.weight: Font.Medium
+                font.letterSpacing: 0.2
                 color: theme.text
             }
         }
@@ -2181,4 +2191,310 @@ Item {
             onClicked: actBtn.clicked()
         }
     }
+    component SettingsGroupCard : Rectangle {
+        id: sgc
+        property string title: ""
+        property string iconName: "sliders"
+        property var settingsList: []
+
+        visible: sgc.settingsList && sgc.settingsList.length > 0
+        Layout.fillWidth: true
+        radius: theme.radiusMd
+        color: theme.surface
+        border.color: theme.borderSubtle
+        border.width: 1
+        implicitHeight: groupCol.implicitHeight + 32
+
+        ColumnLayout {
+            id: groupCol
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                RyzoraIcon { name: sgc.iconName; size: 13; color: theme.accent }
+                Text {
+                    text: sgc.title
+                    font.pixelSize: 12
+                    font.bold: true
+                    font.letterSpacing: 0.5
+                    color: theme.text
+                }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    height: 18
+                    width: cntTxt.implicitWidth + 10
+                    radius: 4
+                    color: theme.surfaceElevated
+                    border.color: theme.borderSubtle
+                    border.width: 1
+                    Text {
+                        id: cntTxt
+                        anchors.centerIn: parent
+                        text: sgc.settingsList ? (sgc.settingsList.length + " settings") : ""
+                        font.pixelSize: 9
+                        font.bold: true
+                        color: theme.textMuted
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: theme.borderSubtle
+            }
+
+            Repeater {
+                model: sgc.settingsList
+                delegate: ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 14
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 3
+                            Text {
+                                text: modelData.label || ""
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: theme.text
+                            }
+                            Text {
+                                text: modelData.help || ""
+                                font.pixelSize: 11
+                                color: theme.textMuted
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        // 1. Boolean Toggle Switch
+                        Item {
+                            visible: modelData.type === "bool"
+                            width: 44
+                            height: 24
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+                            property bool checked: Boolean(root.draftConfig[modelData.id]) === true
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: parent.checked ? (theme.resolvedTheme === "light" ? "#10B981" : "#059669") : (theme.resolvedTheme === "light" ? "#D1D5DB" : "#334155")
+                                border.color: parent.checked ? "#10B981" : (swMouse.containsMouse ? theme.borderStrong : theme.borderSubtle)
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                Rectangle {
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    y: 3
+                                    x: parent.parent.checked ? 23 : 3
+                                    color: "#FFFFFF"
+
+                                    Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: swMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.updateDraft(modelData.id, !parent.checked)
+                            }
+                        }
+
+                        // 2. Blur Slider with Numeric Readout
+                        RowLayout {
+                            visible: modelData.id === "blur"
+                            spacing: 8
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+                            Slider {
+                                id: bSlider
+                                implicitWidth: 120
+                                from: modelData.min !== undefined ? modelData.min : 0
+                                to: modelData.max !== undefined ? modelData.max : 100
+                                stepSize: 1
+                                value: parseInt(root.draftConfig[modelData.id] !== undefined ? root.draftConfig[modelData.id] : (modelData.default_value || 0))
+                                onMoved: root.updateDraft(modelData.id, Math.round(value))
+                            }
+
+                            Rectangle {
+                                height: 26
+                                width: Math.max(46, bValTxt.implicitWidth + 12)
+                                radius: 4
+                                color: theme.surfaceElevated
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                Text {
+                                    id: bValTxt
+                                    anchors.centerIn: parent
+                                    text: Math.round(bSlider.value) + " px"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: theme.accent
+                                }
+                            }
+                        }
+
+                        // 3. Clock Position 3x3 Pad
+                        RowLayout {
+                            visible: modelData.id === "clockPosition"
+                            spacing: 8
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+                            GridLayout {
+                                columns: 3
+                                rowSpacing: 3
+                                columnSpacing: 3
+
+                                Repeater {
+                                    model: [
+                                        { id: "top-left", tip: "Top Left" },
+                                        { id: "top-center", tip: "Top Center" },
+                                        { id: "top-right", tip: "Top Right" },
+                                        { id: "center-left", tip: "Center Left" },
+                                        { id: "center", tip: "Center" },
+                                        { id: "center-right", tip: "Center Right" },
+                                        { id: "bottom-left", tip: "Bottom Left" },
+                                        { id: "bottom-center", tip: "Bottom Center" },
+                                        { id: "bottom-right", tip: "Bottom Right" }
+                                    ]
+                                    delegate: Rectangle {
+                                        property bool isCur: String(root.draftConfig["clockPosition"]) === modelData.id
+                                        width: 22
+                                        height: 22
+                                        radius: 4
+                                        color: isCur ? theme.accent : (padMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                        border.color: isCur ? theme.accent : theme.borderSubtle
+                                        border.width: 1
+
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: isCur ? 7 : 4
+                                            height: isCur ? 7 : 4
+                                            radius: isCur ? 3.5 : 2
+                                            color: parent.isCur ? (theme.resolvedTheme === "light" ? "#FFFFFF" : "#000000") : theme.textMuted
+                                        }
+
+                                        MouseArea {
+                                            id: padMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.updateDraft("clockPosition", modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                height: 26
+                                width: Math.max(50, posValTxt.implicitWidth + 14)
+                                radius: 4
+                                color: theme.surfaceElevated
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                Text {
+                                    id: posValTxt
+                                    anchors.centerIn: parent
+                                    text: {
+                                        var p = String(root.draftConfig["clockPosition"] || "top-center")
+                                        return p.replace("-", " ").toUpperCase()
+                                    }
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: theme.text
+                                }
+                            }
+                        }
+
+                        // 4. Segmented Control for Other Enums
+                        Rectangle {
+                            visible: modelData.type === "enum" && modelData.id !== "clockPosition"
+                            height: 30
+                            radius: theme.radiusSm
+                            color: theme.surfaceElevated
+                            border.color: theme.borderSubtle
+                            border.width: 1
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                            implicitWidth: segRow.implicitWidth + 6
+
+                            RowLayout {
+                                id: segRow
+                                anchors.centerIn: parent
+                                spacing: 2
+
+                                Repeater {
+                                    model: modelData.options || []
+                                    delegate: Rectangle {
+                                        id: segItem
+                                        property bool isCur: String(root.draftConfig[modelData.id]) === String(modelData)
+                                        height: 24
+                                        radius: 4
+                                        implicitWidth: Math.max(42, segTxt.implicitWidth + 12)
+                                        color: isCur ? (theme.resolvedTheme === "light" ? "#FFFFFF" : theme.accent) : (segM.containsMouse ? theme.surfaceHover : "transparent")
+                                        border.color: isCur ? (theme.resolvedTheme === "light" ? theme.border : theme.accent) : "transparent"
+                                        border.width: isCur ? 1 : 0
+
+                                        Text {
+                                            id: segTxt
+                                            anchors.centerIn: parent
+                                            text: {
+                                                var str = String(modelData)
+                                                if (str === "Press any key to unlock") return "Full Prompt"
+                                                if (str === "Press any key") return "Short Prompt"
+                                                if (str === "Welcome") return "Welcome"
+                                                if (str === "dddd, MMMM dd, yyyy") return "Full Date"
+                                                if (str === "dddd, MMMM d") return "Day & Month"
+                                                if (str === "MM/dd/yyyy") return "MM/DD/YY"
+                                                if (str === "dd/MM/yyyy") return "DD/MM/YY"
+                                                if (str === "hh:mm") return "24h"
+                                                if (str === "hh:mm:ss") return "24h + Sec"
+                                                if (str === "hh:mm AP") return "12h"
+                                                if (str === "hh:mm:ss AP") return "12h + Sec"
+                                                return str.charAt(0).toUpperCase() + str.slice(1)
+                                            }
+                                            font.pixelSize: 11
+                                            font.bold: segItem.isCur
+                                            color: segItem.isCur ? (theme.resolvedTheme === "light" ? theme.text : "#FFFFFF") : theme.textMuted
+                                        }
+
+                                        MouseArea {
+                                            id: segM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.updateDraft(modelData.id, String(modelData))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: index < sgc.settingsList.length - 1
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(theme.borderSubtle.r, theme.borderSubtle.g, theme.borderSubtle.b, 0.4)
+                    }
+                }
+            }
+        }
+    }
+
 }

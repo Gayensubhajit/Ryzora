@@ -20,27 +20,46 @@ ApplicationWindow {
         objectName: "theme"
     }
 
+    // Shared video decoder pool counter to prevent GPU NVDEC out-of-memory
+    property int activeDecoderCount: 0
+
     // Navigation History Stack
     property var navHistory: ["discover"]
     property int navHistoryIndex: 0
-    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null)
+    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen"))
     readonly property bool canGoForward: navHistoryIndex < navHistory.length - 1
 
     function showPackageDetail(pkg, originTab) {
         var tab = originTab || stackLayout.currentTab;
         if (tab === "lockscreens" && lockscreenView) {
+            if (discoverView) discoverView.setSelectedPackage(null);
             lockscreenView.setSelectedPackage(pkg);
         } else {
+            if (lockscreenView) lockscreenView.setSelectedPackage(null);
             discoverView.setSelectedPackage(pkg);
             navigateTo("discover");
         }
     }
 
-    function openStudio(subpage, pkg) {
+    function openStudioWithRoute(subpage, pkg, returnRoute) {
         if (studioView) {
-            studioView.selectSubpage(subpage || "overview", pkg || null);
+            studioView.returnRoute = returnRoute || "";
+            studioView.selectSubpage(subpage || "lockscreen", pkg || null);
         }
-        navigateTo("studio");
+        if (stackLayout.currentTab !== "studio") {
+            if (navHistoryIndex < navHistory.length - 1) {
+                navHistory = navHistory.slice(0, navHistoryIndex + 1);
+            }
+            if (navHistory.length === 0 || navHistory[navHistory.length - 1] !== "studio") {
+                navHistory.push("studio");
+            }
+            navHistoryIndex = navHistory.length - 1;
+            stackLayout.currentTab = "studio";
+        }
+    }
+
+    function openStudio(subpage, pkg) {
+        openStudioWithRoute(subpage, pkg, "");
     }
 
     Connections {
@@ -102,6 +121,25 @@ ApplicationWindow {
             detailDrawer.isOpen = false;
             discoverView.setSelectedPackage(null);
             window.navigateTo("lockscreens");
+        } else if (action === "open_studio") {
+            detailDrawer.isOpen = false;
+            var origin = stackLayout ? stackLayout.currentTab : "discover";
+            var cat = String(data.category || "").toLowerCase();
+            var pt = String(data.package_type || "").toLowerCase();
+            var sf = String(data.subfilter || "").toLowerCase();
+            var id = String(data.id || "");
+            var isSilent = sf === "silentsddm" || id.indexOf("silentsddm-") === 0;
+            var isCustom = sf === "custom_media" || id.indexOf("custom:") === 0 || (data.tags && data.tags.indexOf("custom") !== -1);
+
+            if (isSilent || cat === "lockscreens" || cat === "lockscreen" || cat === "sddm" || pt === "lockscreen" || pt === "lockscreens" || data.supports_sddm) {
+                window.openStudioWithRoute("lockscreen", data.id, origin);
+            } else if (cat === "fastfetch" || pt === "fastfetch") {
+                window.openStudioWithRoute("fastfetch", data.id, origin);
+            } else if (isCustom || cat === "wallpapers" || cat === "wallpaper" || pt === "wallpaper" || cat === "rices" || cat === "themes") {
+                window.openStudioWithRoute("wallpapers", data.id, origin);
+            } else {
+                window.openStudioWithRoute("lockscreen", data.id, origin);
+            }
         } else if (action === "open_library") {
             detailDrawer.isOpen = false;
             discoverView.setSelectedPackage(null);
@@ -135,12 +173,21 @@ ApplicationWindow {
             tab = "discover";
         }
 
+        if (tab === "studio") {
+            if (studioView) {
+                studioView.returnRoute = "";
+                studioView.selectSubpage("lockscreen", null);
+            }
+        }
+
         if (stackLayout.currentTab === tab) return;
         // Truncate forward history if navigating to a new destination
         if (navHistoryIndex < navHistory.length - 1) {
             navHistory = navHistory.slice(0, navHistoryIndex + 1);
         }
-        navHistory.push(tab);
+        if (navHistory.length === 0 || navHistory[navHistory.length - 1] !== tab) {
+            navHistory.push(tab);
+        }
         navHistoryIndex = navHistory.length - 1;
         stackLayout.currentTab = tab;
     }
@@ -153,6 +200,23 @@ ApplicationWindow {
         if (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) {
             lockscreenView.setSelectedPackage(null);
             return;
+        }
+        if (stackLayout.currentTab === "studio" && studioView) {
+            if (studioView.activeDetailTheme !== null) {
+                if (studioView.returnRoute !== "") {
+                    var r = studioView.returnRoute;
+                    studioView.returnRoute = "";
+                    studioView.activeDetailTheme = null;
+                    navigateTo(r);
+                    return;
+                }
+                studioView.activeDetailTheme = null;
+                return;
+            }
+            if (studioView.currentSubpage !== "lockscreen") {
+                studioView.selectSubpage("lockscreen", null);
+                return;
+            }
         }
         if (navHistoryIndex > 0) {
             navHistoryIndex--;

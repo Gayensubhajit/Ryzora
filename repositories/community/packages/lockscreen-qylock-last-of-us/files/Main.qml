@@ -64,7 +64,9 @@ Item {
 
     // Environment
     Rectangle { anchors.fill: parent; color: "#0a0a09"; z: -2000 }
-    MediaPlayer { id: player; source: "bg.mp4"; videoOutput: bgVideo; loops: MediaPlayer.Infinite; Component.onCompleted: player.play() }
+    MediaPlayer {
+        audioOutput: AudioOutput { muted: true; volume: 0.0 } id: player; source: "bg.mp4"; videoOutput: bgVideo; loops: MediaPlayer.Infinite; Component.onCompleted: play()
+        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play() }
     VideoOutput { id: bgVideo; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectCrop; z: -1000 }
 
     Rectangle {

@@ -62,9 +62,11 @@ Item {
     Rectangle { anchors.fill: parent; color: "#010801"; z: -1000 }
     
     MediaPlayer {
+        audioOutput: AudioOutput { muted: true; volume: 0.0 }
         id: player; source: "bg.mp4"
         videoOutput: bgVideo; loops: MediaPlayer.Infinite
-        Component.onCompleted: player.play()
+        Component.onCompleted: play()
+        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
     }
     VideoOutput { id: bgVideo; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectCrop; z: -500 }
 

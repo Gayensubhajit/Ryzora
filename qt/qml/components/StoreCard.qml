@@ -1,16 +1,166 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtMultimedia
 
 Rectangle {
     id: card
     radius: 10
     clip: true
+    implicitWidth: 280
+    implicitHeight: 240
     color: mouseArea.containsMouse ? theme.surfaceHover : theme.surface
     border.color: mouseArea.containsMouse ? theme.accent : theme.borderSubtle
     border.width: 1
 
     property var itemData: null
+
+    readonly property bool isLockscreen: {
+        if (!card.itemData) return false
+        var cat = String(card.itemData.category || "").toLowerCase()
+        var pt = String(card.itemData.package_type || "").toLowerCase()
+        var sf = String(card.itemData.subfilter || "").toLowerCase()
+        var id = String(card.itemData.id || "")
+        return cat === "lockscreens" || cat === "lockscreen" || cat === "sddm" ||
+               pt === "lockscreens" || pt === "lockscreen" || pt === "sddm" ||
+               sf === "silentsddm" || id.indexOf("lockscreen-") === 0 || id.indexOf("silentsddm-") === 0
+    }
+
+    readonly property string videoSource: {
+        if (!card.itemData) return ""
+        var vu = card.itemData.video_url ? String(card.itemData.video_url).trim() : ""
+        if (vu.length === 0 && card.itemData.preview_video) {
+            vu = String(card.itemData.preview_video).trim()
+        }
+        if (vu.length === 0 && card.itemData.id) {
+            var lists = [backend.catalogList || [], backend.libraryList || []]
+            for (var li = 0; li < lists.length && vu.length === 0; ++li) {
+                for (var ci = 0; ci < lists[li].length; ++ci) {
+                    if (lists[li][ci].id === card.itemData.id) {
+                        if (lists[li][ci].video_url) { vu = String(lists[li][ci].video_url).trim(); break }
+                        if (lists[li][ci].preview_video) { vu = String(lists[li][ci].preview_video).trim(); break }
+                    }
+                }
+            }
+        }
+        if (vu.length === 0 && card.itemData.preview_url) {
+            var pu = String(card.itemData.preview_url).trim()
+            if (pu.indexOf(".mp4") >= 0 || pu.indexOf(".webm") >= 0 || pu.indexOf(".mov") >= 0) {
+                vu = pu
+            }
+        }
+        if (vu.length === 0) return ""
+        if (vu.indexOf("file://") === 0) {
+            if (vu.indexOf("file:///") !== 0 && vu.indexOf("file://localhost/") !== 0) {
+                return "file:///" + vu.substring(7)
+            }
+            return vu
+        }
+        if (vu.indexOf("http://") === 0 || vu.indexOf("https://") === 0) return vu
+        if (vu.indexOf("/") === 0) return "file://" + vu
+        return ""
+    }
+    readonly property bool hasVideo: videoSource !== ""
+    readonly property bool isLocalVideo: videoSource.indexOf("file://") === 0
+    property string actionLabel: ""
+
+    property bool inViewport: false
+    property bool allowAutoplay: true
+    property Item scrollContainer: null
+    property bool isPageVisible: true
+    property bool playVideoActive: false
+    readonly property bool isHovered: mouseArea.containsMouse
+
+    function findScrollContainer() {
+        var p = card.parent
+        while (p) {
+            if (p.contentY !== undefined && p.height !== undefined && p.height > 0) {
+                return p
+            }
+            if (p.contentItem && p.contentItem.contentY !== undefined && p.height !== undefined && p.height > 0) {
+                return p.contentItem
+            }
+            p = p.parent
+        }
+        return null
+    }
+
+    Component.onCompleted: {
+        card.scrollContainer = card.findScrollContainer()
+    }
+
+    // Viewport-aware visibility: autoplays recorded demo when visible, pauses/unmounts offscreen
+    readonly property bool isInViewport: {
+        if (!card.visible || !card.isPageVisible || card.width <= 0 || card.height <= 0) return false
+        var sc = card.scrollContainer || card.findScrollContainer()
+        if (sc && sc.height > 0) {
+            var dummy = sc.contentY
+            var pt = card.mapToItem(sc, 0, 0)
+            return (pt.y + card.height >= -20) && (pt.y <= sc.height + 20)
+        }
+        return card.inViewport
+    }
+
+    readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && isLocalVideo && videoSource !== "" && (isHovered || allowAutoplay)
+
+    property bool hasDecoderSlot: false
+
+    function tryAcquireSlot() {
+        if (hasDecoderSlot) return true
+        if (typeof window !== "undefined" && window) {
+            if (window.activeDecoderCount === undefined) window.activeDecoderCount = 0
+            if (isHovered || window.activeDecoderCount < 3) {
+                window.activeDecoderCount++
+                hasDecoderSlot = true
+                return true
+            }
+            return false
+        }
+        hasDecoderSlot = true
+        return true
+    }
+
+    function releaseSlot() {
+        if (hasDecoderSlot) {
+            hasDecoderSlot = false
+            if (typeof window !== "undefined" && window && window.activeDecoderCount > 0) {
+                window.activeDecoderCount--
+            }
+        }
+    }
+
+    Component.onDestruction: releaseSlot()
+
+    Timer {
+        id: playDebounceTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            if (card.shouldPlayVideo) {
+                if (card.tryAcquireSlot()) {
+                    card.playVideoActive = true
+                }
+            }
+        }
+    }
+
+    onShouldPlayVideoChanged: {
+        if (shouldPlayVideo) {
+            playDebounceTimer.restart()
+        } else {
+            playDebounceTimer.stop()
+            card.playVideoActive = false
+            card.releaseSlot()
+        }
+    }
+
+    onIsHoveredChanged: {
+        if (isHovered && shouldPlayVideo && !playVideoActive) {
+            if (card.tryAcquireSlot()) {
+                card.playVideoActive = true
+            }
+        }
+    }
 
     signal cardClicked(var itemData)
     signal actionClicked(string action, var itemData)
@@ -116,6 +266,74 @@ Rectangle {
                 visible: status === Image.Ready
             }
 
+            // Recorded Demo / Cursor Tutorial Video Preview on Hover (Old Tauri Behavior)
+            Loader {
+                id: videoLoader
+                anchors.fill: parent
+                active: card.playVideoActive && card.shouldPlayVideo
+                sourceComponent: demoVideoComp
+            }
+
+            Component {
+                id: demoVideoComp
+                Item {
+                    anchors.fill: parent
+                    readonly property bool isPlaying: cardPlayer.playbackState === MediaPlayer.PlayingState
+
+                    VideoOutput {
+                        id: cardVideoOutput
+                        anchors.fill: parent
+                        fillMode: VideoOutput.PreserveAspectCrop
+                        visible: cardPlayer.playbackState === MediaPlayer.PlayingState
+                    }
+
+                    MediaPlayer {
+                        id: cardPlayer
+                        videoOutput: cardVideoOutput
+                        audioOutput: AudioOutput {
+                            muted: true
+                            volume: 0.0
+                        }
+                        loops: MediaPlayer.Infinite
+                        source: card.videoSource
+                        Component.onCompleted: play()
+                        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
+                    }
+                }
+            }
+
+            // Video Indicator Badge Pill (Top-Right)
+            Rectangle {
+                visible: card.hasVideo
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 8
+                height: 18
+                width: liveRow.implicitWidth + 12
+                radius: 4
+                color: Qt.rgba(0, 0, 0, 0.65)
+                border.color: Qt.rgba(96, 165, 250, 0.40)
+                border.width: 1
+
+                RowLayout {
+                    id: liveRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    RyzoraIcon {
+                        name: "play"
+                        size: 8
+                        color: "#60a5fa"
+                    }
+                    Text {
+                        text: "VIDEO"
+                        font.pixelSize: 8
+                        font.bold: true
+                        font.letterSpacing: 0.5
+                        color: "#93c5fd"
+                    }
+                }
+            }
+
             // Category Badge Pill (Top-Left)
             Rectangle {
                 visible: Boolean(card.itemData && card.itemData.category)
@@ -152,39 +370,7 @@ Rectangle {
                 color: theme.borderSubtle
             }
 
-            // Subtle Status Indicator (Top-Right: Small Dot + Status Text)
-            Rectangle {
-                visible: Boolean(card.itemData && (card.itemData.is_active || card.itemData.is_installed))
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.margins: 8
-                height: 20
-                width: statusRow.implicitWidth + 14
-                radius: 10
-                color: Qt.rgba(0, 0, 0, 0.65)
-                border.color: card.itemData && card.itemData.is_active ? theme.accent : Qt.rgba(255, 255, 255, 0.22)
-                border.width: 1
 
-                RowLayout {
-                    id: statusRow
-                    anchors.centerIn: parent
-                    spacing: 5
-
-                    Rectangle {
-                        width: 6
-                        height: 6
-                        radius: 3
-                        color: card.itemData && card.itemData.is_active ? "#10b981" : "#6488E8"
-                    }
-
-                    Text {
-                        text: card.itemData && card.itemData.is_active ? "Active" : "Installed"
-                        font.pixelSize: 10
-                        font.bold: true
-                        color: "#FFFFFF"
-                    }
-                }
-            }
         }
 
         // ── 2. Minimal Metadata & Contextual Action Section ──
@@ -233,18 +419,25 @@ Rectangle {
 
                 // PureDesk / macOS Contextual Action Pill Beneath Preview
                 Rectangle {
+                    property bool isSddm: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.sddm_login)
+                    property bool isLock: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.session_lock)
+                    property bool isAct: Boolean(card.itemData && (card.itemData.is_active || isSddm || isLock))
                     height: 24
                     width: cardActionText.implicitWidth + 18
                     radius: 12
                     color: {
                         if (!card.itemData) return "transparent"
-                        if (card.itemData.is_active) return theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B"
+                        if (isSddm) return theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B"
+                        if (isLock) return theme.resolvedTheme === "light" ? "#EDE9FE" : Qt.rgba(139/255, 92/255, 246/255, 0.25)
+                        if (isAct) return theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B"
                         if (card.itemData.is_installed) return theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E3A8A"
                         return pillMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#E5E7EB" : "#2A2F3A") : (theme.resolvedTheme === "light" ? "#F3F4F6" : "#22262E")
                     }
                     border.color: {
                         if (!card.itemData) return "transparent"
-                        if (card.itemData.is_active) return "#10B981"
+                        if (isSddm) return "#10B981"
+                        if (isLock) return "#8B5CF6"
+                        if (isAct) return "#10B981"
                         if (card.itemData.is_installed) return "#3B82F6"
                         return pillMouse.containsMouse ? theme.accent : theme.borderSubtle
                     }
@@ -255,7 +448,10 @@ Rectangle {
                         anchors.centerIn: parent
                         text: {
                             if (!card.itemData) return ""
-                            if (card.itemData.is_active) return "ACTIVE"
+                            if (card.actionLabel !== "") return card.actionLabel
+                            if (parent.isSddm) return "ACTIVE SDDM"
+                            if (parent.isLock) return "ACTIVE LOCK"
+                            if (parent.isAct) return "ACTIVE"
                             if (card.itemData.is_installed) return "OPEN"
                             return "GET"
                         }
@@ -263,7 +459,9 @@ Rectangle {
                         font.bold: true
                         color: {
                             if (!card.itemData) return theme.textMuted
-                            if (card.itemData.is_active) return theme.resolvedTheme === "light" ? "#047857" : "#34D399"
+                            if (parent.isSddm) return theme.resolvedTheme === "light" ? "#047857" : "#34D399"
+                            if (parent.isLock) return theme.resolvedTheme === "light" ? "#6D28D9" : "#a78bfa"
+                            if (parent.isAct) return theme.resolvedTheme === "light" ? "#047857" : "#34D399"
                             if (card.itemData.is_installed) return theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD"
                             return theme.accent
                         }

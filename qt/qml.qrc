@@ -3,6 +3,7 @@
         <file>qml/Main.qml</file>
         <file>qml/Theme.qml</file>
         <file>qml/components/SideBar.qml</file>
+        <file>qml/components/LoginPreview.qml</file>
         <file>qml/components/TopBar.qml</file>
         <file>qml/components/StoreCard.qml</file>
         <file>qml/components/PackageCard.qml</file>

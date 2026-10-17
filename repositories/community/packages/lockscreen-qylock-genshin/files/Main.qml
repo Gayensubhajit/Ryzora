@@ -116,8 +116,9 @@ Rectangle {
             id: bgVideoPlayer
             source: root.bgVideo
             loops: MediaPlayer.Infinite
-            autoPlay: true
             videoOutput: bgVideoOutput
+            Component.onCompleted: play()
+            onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
         }
         VideoOutput {
             id: bgVideoOutput

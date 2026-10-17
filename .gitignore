@@ -47,3 +47,4 @@ prototypes/**/target/
 screenshots/
 .planning/
 .agents/
+skills-lock.json

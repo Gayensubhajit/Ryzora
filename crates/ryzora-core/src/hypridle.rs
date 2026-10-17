@@ -912,6 +912,7 @@ Item {
     {
         let preview_content = r##"import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import "./shim"
 
 ShellRoot {
@@ -929,12 +930,19 @@ ShellRoot {
         themePath: root.themePath
     }
 
-    FloatingWindow {
+    PanelWindow {
         id: win
-        title: "Lockscreen Preview (Non-Locking) - Esc or ✕ to close"
-        visible: true
-        width: Screen.width > 0 ? Screen.width : 1920
-        height: Screen.height > 0 ? Screen.height : 1080
+        screen: (Quickshell.screens && Quickshell.screens.length > 0) ? Quickshell.screens[0] : null
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
         color: root.themeMode === "light" ? "#f8fafc" : "#09090b"
 
         Loader {

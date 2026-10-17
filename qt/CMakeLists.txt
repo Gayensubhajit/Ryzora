@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Qml Concurrent QuickControls2 Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Qml Concurrent QuickControls2 Network Multimedia)
 
 qt_standard_project_setup()
 
@@ -24,6 +24,7 @@ add_custom_target(ryzora_rust_backend
 set(PROJECT_SOURCES
     src/main.cpp
     src/ryzora_backend.hpp
+    src/preview_stubs.hpp
     src/ryzora_backend.cpp
     qml.qrc
 )
@@ -39,6 +40,7 @@ target_link_libraries(ryzora PRIVATE
     Qt6::Concurrent
     Qt6::QuickControls2
     Qt6::Network
+    Qt6::Multimedia
     "${RUST_LIB_PATH}"
     pthread
     dl

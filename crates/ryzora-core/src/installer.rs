@@ -740,6 +740,416 @@ pub fn apply_lockscreen_target_in(
             .or_else(|| package_id.strip_prefix("lockscreen-"))
             .unwrap_or(package_id);
 
+        if package_id.starts_with("silentsddm-") {
+            let asset_name = package_id.strip_prefix("silentsddm-").unwrap_or(package_id);
+            let sys_silent_dir = if let Some(root) = sys_root {
+                root.join("usr/share/sddm/themes/ryzora-silent")
+            } else {
+                PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+            };
+
+            // 1. Resolve wallpaper source file and its filename
+            let mut wp_filename = format!("{}.mp4", asset_name);
+            let candidate_wp_sources = [
+                home.join(format!(".local/share/ryzora/lockscreens/silentsddm/wallpapers/{}.mp4", asset_name)),
+                sys_silent_dir.join(format!("backgrounds/{}.mp4", asset_name)),
+                home.join(format!(".local/share/ryzora/lockscreens/silentsddm/wallpapers/{}.webm", asset_name)),
+                sys_silent_dir.join(format!("backgrounds/{}.webm", asset_name)),
+                home.join(format!(".local/share/ryzora/lockscreens/silentsddm/wallpapers/{}.jpg", asset_name)),
+                sys_silent_dir.join(format!("backgrounds/{}.jpg", asset_name)),
+                home.join(format!(".local/share/ryzora/lockscreens/silentsddm/wallpapers/{}.png", asset_name)),
+                sys_silent_dir.join(format!("backgrounds/{}.png", asset_name)),
+                PathBuf::from(format!("repositories/community/packages/{}/files/backgrounds/{}.mp4", package_id, asset_name)),
+                home.join(".local/share/ryzora/lockscreens/silentsddm/wallpapers/default.jpg"),
+                sys_silent_dir.join("backgrounds/default.jpg"),
+            ];
+
+            let mut found_wp_source: Option<PathBuf> = None;
+            for c in &candidate_wp_sources {
+                if c.is_file() {
+                    found_wp_source = Some(c.clone());
+                    if let Some(fn_os) = c.file_name() {
+                        wp_filename = fn_os.to_string_lossy().to_string();
+                    }
+                    break;
+                }
+            }
+
+            // 2. Resolve placeholder image source file
+            let placeholder_filename = format!("{}.png", asset_name);
+            let candidate_ph_sources = [
+                home.join(format!(".local/share/ryzora/lockscreens/silentsddm/wallpapers/{}", placeholder_filename)),
+                sys_silent_dir.join(format!("backgrounds/{}", placeholder_filename)),
+                PathBuf::from(format!("repositories/community/packages/{}/files/backgrounds/{}", package_id, placeholder_filename)),
+                home.join(format!(".local/share/ryzora/lockscreens/silentsddm/wallpapers/{}.jpg", asset_name)),
+                sys_silent_dir.join(format!("backgrounds/{}.jpg", asset_name)),
+            ];
+            let mut found_ph_source: Option<PathBuf> = None;
+            for p in &candidate_ph_sources {
+                if p.is_file() {
+                    found_ph_source = Some(p.clone());
+                    break;
+                }
+            }
+
+            // 3. Read authentic base config for the theme (e.g. silvia.conf, ken.conf, default.conf)
+            let candidate_base_confs = [
+                sys_silent_dir.join(format!("configs/{}.conf", asset_name)),
+                PathBuf::from(format!("repositories/community/packages/{}/files/configs/{}.conf", package_id, asset_name)),
+                PathBuf::from(format!("repositories/community/packages/{}/files/{}.conf", package_id, asset_name)),
+                sys_silent_dir.join("configs/default.conf"),
+                PathBuf::from("repositories/community/packages/silentsddm-ken/files/configs/ken.conf"),
+            ];
+
+            let mut base_conf_str = String::new();
+            for c in &candidate_base_confs {
+                if c.is_file() {
+                    if let Ok(content) = fs::read_to_string(c) {
+                        if content.contains("[General]") && !content.contains("[%General]") {
+                            base_conf_str = content;
+                            break;
+                        }
+                    }
+                }
+            }
+            if base_conf_str.is_empty() {
+                base_conf_str = format!(
+r#"[General]
+scale = 1.0
+enable-animations = true
+animated-background-placeholder = {ph}
+background-fill-mode = "fill"
+
+[LockScreen]
+display = true
+background = "{wp}"
+blur = 0
+brightness = 0.0
+saturation = 0.0
+
+[LockScreen.Clock]
+display = true
+position = "center-right"
+format = "hh:mm"
+
+[LockScreen.Date]
+display = true
+format = "dddd, MMMM dd, yyyy"
+
+[LoginScreen]
+background = "{wp}"
+blur = 0
+brightness = 0.0
+saturation = 0.0
+
+[LoginScreen.LoginArea]
+position = "right"
+
+[LoginScreen.LoginArea.Avatar]
+shape = "circle"
+"#, wp = wp_filename, ph = placeholder_filename);
+            }
+
+            // 4. Read user overrides from configuration.json
+            let mut user_overrides: Option<serde_json::Value> = None;
+            let config_json_path = home.join(".local/share/ryzora/lockscreens/silentsddm/configuration.json");
+            if config_json_path.is_file() {
+                if let Ok(raw_json) = fs::read_to_string(&config_json_path) {
+                    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&raw_json) {
+                        if let Some(themes) = json_val.get("themes").and_then(|t| t.as_object()) {
+                            if let Some(pkg_cfg) = themes.get(package_id) {
+                                user_overrides = Some(pkg_cfg.clone());
+                            }
+                        }
+                        if user_overrides.is_none() && !json_val.get("themes").is_some() {
+                            user_overrides = Some(json_val);
+                        }
+                    }
+                }
+            }
+
+            // 5. Merge overrides and wallpaper into ryzora-active.conf
+            let mut active_conf_lines = Vec::new();
+            let mut cur_sec = String::new();
+            let ovr = user_overrides.unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+
+            let mut has_lock_bg = false;
+            let mut has_login_bg = false;
+            let mut has_placeholder = false;
+
+            for line in base_conf_str.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                    if cur_sec == "[General]" && !has_placeholder {
+                        active_conf_lines.push(format!("animated-background-placeholder = {}", placeholder_filename));
+                        has_placeholder = true;
+                    } else if cur_sec == "[LockScreen]" && !has_lock_bg {
+                        active_conf_lines.push(format!("background = \"{}\"", wp_filename));
+                        has_lock_bg = true;
+                    } else if cur_sec == "[LoginScreen]" && !has_login_bg {
+                        active_conf_lines.push(format!("background = \"{}\"", wp_filename));
+                        has_login_bg = true;
+                    }
+
+                    cur_sec = trimmed.to_string();
+                    active_conf_lines.push(line.to_string());
+                    continue;
+                }
+
+                if cur_sec == "[General]" {
+                    if trimmed.starts_with("animated-background-placeholder") {
+                        active_conf_lines.push(format!("animated-background-placeholder = {}", placeholder_filename));
+                        has_placeholder = true;
+                        continue;
+                    }
+                    if trimmed.starts_with("background-fill-mode") {
+                        if let Some(fm) = ovr.get("fillMode").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("background-fill-mode = \"{}\"", fm));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("enable-animations") {
+                        if let Some(ea) = ovr.get("enableAnimations") {
+                            let b = ea.as_bool().unwrap_or_else(|| ea.as_str().map(|s| s == "true" || s == "1").unwrap_or(true));
+                            active_conf_lines.push(format!("enable-animations = {}", if b { "true" } else { "false" }));
+                            continue;
+                        }
+                    }
+                } else if cur_sec == "[LockScreen]" {
+                    if trimmed.starts_with("background =") {
+                        active_conf_lines.push(format!("background = \"{}\"", wp_filename));
+                        has_lock_bg = true;
+                        continue;
+                    }
+                    if trimmed.starts_with("blur =") {
+                        if let Some(bl) = ovr.get("blur").and_then(|v| v.as_i64()) {
+                            active_conf_lines.push(format!("blur = {}", bl));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("brightness =") {
+                        if let Some(br) = ovr.get("brightness").and_then(|v| v.as_str()) {
+                            let bval = match br { "dark" => "-0.4", "dim" => "-0.2", "bright" => "0.2", _ => "0.0" };
+                            active_conf_lines.push(format!("brightness = {}", bval));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("saturation =") {
+                        if let Some(st) = ovr.get("saturation").and_then(|v| v.as_str()) {
+                            let sval = match st { "grayscale" => "-1.0", "muted" => "-0.5", "vibrant" => "0.2", _ => "0.0" };
+                            active_conf_lines.push(format!("saturation = {}", sval));
+                            continue;
+                        }
+                    }
+                } else if cur_sec == "[LockScreen.Clock]" {
+                    if trimmed.starts_with("display =") {
+                        if let Some(cd) = ovr.get("clockDisplay") {
+                            let b = cd.as_bool().unwrap_or_else(|| cd.as_str().map(|s| s == "true" || s == "1").unwrap_or(true));
+                            active_conf_lines.push(format!("display = {}", if b { "true" } else { "false" }));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("position =") {
+                        if let Some(cp) = ovr.get("clockPosition").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("position = \"{}\"", cp));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("format =") {
+                        if let Some(cf) = ovr.get("clockFormat").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("format = \"{}\"", cf));
+                            continue;
+                        }
+                    }
+                } else if cur_sec == "[LockScreen.Date]" {
+                    if trimmed.starts_with("display =") {
+                        if let Some(dd) = ovr.get("dateDisplay") {
+                            let b = dd.as_bool().unwrap_or_else(|| dd.as_str().map(|s| s == "true" || s == "1").unwrap_or(true));
+                            active_conf_lines.push(format!("display = {}", if b { "true" } else { "false" }));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("format =") {
+                        if let Some(df) = ovr.get("dateFormat").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("format = \"{}\"", df));
+                            continue;
+                        }
+                    }
+                } else if cur_sec == "[LoginScreen]" {
+                    if trimmed.starts_with("background =") {
+                        active_conf_lines.push(format!("background = \"{}\"", wp_filename));
+                        has_login_bg = true;
+                        continue;
+                    }
+                    if trimmed.starts_with("blur =") {
+                        if let Some(bl) = ovr.get("blur").and_then(|v| v.as_i64()) {
+                            active_conf_lines.push(format!("blur = {}", bl));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("brightness =") {
+                        if let Some(br) = ovr.get("brightness").and_then(|v| v.as_str()) {
+                            let bval = match br { "dark" => "-0.4", "dim" => "-0.2", "bright" => "0.2", _ => "0.0" };
+                            active_conf_lines.push(format!("brightness = {}", bval));
+                            continue;
+                        }
+                    }
+                    if trimmed.starts_with("saturation =") {
+                        if let Some(st) = ovr.get("saturation").and_then(|v| v.as_str()) {
+                            let sval = match st { "grayscale" => "-1.0", "muted" => "-0.5", "vibrant" => "0.2", _ => "0.0" };
+                            active_conf_lines.push(format!("saturation = {}", sval));
+                            continue;
+                        }
+                    }
+                } else if cur_sec == "[LoginScreen.LoginArea]" {
+                    if trimmed.starts_with("position =") {
+                        if let Some(lp) = ovr.get("loginAreaPosition").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("position = \"{}\"", lp));
+                            continue;
+                        }
+                    }
+                } else if cur_sec == "[LoginScreen.LoginArea.Avatar]" {
+                    if trimmed.starts_with("shape =") {
+                        if let Some(as_) = ovr.get("avatarShape").and_then(|v| v.as_str()) {
+                            active_conf_lines.push(format!("shape = \"{}\"", as_));
+                            continue;
+                        }
+                    }
+                }
+
+                active_conf_lines.push(line.to_string());
+            }
+
+            if cur_sec == "[General]" && !has_placeholder {
+                active_conf_lines.push(format!("animated-background-placeholder = {}", placeholder_filename));
+            } else if cur_sec == "[LockScreen]" && !has_lock_bg {
+                active_conf_lines.push(format!("background = \"{}\"", wp_filename));
+            } else if cur_sec == "[LoginScreen]" && !has_login_bg {
+                active_conf_lines.push(format!("background = \"{}\"", wp_filename));
+            }
+
+            let ryzora_active_conf_content = active_conf_lines.join("\n") + "\n";
+
+            // 6. Apply configuration and wallpaper
+            if let Some(root) = sys_root {
+                let dropin_dir = root.join("etc/sddm.conf.d");
+                fs::create_dir_all(&dropin_dir)
+                    .map_err(|e| format!("Failed to create SDDM test drop-in directory: {}", e))?;
+                let dropin_file = dropin_dir.join("zz-ryzora-theme.conf");
+                fs::write(&dropin_file, "[Theme]\nCurrent=ryzora-silent\n")
+                    .map_err(|e| format!("Failed to write SDDM test drop-in: {}", e))?;
+                let sddm_silent_dir = root.join("usr/share/sddm/themes/ryzora-silent");
+                let configs_dir = sddm_silent_dir.join("configs");
+                fs::create_dir_all(&configs_dir)
+                    .map_err(|e| format!("Failed to create configs dir: {}", e))?;
+                fs::write(configs_dir.join("ryzora-active.conf"), &ryzora_active_conf_content)
+                    .map_err(|e| format!("Failed to write ryzora-active.conf: {}", e))?;
+                let backgrounds_dir = sddm_silent_dir.join("backgrounds");
+                fs::create_dir_all(&backgrounds_dir)
+                    .map_err(|e| format!("Failed to create backgrounds dir: {}", e))?;
+                if let Some(ref src) = found_wp_source {
+                    let _ = fs::copy(src, backgrounds_dir.join(&wp_filename));
+                } else {
+                    let _ = fs::write(backgrounds_dir.join(&wp_filename), b"video_bytes");
+                }
+                if let Some(ref ph) = found_ph_source {
+                    let _ = fs::copy(ph, backgrounds_dir.join(&placeholder_filename));
+                }
+                let meta_path = sddm_silent_dir.join("metadata.desktop");
+                if meta_path.is_file() {
+                    if let Ok(meta_raw) = fs::read_to_string(&meta_path) {
+                        let mut m_lines = Vec::new();
+                        let mut has_cfg = false;
+                        for l in meta_raw.lines() {
+                            if l.trim_start().starts_with("ConfigFile=") {
+                                m_lines.push("ConfigFile=configs/ryzora-active.conf".to_string());
+                                has_cfg = true;
+                            } else {
+                                m_lines.push(l.to_string());
+                            }
+                        }
+                        if !has_cfg {
+                            m_lines.push("ConfigFile=configs/ryzora-active.conf".to_string());
+                        }
+                        let _ = fs::write(&meta_path, m_lines.join("\n") + "\n");
+                    }
+                }
+            } else {
+                let sddm_silent_dir = Path::new("/usr/share/sddm/themes/ryzora-silent");
+                if !sddm_silent_dir.join("Main.qml").exists() {
+                    return Err("SilentSDDM base theme engine is not installed at /usr/share/sddm/themes/ryzora-silent. Please install it first.".to_string());
+                }
+
+                // Stage ryzora-active.conf and wallpaper in staging dir for privileged helper
+                let staging_dir = PathBuf::from(format!("/tmp/ryzora-staging-silent-{}-{}", asset_name, now));
+                let staging_bg = staging_dir.join("backgrounds");
+                let staging_cfg = staging_dir.join("configs");
+                fs::create_dir_all(&staging_bg)
+                    .map_err(|e| format!("Failed to create staging backgrounds dir: {}", e))?;
+                fs::create_dir_all(&staging_cfg)
+                    .map_err(|e| format!("Failed to create staging configs dir: {}", e))?;
+
+                fs::write(staging_cfg.join("ryzora-active.conf"), &ryzora_active_conf_content)
+                    .map_err(|e| format!("Failed to write staged ryzora-active.conf: {}", e))?;
+
+                if let Some(ref src) = found_wp_source {
+                    let _ = fs::copy(src, staging_bg.join(&wp_filename));
+                } else {
+                    let installed_bg = sddm_silent_dir.join("backgrounds").join(&wp_filename);
+                    if installed_bg.is_file() {
+                        let _ = fs::copy(&installed_bg, staging_bg.join(&wp_filename));
+                    } else {
+                        let _ = fs::write(staging_bg.join(&wp_filename), b"dummy_content");
+                    }
+                }
+
+                if let Some(ref ph) = found_ph_source {
+                    let _ = fs::copy(ph, staging_bg.join(&placeholder_filename));
+                } else {
+                    let installed_ph = sddm_silent_dir.join("backgrounds").join(&placeholder_filename);
+                    if installed_ph.is_file() {
+                        let _ = fs::copy(&installed_ph, staging_bg.join(&placeholder_filename));
+                    }
+                }
+
+                let meta_src = sddm_silent_dir.join("metadata.desktop");
+                if meta_src.is_file() {
+                    if let Ok(meta_raw) = fs::read_to_string(&meta_src) {
+                        let mut m_lines = Vec::new();
+                        let mut has_cfg = false;
+                        for l in meta_raw.lines() {
+                            if l.trim_start().starts_with("ConfigFile=") {
+                                m_lines.push("ConfigFile=configs/ryzora-active.conf".to_string());
+                                has_cfg = true;
+                            } else {
+                                m_lines.push(l.to_string());
+                            }
+                        }
+                        if !has_cfg {
+                            m_lines.push("ConfigFile=configs/ryzora-active.conf".to_string());
+                        }
+                        let _ = fs::write(staging_dir.join("metadata.desktop"), m_lines.join("\n") + "\n");
+                    }
+                }
+
+                let helper_res = crate::sddm_helper::set_sddm_theme_background(&staging_dir, "silent");
+                let _ = fs::remove_dir_all(&staging_dir);
+                helper_res.map_err(|e| format!("Failed to update SDDM silent background/config: {}", e))?;
+
+                crate::sddm_helper::activate_sddm_theme("silent")
+                    .map_err(|e| format!("Failed to activate SDDM theme: {}", e))?;
+            }
+            if state.sddm_previous_theme.is_none() {
+                state.sddm_previous_theme = Some("garuda-white".to_string());
+            }
+            state.sddm = Some(package_id.to_string());
+            state.sddm_login = Some(package_id.to_string());
+            state.last_applied_at = Some(now);
+
+            save_active_lockscreen_state_in(state_dir, &state)?;
+            return Ok(state);
+        }
+
         if let Some(root) = sys_root {
             let dropin_dir = root.join("etc/sddm.conf.d");
             fs::create_dir_all(&dropin_dir)

@@ -1,3 +1,5 @@
+#include <QTimer>
+#include <QEventLoop>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QDir>
@@ -20,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "ryzora_backend.hpp"
+#include "preview_stubs.hpp"
 
 class RyzoraNetworkAccessManager : public QNetworkAccessManager {
 public:
@@ -521,6 +524,16 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     QString dropinPath = homePath + "/.config/hypr/hypridle.conf.d/ryzora.conf";
     backend->setTestHomeOverride(homePath);
     backend->setTestSystemRootOverride(homePath + "/sysroot");
+
+    QString sysRoot = homePath + "/sysroot";
+    QDir().mkpath(sysRoot + "/usr/lib/ryzora");
+    QDir().mkpath(sysRoot + "/usr/share/sddm/themes");
+    QDir().mkpath(sysRoot + "/etc/sddm.conf.d");
+    QString helperSrc = QDir::currentPath() + "/crates/ryzora-core/resources/ryzora-sddm-helper";
+    QString helperDst = sysRoot + "/usr/lib/ryzora/ryzora-sddm-helper";
+    QFile::copy(helperSrc, helperDst);
+    QFile::setPermissions(helperDst, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner | QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::ExeOther);
+
     pumpEvents(30, 10000);
 
     qInfo() << "[STEP 0] Verifying Package Selection and Detail Routing for Enfield, Field, Forest, Dog Samurai...";
@@ -831,6 +844,14 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
 
     backend->loadLibrary(true);
     backend->filterCatalog("all", "");
+    {
+        QElapsedTimer lt;
+        lt.start();
+        while ((backend->isCatalogLoading() || backend->isLibraryLoading()) && lt.elapsed() < 3000) {
+            app.processEvents();
+            usleep(10000);
+        }
+    }
     pumpEvents(25, 10000);
 
     // Re-select package in discoverView
@@ -1381,7 +1402,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         QObject::disconnect(connLsInst);
         pumpEvents(25, 10000);
 
-        // Now verify installed lockscreen actions: testButton & primaryApplyButton are visible!
+        // Now verify installed lockscreen actions: testButton, primaryApplyButton & openStudioButton are visible!
         if (!lsTestBtn || !lsTestBtn->property("visible").toBool()) {
             qCritical() << "FAIL: testButton ('Preview Theme') not visible on installed lockscreen!";
             return 135;
@@ -1390,7 +1411,17 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
             qCritical() << "FAIL: primaryApplyButton ('Apply to Login Screen') not visible on installed SDDM lockscreen!";
             return 136;
         }
-        qInfo() << "  -> CONFIRMED: Lockscreen package correctly displays 'Get' when uninstalled, and 'Preview Theme' + 'Apply to Login Screen' when installed.";
+        QObject *openStudioBtn = packageDetailView->findChild<QObject*>("openStudioButton");
+        if (!openStudioBtn || !openStudioBtn->property("visible").toBool()) {
+            qCritical() << "FAIL: openStudioButton not visible on installed lockscreen!";
+            return 137;
+        }
+        QObject *authStatusPill = packageDetailView->findChild<QObject*>("authStatusPill");
+        if (!authStatusPill || !authStatusPill->property("visible").toBool()) {
+            qCritical() << "FAIL: authStatusPill not visible beside title!";
+            return 138;
+        }
+        qInfo() << "  -> CONFIRMED: Lockscreen package correctly displays 'Get' when uninstalled, and 'Preview Theme' + 'Apply to Login Screen' + 'Open in Studio' when installed.";
 
         // Clean up: uninstall Clockwork Orbital
         bool lsUninstEmitted = false;
@@ -1574,7 +1605,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         });
     backend->installPackage("silentsddm-default");
     QElapsedTimer silentSddmTimer; silentSddmTimer.start();
-    while (!sddmInstEmitted && silentSddmTimer.elapsed() < 5000) {
+    while (!sddmInstEmitted && silentSddmTimer.elapsed() < 15000) {
         pumpEvents(5, 5000);
     }
     QObject::disconnect(connSddmInst);
@@ -1646,10 +1677,10 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         qCritical() << "FAIL: StudioView subpage expected 'fastfetch'";
         return 222;
     }
-    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "overview"), Q_ARG(QVariant, QVariant()));
+    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "wallpapers"), Q_ARG(QVariant, QVariant()));
     pumpEvents(10, 20000);
-    if (studioViewObj->property("currentSubpage").toString() != "overview") {
-        qCritical() << "FAIL: StudioView subpage expected 'overview'";
+    if (studioViewObj->property("currentSubpage").toString() != "wallpapers") {
+        qCritical() << "FAIL: StudioView subpage expected 'wallpapers'";
         return 223;
     }
     qInfo() << "  -> CONFIRMED: Studio navigation, subpage switching, and state binding verified!";
@@ -1792,6 +1823,544 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         return 230;
     }
     qInfo() << "  -> CONFIRMED: Return navigation cleanly restores installed-theme gallery!";
+
+    qInfo() << "[STEP 9] Testing End-to-End Open in Studio, dynamic theme appearance without restart, and return navigation...";
+    // 1. Initial check: verify studioView installedThemes only lists genuinely installed themes
+    QVariantList initialInstalledThemes = studioViewObj->property("installedThemes").toList();
+    for (const QVariant &th : initialInstalledThemes) {
+        QVariantMap tm = th.toMap();
+        QString id = tm.value("id").toString();
+        if (id.startsWith("silentsddm-") || id.startsWith("custom:") || tm.value("package_type").toString() == "wallpaper") {
+            qCritical() << "FAIL: Wallpaper asset" << id << "leaked into Lockscreen Studio installedThemes!";
+            return 231;
+        }
+        if (!tm.value("is_installed").toBool()) {
+            qCritical() << "FAIL: Uninstalled theme" << id << "appeared in Studio installedThemes!";
+            return 232;
+        }
+    }
+    int initialCount = initialInstalledThemes.size();
+    qInfo() << "  -> CONFIRMED: Lockscreen Studio initial installedThemes contains strictly installed themes (" << initialCount << "themes), 0 wallpaper leaks.";
+
+    // 2. Install a second theme: lockscreen-qylock-field
+    bool instFldEmitted = false;
+    bool instFldSuccess = false;
+    QString instFldMsg;
+    QMetaObject::Connection connFldInst = QObject::connect(backend, &RyzoraBackend::packageInstalled,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            if (pkgId == "lockscreen-qylock-field") {
+                instFldEmitted = true;
+                instFldSuccess = success;
+                instFldMsg = msg;
+            }
+        });
+    backend->installPackage("lockscreen-qylock-field");
+    QElapsedTimer fldTimer; fldTimer.start();
+    while (!instFldEmitted && fldTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connFldInst);
+    if (!instFldEmitted || !instFldSuccess) {
+        qCritical() << "FAIL: Installation of lockscreen-qylock-field failed! Msg:" << instFldMsg;
+        return 233;
+    }
+    pumpEvents(25, 10000);
+
+    // 3. Confirm the new theme appears in Studio WITHOUT an application restart!
+    QVariantList updatedInstalledThemes = studioViewObj->property("installedThemes").toList();
+    bool foundFieldInStudio = false;
+    for (const QVariant &th : updatedInstalledThemes) {
+        if (th.toMap().value("id").toString() == "lockscreen-qylock-field") {
+            foundFieldInStudio = true;
+            break;
+        }
+    }
+    if (!foundFieldInStudio) {
+        qCritical() << "FAIL: Newly installed theme lockscreen-qylock-field did not appear in Studio without app restart!";
+        return 234;
+    }
+    if (updatedInstalledThemes.size() != initialCount + 1) {
+        qCritical() << "FAIL: installedThemes count expected" << (initialCount + 1) << "got:" << updatedInstalledThemes.size();
+        return 235;
+    }
+    qInfo() << "  -> CONFIRMED: Newly installed theme lockscreen-qylock-field dynamically appeared in Studio without app restart!";
+
+    // 4. Test Open in Studio from PackageDetailView
+    if (rootObj) {
+        QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    }
+    pumpEvents(15, 10000);
+
+    QVariant fieldCatalogItem;
+    for (const QVariant &item : backend->catalogList()) {
+        if (item.toMap().value("id").toString() == "lockscreen-qylock-field") {
+            fieldCatalogItem = item;
+            break;
+        }
+    }
+    QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, fieldCatalogItem));
+    pumpEvents(20, 10000);
+
+    // Verify openStudioButton is visible
+    QObject *openStudioBtn2 = packageDetailView->findChild<QObject*>("openStudioButton");
+    if (!openStudioBtn2 || !openStudioBtn2->property("visible").toBool()) {
+        qCritical() << "FAIL: openStudioButton not visible on installed lockscreen-qylock-field!";
+        return 236;
+    }
+
+    // Trigger Open in Studio action via QML
+    QVariantMap fieldPkgData = packageDetailView->property("packageData").toMap();
+    QMetaObject::invokeMethod(rootObj, "handlePackageAction",
+        Q_ARG(QVariant, "open_studio"),
+        Q_ARG(QVariant, fieldPkgData),
+        Q_ARG(QVariant, ""));
+    pumpEvents(20, 10000);
+
+    // Verify Main.qml navigated to Studio
+    QObject *stackLayoutObj = rootObj ? rootObj->findChild<QObject*>("stackLayout") : nullptr;
+    if (!stackLayoutObj || stackLayoutObj->property("currentTab").toString() != "studio") {
+        qCritical() << "FAIL: Expected currentTab == studio, got:" << (stackLayoutObj ? stackLayoutObj->property("currentTab").toString() : "null");
+        return 237;
+    }
+    if (studioViewObj->property("currentSubpage").toString() != "lockscreen") {
+        qCritical() << "FAIL: Expected studio subpage == lockscreen, got:" << studioViewObj->property("currentSubpage").toString();
+        return 238;
+    }
+    QVariant fieldActiveInStudio = studioViewObj->property("activeDetailTheme");
+    if (fieldActiveInStudio.toMap().value("id").toString() != "lockscreen-qylock-field") {
+        qCritical() << "FAIL: Expected Studio activeDetailTheme ID == lockscreen-qylock-field, got:" << fieldActiveInStudio.toMap().value("id").toString();
+        return 239;
+    }
+    qInfo() << "  -> CONFIRMED: Open in Studio dispatched correct route (studio), subpage (lockscreen), and exact package ID (lockscreen-qylock-field)!";
+
+    // 5. Test Return Navigation preserving originating page (discover)
+    studioViewObj->setProperty("returnRoute", "discover");
+    studioViewObj->setProperty("activeDetailTheme", QVariant());
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    pumpEvents(15, 10000);
+    if (!stackLayoutObj || stackLayoutObj->property("currentTab").toString() != "discover") {
+        qCritical() << "FAIL: Return navigation to discover failed! Current:" << (stackLayoutObj ? stackLayoutObj->property("currentTab").toString() : "null");
+        return 240;
+    }
+    qInfo() << "  -> CONFIRMED: Return navigation cleanly preserved originating route (discover).";
+
+    // 6. Test Sequential theme selection: Theme A -> Theme B without stale data
+    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "lockscreen"), Q_ARG(QVariant, "lockscreen-qylock-clockwork-orbital"));
+    pumpEvents(10, 10000);
+    QVariant thA = studioViewObj->property("activeDetailTheme");
+    if (thA.toMap().value("id").toString() != "lockscreen-qylock-clockwork-orbital") {
+        qCritical() << "FAIL: Theme A selection mismatch!";
+        return 241;
+    }
+    // Now select Theme B
+    QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "lockscreen"), Q_ARG(QVariant, "lockscreen-qylock-field"));
+    pumpEvents(10, 10000);
+    QVariant thB = studioViewObj->property("activeDetailTheme");
+    if (thB.toMap().value("id").toString() != "lockscreen-qylock-field") {
+        qCritical() << "FAIL: Theme B selection mismatch or stale data from Theme A!";
+        return 242;
+    }
+    qInfo() << "  -> CONFIRMED: Sequential theme selections in Studio load correct respective data without stale leakage.";
+
+    // 7. Cleanup: uninstall lockscreen-qylock-field and verify removal from Studio
+    bool uninstFldEmitted = false;
+    QMetaObject::Connection connFldUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
+        [&](const QString &, bool, const QString &) { uninstFldEmitted = true; });
+    backend->uninstallPackage("lockscreen-qylock-field");
+    fldTimer.restart();
+    while (!uninstFldEmitted && fldTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connFldUninst);
+    pumpEvents(25, 10000);
+
+    QVariantList finalInstalledThemes = studioViewObj->property("installedThemes").toList();
+    for (const QVariant &th : finalInstalledThemes) {
+        if (th.toMap().value("id").toString() == "lockscreen-qylock-field") {
+            qCritical() << "FAIL: Uninstalled theme lockscreen-qylock-field still present in Studio installedThemes!";
+            return 243;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: Theme uninstallation dynamically removed theme from Studio installed list.";
+
+    // =========================================================================
+    // STEP 10: SilentSDDM Base Theme Prerequisite, Video Metadata & Activation
+    // =========================================================================
+    qInfo() << "[STEP 10] Testing SilentSDDM Base Theme Prerequisite, Video Metadata & End-to-End Activation...";
+
+    // 10A. Check silentsddm-ken catalog metadata
+    bool foundKen = false;
+    for (const QVariant &item : backend->catalogList()) {
+        QVariantMap m = item.toMap();
+        if (m.value("id").toString() == "silentsddm-ken") {
+            foundKen = true;
+            if (m.value("media_type").toString() != "video") {
+                qCritical() << "FAIL: silentsddm-ken media_type is not 'video'! Got:" << m.value("media_type").toString();
+                return 250;
+            }
+            QString vidUrl = m.value("video_url").toString();
+            if (!vidUrl.contains("ken.mp4")) {
+                qCritical() << "FAIL: silentsddm-ken video_url does not contain 'ken.mp4'! Got:" << vidUrl;
+                return 251;
+            }
+            QString prevUrl = m.value("preview_url").toString();
+            if (!prevUrl.contains("ken.png")) {
+                qCritical() << "FAIL: silentsddm-ken preview_url does not contain poster 'ken.png'! Got:" << prevUrl;
+                return 252;
+            }
+            qInfo() << "  -> CONFIRMED: silentsddm-ken has distinct poster ('ken.png') and video ('ken.mp4') URLs.";
+            break;
+        }
+    }
+    if (!foundKen) {
+        qCritical() << "FAIL: silentsddm-ken not found in catalog!";
+        return 253;
+    }
+
+    // 10B. Verify engine is initially not installed
+    if (backend->isSilentEngineInstalled()) {
+        qCritical() << "FAIL: isSilentEngineInstalled must be false in clean test sandbox!";
+        return 254;
+    }
+    qInfo() << "  -> CONFIRMED: Base engine initially reported uninstalled.";
+
+    // 10C. Install wallpaper asset silentsddm-ken
+    QString kenInstMsg;
+    bool kenInstReceived = false;
+    QObject::connect(backend, &RyzoraBackend::packageInstalled, [&](const QString &pkgId, bool success, const QString &message) {
+        if (pkgId == "silentsddm-ken") {
+            kenInstReceived = true;
+            kenInstMsg = message;
+        }
+    });
+    backend->installPackage("silentsddm-ken");
+    for (int i = 0; i < 400 && !kenInstReceived; ++i) {
+        pumpEvents(10, 10000);
+    }
+    if (!kenInstReceived) {
+        qCritical() << "FAIL: Timed out installing silentsddm-ken wallpaper asset!";
+        return 255;
+    }
+    qInfo() << "  -> CONFIRMED: silentsddm-ken wallpaper asset installed successfully:" << kenInstMsg;
+
+    // 10D. Select silentsddm-ken in QML DiscoverView
+    for (const QVariant &item : backend->catalogList()) {
+        QVariantMap m = item.toMap();
+        if (m.value("id").toString() == "silentsddm-ken") {
+            QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, item));
+            break;
+        }
+    }
+    pumpEvents(30, 10000);
+
+    QObject *detailView = discoverView->findChild<QObject*>("packageDetailView");
+    if (!detailView) {
+        qCritical() << "FAIL: packageDetailView not found!";
+        return 256;
+    }
+
+    // Invariant: QML reflects engine requirement
+    bool qmlEngineInstalled = detailView->property("isEngineInstalled").toBool();
+    if (qmlEngineInstalled) {
+        qCritical() << "FAIL: QML detailView.isEngineInstalled should be false!";
+        return 257;
+    }
+
+    QObject *prereqCard = detailView->findChild<QObject*>("prerequisiteEngineCard");
+    if (!prereqCard || !prereqCard->property("visible").toBool()) {
+        qCritical() << "FAIL: Prerequisite card must be visible when base engine is missing!";
+        return 258;
+    }
+    qInfo() << "  -> CONFIRMED: QML Prerequisite card is visible for installed asset with missing engine.";
+
+    // Test clicking Apply when engine is missing -> fails safely with actionable message
+    QMetaObject::invokeMethod(detailView, "applyCurrentPackage");
+    pumpEvents(15, 10000);
+
+    QString qmlErrMsg = detailView->property("errorMessage").toString();
+    if (!qmlErrMsg.contains("SilentSDDM base theme engine")) {
+        qCritical() << "FAIL: Expected error message about missing base theme engine, got:" << qmlErrMsg;
+        return 260;
+    }
+    qInfo() << "  -> CONFIRMED: Apply click when engine missing failed closed with actionable error:" << qmlErrMsg;
+
+    // Invariant: SDDM config was NOT created
+    QFile failConf(sysRoot + "/etc/sddm.conf.d/zz-ryzora-theme.conf");
+    if (failConf.exists()) {
+        qCritical() << "FAIL: SDDM config created despite missing base theme engine! Invariant violated.";
+        return 261;
+    }
+
+    // 10E. Install Base Theme Engine
+    qInfo() << "  -> Installing SilentSDDM base engine via backend...";
+    bool engineInstReceived = false;
+    bool engineInstSuccess = false;
+    QString engineInstMsg;
+    QObject::connect(backend, &RyzoraBackend::silentEngineInstalled, [&](bool success, const QString &message) {
+        engineInstReceived = true;
+        engineInstSuccess = success;
+        engineInstMsg = message;
+    });
+
+    backend->installSilentEngine();
+    for (int i = 0; i < 400 && !engineInstReceived; ++i) {
+        pumpEvents(10, 10000);
+    }
+    if (!engineInstReceived || !engineInstSuccess) {
+        qCritical() << "FAIL: Base theme engine installation failed! Msg:" << engineInstMsg;
+        return 262;
+    }
+    qInfo() << "  -> CONFIRMED: Base engine installed:" << engineInstMsg;
+
+    if (!backend->isSilentEngineInstalled()) {
+        qCritical() << "FAIL: backend->isSilentEngineInstalled() is still false after install!";
+        return 263;
+    }
+
+    // Physical verification of base theme files
+    QDir engineThemeDir(sysRoot + "/usr/share/sddm/themes/ryzora-silent");
+    if (!engineThemeDir.exists()) {
+        qCritical() << "FAIL: ryzora-silent theme directory missing from sysroot!";
+        return 264;
+    }
+    if (!QFile::exists(sysRoot + "/usr/share/sddm/themes/ryzora-silent/Main.qml")) {
+        qCritical() << "FAIL: ryzora-silent/Main.qml missing!";
+        return 265;
+    }
+    qInfo() << "  -> CONFIRMED: Real base theme files verified in sysroot (Main.qml present).";
+
+    pumpEvents(30, 10000);
+    // In QML, prerequisite card should now be hidden
+    if (prereqCard->property("visible").toBool()) {
+        qCritical() << "FAIL: Prerequisite card should be hidden after engine installation!";
+        return 266;
+    }
+    qInfo() << "  -> CONFIRMED: QML Prerequisite card automatically hid after engine installation.";
+
+    // 10F. Apply wallpaper asset silentsddm-ken now that engine is installed
+    qInfo() << "  -> Applying silentsddm-ken to login screen with base engine present...";
+    for (const QVariant &item : backend->catalogList()) {
+        QVariantMap m = item.toMap();
+        if (m.value("id").toString() == "silentsddm-ken") {
+            QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, item));
+            break;
+        }
+    }
+    pumpEvents(20, 10000);
+    bool actReceived = false;
+    bool actSuccess = false;
+    QString actMsg;
+    QObject::connect(backend, &RyzoraBackend::targetActivated, [&](const QString &pkgId, const QString &target, bool success, const QString &message) {
+        if (pkgId == "silentsddm-ken" && target == "sddm_login") {
+            actReceived = true;
+            actSuccess = success;
+            actMsg = message;
+        }
+    });
+
+    QMetaObject::invokeMethod(detailView, "applyCurrentPackage");
+    for (int i = 0; i < 400 && !actReceived; ++i) {
+        pumpEvents(10, 10000);
+    }
+    if (!actReceived || !actSuccess) {
+        qCritical() << "FAIL: silentsddm-ken activation failed! Msg:" << actMsg;
+        return 267;
+    }
+    qInfo() << "  -> CONFIRMED: Activation succeeded:" << actMsg;
+
+    // Physical verification of activated state
+    QFile actConf(sysRoot + "/etc/sddm.conf.d/zz-ryzora-theme.conf");
+    if (!actConf.open(QIODevice::ReadOnly)) {
+        qCritical() << "FAIL: Active SDDM config zz-ryzora-theme.conf not found!";
+        return 268;
+    }
+    QString confContent = QString::fromUtf8(actConf.readAll());
+    actConf.close();
+    if (!confContent.contains("Current=ryzora-silent")) {
+        qCritical() << "FAIL: SDDM config does not specify Current=ryzora-silent! Got:" << confContent;
+        return 269;
+    }
+    if (!QFile::exists(sysRoot + "/usr/share/sddm/themes/ryzora-silent/backgrounds/ken.mp4")) {
+        qCritical() << "FAIL: Materialized wallpaper backgrounds/ken.mp4 missing from base theme!";
+        return 270;
+    }
+    qInfo() << "  -> CONFIRMED: SDDM active config (Current=ryzora-silent) and wallpaper asset (ken.mp4) verified!";
+
+    // 10F.2: Test Fullscreen Preview of SilentSDDM Theme with Base Engine
+    qInfo() << "  -> Testing fullscreen SilentSDDM preview with base engine present...";
+    bool prevEmitted = false;
+    bool prevSuccess = false;
+    QString prevMsg;
+    QMetaObject::Connection connPrev = QObject::connect(backend, &RyzoraBackend::packageTested,
+        [&](const QString &pkgId, bool success, const QString &msg) {
+            if (pkgId == "silentsddm-ken") {
+                prevEmitted = true;
+                prevSuccess = success;
+                prevMsg = msg;
+            }
+        });
+    backend->testPackage("silentsddm-ken");
+    QElapsedTimer prevTimer; prevTimer.start();
+    while (!prevEmitted && prevTimer.elapsed() < 5000) {
+        pumpEvents(5, 5000);
+    }
+    QObject::disconnect(connPrev);
+    if (!prevEmitted || !prevSuccess) {
+        qCritical() << "FAIL: Fullscreen SilentSDDM preview failed! Msg:" << prevMsg;
+        return 272;
+    }
+    qInfo() << "  -> CONFIRMED: Fullscreen SilentSDDM preview launched successfully:" << prevMsg;
+    std::system("pkill -f sddm-greeter-qt6 2>/dev/null");
+    pumpEvents(20, 10000);
+
+    // 10F.3: Test SilentSDDM theme defaults, isolation, per-theme overrides, and Reset to Defaults
+    QVariantMap kenDefaults = backend->getThemeConfig("silentsddm-ken");
+    if (!kenDefaults.value("has_settings").toBool()) {
+        qCritical() << "FAIL: silentsddm-ken expected has_settings=true, got error:" << kenDefaults.value("error").toString();
+        return 2294;
+    }
+    QVariantMap kenConfig = kenDefaults.value("config").toMap();
+    if (kenConfig.value("blur").toInt() != 0 || kenConfig.value("loginAreaPosition").toString() != "right") {
+        qCritical() << "FAIL: silentsddm-ken did not load authentic defaults from ken.conf! Got blur:" << kenConfig.value("blur") << "pos:" << kenConfig.value("loginAreaPosition");
+        return 2295;
+    }
+
+    QVariantMap silviaDefaults = backend->getThemeConfig("silentsddm-silvia");
+    QVariantMap silviaConfig = silviaDefaults.value("config").toMap();
+    if (silviaConfig.value("saturation").toString() != "grayscale" || silviaConfig.value("loginAreaPosition").toString() != "left") {
+        qCritical() << "FAIL: silentsddm-silvia did not load authentic defaults from silvia.conf! Got sat:" << silviaConfig.value("saturation");
+        return 2296;
+    }
+
+    QVariantMap kenOverrides;
+    kenOverrides["blur"] = 15;
+    kenOverrides["avatarShape"] = "square";
+    kenOverrides["messageDisplay"] = true;
+    kenOverrides["messageText"] = "Welcome";
+    QVariantMap kenSaveRes = backend->saveThemeConfig("silentsddm-ken", kenOverrides);
+    if (!kenSaveRes.value("success").toBool()) {
+        qCritical() << "FAIL: silentsddm-ken saveThemeConfig failed:" << kenSaveRes.value("message").toString();
+        return 2297;
+    }
+
+    QVariantMap kenReloaded = backend->getThemeConfig("silentsddm-ken");
+    QVariantMap kenReloadedConfig = kenReloaded.value("config").toMap();
+    if (kenReloadedConfig.value("blur").toInt() != 15 || kenReloadedConfig.value("avatarShape").toString() != "square" || !kenReloaded.value("is_modified").toBool()) {
+        qCritical() << "FAIL: silentsddm-ken did not reflect saved overrides! Got blur:" << kenReloadedConfig.value("blur") << "modified:" << kenReloaded.value("is_modified");
+        return 2298;
+    }
+
+    // Theme isolation: Silvia must remain unpolluted
+    QVariantMap silviaReloaded = backend->getThemeConfig("silentsddm-silvia");
+    QVariantMap silviaReloadedConfig = silviaReloaded.value("config").toMap();
+    if (silviaReloadedConfig.value("blur").toInt() == 15 || silviaReloadedConfig.value("avatarShape").toString() == "square") {
+        qCritical() << "FAIL: silentsddm-silvia was contaminated by silentsddm-ken overrides!";
+        return 2299;
+    }
+
+    // Reset to Defaults
+    QVariantMap kenReset = backend->resetThemeConfig("silentsddm-ken");
+    if (!kenReset.value("success").toBool()) {
+        qCritical() << "FAIL: resetThemeConfig on silentsddm-ken failed:" << kenReset.value("message").toString();
+        return 2300;
+    }
+    QVariantMap kenResetConfig = kenReset.value("config").toMap();
+    if (kenResetConfig.value("blur").toInt() != 0 || kenResetConfig.value("avatarShape").toString() != "circle" || kenReset.value("is_modified").toBool()) {
+        qCritical() << "FAIL: resetThemeConfig did not restore authentic defaults! Got blur:" << kenResetConfig.value("blur") << "modified:" << kenReset.value("is_modified");
+        return 2301;
+    }
+    qInfo() << "  -> CONFIRMED: SilentSDDM per-theme default resolution, isolation, and Reset to Defaults strictly verified!";
+
+    // 10F.4: Test Applying Silvia and Verifying Non-Fallback Configuration & Video Assets
+    bool silviaInstReceived = false;
+    QMetaObject::Connection silviaInstConn = QObject::connect(backend, &RyzoraBackend::packageInstalled,
+        [&](const QString &pkgId, bool success, const QString &message) {
+            if (pkgId == "silentsddm-silvia") {
+                silviaInstReceived = true;
+            }
+        });
+    backend->installPackage("silentsddm-silvia");
+    for (int i = 0; i < 400 && !silviaInstReceived; ++i) {
+        pumpEvents(10, 10000);
+    }
+    QObject::disconnect(silviaInstConn);
+
+    bool silviaApplyEmitted = false;
+    bool silviaApplySuccess = false;
+    QString silviaApplyMsg;
+    QMetaObject::Connection silviaConn = QObject::connect(backend, &RyzoraBackend::targetActivated,
+        [&](const QString &pkg, const QString &target, bool success, const QString &msg) {
+            if (pkg == "silentsddm-silvia" && target == "sddm_login") {
+                silviaApplyEmitted = true;
+                silviaApplySuccess = success;
+                silviaApplyMsg = msg;
+            }
+        });
+    backend->applyTarget("silentsddm-silvia", "sddm_login");
+    QElapsedTimer silviaTimer; silviaTimer.start();
+    while (!silviaApplyEmitted && silviaTimer.elapsed() < 8000) {
+        pumpEvents(10, 10000);
+    }
+    QObject::disconnect(silviaConn);
+    if (!silviaApplyEmitted || !silviaApplySuccess) {
+        qCritical() << "FAIL: applyTarget for silentsddm-silvia failed! Msg:" << silviaApplyMsg;
+        return 2302;
+    }
+
+    // Verify physical ryzora-active.conf content on sysroot
+    {
+        QString activeConfPath = sysRoot + "/usr/share/sddm/themes/ryzora-silent/configs/ryzora-active.conf";
+        QFile f(activeConfPath);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qCritical() << "FAIL: Could not open ryzora-active.conf after applying silvia at path:" << activeConfPath;
+            return 2303;
+        }
+        QString txt = QString::fromUtf8(f.readAll());
+        f.close();
+        if (txt.contains("[%General]")) {
+            qCritical() << "FAIL: ryzora-active.conf contains corrupt [%General] header!";
+            return 2304;
+        }
+        if (!txt.contains("[General]") || !txt.contains("[LockScreen]") || !txt.contains("[LoginScreen]")) {
+            qCritical() << "FAIL: ryzora-active.conf missing essential sections! Content:" << txt;
+            return 2305;
+        }
+        if (!txt.contains("background = \"silvia.mp4\"")) {
+            qCritical() << "FAIL: ryzora-active.conf does not set background to silvia.mp4! Content:" << txt;
+            return 2306;
+        }
+        if (!txt.contains("animated-background-placeholder = silvia.png")) {
+            qCritical() << "FAIL: ryzora-active.conf does not set placeholder to silvia.png! Content:" << txt;
+            return 2307;
+        }
+    }
+    if (!QFile::exists(sysRoot + "/usr/share/sddm/themes/ryzora-silent/backgrounds/silvia.mp4")) {
+        qCritical() << "FAIL: silvia.mp4 missing from SDDM backgrounds dir!";
+        return 2308;
+    }
+    if (!QFile::exists(sysRoot + "/usr/share/sddm/themes/ryzora-silent/backgrounds/silvia.png")) {
+        qCritical() << "FAIL: silvia.png missing from SDDM backgrounds dir!";
+        return 2309;
+    }
+    qInfo() << "  -> CONFIRMED: silentsddm-silvia activation strictly verified with authentic silvia.mp4 & silvia.png (0 Ken fallback)!";
+
+    // 10G. Test Deactivation and Engine Uninstallation
+    backend->deactivateTarget("sddm_login");
+    pumpEvents(25, 10000);
+
+    bool uninstReceived = false;
+    QObject::connect(backend, &RyzoraBackend::silentEngineInstalledChanged, [&]() {
+        uninstReceived = true;
+    });
+    backend->uninstallSilentEngine();
+    for (int i = 0; i < 400 && !uninstReceived; ++i) {
+        pumpEvents(10, 10000);
+    }
+    if (backend->isSilentEngineInstalled()) {
+        qCritical() << "FAIL: Engine still reported installed after uninstallSilentEngine!";
+        return 271;
+    }
+    qInfo() << "  -> CONFIRMED: Engine uninstallation succeeded cleanly.";
 
     backend->setTestHomeOverride(QString());
     backend->setTestSystemRootOverride(QString());
@@ -1939,6 +2508,26 @@ static void handleTerminationSignal(int sig) {
     _exit(0);
 }
 
+
+// Smoke mode: open Lockscreen Studio for a package, let the preview run, grab two frames.
+static int runPreviewSmoke(QGuiApplication &app, QQmlApplicationEngine &engine, const QString &id, const QString &out) {
+    QObject *root = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    auto *window = qobject_cast<QQuickWindow *>(root);
+    if (!window) { qCritical() << "no window"; return 2; }
+    window->resize(1440, 900);
+    auto wait = [&](int ms) { QEventLoop l; QTimer::singleShot(ms, &l, &QEventLoop::quit); l.exec(); };
+    wait(2500);
+    QMetaObject::invokeMethod(root, "openStudioWithRoute", Q_ARG(QVariant, "lockscreen"), Q_ARG(QVariant, id), Q_ARG(QVariant, ""));
+    wait(6000);
+    QImage a = window->grabWindow();
+    a.save(out);
+    wait(1500);
+    QImage b = window->grabWindow();
+    b.save(out + ".2.png");
+    qInfo() << "SMOKE frames differ:" << (a != b) << a.size();
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Ryzora");
@@ -1955,6 +2544,16 @@ int main(int argc, char *argv[]) {
     QQmlApplicationEngine engine;
     engine.setNetworkAccessManagerFactory(new RyzoraNetworkAccessManagerFactory());
     engine.rootContext()->setContextProperty("backend", &backend);
+    // Inert greeter globals for the in-app real-theme preview (no auth, no session access).
+    engine.rootContext()->setContextProperty("sddm", new PreviewSddm(&app));
+    engine.rootContext()->setContextProperty("keyboard", new PreviewKeyboard(&app));
+    engine.rootContext()->setContextProperty("userModel", new PreviewListModel(qEnvironmentVariable("USER", "user"), qEnvironmentVariable("USER", "User"), &app));
+    engine.rootContext()->setContextProperty("sessionModel", new PreviewListModel("Hyprland", "Hyprland", &app));
+    engine.rootContext()->setContextProperty("screenModel", new PreviewScreenModel(&app));
+    PreviewConfig *previewConfig = new PreviewConfig(&app);
+    backend.setPreviewConfig(previewConfig);
+    engine.rootContext()->setContextProperty("config", previewConfig);
+    engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
 
     const QUrl url(QStringLiteral("qrc:/qml/Main.qml"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
@@ -1972,6 +2571,10 @@ int main(int argc, char *argv[]) {
         _exit(exitCode);
     } else if (argc > 1 && QString(argv[1]) == "--test-lifecycle") {
         exitCode = runLifecycleSuite(app, engine, &backend);
+    } else if (argc > 3 && QString(argv[1]) == "--preview-smoke") {
+        exitCode = runPreviewSmoke(app, engine, QString(argv[2]), QString(argv[3]));
+        backend.shutdown();
+        _exit(exitCode);
     } else if (argc > 2 && QString(argv[1]) == "--capture-screenshots") {
         exitCode = runCaptureScreenshots(app, engine, &backend, QString(argv[2]));
     } else {

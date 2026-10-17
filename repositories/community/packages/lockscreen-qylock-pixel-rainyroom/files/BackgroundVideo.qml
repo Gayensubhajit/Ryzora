@@ -9,9 +9,10 @@ Item {
     MediaPlayer {
         id: mediaplayer
         source: "bg.mp4"
-        autoPlay: true
         loops: MediaPlayer.Infinite
         videoOutput: videoOutput
+        Component.onCompleted: play()
+        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
     }
 
     VideoOutput {

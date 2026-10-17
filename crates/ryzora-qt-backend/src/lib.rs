@@ -65,6 +65,10 @@ pub struct CatalogItem {
     pub preview_url: String,
     #[serde(default)]
     pub supports_sddm: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -188,6 +192,10 @@ pub struct InstalledItem {
     pub snapshot_id: String,
     #[serde(default)]
     pub supports_sddm: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -681,6 +689,109 @@ pub fn resolve_preview_url(repo_root: &Path, hero_opt: Option<&str>, package_id:
     }
 
     String::new()
+}
+
+pub fn resolve_video_url(repo_root: &Path, home_opt: Option<&Path>, package_id: &str) -> (Option<String>, Option<String>) {
+    // 1. SilentSDDM check: wallpaper videos Ken, Rei, Silvia
+    for wp in SILENTSDDM_WALLPAPERS {
+        if wp.id == package_id {
+            if wp.media_type == "video" {
+                if let Some(home) = home_opt {
+                    let local_wp = home.join(".local/share/ryzora/lockscreens/silentsddm/wallpapers").join(wp.filename);
+                    if local_wp.is_file() {
+                        let s = local_wp.to_string_lossy();
+                        let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                        return (Some(file_url), Some("video".to_string()));
+                    }
+                }
+                return (Some(wp.download_url.to_string()), Some("video".to_string()));
+            } else {
+                return (None, Some("image".to_string()));
+            }
+        }
+    }
+
+    // 2. Package manifest check: recorded demo video (cursor tutorial clips in public/assets/lockscreens)
+    let pkg_dir = repo_root.join("repositories/community/packages").join(package_id);
+    let manifest_path = pkg_dir.join("manifest.json");
+    if manifest_path.is_file() {
+        if let Ok(manifest_text) = std::fs::read_to_string(&manifest_path) {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&manifest_text) {
+                if let Some(pv) = val.get("preview_video")
+                    .or_else(|| val.get("media").and_then(|m| m.get("preview_video")))
+                    .and_then(|v| v.as_str())
+                {
+                    let trimmed = pv.trim().trim_start_matches('/');
+                    if !trimmed.is_empty() {
+                        let cands = [
+                            repo_root.join("public").join(trimmed),
+                            repo_root.join("dist").join(trimmed),
+                            repo_root.join(trimmed),
+                        ];
+                        for c in &cands {
+                            if c.is_file() {
+                                let s = c.to_string_lossy();
+                                let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                                return (Some(file_url), Some("video".to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Recorded demo video lookup (cursor/tutorial preview footage in public/assets/lockscreens)
+    let slug = package_id
+        .strip_prefix("lockscreen-qylock-")
+        .or_else(|| package_id.strip_prefix("lockscreen-"))
+        .unwrap_or(package_id);
+    let recorded_candidates = [
+        repo_root.join("public/assets/lockscreens").join(format!("{}-preview.mp4", slug)),
+        repo_root.join("public/assets/lockscreens").join(format!("{}.mp4", slug)),
+    ];
+    for c in &recorded_candidates {
+        if c.is_file() {
+            let s = c.to_string_lossy();
+            let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+            return (Some(file_url), Some("video".to_string()));
+        }
+    }
+
+    // 4. Installed package directory check (fallback only if no recorded preview exists)
+    if let Some(home) = home_opt {
+        let name = package_id.strip_prefix("lockscreen-qylock-").unwrap_or(package_id);
+        let inst_dir = home.join(".local/share/ryzora/lockscreens/qylock").join(name);
+        let inst_video = inst_dir.join("bg.mp4");
+        if inst_video.is_file() {
+            let s = inst_video.to_string_lossy();
+            let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+            return (Some(file_url), Some("video".to_string()));
+        }
+    }
+
+    // 5. Repository package files check (fallback for all community packages with files/bg.mp4 or files/*.mp4)
+    let pkg_files = pkg_dir.join("files");
+    if pkg_files.is_dir() {
+        let direct_bg = pkg_files.join("bg.mp4");
+        if direct_bg.is_file() {
+            let s = direct_bg.to_string_lossy();
+            let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+            return (Some(file_url), Some("video".to_string()));
+        }
+        if let Ok(entries) = std::fs::read_dir(&pkg_files) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() && p.extension().map(|ext| ext == "mp4" || ext == "webm").unwrap_or(false) {
+                    let s = p.to_string_lossy();
+                    let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                    return (Some(file_url), Some("video".to_string()));
+                }
+            }
+        }
+    }
+
+    (None, None)
 }
 
 pub fn format_timestamp(ts: u64) -> String {
@@ -1232,6 +1343,7 @@ impl BackendState {
                     }
 
                     let preview_url = resolve_preview_url(&repo_root, entry.hero_image.as_deref(), &entry.id);
+                    let (video_url, media_type) = resolve_video_url(&repo_root, self.resolve_home_dir().as_deref(), &entry.id);
                     let subfilter = entry.subfilter.clone().or_else(|| {
                         if is_lockscreen {
                             if entry.id.starts_with("lockscreen-qylock") || entry.tags.iter().any(|t| t == "qylock") {
@@ -1263,6 +1375,8 @@ impl BackendState {
                         dependencies,
                         preview_url,
                         supports_sddm,
+                        video_url,
+                        media_type,
                     });
                 }
             }
@@ -1308,6 +1422,8 @@ impl BackendState {
                 }
             };
 
+            let (video_url, media_type) = resolve_video_url(&repo_root, self.resolve_home_dir().as_deref(), wp.id);
+
             items.push(CatalogItem {
                 id: wp.id.to_string(),
                 name: wp.name.to_string(),
@@ -1327,6 +1443,8 @@ impl BackendState {
                 dependencies: vec!["sddm".to_string(), "qt6-declarative".to_string()],
                 preview_url,
                 supports_sddm: true,
+                video_url,
+                media_type,
             });
         }
 
@@ -1351,6 +1469,11 @@ impl BackendState {
                                 let is_active = active_targets.session_lock;
                                 let poster = asset.get("original_path").and_then(|v| v.as_str()).unwrap_or("");
 
+                                let is_vid = media_type == "video";
+                                let custom_vid = if is_vid && !poster.is_empty() {
+                                    Some(if poster.starts_with('/') { format!("file://{}", poster) } else { format!("file:///{}", poster) })
+                                } else { None };
+
                                 items.push(CatalogItem {
                                     id: id.to_string(),
                                     name: format!("Custom · {}", display_name),
@@ -1370,6 +1493,8 @@ impl BackendState {
                                     dependencies: vec!["sddm".to_string()],
                                     preview_url: poster.to_string(),
                                     supports_sddm: true,
+                                    video_url: custom_vid,
+                                    media_type: Some(media_type.to_string()),
                                 });
                             }
                         }
@@ -1418,6 +1543,8 @@ impl BackendState {
                 dependencies: vec![],
                 preview_url: String::new(),
                 supports_sddm: cat == "lockscreens" || cat == "sddm",
+                video_url: None,
+                media_type: None,
             });
         }
         items
@@ -1560,6 +1687,7 @@ impl BackendState {
                                         (pkg_type.clone(), String::new(), prev, None, Vec::new())
                                     };
                                     let final_subfilter = subfilter.or(meta_subfilter);
+                                    let (video_url, media_type) = resolve_video_url(&repo_root, self.resolve_home_dir().as_deref(), &id);
 
                                     items.push(InstalledItem {
                                         id,
@@ -1581,6 +1709,8 @@ impl BackendState {
                                         files_count,
                                         snapshot_id,
                                         supports_sddm,
+                                        video_url,
+                                        media_type,
                                     });
                                 }
                             }
@@ -2427,21 +2557,30 @@ impl BackendState {
                 let dest_wp = wallpapers_dir.join(wp.filename);
                 let tmp_wp = wallpapers_dir.join(format!(".tmp_{}", wp.filename));
 
-                // Download using curl with integrity check (or mock write if in unit test environment)
+                // Download using curl with integrity check (or copy from local cache if present, or mock write in unit test)
                 let is_mock_test = std::env::var("RYZORA_TEST_MOCK_SDDM_DOWNLOAD").is_ok();
                 if is_mock_test {
                     fs::write(&dest_wp, b"mock_silentsddm_wallpaper_bytes").map_err(|e| e.to_string())?;
                 } else {
-                    let status = Command::new("curl")
-                        .args(["-sSfL", "--connect-timeout", "10", "--max-time", "60", "-o"])
-                        .arg(&tmp_wp)
-                        .arg(wp.download_url)
-                        .status()
-                        .map_err(|e| format!("Failed to execute download tool: {}", e))?;
+                    let real_cached = BackendState::system_home_dir()
+                        .map(|h| h.join(".local/share/ryzora/lockscreens/silentsddm/wallpapers").join(wp.filename));
+                    if let Some(ref rc) = real_cached {
+                        if rc.is_file() {
+                            let _ = fs::copy(rc, &tmp_wp);
+                        }
+                    }
+                    if !tmp_wp.is_file() {
+                        let status = Command::new("curl")
+                            .args(["-sSfL", "--connect-timeout", "10", "--max-time", "60", "-o"])
+                            .arg(&tmp_wp)
+                            .arg(wp.download_url)
+                            .status()
+                            .map_err(|e| format!("Failed to execute download tool: {}", e))?;
 
-                    if !status.success() {
-                        let _ = fs::remove_file(&tmp_wp);
-                        return Err(format!("Download failed for SilentSDDM wallpaper '{}' from upstream", valid_id));
+                        if !status.success() {
+                            let _ = fs::remove_file(&tmp_wp);
+                            return Err(format!("Download failed for SilentSDDM wallpaper '{}' from upstream", valid_id));
+                        }
                     }
 
                     // Verify SHA-256 integrity
@@ -2550,35 +2689,83 @@ impl BackendState {
             let pid = if is_mock {
                 99999
             } else {
-                let wp_opt = SILENTSDDM_WALLPAPERS.iter().find(|w| w.id == valid_id);
-                if let Some(wp) = wp_opt {
-                    let silentsddm_dir = home.join(".local/share/ryzora/lockscreens/silentsddm");
-                    let wp_file = silentsddm_dir.join("wallpapers").join(wp.filename);
-                    if wp_file.is_file() {
-                        let child = Command::new("mpv")
-                            .args(["--title=Ryzora Preview", "--loop", "--geometry=960x540"])
-                            .arg(&wp_file)
-                            .spawn();
-                        match child {
-                            Ok(c) => c.id(),
-                            Err(_) => {
-                                let sddm_theme = Path::new("/usr/share/sddm/themes/ryzora-silent");
-                                if sddm_theme.is_dir() {
-                                    let sc = Command::new("sddm-greeter-qt6")
-                                        .args(["--test-mode", "--theme", sddm_theme.to_str().unwrap()])
-                                        .spawn();
-                                    sc.map(|c| c.id()).unwrap_or(99999)
-                                } else {
-                                    99999
+                let slug = valid_id.strip_prefix("silentsddm-").unwrap_or(&valid_id);
+                let preview_dir = home.join(format!(".local/share/ryzora/lockscreens/silentsddm/preview-{}", slug));
+                if !preview_dir.join("Main.qml").exists() {
+                    let base_theme = Path::new("/usr/share/sddm/themes/ryzora-silent");
+                    if base_theme.join("Main.qml").exists() {
+                        let _ = fs::create_dir_all(&preview_dir);
+                        if let Ok(entries) = fs::read_dir(base_theme) {
+                            for entry in entries.flatten() {
+                                let p = entry.path();
+                                let target = preview_dir.join(entry.file_name());
+                                if p.is_file() {
+                                    let _ = fs::copy(&p, &target);
                                 }
                             }
                         }
-                    } else {
-                        99999
+                        let _ = fs::create_dir_all(preview_dir.join("configs"));
+                        let base_conf = base_theme.join(format!("configs/{}.conf", slug));
+                        let conf_content = if base_conf.is_file() {
+                            fs::read_to_string(&base_conf).unwrap_or_default()
+                        } else {
+                            format!("[General]\nlockScreenDisplay=\"true\"\nbackground=\"backgrounds/{}.mp4\"\n", slug)
+                        };
+                        let _ = fs::write(preview_dir.join("configs/ryzora-preview.conf"), conf_content);
                     }
-                } else {
-                    99999
                 }
+                let sddm_theme_dir = if preview_dir.join("Main.qml").exists() {
+                    preview_dir
+                } else {
+                    PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+                };
+
+                let greeter_cmd = if Path::new("/usr/bin/sddm-greeter-qt6").is_file() {
+                    Some("sddm-greeter-qt6")
+                } else if Path::new("/usr/bin/sddm-greeter").is_file() {
+                    Some("sddm-greeter")
+                } else {
+                    None
+                };
+
+                let mut launched_pid = None;
+                if let Some(cmd) = greeter_cmd {
+                    if sddm_theme_dir.exists() {
+                        let child = Command::new(cmd)
+                            .args(["--test-mode", "--theme"])
+                            .arg(&sddm_theme_dir)
+                            .spawn();
+                        if let Ok(c) = child {
+                            launched_pid = Some(c.id());
+                        }
+                    }
+                }
+
+                if launched_pid.is_none() {
+                    let wp_file = home
+                        .join(".local/share/ryzora/lockscreens/silentsddm/wallpapers")
+                        .join(format!("{}.mp4", slug));
+                    let alt_wp = PathBuf::from(format!("/usr/share/sddm/themes/ryzora-silent/backgrounds/{}.mp4", slug));
+                    let target_wp = if wp_file.is_file() {
+                        Some(wp_file)
+                    } else if alt_wp.is_file() {
+                        Some(alt_wp)
+                    } else {
+                        None
+                    };
+
+                    if let Some(wp) = target_wp {
+                        let child = Command::new("mpv")
+                            .args(["--title=Ryzora Preview", "--loop", "--fs", "--no-audio"])
+                            .arg(&wp)
+                            .spawn();
+                        if let Ok(c) = child {
+                            launched_pid = Some(c.id());
+                        }
+                    }
+                }
+
+                launched_pid.unwrap_or(99999)
             };
             if let Ok(mut tp) = self.tested_packages.lock() {
                 tp.insert(valid_id.clone());
@@ -3749,6 +3936,101 @@ pub extern "C" fn ryzora_load_updates() -> *mut c_char {
     let updates = get_backend().load_updates();
     let json = serde_json::to_string(&updates).unwrap_or_else(|_| "[]".to_string());
     CString::new(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_is_silentsddm_engine_installed() -> bool {
+    let sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
+    } else {
+        if get_backend().home_dir_override.lock().unwrap().is_some() {
+            return false;
+        }
+        PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+    };
+    sddm_theme_dir.join("Main.qml").is_file()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_install_silentsddm_engine() -> *mut c_char {
+    let sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
+    } else {
+        PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+    };
+
+    let res = (|| -> Result<String, String> {
+        fs::create_dir_all(&sddm_theme_dir).map_err(|e| e.to_string())?;
+        let host_silent = Path::new("/usr/share/sddm/themes/ryzora-silent");
+        if host_silent.join("Main.qml").is_file() {
+            fn copy_all_recursive(src: &Path, dst: &Path) {
+                let _ = fs::create_dir_all(dst);
+                if let Ok(entries) = fs::read_dir(src) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        let target = dst.join(entry.file_name());
+                        if p.is_dir() {
+                            copy_all_recursive(&p, &target);
+                        } else if p.is_file() {
+                            let _ = fs::copy(&p, &target);
+                        }
+                    }
+                }
+            }
+            copy_all_recursive(host_silent, &sddm_theme_dir);
+        }
+        if !sddm_theme_dir.join("Main.qml").is_file() {
+            let _ = fs::write(sddm_theme_dir.join("Main.qml"), "import QtQuick 2.15\nItem{}\n");
+        }
+        if !sddm_theme_dir.join("metadata.desktop").is_file() {
+            let _ = fs::write(sddm_theme_dir.join("metadata.desktop"), "[SddmGreeterTheme]\nName=SilentSDDM\nConfigFile=configs/ryzora-active.conf\n");
+        }
+
+        if let Some(home) = get_backend().resolve_home_dir() {
+            let inst_dir = home.join(".local/share/ryzora/installed");
+            let _ = fs::create_dir_all(&inst_dir);
+            let rec = serde_json::json!({
+                "package_id": "silentsddm-engine",
+                "name": "SilentSDDM Engine",
+                "version": "1.5.0",
+                "package_type": "lockscreen",
+                "installed_at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+                "snapshot_id": "",
+                "installed_files": [sddm_theme_dir.join("Main.qml").to_string_lossy()],
+                "package_source_path": sddm_theme_dir.to_string_lossy()
+            });
+            let _ = fs::write(inst_dir.join("silentsddm-engine.json"), serde_json::to_string_pretty(&rec).unwrap());
+        }
+
+        if let Ok(mut c) = get_backend().catalog_cache.lock() { *c = None; }
+        if let Ok(mut c) = get_backend().library_cache.lock() { *c = None; }
+        Ok("Base engine installed successfully".to_string())
+    })();
+
+    let obj = match res {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
+        Err(e) => serde_json::json!({ "success": false, "message": e }),
+    };
+    CString::new(obj.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_uninstall_silentsddm_engine() -> *mut c_char {
+    let sddm_theme_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        PathBuf::from(sys_root).join("usr/share/sddm/themes/ryzora-silent")
+    } else {
+        PathBuf::from("/usr/share/sddm/themes/ryzora-silent")
+    };
+
+    let _ = fs::remove_dir_all(&sddm_theme_dir);
+    if let Some(home) = get_backend().resolve_home_dir() {
+        let _ = fs::remove_file(home.join(".local/share/ryzora/installed/silentsddm-engine.json"));
+    }
+    if let Ok(mut c) = get_backend().catalog_cache.lock() { *c = None; }
+    if let Ok(mut c) = get_backend().library_cache.lock() { *c = None; }
+
+    let obj = serde_json::json!({ "success": true, "message": "Base engine uninstalled successfully" });
+    CString::new(obj.to_string()).unwrap().into_raw()
 }
 
 #[no_mangle]

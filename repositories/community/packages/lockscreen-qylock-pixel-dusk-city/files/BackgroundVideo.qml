@@ -7,11 +7,16 @@ Item {
     anchors.fill: parent
 
         MediaPlayer {
+        audioOutput: AudioOutput { muted: true; volume: 0.0 }
             id: mediaplayer
             source: "bg.mp4"
             autoPlay: true
             loops: MediaPlayer.Infinite
             videoOutput: videoOutput
+            Component.onCompleted: play()
+
+            onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
+
         }
         
 

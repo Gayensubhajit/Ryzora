@@ -62,6 +62,11 @@ Item {
     }
 
     onSelectedPackageChanged: {
+        if (root.selectedPackage && root.selectedPackage.id) {
+            root.selectedPackageId = String(root.selectedPackage.id)
+        } else if (!root.selectedPackage) {
+            root.selectedPackageId = ""
+        }
         if (detailView) {
             detailView.packageData = root.selectedPackage
         }
@@ -571,8 +576,8 @@ Item {
                 clip: true
                 visible: root.filteredPackages.length > 0
                 boundsBehavior: Flickable.StopAtBounds
-                flickDeceleration: 3500
-                maximumFlickVelocity: 3000
+                flickDeceleration: 2500
+                maximumFlickVelocity: 4000
 
                 // Responsive columns: 4 columns >= 1150px, 3 columns >= 820px, 2 columns >= 520px, 1 column below
                 // Width minus 18 ensures right-hand cards do not touch the scrollbar thumb
@@ -589,6 +594,9 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 8
                         itemData: modelData
+                        isPageVisible: root.visible
+                        inViewport: root.visible && (parent.y + parent.height >= grid.contentY - 20) && (parent.y <= grid.contentY + grid.height + 20)
+                        allowAutoplay: true
                         onCardClicked: function(data) {
                             root.setSelectedPackage(data)
                             root.packageSelected(root.selectedPackage || data)
