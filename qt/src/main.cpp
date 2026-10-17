@@ -2449,37 +2449,37 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         qCritical() << "FAIL: Initial activeDecoderCount must be 0, got:" << backend->activeDecoderCount();
         return 2408;
     }
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         if (!backend->acquireDecoderSlot()) {
             qCritical() << "FAIL: Failed to acquire decoder slot" << i;
             return 2409;
         }
     }
-    if (backend->activeDecoderCount() != 5) {
-        qCritical() << "FAIL: Expected activeDecoderCount == 5, got:" << backend->activeDecoderCount();
+    if (backend->activeDecoderCount() != 6) {
+        qCritical() << "FAIL: Expected activeDecoderCount == 6, got:" << backend->activeDecoderCount();
         return 2410;
     }
     if (backend->acquireDecoderSlot()) {
-        qCritical() << "FAIL: 6th decoder slot acquisition succeeded! Must be bounded to 5.";
+        qCritical() << "FAIL: 7th decoder slot acquisition succeeded! Must be bounded to 6.";
         return 2411;
     }
     backend->releaseDecoderSlot();
-    if (backend->activeDecoderCount() != 4) {
-        qCritical() << "FAIL: Expected activeDecoderCount == 4 after release, got:" << backend->activeDecoderCount();
+    if (backend->activeDecoderCount() != 5) {
+        qCritical() << "FAIL: Expected activeDecoderCount == 5 after release, got:" << backend->activeDecoderCount();
         return 2412;
     }
     if (!backend->acquireDecoderSlot()) {
         qCritical() << "FAIL: Re-acquisition of released decoder slot failed!";
         return 2413;
     }
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         backend->releaseDecoderSlot();
     }
     if (backend->activeDecoderCount() != 0) {
         qCritical() << "FAIL: Expected activeDecoderCount == 0 after all releases, got:" << backend->activeDecoderCount();
         return 2414;
     }
-    qInfo() << "  -> CONFIRMED: Decoder slot pool strictly bounds concurrency to 5 and recycles cleanly.";
+    qInfo() << "  -> CONFIRMED: Decoder slot pool strictly bounds concurrency to 6 and recycles cleanly.";
 
     backend->setTestHomeOverride(QString());
     backend->setTestSystemRootOverride(QString());

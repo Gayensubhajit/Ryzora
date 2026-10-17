@@ -606,7 +606,6 @@ Item {
                         anchors.margins: 8
                         itemData: modelData
                         isPageVisible: root.visible
-                        inViewport: root.visible && (parent.y + parent.height >= grid.contentY - 20) && (parent.y <= grid.contentY + grid.height + 20)
                         allowAutoplay: true
                         onCardClicked: function(data) {
                             root.setSelectedPackage(data)

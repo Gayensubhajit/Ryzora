@@ -2248,7 +2248,7 @@ void RyzoraBackend::uninstallSilentEngine() {
 
 bool RyzoraBackend::acquireDecoderSlot() {
     int current = m_activeDecoderCount.load();
-    while (current < 5) {
+    while (current < 6) {
         if (m_activeDecoderCount.compare_exchange_weak(current, current + 1)) {
             return true;
         }

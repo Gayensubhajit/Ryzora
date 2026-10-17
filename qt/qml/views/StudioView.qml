@@ -573,7 +573,7 @@ Item {
                         property bool isSddmAct: root.isThemeSddmActive(root.activeDetailTheme)
                         property bool isLockAct: root.isThemeLockActive(root.activeDetailTheme)
                         height: 22
-                        width: statusRowHdr.implicitWidth + 14
+                        width: statusRowHdr.implicitWidth + 18
                         radius: 11
                         color: isSddmAct
                             ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B")
@@ -925,7 +925,7 @@ Item {
                             // Left Pane: Left-aligned Preview Container using available width (aspect 16:9)
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredWidth: studioScroll.width >= 920 ? 3 : 1
+                                Layout.preferredWidth: studioScroll.width >= 920 ? 5 : 2
                                 Layout.minimumWidth: 320
                                 radius: theme.radiusMd
                                 color: theme.surface
@@ -942,7 +942,9 @@ Item {
                                     LoginPreview {
                                         id: studioPreview
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.round(width / aspect)
+                                        Layout.preferredHeight: Math.min(340, Math.round(width / aspect))
+                                        Layout.maximumWidth: Math.round(Layout.preferredHeight * aspect)
+                                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
                                         radius: theme.radiusSm
                                         border.color: theme.borderSubtle
                                         packageData: root.activeDetailTheme
@@ -1044,9 +1046,9 @@ Item {
                             // Right Pane: Contextual Theme Summary Card (when width >= 920)
                             Rectangle {
                                 visible: studioScroll.width >= 920
-                                Layout.preferredWidth: 260
-                                Layout.minimumWidth: 220
-                                Layout.maximumWidth: 320
+                                Layout.preferredWidth: 300
+                                Layout.minimumWidth: 260
+                                Layout.maximumWidth: 340
                                 Layout.fillHeight: true
                                 radius: theme.radiusMd
                                 color: theme.surface
@@ -1178,38 +1180,6 @@ Item {
                                             }
                                         }
 
-                                        // Deactivate Button (Visible if applied)
-                                        Rectangle {
-                                            visible: root.isThemeSddmActive(root.activeDetailTheme)
-                                            Layout.fillWidth: true
-                                            height: 40
-                                            radius: theme.radiusSm
-                                            color: deactMouse.containsMouse ? theme.surfaceHover : "transparent"
-                                            border.color: theme.borderSubtle
-                                            border.width: 1
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 8
-                                                RyzoraIcon { name: "x"; size: 16; color: "#EF4444" }
-                                                Text {
-                                                    text: root.pendingAction === "deactivate" ? "Deactivating…" : "Deactivate (Restore Default)"
-                                                    font.pixelSize: 14
-                                                    font.weight: Font.Medium
-                                                    color: "#EF4444"
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: deactMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                enabled: root.pendingAction !== "deactivate"
-                                                onClicked: root.triggerDeactivate()
-                                            }
-                                        }
-
                                         // Fullscreen Test Button
                                         Rectangle {
                                             Layout.fillWidth: true
@@ -1240,60 +1210,65 @@ Item {
                                             }
                                         }
 
-                                        // Save / Reset block for settings changes
-                                        RowLayout {
+                                        // Reset to Defaults (Visible when modifications or unsaved changes exist)
+                                        Rectangle {
                                             visible: root.hasUnsavedChanges || Boolean(root.themeConfig && root.themeConfig.is_modified)
                                             Layout.fillWidth: true
-                                            spacing: 8
+                                            height: 40
+                                            radius: theme.radiusSm
+                                            color: resetSideMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
 
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                height: 40
-                                                radius: theme.radiusSm
-                                                color: saveSideMouse.containsMouse ? theme.accentHover : theme.accent
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-                                                    RyzoraIcon { name: "check"; size: 16; color: "#FFFFFF" }
-                                                    Text {
-                                                        text: "Save Settings"
-                                                        font.pixelSize: 15
-                                                        font.weight: Font.DemiBold
-                                                        color: "#FFFFFF"
-                                                    }
-                                                }
-                                                MouseArea {
-                                                    id: saveSideMouse
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: root.triggerSave()
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                RyzoraIcon { name: "rotate-ccw"; size: 14; color: theme.textSecondary }
+                                                Text {
+                                                    text: "Reset to Defaults"
+                                                    font.pixelSize: 14
+                                                    font.weight: Font.Medium
+                                                    color: theme.textSecondary
                                                 }
                                             }
 
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                height: 40
-                                                radius: theme.radiusSm
-                                                color: resetSideMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                                                border.color: theme.borderSubtle
-                                                border.width: 1
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-                                                    RyzoraIcon { name: "rotate-ccw"; size: 14; color: theme.textSecondary }
-                                                    Text {
-                                                        text: "Reset to Defaults"
-                                                        font.pixelSize: 14
-                                                        font.weight: Font.Medium
-                                                        color: theme.textSecondary
-                                                    }
+                                            MouseArea {
+                                                id: resetSideMouse
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.triggerReset()
+                                            }
+                                        }
+
+                                        // Deactivate Button (Visible if applied)
+                                        Rectangle {
+                                            visible: root.isThemeSddmActive(root.activeDetailTheme)
+                                            Layout.fillWidth: true
+                                            height: 40
+                                            radius: theme.radiusSm
+                                            color: deactMouse.containsMouse ? theme.surfaceHover : "transparent"
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 8
+                                                RyzoraIcon { name: "x"; size: 16; color: "#EF4444" }
+                                                Text {
+                                                    text: root.pendingAction === "deactivate" ? "Deactivating…" : "Deactivate (Restore Default)"
+                                                    font.pixelSize: 14
+                                                    font.weight: Font.Medium
+                                                    color: "#EF4444"
                                                 }
-                                                MouseArea {
-                                                    id: resetSideMouse
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: root.triggerReset()
-                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: deactMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                enabled: root.pendingAction !== "deactivate"
+                                                onClicked: root.triggerDeactivate()
                                             }
                                         }
                                     }

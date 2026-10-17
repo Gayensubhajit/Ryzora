@@ -47,7 +47,7 @@ Rectangle {
         }
         if (vu.indexOf("http://") === 0 || vu.indexOf("https://") === 0) return vu
         if (vu.indexOf("/") === 0) return "file://" + vu
-        return ""
+        return "file://" + backend.resolveHomePath() + "/" + vu
     }
     readonly property bool hasVideo: videoSource !== ""
     readonly property bool isLocalVideo: videoSource.indexOf("file://") === 0
@@ -77,16 +77,19 @@ Rectangle {
                 playDebounceTimer.restart()
             }
         }
-        updateViewportState()
     }
 
     function findScrollContainer() {
         var p = card.parent
         while (p) {
-            if (p.contentY !== undefined && p.height !== undefined && p.height > 0) {
+            if (p.interactive === false) {
+                p = p.parent
+                continue
+            }
+            if (p.contentY !== undefined) {
                 return p
             }
-            if (p.contentItem && p.contentItem.contentY !== undefined && p.height !== undefined && p.height > 0) {
+            if (p.contentItem && p.contentItem.contentY !== undefined) {
                 return p.contentItem
             }
             p = p.parent
@@ -94,55 +97,32 @@ Rectangle {
         return null
     }
 
+    onParentChanged: {
+        card.scrollContainer = card.findScrollContainer()
+    }
+
     Component.onCompleted: {
         card.scrollContainer = card.findScrollContainer()
-        card.updateViewportState()
+        if (card.shouldPlayVideo && card.tryAcquireSlot()) {
+            card.playVideoActive = true
+        }
     }
 
-    // Viewport-aware visibility with hysteresis: protects against boundary flapping during scroll
-    property bool inViewCalculated: false
-
-    function updateViewportState() {
-        if (!card.visible || !card.isPageVisible || card.width <= 0 || card.height <= 0) {
-            inViewCalculated = false
-            return
-        }
+    // Direct reactive viewport detection: tracks sc.contentY dynamically and autoplays immediately on page view
+    readonly property bool isInViewport: {
+        if (!card.visible || !card.isPageVisible) return false
         var sc = card.scrollContainer || card.findScrollContainer()
-        if (sc && sc.height > 0) {
+        if (sc) {
+            var dummy = sc.contentY
+            var h = (sc.height && sc.height > 0) ? sc.height : (sc.parent && sc.parent.height > 0 ? sc.parent.height : 800)
             var pt = card.mapToItem(sc, 0, 0)
-            var cardTop = pt.y
-            var cardBottom = pt.y + card.height
-            // Enter when card touches [-60, sc.height + 60]
-            // Leave only when card moves past [-140, sc.height + 140]
-            if (inViewCalculated) {
-                if (cardBottom < -140 || cardTop > sc.height + 140) {
-                    inViewCalculated = false
-                }
-            } else {
-                if (cardBottom >= -60 && cardTop <= sc.height + 60) {
-                    inViewCalculated = true
-                }
-            }
-        } else {
-            inViewCalculated = card.inViewport
+            var cardH = card.height > 0 ? card.height : 220
+            return (pt.y + cardH >= -80) && (pt.y <= h + 80)
         }
+        return true
     }
 
-    Connections {
-        target: card.scrollContainer
-        function onContentYChanged() {
-            card.updateViewportState()
-        }
-    }
-
-    onIsPageVisibleChanged: updateViewportState()
-    onVisibleChanged: updateViewportState()
-    onWidthChanged: updateViewportState()
-    onHeightChanged: updateViewportState()
-    onScrollContainerChanged: updateViewportState()
-
-    readonly property bool isInViewport: inViewCalculated
-    readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && isLocalVideo && videoSource !== "" && allowAutoplay
+    readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && videoSource !== "" && allowAutoplay
 
     property bool hasDecoderSlot: false
 
@@ -181,7 +161,7 @@ Rectangle {
 
     Timer {
         id: playDebounceTimer
-        interval: 150
+        interval: 80
         repeat: false
         onTriggered: {
             if (card.shouldPlayVideo) {
@@ -194,7 +174,13 @@ Rectangle {
 
     onShouldPlayVideoChanged: {
         if (shouldPlayVideo) {
-            playDebounceTimer.restart()
+            if (!card.playVideoActive) {
+                if (card.tryAcquireSlot()) {
+                    card.playVideoActive = true
+                } else {
+                    playDebounceTimer.restart()
+                }
+            }
         } else {
             playDebounceTimer.stop()
             card.playVideoActive = false
@@ -348,6 +334,9 @@ Rectangle {
                         }
                         onMediaStatusChanged: {
                             if (mediaStatus === MediaPlayer.LoadedMedia || mediaStatus === MediaPlayer.BufferedMedia) {
+                                play()
+                            } else if (mediaStatus === MediaPlayer.EndOfMedia) {
+                                position = 0
                                 play()
                             }
                         }
