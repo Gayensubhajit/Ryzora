@@ -129,12 +129,17 @@ public:
     Q_INVOKABLE void installSilentEngine();
     Q_INVOKABLE void uninstallSilentEngine();
 
+    Q_INVOKABLE bool acquireDecoderSlot();
+    Q_INVOKABLE void releaseDecoderSlot();
+    Q_INVOKABLE int activeDecoderCount() const { return m_activeDecoderCount.load(); }
+
     Q_INVOKABLE QString resolveHomePath() const;
 
 signals:
     void catalogChanged();
     void libraryChanged();
     void activeConfigurationChanged();
+    void decoderSlotAvailable();
     void catalogLoadingChanged();
     void libraryLoadingChanged();
     void libraryErrorChanged();
@@ -202,6 +207,7 @@ private:
     std::atomic<uint64_t> m_currentLibraryReqId{0};
 
     QThreadPool m_threadPool;
+    std::atomic<int> m_activeDecoderCount{0};
     std::atomic<bool> m_isShutdown{false};
     QString m_testHomeOverride;
     QString m_testSystemRootOverride;

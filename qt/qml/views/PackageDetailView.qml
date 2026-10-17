@@ -34,10 +34,11 @@ Item {
         return ""
     }
     readonly property bool hasVideo: videoSource !== ""
+    property bool hasFirstFrame: false
     readonly property bool isNarrow: detailScroll.width < 880
     property bool isEngineInstalled: (typeof backend !== "undefined" && backend) ? backend.isSilentEngineInstalled : false
     property bool engineActionPending: false
-    readonly property bool isVideoPlaying: root.hasVideo && videoPlayer.playbackState === MediaPlayer.PlayingState && videoPlayer.error === MediaPlayer.NoError
+    readonly property bool isVideoPlaying: root.hasVideo && (root.hasFirstFrame || videoPlayer.playbackState === MediaPlayer.PlayingState) && videoPlayer.error === MediaPlayer.NoError
 
     MediaPlayer {
         id: videoPlayer
@@ -51,7 +52,13 @@ Item {
         onErrorOccurred: function(error, errorString) {
             console.warn("VideoPlayer error [" + error + "]: " + errorString)
         }
+        onPlaybackStateChanged: {
+            if (playbackState === MediaPlayer.PlayingState) {
+                root.hasFirstFrame = true
+            }
+        }
         onSourceChanged: {
+            root.hasFirstFrame = false
             if (source !== "") {
                 play()
             } else {
@@ -62,6 +69,7 @@ Item {
     }
 
     onPackageDataChanged: {
+        root.hasFirstFrame = false
         root.syncThemeConfig()
         root.errorMessage = ""
         root.pendingAction = ""
@@ -593,7 +601,7 @@ Item {
                                     asynchronous: true
                                     cache: true
                                     smooth: true
-                                    visible: !root.useLoginPreview && status === Image.Ready && (!root.hasVideo || videoPlayer.playbackState === MediaPlayer.StoppedState || videoPlayer.error !== MediaPlayer.NoError)
+                                    visible: !root.useLoginPreview && status === Image.Ready && (!root.hasVideo || !root.hasFirstFrame || videoPlayer.error !== MediaPlayer.NoError)
                                 }
 
                                 // Qt Multimedia Live Video Output
@@ -601,7 +609,7 @@ Item {
                                     id: videoOutput
                                     anchors.fill: parent
                                     fillMode: VideoOutput.PreserveAspectCrop
-                                    visible: root.hasVideo && (videoPlayer.playbackState === MediaPlayer.PlayingState || videoPlayer.playbackState === MediaPlayer.PausedState)
+                                    visible: root.hasVideo && (root.hasFirstFrame || videoPlayer.playbackState === MediaPlayer.PlayingState || videoPlayer.playbackState === MediaPlayer.PausedState)
                                 }
 
                                 // Playback Control Overlay Badge

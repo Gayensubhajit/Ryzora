@@ -21,9 +21,13 @@ Rectangle {
     readonly property bool isReal: realUrl !== "" && realLoader.status !== Loader.Error
     readonly property string videoSource: videoFor(packageData)
     readonly property bool hasVideo: videoSource !== ""
-    readonly property bool videoPlaying: player.playbackState === MediaPlayer.PlayingState && player.error === MediaPlayer.NoError && player.mediaStatus !== MediaPlayer.NoMedia
+    property bool hasFirstFrame: false
+    readonly property bool videoPlaying: root.hasFirstFrame || (player.playbackState === MediaPlayer.PlayingState && player.error === MediaPlayer.NoError && player.mediaStatus !== MediaPlayer.NoMedia)
     readonly property bool isPlaying: isReal ? (realLoader.status === Loader.Ready) : videoPlaying
     property bool isLoginScreenState: false
+
+    onPackageDataChanged: hasFirstFrame = false
+    onVideoSourceChanged: hasFirstFrame = false
 
     function isTruthy(v) {
         if (v === true || v === 1) return true;
@@ -198,12 +202,12 @@ Rectangle {
                         : (String(root.config.fillMode) === "stretch" ? Image.Stretch : Image.PreserveAspectCrop)
                 asynchronous: true
                 cache: true
-                visible: status === Image.Ready && (!root.hasVideo || !root.videoPlaying)
+                visible: status === Image.Ready && (!root.hasVideo || !root.hasFirstFrame)
             }
             VideoOutput {
                 id: vout
                 anchors.fill: parent
-                visible: root.hasVideo && root.videoPlaying
+                visible: root.hasVideo && root.hasFirstFrame
                 fillMode: String(root.config.fillMode || "fill") === "fit" ? VideoOutput.PreserveAspectFit
                         : (String(root.config.fillMode) === "stretch" ? VideoOutput.Stretch : VideoOutput.PreserveAspectCrop)
             }
@@ -239,8 +243,14 @@ Rectangle {
             loops: MediaPlayer.Infinite
             source: (root.active && !root.isReal && root.hasVideo && root.isTruthy(root.config.enableAnimations !== undefined ? root.config.enableAnimations : true)) ? root.videoSource : ""
             Component.onCompleted: if (root.active && !root.isReal && source != "") play()
+            onPlaybackStateChanged: {
+                if (playbackState === MediaPlayer.PlayingState) {
+                    root.hasFirstFrame = true
+                }
+            }
             onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && root.active && !root.isReal) play()
             onSourceChanged: {
+                root.hasFirstFrame = false
                 if (source == "") stop()
                 else if (root.active && !root.isReal) play()
             }

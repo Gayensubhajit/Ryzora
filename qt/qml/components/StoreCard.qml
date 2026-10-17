@@ -32,17 +32,6 @@ Rectangle {
         if (vu.length === 0 && card.itemData.preview_video) {
             vu = String(card.itemData.preview_video).trim()
         }
-        if (vu.length === 0 && card.itemData.id) {
-            var lists = [backend.catalogList || [], backend.libraryList || []]
-            for (var li = 0; li < lists.length && vu.length === 0; ++li) {
-                for (var ci = 0; ci < lists[li].length; ++ci) {
-                    if (lists[li][ci].id === card.itemData.id) {
-                        if (lists[li][ci].video_url) { vu = String(lists[li][ci].video_url).trim(); break }
-                        if (lists[li][ci].preview_video) { vu = String(lists[li][ci].preview_video).trim(); break }
-                    }
-                }
-            }
-        }
         if (vu.length === 0 && card.itemData.preview_url) {
             var pu = String(card.itemData.preview_url).trim()
             if (pu.indexOf(".mp4") >= 0 || pu.indexOf(".webm") >= 0 || pu.indexOf(".mov") >= 0) {
@@ -73,6 +62,24 @@ Rectangle {
     property bool playVideoActive: false
     readonly property bool isHovered: mouseArea.containsMouse
 
+    property string currentItemId: ""
+    onItemDataChanged: {
+        var newId = (card.itemData && card.itemData.id) ? String(card.itemData.id) : ""
+        if (newId !== currentItemId) {
+            currentItemId = newId
+            if (videoLoader.item) {
+                videoLoader.item.hasFirstFrame = false
+            }
+            playDebounceTimer.stop()
+            card.playVideoActive = false
+            card.releaseSlot()
+            if (card.shouldPlayVideo) {
+                playDebounceTimer.restart()
+            }
+        }
+        updateViewportState()
+    }
+
     function findScrollContainer() {
         var p = card.parent
         while (p) {
@@ -89,30 +96,60 @@ Rectangle {
 
     Component.onCompleted: {
         card.scrollContainer = card.findScrollContainer()
+        card.updateViewportState()
     }
 
-    // Viewport-aware visibility: autoplays recorded demo when visible, pauses/unmounts offscreen
-    readonly property bool isInViewport: {
-        if (!card.visible || !card.isPageVisible || card.width <= 0 || card.height <= 0) return false
+    // Viewport-aware visibility with hysteresis: protects against boundary flapping during scroll
+    property bool inViewCalculated: false
+
+    function updateViewportState() {
+        if (!card.visible || !card.isPageVisible || card.width <= 0 || card.height <= 0) {
+            inViewCalculated = false
+            return
+        }
         var sc = card.scrollContainer || card.findScrollContainer()
         if (sc && sc.height > 0) {
-            var dummy = sc.contentY
             var pt = card.mapToItem(sc, 0, 0)
-            return (pt.y + card.height >= -20) && (pt.y <= sc.height + 20)
+            var cardTop = pt.y
+            var cardBottom = pt.y + card.height
+            // Enter when card touches [-60, sc.height + 60]
+            // Leave only when card moves past [-140, sc.height + 140]
+            if (inViewCalculated) {
+                if (cardBottom < -140 || cardTop > sc.height + 140) {
+                    inViewCalculated = false
+                }
+            } else {
+                if (cardBottom >= -60 && cardTop <= sc.height + 60) {
+                    inViewCalculated = true
+                }
+            }
+        } else {
+            inViewCalculated = card.inViewport
         }
-        return card.inViewport
     }
 
+    Connections {
+        target: card.scrollContainer
+        function onContentYChanged() {
+            card.updateViewportState()
+        }
+    }
+
+    onIsPageVisibleChanged: updateViewportState()
+    onVisibleChanged: updateViewportState()
+    onWidthChanged: updateViewportState()
+    onHeightChanged: updateViewportState()
+    onScrollContainerChanged: updateViewportState()
+
+    readonly property bool isInViewport: inViewCalculated
     readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && isLocalVideo && videoSource !== "" && allowAutoplay
 
     property bool hasDecoderSlot: false
 
     function tryAcquireSlot() {
         if (hasDecoderSlot) return true
-        if (typeof window !== "undefined" && window) {
-            if (window.activeDecoderCount === undefined) window.activeDecoderCount = 0
-            if (window.activeDecoderCount < 8) {
-                window.activeDecoderCount++
+        if (backend && backend.acquireDecoderSlot) {
+            if (backend.acquireDecoderSlot()) {
                 hasDecoderSlot = true
                 return true
             }
@@ -123,8 +160,8 @@ Rectangle {
     }
 
     Connections {
-        target: (typeof window !== "undefined") ? window : null
-        function onActiveDecoderCountChanged() {
+        target: backend
+        function onDecoderSlotAvailable() {
             if (card.shouldPlayVideo && !card.playVideoActive && !card.hasDecoderSlot) {
                 playDebounceTimer.restart()
             }
@@ -134,8 +171,8 @@ Rectangle {
     function releaseSlot() {
         if (hasDecoderSlot) {
             hasDecoderSlot = false
-            if (typeof window !== "undefined" && window && window.activeDecoderCount > 0) {
-                window.activeDecoderCount--
+            if (backend && backend.releaseDecoderSlot) {
+                backend.releaseDecoderSlot()
             }
         }
     }
@@ -268,10 +305,10 @@ Rectangle {
                 sourceSize.width: 640
                 sourceSize.height: 480
                 smooth: true
-                visible: status === Image.Ready && (!videoLoader.item || !videoLoader.item.isPlaying)
+                visible: status === Image.Ready && (!videoLoader.item || !videoLoader.item.hasFirstFrame)
             }
 
-            // Recorded Demo / Cursor Tutorial Video Preview on Hover (Old Tauri Behavior)
+            // Recorded Demo / Cursor Tutorial Video Preview with Bounded Concurrency
             Loader {
                 id: videoLoader
                 anchors.fill: parent
@@ -282,14 +319,16 @@ Rectangle {
             Component {
                 id: demoVideoComp
                 Item {
+                    id: videoRoot
                     anchors.fill: parent
-                    readonly property bool isPlaying: cardPlayer.playbackState === MediaPlayer.PlayingState
+                    property bool hasFirstFrame: false
+                    readonly property bool isPlaying: hasFirstFrame || (cardPlayer.playbackState === MediaPlayer.PlayingState)
 
                     VideoOutput {
                         id: cardVideoOutput
                         anchors.fill: parent
                         fillMode: VideoOutput.PreserveAspectCrop
-                        visible: cardPlayer.playbackState === MediaPlayer.PlayingState
+                        visible: videoRoot.hasFirstFrame
                     }
 
                     MediaPlayer {
@@ -302,14 +341,23 @@ Rectangle {
                         loops: MediaPlayer.Infinite
                         source: card.videoSource
                         Component.onCompleted: play()
-                        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia) play()
+                        onPlaybackStateChanged: {
+                            if (playbackState === MediaPlayer.PlayingState) {
+                                videoRoot.hasFirstFrame = true
+                            }
+                        }
+                        onMediaStatusChanged: {
+                            if (mediaStatus === MediaPlayer.LoadedMedia || mediaStatus === MediaPlayer.BufferedMedia) {
+                                play()
+                            }
+                        }
                     }
                 }
             }
 
             // Video Indicator Badge Pill (Top-Right)
             Rectangle {
-                visible: card.hasVideo && Boolean(videoLoader.item && videoLoader.item.isPlaying)
+                visible: card.hasVideo && Boolean(videoLoader.item && videoLoader.item.hasFirstFrame)
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.margins: 8

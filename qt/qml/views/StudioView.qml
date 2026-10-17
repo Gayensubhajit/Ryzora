@@ -654,21 +654,21 @@ Item {
                     // Save Button in Header (only when unsaved changes exist)
                     Rectangle {
                         visible: root.hasUnsavedChanges
-                        height: 28
-                        width: saveTxtHdr.implicitWidth + 20
+                        height: 38
+                        width: saveTxtHdr.implicitWidth + 24
                         radius: theme.radiusSm
                         color: theme.accent
                         opacity: root.pendingAction !== "" ? 0.5 : 1.0
 
                         RowLayout {
                             anchors.centerIn: parent
-                            spacing: 5
-                            RyzoraIcon { name: "check"; size: 12; color: "#FFFFFF" }
+                            spacing: 6
+                            RyzoraIcon { name: "check"; size: 16; color: "#FFFFFF" }
                             Text {
                                 id: saveTxtHdr
                                 text: "Save Changes"
-                                font.pixelSize: 11
-                                font.bold: true
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
                                 color: "#FFFFFF"
                             }
                         }
@@ -974,7 +974,7 @@ Item {
 
                                         Rectangle {
                                             Layout.fillWidth: true
-                                            height: 32
+                                            height: 40
                                             radius: theme.radiusSm
                                             color: fsQuickMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                                             border.color: theme.borderSubtle
@@ -983,10 +983,10 @@ Item {
                                             RowLayout {
                                                 anchors.centerIn: parent
                                                 spacing: 6
-                                                RyzoraIcon { name: "maximize-2"; size: 12; color: theme.textSecondary }
+                                                RyzoraIcon { name: "maximize-2"; size: 16; color: theme.textSecondary }
                                                 Text {
                                                     text: "Fullscreen Preview"
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 14
                                                     font.weight: Font.Medium
                                                     color: theme.text
                                                 }
@@ -1002,8 +1002,9 @@ Item {
                                         }
 
                                         Rectangle {
+                                            id: applyQuickBtn
                                             Layout.fillWidth: true
-                                            height: 32
+                                            height: 40
                                             radius: theme.radiusSm
                                             property bool isApplied: root.isThemeSddmActive(root.activeDetailTheme)
                                             property bool needsApply: !isApplied || root.hasUnsavedChanges
@@ -1016,13 +1017,13 @@ Item {
                                                 spacing: 6
                                                 RyzoraIcon {
                                                     name: (!parent.parent.needsApply && parent.parent.isApplied) ? "check" : "shield"
-                                                    size: 12
+                                                    size: 16
                                                     color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
                                                 }
                                                 Text {
                                                     text: root.pendingAction === "apply" ? "Applying…" : (root.hasUnsavedChanges ? "Save & Apply" : (parent.parent.isApplied ? "Active on SDDM" : "Apply to Login Screen"))
-                                                    font.pixelSize: 11
-                                                    font.weight: Font.SemiBold
+                                                    font.pixelSize: 15
+                                                    font.weight: Font.DemiBold
                                                     color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
                                                 }
                                             }
@@ -1140,7 +1141,7 @@ Item {
                                         Rectangle {
                                             id: applyCtaBtn
                                             Layout.fillWidth: true
-                                            height: 38
+                                            height: 42
                                             radius: theme.radiusSm
                                             property bool isApplied: root.isThemeSddmActive(root.activeDetailTheme)
                                             property bool isBusy: root.pendingAction === "apply"
@@ -1156,13 +1157,13 @@ Item {
                                                 spacing: 8
                                                 RyzoraIcon {
                                                     name: (!applyCtaBtn.needsApply && applyCtaBtn.isApplied) ? "check" : "shield"
-                                                    size: 14
+                                                    size: 16
                                                     color: (!applyCtaBtn.needsApply && applyCtaBtn.isApplied) ? "#10B981" : "#FFFFFF"
                                                 }
                                                 Text {
                                                     text: applyCtaBtn.isBusy ? "Applying…" : (root.hasUnsavedChanges ? "Save & Apply Customization" : (applyCtaBtn.isApplied ? "Applied to SDDM" : "Apply to Login Screen"))
-                                                    font.pixelSize: 12
-                                                    font.weight: Font.SemiBold
+                                                    font.pixelSize: 15
+                                                    font.weight: Font.DemiBold
                                                     color: (!applyCtaBtn.needsApply && applyCtaBtn.isApplied) ? "#10B981" : "#FFFFFF"
                                                 }
                                             }
@@ -1181,7 +1182,7 @@ Item {
                                         Rectangle {
                                             visible: root.isThemeSddmActive(root.activeDetailTheme)
                                             Layout.fillWidth: true
-                                            height: 32
+                                            height: 40
                                             radius: theme.radiusSm
                                             color: deactMouse.containsMouse ? theme.surfaceHover : "transparent"
                                             border.color: theme.borderSubtle
@@ -1189,11 +1190,11 @@ Item {
 
                                             RowLayout {
                                                 anchors.centerIn: parent
-                                                spacing: 6
-                                                RyzoraIcon { name: "x"; size: 12; color: "#EF4444" }
+                                                spacing: 8
+                                                RyzoraIcon { name: "x"; size: 16; color: "#EF4444" }
                                                 Text {
                                                     text: root.pendingAction === "deactivate" ? "Deactivating…" : "Deactivate (Restore Default)"
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 14
                                                     font.weight: Font.Medium
                                                     color: "#EF4444"
                                                 }
@@ -1212,7 +1213,7 @@ Item {
                                         // Fullscreen Test Button
                                         Rectangle {
                                             Layout.fillWidth: true
-                                            height: 32
+                                            height: 40
                                             radius: theme.radiusSm
                                             color: fsBtnMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                                             border.color: theme.borderSubtle
@@ -1220,11 +1221,11 @@ Item {
 
                                             RowLayout {
                                                 anchors.centerIn: parent
-                                                spacing: 6
-                                                RyzoraIcon { name: "maximize-2"; size: 12; color: theme.textSecondary }
+                                                spacing: 8
+                                                RyzoraIcon { name: "maximize-2"; size: 16; color: theme.textSecondary }
                                                 Text {
                                                     text: "Test Fullscreen Preview"
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 14
                                                     font.weight: Font.Medium
                                                     color: theme.text
                                                 }
@@ -1247,15 +1248,19 @@ Item {
 
                                             Rectangle {
                                                 Layout.fillWidth: true
-                                                height: 30
+                                                height: 40
                                                 radius: theme.radiusSm
                                                 color: saveSideMouse.containsMouse ? theme.accentHover : theme.accent
-                                                Text {
+                                                RowLayout {
                                                     anchors.centerIn: parent
-                                                    text: "Save Settings"
-                                                    font.pixelSize: 11
-                                                    font.bold: true
-                                                    color: "#FFFFFF"
+                                                    spacing: 6
+                                                    RyzoraIcon { name: "check"; size: 16; color: "#FFFFFF" }
+                                                    Text {
+                                                        text: "Save Settings"
+                                                        font.pixelSize: 15
+                                                        font.weight: Font.DemiBold
+                                                        color: "#FFFFFF"
+                                                    }
                                                 }
                                                 MouseArea {
                                                     id: saveSideMouse
@@ -1267,16 +1272,21 @@ Item {
 
                                             Rectangle {
                                                 Layout.fillWidth: true
-                                                height: 30
+                                                height: 40
                                                 radius: theme.radiusSm
                                                 color: resetSideMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                                                 border.color: theme.borderSubtle
                                                 border.width: 1
-                                                Text {
+                                                RowLayout {
                                                     anchors.centerIn: parent
-                                                    text: "Reset"
-                                                    font.pixelSize: 11
-                                                    color: theme.textSecondary
+                                                    spacing: 6
+                                                    RyzoraIcon { name: "rotate-ccw"; size: 14; color: theme.textSecondary }
+                                                    Text {
+                                                        text: "Reset to Defaults"
+                                                        font.pixelSize: 14
+                                                        font.weight: Font.Medium
+                                                        color: theme.textSecondary
+                                                    }
                                                 }
                                                 MouseArea {
                                                     id: resetSideMouse
@@ -1922,7 +1932,7 @@ Item {
             Text {
                 text: tabBtn.label
                 font.pixelSize: 12
-                font.weight: tabBtn.isActive ? Font.SemiBold : Font.Normal
+                font.weight: tabBtn.isActive ? Font.DemiBold : Font.Normal
                 color: tabBtn.isActive ? theme.text : (tabMouse.containsMouse ? theme.text : theme.textSecondary)
             }
         }

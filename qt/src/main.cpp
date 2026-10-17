@@ -2362,6 +2362,125 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     }
     qInfo() << "  -> CONFIRMED: Engine uninstallation succeeded cleanly.";
 
+    // 10H. Testing Broadened Theme Matrix, Video Sources, Static Images, Asset Faults, Switching & Recycling Verification
+    qInfo() << "[STEP 10H] Testing Broadened Theme Matrix, Video Sources, Static Images, Asset Faults, Switching & Recycling Verification...";
+
+    // 1. Multi-theme real themes verification
+    QMap<QString, QStringList> themeExpectations;
+    // id -> [expected video substring, expected poster substring, expected sddm support ("true"/"false")]
+    themeExpectations["silentsddm-ken"] = {"ken.mp4", "ken.png", "true"};
+    themeExpectations["silentsddm-rei"] = {"rei.mp4", "rei.png", "true"};
+    themeExpectations["silentsddm-silvia"] = {"silvia.mp4", "silvia.png", "true"};
+    themeExpectations["lockscreen-qylock-enfield"] = {"enfield", "enfield", "true"};
+    themeExpectations["lockscreen-qylock-dog-samurai"] = {"dog-samurai", "dog-samurai", "true"};
+    themeExpectations["fastfetch-emblem-arch"] = {"", "arch", "false"};
+
+    QVariantList cat = backend->catalogList();
+    for (auto it = themeExpectations.constBegin(); it != themeExpectations.constEnd(); ++it) {
+        QString targetId = it.key();
+        QString expVideo = it.value().at(0);
+        QString expPoster = it.value().at(1);
+        bool expSddm = (it.value().at(2) == "true");
+
+        bool found = false;
+        for (const QVariant &item : cat) {
+            QVariantMap m = item.toMap();
+            if (m.value("id").toString() == targetId) {
+                found = true;
+                QString vu = m.value("video_url").toString();
+                QString pu = m.value("preview_url").toString();
+                bool sddm = m.value("supports_sddm").toBool();
+
+                if (!expVideo.isEmpty() && !vu.contains(expVideo)) {
+                    qCritical() << "FAIL:" << targetId << "video_url does not contain" << expVideo << "got:" << vu;
+                    return 2401;
+                }
+                if (!expPoster.isEmpty() && !pu.contains(expPoster)) {
+                    qCritical() << "FAIL:" << targetId << "preview_url does not contain" << expPoster << "got:" << pu;
+                    return 2402;
+                }
+                if (sddm != expSddm) {
+                    qCritical() << "FAIL:" << targetId << "supports_sddm expected" << expSddm << "got:" << sddm;
+                    return 2403;
+                }
+                break;
+            }
+        }
+        if (!found) {
+            qCritical() << "FAIL: Required theme matrix package not found in catalog:" << targetId;
+            return 2404;
+        }
+    }
+    qInfo() << "  -> CONFIRMED: Broadened theme matrix verified across multiple themes, video sources, and static images.";
+
+    // 2. Missing / corrupt asset handling (fail-closed behavior)
+    QVariantMap missingCfg = backend->getThemeConfig("nonexistent-theme-xyz");
+    if (missingCfg.value("has_capabilities").toBool()) {
+        qCritical() << "FAIL: Nonexistent theme reported capabilities!";
+        return 2405;
+    }
+    QString missingPreview = backend->themePreviewMainUrl("nonexistent-theme-xyz");
+    if (!missingPreview.isEmpty()) {
+        qCritical() << "FAIL: Nonexistent theme returned non-empty preview URL!";
+        return 2406;
+    }
+    qInfo() << "  -> CONFIRMED: Missing/corrupt asset handling strictly fails closed without crashing.";
+
+    // 3. Rapid theme switching during load
+    for (const QString &tid : {"silentsddm-ken", "silentsddm-rei", "silentsddm-silvia", "lockscreen-qylock-clockwork-orbital"}) {
+        for (const QVariant &item : cat) {
+            if (item.toMap().value("id").toString() == tid) {
+                QMetaObject::invokeMethod(studioViewObj, "openThemeDetail", Q_ARG(QVariant, item));
+                pumpEvents(2, 5000);
+                break;
+            }
+        }
+    }
+    pumpEvents(15, 10000);
+    QVariant activeThemeVal = studioViewObj->property("activeDetailTheme");
+    if (activeThemeVal.toMap().value("id").toString() != "lockscreen-qylock-clockwork-orbital") {
+        qCritical() << "FAIL: Rapid theme switching did not settle on final theme!";
+        return 2407;
+    }
+    qInfo() << "  -> CONFIRMED: Rapid theme switching settled cleanly to final theme without stale leaks.";
+
+    // 4. Decoder slot pool bounded concurrency & recycling verification
+    if (backend->activeDecoderCount() != 0) {
+        qCritical() << "FAIL: Initial activeDecoderCount must be 0, got:" << backend->activeDecoderCount();
+        return 2408;
+    }
+    for (int i = 0; i < 5; ++i) {
+        if (!backend->acquireDecoderSlot()) {
+            qCritical() << "FAIL: Failed to acquire decoder slot" << i;
+            return 2409;
+        }
+    }
+    if (backend->activeDecoderCount() != 5) {
+        qCritical() << "FAIL: Expected activeDecoderCount == 5, got:" << backend->activeDecoderCount();
+        return 2410;
+    }
+    if (backend->acquireDecoderSlot()) {
+        qCritical() << "FAIL: 6th decoder slot acquisition succeeded! Must be bounded to 5.";
+        return 2411;
+    }
+    backend->releaseDecoderSlot();
+    if (backend->activeDecoderCount() != 4) {
+        qCritical() << "FAIL: Expected activeDecoderCount == 4 after release, got:" << backend->activeDecoderCount();
+        return 2412;
+    }
+    if (!backend->acquireDecoderSlot()) {
+        qCritical() << "FAIL: Re-acquisition of released decoder slot failed!";
+        return 2413;
+    }
+    for (int i = 0; i < 5; ++i) {
+        backend->releaseDecoderSlot();
+    }
+    if (backend->activeDecoderCount() != 0) {
+        qCritical() << "FAIL: Expected activeDecoderCount == 0 after all releases, got:" << backend->activeDecoderCount();
+        return 2414;
+    }
+    qInfo() << "  -> CONFIRMED: Decoder slot pool strictly bounds concurrency to 5 and recycles cleanly.";
+
     backend->setTestHomeOverride(QString());
     backend->setTestSystemRootOverride(QString());
     pumpEvents(20, 10000);

@@ -2245,3 +2245,23 @@ void RyzoraBackend::uninstallSilentEngine() {
         });
     });
 }
+
+bool RyzoraBackend::acquireDecoderSlot() {
+    int current = m_activeDecoderCount.load();
+    while (current < 5) {
+        if (m_activeDecoderCount.compare_exchange_weak(current, current + 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void RyzoraBackend::releaseDecoderSlot() {
+    int current = m_activeDecoderCount.load();
+    while (current > 0) {
+        if (m_activeDecoderCount.compare_exchange_weak(current, current - 1)) {
+            emit decoderSlotAvailable();
+            return;
+        }
+    }
+}
