@@ -565,15 +565,17 @@ Item {
                         font.bold: true
                         color: theme.text
                         elide: Text.ElideRight
-                        Layout.maximumWidth: 260
+                        Layout.preferredWidth: Math.min(320, implicitWidth)
                     }
 
                     // Single Truthful Status Badge
                     Rectangle {
                         property bool isSddmAct: root.isThemeSddmActive(root.activeDetailTheme)
                         property bool isLockAct: root.isThemeLockActive(root.activeDetailTheme)
-                        height: 22
-                        width: statusRowHdr.implicitWidth + 18
+                        implicitHeight: 22
+                        implicitWidth: statusRowHdr.implicitWidth + 18
+                        Layout.preferredHeight: 22
+                        Layout.preferredWidth: implicitWidth
                         radius: 11
                         color: isSddmAct
                             ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B")
@@ -609,8 +611,10 @@ Item {
                     // Unsaved Changes Indicator
                     Rectangle {
                         visible: root.hasUnsavedChanges
-                        height: 22
-                        width: unsavedRow.implicitWidth + 12
+                        implicitHeight: 22
+                        implicitWidth: unsavedRow.implicitWidth + 12
+                        Layout.preferredHeight: 22
+                        Layout.preferredWidth: implicitWidth
                         radius: 11
                         color: theme.resolvedTheme === "light" ? "#FEF3C7" : "#78350F"
                         border.color: "#F59E0B"
@@ -922,11 +926,11 @@ Item {
                             spacing: 18
                             Layout.alignment: Qt.AlignTop
 
-                            // Left Pane: Left-aligned Preview Container using available width (aspect 16:9)
+                            // Left Pane: Left-aligned Preview Container with authentic 16:9 monitor display
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredWidth: studioScroll.width >= 920 ? 3 : 1
-                                Layout.minimumWidth: 320
+                                Layout.preferredWidth: root.width >= 920 ? 640 : Math.round(studioScroll.width - 40)
+                                Layout.maximumWidth: 660
                                 radius: theme.radiusMd
                                 color: theme.surface
                                 border.color: theme.borderSubtle
@@ -942,8 +946,11 @@ Item {
                                     LoginPreview {
                                         id: studioPreview
                                         Layout.fillWidth: true
-                                        implicitHeight: width > 0 ? Math.min(300, Math.round(width / aspect)) : 280
-                                        Layout.preferredHeight: implicitHeight
+                                        Layout.maximumWidth: 620
+                                        Layout.preferredWidth: Math.min(620, Math.max(320, root.width >= 920 ? 600 : Math.round(studioScroll.width - 60)))
+                                        Layout.preferredHeight: Math.max(220, Math.round(Layout.maximumWidth / aspect))
+                                        implicitHeight: Layout.preferredHeight
+                                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
                                         radius: theme.radiusSm
                                         border.color: theme.borderSubtle
                                         packageData: root.activeDetailTheme
@@ -1044,17 +1051,20 @@ Item {
 
                             // Right Pane: Contextual Theme Summary Card (when width >= 920)
                             Rectangle {
-                                visible: studioScroll.width >= 920
-                                Layout.preferredWidth: 280
-                                Layout.minimumWidth: 240
-                                Layout.maximumWidth: 320
-                                Layout.fillHeight: true
+                                visible: root.width >= 920
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 340
+                                Layout.minimumWidth: 280
+                                Layout.maximumWidth: 380
+                                Layout.alignment: Qt.AlignTop
                                 radius: theme.radiusMd
                                 color: theme.surface
                                 border.color: theme.borderSubtle
                                 border.width: 1
+                                implicitHeight: summaryCol.implicitHeight + 28
 
                                 ColumnLayout {
+                                    id: summaryCol
                                     anchors.fill: parent
                                     anchors.margins: 14
                                     spacing: 10
@@ -1275,6 +1285,8 @@ Item {
                                     Item { Layout.fillHeight: true }
                                 }
                             }
+
+                            Item { Layout.fillWidth: true }
                         }
 
                         // 3. Responsive Grouped Settings Cards
@@ -1383,6 +1395,7 @@ Item {
                         Rectangle {
                             visible: Boolean(root.activeDetailTheme && root.themeConfig && root.themeConfig.has_settings === false && !root.themeConfig.error)
                             Layout.fillWidth: true
+                            Layout.maximumWidth: 1058
                             height: 48
                             radius: theme.radiusSm
                             color: theme.surface
@@ -1407,6 +1420,7 @@ Item {
                         // 5. System Integration Safety Note
                         Rectangle {
                             Layout.fillWidth: true
+                            Layout.maximumWidth: 1058
                             height: 48
                             radius: theme.radiusSm
                             color: theme.surface
