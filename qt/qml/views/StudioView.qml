@@ -920,154 +920,157 @@ Item {
                             }
                         }
 
-                        // 2. Responsive Hero Section (Left Preview + Right Context Summary)
-                        RowLayout {
+                        // 2. Responsive Hero Section (Left Preview + Right Context Summary, matching Discover Page 58% / 42% Grid)
+                        GridLayout {
                             Layout.fillWidth: true
-                            spacing: 18
-                            Layout.alignment: Qt.AlignTop
+                            columns: root.width < 860 ? 1 : 2
+                            columnSpacing: 20
+                            rowSpacing: 20
 
-                            // Left Pane: Left-aligned Preview Container with authentic 16:9 monitor display
-                            Rectangle {
+                            // ── LEFT COLUMN: Media Preview & Art Showcase (~58% width, matching Discover page) ──
+                            ColumnLayout {
+                                id: previewColWrap
                                 Layout.fillWidth: true
-                                Layout.preferredWidth: root.width >= 920 ? 640 : Math.round(studioScroll.width - 40)
-                                Layout.maximumWidth: 660
-                                radius: theme.radiusMd
-                                color: theme.surface
-                                border.color: theme.borderSubtle
-                                border.width: 1
-                                implicitHeight: previewCol.implicitHeight + 20
+                                Layout.preferredWidth: root.width < 860 ? studioScroll.width : Math.floor(studioScroll.width * 0.58)
+                                Layout.minimumWidth: root.width < 860 ? 280 : 420
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 10
 
-                                ColumnLayout {
-                                    id: previewCol
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 8
+                                Rectangle {
+                                    id: heroPreviewBox
+                                    Layout.fillWidth: true
+                                    property real aspect: 16 / 9
+                                    Layout.preferredHeight: Math.min(520, Math.max(280, Math.round((previewColWrap.width > 0 ? previewColWrap.width : Layout.preferredWidth) / aspect)))
+                                    radius: theme.radiusMd
+                                    color: theme.surface
+                                    border.color: theme.borderSubtle
+                                    border.width: 1
+                                    clip: true
 
                                     LoginPreview {
                                         id: studioPreview
-                                        Layout.fillWidth: true
-                                        Layout.maximumWidth: 620
-                                        Layout.preferredWidth: Math.min(620, Math.max(320, root.width >= 920 ? 600 : Math.round(studioScroll.width - 60)))
-                                        Layout.preferredHeight: Math.max(220, Math.round(Layout.maximumWidth / aspect))
-                                        implicitHeight: Layout.preferredHeight
-                                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                                        anchors.fill: parent
                                         radius: theme.radiusSm
-                                        border.color: theme.borderSubtle
+                                        border.width: 0
                                         packageData: root.activeDetailTheme
                                         config: root.draftConfig
                                         hasUnsaved: root.hasUnsavedChanges
                                         active: root.visible && root.activeDetailTheme !== null
                                     }
+                                }
 
-                                    RowLayout {
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    RyzoraIcon { name: "info"; size: 12; color: theme.textMuted }
+                                    Text {
+                                        text: studioPreview.isReal
+                                            ? "Rendered with theme’s live engine. Edits update preview dynamically."
+                                            : "Simulated login composition driven by your draft settings."
+                                        font.pixelSize: 11
+                                        color: theme.textMuted
                                         Layout.fillWidth: true
-                                        spacing: 6
-                                        RyzoraIcon { name: "info"; size: 12; color: theme.textMuted }
-                                        Text {
-                                            text: studioPreview.isReal
-                                                ? "Rendered with theme’s live engine. Edits update preview dynamically."
-                                                : "Simulated login composition driven by your draft settings."
-                                            font.pixelSize: 11
-                                            color: theme.textMuted
-                                            Layout.fillWidth: true
-                                            elide: Text.ElideRight
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                // Quick Actions Row under Preview Canvas (fallback for narrow screens when sidebar is hidden)
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    visible: root.width < 860
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 40
+                                        radius: theme.radiusSm
+                                        color: fsQuickMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                        border.color: theme.borderSubtle
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+                                            RyzoraIcon { name: "maximize-2"; size: 16; color: theme.textSecondary }
+                                            Text {
+                                                text: "Fullscreen Preview"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: theme.text
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: fsQuickMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.triggerPreview()
                                         }
                                     }
 
-                                    // Quick Actions Row under Preview Canvas (fallback for narrow screens when sidebar is hidden)
-                                    RowLayout {
+                                    Rectangle {
+                                        id: applyQuickBtn
                                         Layout.fillWidth: true
-                                        spacing: 8
-                                        visible: studioScroll.width < 920
+                                        height: 40
+                                        radius: theme.radiusSm
+                                        property bool isApplied: root.isThemeSddmActive(root.activeDetailTheme)
+                                        property bool needsApply: !isApplied || root.hasUnsavedChanges
+                                        color: (!needsApply && isApplied) ? Qt.rgba(16/255, 185/255, 129/255, 0.15) : (applyQuickMouse.containsMouse ? theme.accentHover : theme.accent)
+                                        border.color: (!needsApply && isApplied) ? "#10B981" : "transparent"
+                                        border.width: (!needsApply && isApplied) ? 1 : 0
 
-                                        Rectangle {
-                                            Layout.fillWidth: true
-                                            height: 40
-                                            radius: theme.radiusSm
-                                            color: fsQuickMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                                            border.color: theme.borderSubtle
-                                            border.width: 1
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 6
-                                                RyzoraIcon { name: "maximize-2"; size: 16; color: theme.textSecondary }
-                                                Text {
-                                                    text: "Fullscreen Preview"
-                                                    font.pixelSize: 14
-                                                    font.weight: Font.Medium
-                                                    color: theme.text
-                                                }
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+                                            RyzoraIcon {
+                                                name: (!parent.parent.needsApply && parent.parent.isApplied) ? "check" : "shield"
+                                                size: 16
+                                                color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
                                             }
-
-                                            MouseArea {
-                                                id: fsQuickMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.triggerPreview()
+                                            Text {
+                                                text: root.pendingAction === "apply" ? "Applying…" : (root.hasUnsavedChanges ? "Save & Apply" : (parent.parent.isApplied ? "Active on SDDM" : "Apply to Login Screen"))
+                                                font.pixelSize: 15
+                                                font.weight: Font.DemiBold
+                                                color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
                                             }
                                         }
 
-                                        Rectangle {
-                                            id: applyQuickBtn
-                                            Layout.fillWidth: true
-                                            height: 40
-                                            radius: theme.radiusSm
-                                            property bool isApplied: root.isThemeSddmActive(root.activeDetailTheme)
-                                            property bool needsApply: !isApplied || root.hasUnsavedChanges
-                                            color: (!needsApply && isApplied) ? Qt.rgba(16/255, 185/255, 129/255, 0.15) : (applyQuickMouse.containsMouse ? theme.accentHover : theme.accent)
-                                            border.color: (!needsApply && isApplied) ? "#10B981" : "transparent"
-                                            border.width: (!needsApply && isApplied) ? 1 : 0
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 6
-                                                RyzoraIcon {
-                                                    name: (!parent.parent.needsApply && parent.parent.isApplied) ? "check" : "shield"
-                                                    size: 16
-                                                    color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
-                                                }
-                                                Text {
-                                                    text: root.pendingAction === "apply" ? "Applying…" : (root.hasUnsavedChanges ? "Save & Apply" : (parent.parent.isApplied ? "Active on SDDM" : "Apply to Login Screen"))
-                                                    font.pixelSize: 15
-                                                    font.weight: Font.DemiBold
-                                                    color: (!parent.parent.needsApply && parent.parent.isApplied) ? "#10B981" : "#FFFFFF"
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: applyQuickMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                enabled: root.pendingAction !== "apply" && parent.needsApply
-                                                onClicked: root.triggerApply()
-                                            }
+                                        MouseArea {
+                                            id: applyQuickMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            enabled: root.pendingAction !== "apply" && parent.needsApply
+                                            onClicked: root.triggerApply()
                                         }
                                     }
                                 }
                             }
 
-                            // Right Pane: Contextual Theme Summary Card (when width >= 920)
-                            Rectangle {
-                                visible: root.width >= 920
+                            // ── RIGHT COLUMN: Context Summary & Action Panel (~42% width) ──
+                            ColumnLayout {
+                                id: summaryColWrap
+                                visible: root.width >= 860
                                 Layout.fillWidth: true
-                                Layout.preferredWidth: 340
-                                Layout.minimumWidth: 280
-                                Layout.maximumWidth: 380
+                                Layout.preferredWidth: Math.floor(studioScroll.width * 0.42)
+                                Layout.minimumWidth: 320
                                 Layout.alignment: Qt.AlignTop
-                                radius: theme.radiusMd
-                                color: theme.surface
-                                border.color: theme.borderSubtle
-                                border.width: 1
-                                implicitHeight: summaryCol.implicitHeight + 28
+                                spacing: 14
 
-                                ColumnLayout {
-                                    id: summaryCol
-                                    anchors.fill: parent
-                                    anchors.margins: 14
-                                    spacing: 10
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    radius: theme.radiusMd
+                                    color: theme.surface
+                                    border.color: theme.borderSubtle
+                                    border.width: 1
+                                    implicitHeight: summaryCol.implicitHeight + 28
+
+                                    ColumnLayout {
+                                        id: summaryCol
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 10
 
                                     Text {
                                         text: "ABOUT THEME"
@@ -1285,9 +1288,8 @@ Item {
                                     Item { Layout.fillHeight: true }
                                 }
                             }
-
-                            Item { Layout.fillWidth: true }
                         }
+                    }
 
                         // 3. Responsive Grouped Settings Cards
                         // 3A. Wide Layout (width >= 860): 2 Columns
@@ -1395,8 +1397,7 @@ Item {
                         Rectangle {
                             visible: Boolean(root.activeDetailTheme && root.themeConfig && root.themeConfig.has_settings === false && !root.themeConfig.error)
                             Layout.fillWidth: true
-                            Layout.maximumWidth: 1058
-                            height: 48
+                                                        height: 48
                             radius: theme.radiusSm
                             color: theme.surface
                             border.color: theme.borderSubtle
@@ -1420,8 +1421,7 @@ Item {
                         // 5. System Integration Safety Note
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.maximumWidth: 1058
-                            height: 48
+                                                        height: 48
                             radius: theme.radiusSm
                             color: theme.surface
                             border.color: theme.borderSubtle
