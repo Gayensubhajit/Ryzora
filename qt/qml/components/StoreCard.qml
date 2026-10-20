@@ -32,6 +32,17 @@ Rectangle {
         if (vu.length === 0 && card.itemData.preview_video) {
             vu = String(card.itemData.preview_video).trim()
         }
+        if (vu.length === 0 && card.itemData.id && typeof backend !== "undefined" && backend) {
+            var lists = [backend.catalogList || [], backend.libraryList || []]
+            for (var li = 0; li < lists.length && vu.length === 0; ++li) {
+                for (var ci = 0; ci < lists[li].length; ++ci) {
+                    if (lists[li][ci].id === card.itemData.id) {
+                        if (lists[li][ci].video_url) { vu = String(lists[li][ci].video_url).trim(); break }
+                        if (lists[li][ci].preview_video) { vu = String(lists[li][ci].preview_video).trim(); break }
+                    }
+                }
+            }
+        }
         if (vu.length === 0 && card.itemData.preview_url) {
             var pu = String(card.itemData.preview_url).trim()
             if (pu.indexOf(".mp4") >= 0 || pu.indexOf(".webm") >= 0 || pu.indexOf(".mov") >= 0) {
@@ -55,7 +66,7 @@ Rectangle {
     property bool hideActionButton: false
     property bool hideCategoryBadge: false
 
-    property bool inViewport: false
+    property bool inViewport: true
     property bool allowAutoplay: true
     property Item scrollContainer: null
     property bool isPageVisible: true
@@ -74,7 +85,11 @@ Rectangle {
             card.playVideoActive = false
             card.releaseSlot()
             if (card.shouldPlayVideo) {
-                playDebounceTimer.restart()
+                if (card.tryAcquireSlot()) {
+                    card.playVideoActive = true
+                } else {
+                    playDebounceTimer.restart()
+                }
             }
         }
     }
@@ -101,26 +116,49 @@ Rectangle {
         card.scrollContainer = card.findScrollContainer()
     }
 
-    Component.onCompleted: {
-        card.scrollContainer = card.findScrollContainer()
-        if (card.shouldPlayVideo && card.tryAcquireSlot()) {
-            card.playVideoActive = true
+    onIsPageVisibleChanged: {
+        if (isPageVisible && shouldPlayVideo) {
+            if (card.tryAcquireSlot()) {
+                card.playVideoActive = true
+            } else {
+                playDebounceTimer.restart()
+            }
+        } else if (!isPageVisible) {
+            playDebounceTimer.stop()
+            card.playVideoActive = false
+            card.releaseSlot()
         }
     }
 
-    // Direct reactive viewport detection: tracks sc.contentY dynamically and autoplays immediately on page view
-    readonly property bool isInViewport: {
+    Component.onCompleted: {
+        card.scrollContainer = card.findScrollContainer()
+        if (card.shouldPlayVideo) {
+            if (card.tryAcquireSlot()) {
+                card.playVideoActive = true
+            } else {
+                playDebounceTimer.restart()
+            }
+        }
+    }
+
+    function checkViewport() {
         if (!card.visible || !card.isPageVisible) return false
         var sc = card.scrollContainer || card.findScrollContainer()
-        if (sc) {
-            var dummy = sc.contentY
-            var h = (sc.height && sc.height > 0) ? sc.height : (sc.parent && sc.parent.height > 0 ? sc.parent.height : 800)
+        if (sc && sc.height > 0) {
+            var cy = sc.contentY
+            if (cy <= 0) {
+                var ptTop = card.mapToItem(sc, 0, 0)
+                if (ptTop.y <= sc.height + 250) return true
+            }
             var pt = card.mapToItem(sc, 0, 0)
             var cardH = card.height > 0 ? card.height : 220
-            return (pt.y + cardH >= -80) && (pt.y <= h + 80)
+            return (pt.y + cardH >= -250) && (pt.y <= sc.height + 250)
         }
         return true
     }
+
+    // Direct reactive viewport detection: autoplays immediately on page load and continuously while in view
+    readonly property bool isInViewport: checkViewport()
 
     readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && videoSource !== "" && allowAutoplay
 
@@ -144,6 +182,23 @@ Rectangle {
         function onDecoderSlotAvailable() {
             if (card.shouldPlayVideo && !card.playVideoActive && !card.hasDecoderSlot) {
                 playDebounceTimer.restart()
+            }
+        }
+    }
+
+    Connections {
+        target: card.scrollContainer
+        function onContentYChanged() {
+            var inView = card.checkViewport()
+            if (inView && card.shouldPlayVideo && !card.playVideoActive) {
+                if (card.tryAcquireSlot()) {
+                    card.playVideoActive = true
+                } else {
+                    playDebounceTimer.restart()
+                }
+            } else if (!inView && card.playVideoActive) {
+                card.playVideoActive = false
+                card.releaseSlot()
             }
         }
     }
@@ -334,6 +389,7 @@ Rectangle {
                         }
                         onMediaStatusChanged: {
                             if (mediaStatus === MediaPlayer.LoadedMedia || mediaStatus === MediaPlayer.BufferedMedia) {
+                                videoRoot.hasFirstFrame = true
                                 play()
                             } else if (mediaStatus === MediaPlayer.EndOfMedia) {
                                 position = 0

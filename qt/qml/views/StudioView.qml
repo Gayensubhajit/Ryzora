@@ -925,7 +925,7 @@ Item {
                             // Left Pane: Left-aligned Preview Container using available width (aspect 16:9)
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredWidth: studioScroll.width >= 920 ? 5 : 2
+                                Layout.preferredWidth: studioScroll.width >= 920 ? 3 : 1
                                 Layout.minimumWidth: 320
                                 radius: theme.radiusMd
                                 color: theme.surface
@@ -942,9 +942,8 @@ Item {
                                     LoginPreview {
                                         id: studioPreview
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.min(340, Math.round(width / aspect))
-                                        Layout.maximumWidth: Math.round(Layout.preferredHeight * aspect)
-                                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                                        implicitHeight: width > 0 ? Math.min(300, Math.round(width / aspect)) : 280
+                                        Layout.preferredHeight: implicitHeight
                                         radius: theme.radiusSm
                                         border.color: theme.borderSubtle
                                         packageData: root.activeDetailTheme
@@ -1046,9 +1045,9 @@ Item {
                             // Right Pane: Contextual Theme Summary Card (when width >= 920)
                             Rectangle {
                                 visible: studioScroll.width >= 920
-                                Layout.preferredWidth: 300
-                                Layout.minimumWidth: 260
-                                Layout.maximumWidth: 340
+                                Layout.preferredWidth: 280
+                                Layout.minimumWidth: 240
+                                Layout.maximumWidth: 320
                                 Layout.fillHeight: true
                                 radius: theme.radiusMd
                                 color: theme.surface
