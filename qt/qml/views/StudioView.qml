@@ -196,18 +196,79 @@ Item {
     }
 
     // Fastfetch visual state
-    property string selectedFastfetchPreset: backend.selectedPreset || "garuda"
-    property string selectedFastfetchLogo: "garuda"
+    property string selectedFastfetchPreset: (backend.selectedPreset && backend.selectedPreset.length > 0 && backend.selectedPreset.indexOf("custom:") !== 0) ? backend.selectedPreset : "archey"
+    property string selectedFastfetchLogo: "auto"
     property string fastfetchColorAccent: "cyan"
     property string fastfetchSeparator: ":"
+    property string fastfetchPresetCategory: "all" // "all" | "system" | "community" | "emblem"
 
     // Fastfetch modules
     property var activeModules: ({
         "os": true, "host": true, "kernel": true, "uptime": true,
         "packages": true, "shell": true, "display": true, "de": true,
         "wm": true, "theme": true, "icons": true, "terminal": true,
-        "cpu": true, "gpu": true, "memory": true, "disk": false
+        "cpu": true, "gpu": true, "memory": true, "disk": true
     })
+
+    function buildFastfetchStructure() {
+        var mods = ["Title"]
+        var list = [
+            { id: "os", name: "OS" },
+            { id: "host", name: "Host" },
+            { id: "kernel", name: "Kernel" },
+            { id: "uptime", name: "Uptime" },
+            { id: "packages", name: "Packages" },
+            { id: "shell", name: "Shell" },
+            { id: "display", name: "Display" },
+            { id: "de", name: "DE" },
+            { id: "wm", name: "WM" },
+            { id: "theme", name: "Theme" },
+            { id: "icons", name: "Icons" },
+            { id: "terminal", name: "Terminal" },
+            { id: "cpu", name: "CPU" },
+            { id: "gpu", name: "GPU" },
+            { id: "memory", name: "Memory" },
+            { id: "disk", name: "Disk" }
+        ]
+        for (var i = 0; i < list.length; ++i) {
+            if (root.activeModules[list[i].id]) {
+                mods.push(list[i].name)
+            }
+        }
+        mods.push("Break")
+        mods.push("Colors")
+        return mods.join(":")
+    }
+
+    function triggerFastfetchCustomUpdate() {
+        var st = buildFastfetchStructure()
+        var lg = root.selectedFastfetchLogo || "auto"
+        var cl = root.fastfetchColorAccent || "cyan"
+        backend.requestCustomFastfetchPreview(st, lg, cl)
+    }
+
+    function getFilteredFastfetchPresets() {
+        var all = backend.availablePresets || []
+        if (root.fastfetchPresetCategory === "all") return all
+        var res = []
+        for (var i = 0; i < all.length; ++i) {
+            var p = String(all[i])
+            if (root.fastfetchPresetCategory === "system") {
+                if (p === "default" || p === "all" || p === "archey" || p === "ci" || p === "neofetch" || p === "paleofetch" || p === "screenfetch") {
+                    res.push(p)
+                }
+            } else if (root.fastfetchPresetCategory === "emblem") {
+                if (p.indexOf("emblem-") !== -1) {
+                    res.push(p)
+                }
+            } else if (root.fastfetchPresetCategory === "community") {
+                if (p.indexOf("emblem-") === -1 && p !== "default" && p !== "all" && p !== "archey" && p !== "ci" && p !== "neofetch" && p !== "paleofetch" && p !== "screenfetch") {
+                    res.push(p)
+                }
+            }
+        }
+        return res
+    }
 
     // Wallpapers options
     property string wallpaperFit: "fill" // "fill" | "fit" | "stretch" | "center"
@@ -286,6 +347,10 @@ Item {
                 var preset = ffId.replace(/^fastfetch-/, "")
                 root.selectedFastfetchPreset = preset
                 backend.requestFastfetchPreview(preset)
+            } else {
+                if (!backend.fastfetchHtml || backend.fastfetchHtml.length === 0) {
+                    backend.requestFastfetchPreview(root.selectedFastfetchPreset)
+                }
             }
         } else if (page === "wallpapers") {
             root.activeDetailTheme = null
@@ -373,6 +438,11 @@ Item {
                 root.activeDetailTheme = null
             } else if (!success) {
                 root.actionError = message
+            }
+        }
+        function onSelectedPresetChanged() {
+            if (backend.selectedPreset && backend.selectedPreset.length > 0 && backend.selectedPreset.indexOf("custom:") !== 0) {
+                root.selectedFastfetchPreset = backend.selectedPreset
             }
         }
         function onFastfetchChanged() {
@@ -1450,11 +1520,13 @@ Item {
                 ColumnLayout {
                     visible: root.currentSubpage === "fastfetch"
                     Layout.fillWidth: true
-                    spacing: 18
+                    spacing: 20
 
+                    // 1. Header Toolbar
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12
+
                         Rectangle {
                             width: 32; height: 32; radius: 16
                             Layout.alignment: Qt.AlignTop
@@ -1475,56 +1547,176 @@ Item {
                                 onClicked: root.goBackInStudio()
                             }
                         }
+
                         ColumnLayout {
                             spacing: 4
                             Layout.fillWidth: true
-                            Text { text: "—  PERSONALIZATION"; font.pixelSize: 11; font.bold: true; color: theme.textMuted; font.letterSpacing: 1.5 }
-                            Text { text: "Fastfetch Studio"; font.pixelSize: 26; font.bold: true; color: theme.text }
-                            Text { text: "Terminal layout and modules configuration."; font.pixelSize: 12; color: theme.textMuted }
+                            Text {
+                                text: "—  PERSONALIZATION"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: theme.textMuted
+                                font.letterSpacing: 1.5
+                            }
+                            Text {
+                                text: "Fastfetch Studio"
+                                font.pixelSize: 26
+                                font.bold: true
+                                color: theme.text
+                            }
+                            Text {
+                                text: "Terminal layout, telemetry modules, and branding configuration."
+                                font.pixelSize: 12
+                                color: theme.textMuted
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        // Engine Status Badge
+                        Rectangle {
+                            height: 28
+                            radius: 14
+                            color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.12)
+                            border.color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.3)
+                            border.width: 1
+                            implicitWidth: ffBadgeRow.implicitWidth + 20
+                            Layout.alignment: Qt.AlignVCenter
+
+                            RowLayout {
+                                id: ffBadgeRow
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Rectangle {
+                                    width: 6; height: 6; radius: 3
+                                    color: backend.isProcessActive() ? theme.warning : theme.accent
+                                }
+                                Text {
+                                    text: backend.isProcessActive() ? "Process Active" : "Engine Ready"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: theme.accent
+                                }
+                            }
+                        }
+
+                        // Launch in Terminal Button
+                        HeaderPillButton {
+                            iconName: "terminal"
+                            label: "Launch Terminal"
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: backend.launchFastfetchTerminal(root.selectedFastfetchPreset)
+                        }
+
+                        // Refresh Button
+                        HeaderPillButton {
+                            iconName: "refresh"
+                            label: "Refresh"
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: backend.requestFastfetchPreview(root.selectedFastfetchPreset)
                         }
                     }
 
-                    // Presets bar
-                    RowLayout {
+                    // 2. Preset Filter Category Tabs + Presets Carousel
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 10
 
-                        Text {
-                            text: "Preset:"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: theme.textMuted
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: "Presets:"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: theme.textSecondary
+                            }
+
+                            // Category filter pills
+                            RowLayout {
+                                spacing: 4
+                                Repeater {
+                                    model: [
+                                        { id: "all", label: "All" },
+                                        { id: "system", label: "System" },
+                                        { id: "community", label: "Community" },
+                                        { id: "emblem", label: "Emblems" }
+                                    ]
+                                    Rectangle {
+                                        height: 26
+                                        width: catTxt.implicitWidth + 16
+                                        radius: 13
+                                        color: root.fastfetchPresetCategory === modelData.id
+                                            ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.2)
+                                            : (catM.containsMouse ? theme.surfaceElevated : theme.surface)
+                                        border.color: root.fastfetchPresetCategory === modelData.id ? theme.accent : theme.borderSubtle
+                                        border.width: 1
+
+                                        Text {
+                                            id: catTxt
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            font.pixelSize: 11
+                                            font.bold: root.fastfetchPresetCategory === modelData.id
+                                            color: root.fastfetchPresetCategory === modelData.id ? theme.accent : theme.textMuted
+                                        }
+
+                                        MouseArea {
+                                            id: catM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.fastfetchPresetCategory = modelData.id
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
 
+                        // Presets horizontal scrollable bar
                         ScrollView {
                             Layout.fillWidth: true
+                            Layout.preferredHeight: 36
                             clip: true
                             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                             ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
                             RowLayout {
-                                spacing: 6
+                                spacing: 8
                                 Repeater {
-                                    model: backend.availablePresets
+                                    model: root.getFilteredFastfetchPresets()
                                     Rectangle {
-                                        height: 28
-                                        width: presetTxt.implicitWidth + 20
-                                        radius: 6
-                                        color: (root.selectedFastfetchPreset === modelData)
-                                            ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.2)
+                                        id: prPill
+                                        property bool isCur: root.selectedFastfetchPreset === modelData
+                                        height: 32
+                                        width: prTxt.implicitWidth + 24
+                                        radius: 8
+                                        color: isCur
+                                            ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.22)
                                             : (pMouse.containsMouse ? theme.surfaceElevated : theme.surface)
-                                        border.color: (root.selectedFastfetchPreset === modelData)
-                                            ? theme.accent
-                                            : theme.borderSubtle
-                                        border.width: 1
+                                        border.color: isCur ? theme.accent : theme.borderSubtle
+                                        border.width: isCur ? 1.5 : 1
 
-                                        Text {
-                                            id: presetTxt
+                                        Behavior on color { ColorAnimation { duration: 100 } }
+
+                                        RowLayout {
                                             anchors.centerIn: parent
-                                            text: modelData
-                                            font.pixelSize: 11
-                                            font.bold: root.selectedFastfetchPreset === modelData
-                                            color: (root.selectedFastfetchPreset === modelData) ? theme.accent : theme.text
+                                            spacing: 6
+                                            RyzoraIcon {
+                                                name: "terminal"
+                                                size: 11
+                                                color: prPill.isCur ? theme.accent : theme.textMuted
+                                            }
+                                            Text {
+                                                id: prTxt
+                                                text: modelData
+                                                font.pixelSize: 11
+                                                font.bold: prPill.isCur
+                                                color: prPill.isCur ? theme.accent : theme.text
+                                            }
                                         }
 
                                         MouseArea {
@@ -1541,102 +1733,689 @@ Item {
                                 }
                             }
                         }
+                    }
 
-                        // Refresh Button
-                        Rectangle {
-                            height: 28
-                            width: 84
-                            radius: 6
-                            color: theme.surface
-                            border.color: theme.borderSubtle
+                    // 3. Hero Section: 2-Column Responsive Grid (~58% / ~42%)
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: root.width < 960 ? 1 : 2
+                        columnSpacing: 20
+                        rowSpacing: 20
 
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 4
-                                RyzoraIcon { name: "refresh"; size: 11; color: theme.textMuted }
-                                Text { text: "Refresh"; font.pixelSize: 11; font.bold: true; color: theme.text }
+                        // LEFT COLUMN: Terminal Output Window
+                        ColumnLayout {
+                            id: ffTerminalCol
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: root.width < 960 ? studioScroll.width : Math.floor(studioScroll.width * 0.58)
+                            Layout.minimumWidth: root.width < 960 ? 280 : 420
+                            Layout.alignment: Qt.AlignTop
+                            spacing: 8
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 460
+                                radius: theme.radiusMd
+                                color: "#08080c"
+                                border.color: backend.isProcessActive() ? theme.accent : theme.borderStrong
+                                border.width: 1
+                                clip: true
+
+                                // Terminal Titlebar
+                                Rectangle {
+                                    id: termHdr
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    height: 34
+                                    color: "#111116"
+                                    border.color: "#1e1e24"
+                                    border.width: 1
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 14
+                                        anchors.rightMargin: 14
+                                        spacing: 10
+
+                                        // macOS Style Window Dots
+                                        RowLayout {
+                                            spacing: 6
+                                            Rectangle { width: 10; height: 10; radius: 5; color: "#ff5f56" }
+                                            Rectangle { width: 10; height: 10; radius: 5; color: "#ffbd2e" }
+                                            Rectangle { width: 10; height: 10; radius: 5; color: "#27c93f" }
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        // Command Pill with Copy Action
+                                        Rectangle {
+                                            height: 22
+                                            radius: 11
+                                            color: "#181820"
+                                            border.color: "#272732"
+                                            border.width: 1
+                                            implicitWidth: cmdRow.implicitWidth + 16
+
+                                            RowLayout {
+                                                id: cmdRow
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                RyzoraIcon { name: "terminal"; size: 10; color: theme.textMuted }
+                                                Text {
+                                                    text: "fastfetch -c " + (root.selectedFastfetchPreset || "default")
+                                                    font.pixelSize: 11
+                                                    font.family: "monospace"
+                                                    color: "#94a3b8"
+                                                }
+                                            }
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        // Process Status
+                                        RowLayout {
+                                            spacing: 5
+                                            Rectangle {
+                                                width: 6; height: 6; radius: 3
+                                                color: backend.isProcessActive() ? "#f59e0b" : "#10b981"
+                                            }
+                                            Text {
+                                                text: backend.isProcessActive() ? ("PID: " + backend.activePid()) : "Idle"
+                                                font.pixelSize: 10
+                                                font.family: "monospace"
+                                                color: backend.isProcessActive() ? "#f59e0b" : "#94a3b8"
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Terminal RichText Canvas
+                                ScrollView {
+                                    anchors.top: termHdr.bottom
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: termFooter.top
+                                    anchors.margins: 12
+                                    clip: true
+
+                                    TextEdit {
+                                        id: terminalTextEdit
+                                        readOnly: true
+                                        selectByMouse: true
+                                        textFormat: TextEdit.RichText
+                                        text: backend.fastfetchHtml || "<span style='color:#71717a;'>Press Refresh to load Fastfetch output...</span>"
+                                        font.family: "JetBrains Mono, monospace"
+                                        font.pixelSize: 12
+                                        color: "#f1f5f9"
+                                        wrapMode: TextEdit.NoWrap
+                                    }
+
+                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                                }
+
+                                // Loading state overlay
+                                Rectangle {
+                                    anchors.top: termHdr.bottom
+                                    anchors.right: parent.right
+                                    anchors.margins: 12
+                                    width: 190
+                                    height: 32
+                                    radius: theme.radiusSm
+                                    color: "#e60a0a0e"
+                                    border.color: theme.accent
+                                    visible: backend.isFastfetchLoading
+                                    z: 10
+
+                                    RowLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 8
+                                        BusyIndicator {
+                                            running: backend.isFastfetchLoading
+                                            implicitWidth: 16
+                                            implicitHeight: 16
+                                        }
+                                        Text {
+                                            text: "Executing Fastfetch…"
+                                            font.pixelSize: 10
+                                            color: theme.accent
+                                        }
+                                        Rectangle {
+                                            width: 18; height: 18; radius: 9
+                                            color: theme.errorBg
+                                            border.color: theme.error
+                                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 9; color: theme.error }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: backend.cancelFastfetch()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Terminal Footer Status Bar
+                                Rectangle {
+                                    id: termFooter
+                                    anchors.bottom: parent.bottom
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    height: 30
+                                    color: "#0f0f14"
+                                    border.color: "#181820"
+                                    border.width: 1
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 14
+                                        anchors.rightMargin: 14
+
+                                        Text {
+                                            text: "Preset: " + (root.selectedFastfetchPreset || "default")
+                                            font.pixelSize: 11
+                                            color: theme.textMuted
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        Text {
+                                            text: backend.statusMessage || "Ready"
+                                            font.pixelSize: 11
+                                            color: backend.isFastfetchLoading ? theme.accent : theme.textMuted
+                                        }
+                                    }
+                                }
                             }
+                        }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: backend.requestFastfetchPreview(root.selectedFastfetchPreset)
+                        // RIGHT COLUMN: Preset Details & Primary Actions Card
+                        ColumnLayout {
+                            id: ffActionsCol
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: Math.floor(studioScroll.width * 0.42)
+                            Layout.minimumWidth: 320
+                            Layout.alignment: Qt.AlignTop
+                            spacing: 14
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+                                implicitHeight: summaryColFf.implicitHeight + 32
+
+                                ColumnLayout {
+                                    id: summaryColFf
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 16
+
+                                    ColumnLayout {
+                                        spacing: 4
+                                        Text {
+                                            text: "ACTIVE PRESET"
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            color: theme.textMuted
+                                            font.letterSpacing: 1.5
+                                        }
+                                        Text {
+                                            text: root.selectedFastfetchPreset || "Default"
+                                            font.pixelSize: 22
+                                            font.bold: true
+                                            color: theme.text
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: "Subprocess terminal visualizer with real-time hardware telemetry and ANSI formatting."
+                                            font.pixelSize: 12
+                                            color: theme.textSecondary
+                                            wrapMode: Text.WordWrap
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+
+                                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                    // Primary Apply Button
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 42
+                                        radius: theme.radiusSm
+                                        color: applyM.containsMouse ? Qt.darker(theme.accent, 1.1) : theme.accent
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 8
+                                            RyzoraIcon { name: "check"; size: 14; color: "#09090b" }
+                                            Text {
+                                                text: "Apply as System Fastfetch"
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: "#09090b"
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: applyM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                var ok = backend.applyFastfetchPreset(root.selectedFastfetchPreset)
+                                                if (ok) {
+                                                    root.actionSuccess = "Applied preset '" + root.selectedFastfetchPreset + "' to ~/.config/fastfetch/config.jsonc"
+                                                    root.actionError = ""
+                                                } else {
+                                                    root.actionError = "Failed to apply preset '" + root.selectedFastfetchPreset + "'"
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Launch in Terminal Button
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 38
+                                        radius: theme.radiusSm
+                                        color: termM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                        border.color: theme.borderStrong
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 8
+                                            RyzoraIcon { name: "terminal"; size: 13; color: theme.text }
+                                            Text {
+                                                text: "Open in Real Terminal"
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                color: theme.text
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: termM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.launchFastfetchTerminal(root.selectedFastfetchPreset)
+                                        }
+                                    }
+
+                                    // Action feedback banners
+                                    Rectangle {
+                                        visible: root.actionSuccess.length > 0
+                                        Layout.fillWidth: true
+                                        implicitHeight: succTxt.implicitHeight + 16
+                                        radius: theme.radiusSm
+                                        color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.15)
+                                        border.color: theme.accent
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 8
+                                            RyzoraIcon { name: "check"; size: 12; color: theme.accent }
+                                            Text {
+                                                id: succTxt
+                                                text: root.actionSuccess
+                                                font.pixelSize: 11
+                                                color: theme.accent
+                                                wrapMode: Text.WordWrap
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // Main Canvas + Module Options
-                    RowLayout {
+                    // 4. Customization Cards Grid (Below Hero Section)
+                    GridLayout {
                         Layout.fillWidth: true
-                        spacing: 20
+                        columns: root.width < 960 ? 1 : 2
+                        columnSpacing: 18
+                        rowSpacing: 18
 
-                        // Terminal Output Canvas
+                        // CARD 1: Modules & Telemetry Configuration
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.minimumWidth: 340
-                            height: 400
-                            radius: theme.radiusLg
-                            color: "#08080c"
-                            border.color: backend.isProcessActive() ? theme.accent : theme.borderStrong
+                            radius: theme.radiusMd
+                            color: theme.surface
+                            border.color: theme.borderSubtle
                             border.width: 1
-                            clip: true
+                            implicitHeight: modCol.implicitHeight + 36
 
-                            // Terminal Titlebar
-                            Rectangle {
-                                id: termTitleBar
-                                anchors.top: parent.top
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                height: 32
-                                color: "#111116"
-                                border.color: "#1e1e24"
-                                border.width: 1
+                            ColumnLayout {
+                                id: modCol
+                                anchors.fill: parent
+                                anchors.margins: 18
+                                spacing: 14
 
                                 RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 12
+                                    Layout.fillWidth: true
                                     spacing: 8
-
-                                    // macOS Style Window Dots
-                                    RowLayout {
-                                        spacing: 6
-                                        Rectangle { width: 10; height: 10; radius: 5; color: "#ff5f56" }
-                                        Rectangle { width: 10; height: 10; radius: 5; color: "#ffbd2e" }
-                                        Rectangle { width: 10; height: 10; radius: 5; color: "#27c93f" }
+                                    RyzoraIcon { name: "sliders"; size: 14; color: theme.accent }
+                                    Text {
+                                        text: "Modules & Telemetry"
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: theme.text
                                     }
-
                                     Item { Layout.fillWidth: true }
+                                    Text {
+                                        text: "16 modules"
+                                        font.pixelSize: 11
+                                        color: theme.textMuted
+                                    }
+                                }
+
+                                Text {
+                                    text: "Toggle information rows displayed in the terminal output."
+                                    font.pixelSize: 11
+                                    color: theme.textSecondary
+                                }
+
+                                // Quick presets for modules
+                                RowLayout {
+                                    spacing: 6
+                                    Repeater {
+                                        model: [
+                                            { label: "All", set: ["os", "host", "kernel", "uptime", "packages", "shell", "display", "de", "wm", "theme", "icons", "terminal", "cpu", "gpu", "memory", "disk"] },
+                                            { label: "Essential", set: ["os", "host", "kernel", "uptime", "shell", "cpu", "memory"] },
+                                            { label: "Hardware", set: ["cpu", "gpu", "memory", "disk", "host"] },
+                                            { label: "Desktop", set: ["os", "wm", "de", "theme", "icons", "shell", "terminal"] }
+                                        ]
+                                        Rectangle {
+                                            height: 24
+                                            width: qkTxt.implicitWidth + 14
+                                            radius: 12
+                                            color: qkM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
+
+                                            Text {
+                                                id: qkTxt
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                color: theme.textSecondary
+                                            }
+
+                                            MouseArea {
+                                                id: qkM
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    var cur = Object.assign({}, root.activeModules)
+                                                    var allKeys = ["os", "host", "kernel", "uptime", "packages", "shell", "display", "de", "wm", "theme", "icons", "terminal", "cpu", "gpu", "memory", "disk"]
+                                                    for (var k = 0; k < allKeys.length; ++k) {
+                                                        cur[allKeys[k]] = modelData.set.indexOf(allKeys[k]) !== -1
+                                                    }
+                                                    root.activeModules = cur
+                                                    root.triggerFastfetchCustomUpdate()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // Grid of module toggles
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: 2
+                                    columnSpacing: 10
+                                    rowSpacing: 8
+
+                                    Repeater {
+                                        model: [
+                                            { id: "os", label: "Operating System (OS)" },
+                                            { id: "host", label: "Host Model" },
+                                            { id: "kernel", label: "Kernel Version" },
+                                            { id: "uptime", label: "System Uptime" },
+                                            { id: "packages", label: "Packages Count" },
+                                            { id: "shell", label: "User Shell" },
+                                            { id: "display", label: "Display / Resolution" },
+                                            { id: "de", label: "Desktop Environment" },
+                                            { id: "wm", label: "Window Manager (WM)" },
+                                            { id: "theme", label: "System Theme" },
+                                            { id: "icons", label: "Icon Set" },
+                                            { id: "terminal", label: "Terminal Emulator" },
+                                            { id: "cpu", label: "CPU Processor" },
+                                            { id: "gpu", label: "Graphics Card (GPU)" },
+                                            { id: "memory", label: "Memory (RAM)" },
+                                            { id: "disk", label: "Disk Storage" }
+                                        ]
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 32
+                                            radius: 6
+                                            property bool isChecked: Boolean(root.activeModules[modelData.id])
+                                            color: isChecked ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.12) : theme.surfaceElevated
+                                            border.color: isChecked ? theme.accent : theme.borderSubtle
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 10
+                                                anchors.rightMargin: 10
+                                                spacing: 8
+
+                                                Rectangle {
+                                                    width: 14; height: 14; radius: 3
+                                                    color: parent.parent.isChecked ? theme.accent : "transparent"
+                                                    border.color: parent.parent.isChecked ? theme.accent : theme.textMuted
+                                                    border.width: 1.2
+                                                    RyzoraIcon {
+                                                        anchors.centerIn: parent
+                                                        name: "check"
+                                                        size: 9
+                                                        color: "#09090b"
+                                                        visible: parent.parent.parent.isChecked
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: modelData.label
+                                                    font.pixelSize: 11
+                                                    color: parent.parent.isChecked ? theme.text : theme.textMuted
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    var c = Object.assign({}, root.activeModules)
+                                                    c[modelData.id] = !c[modelData.id]
+                                                    root.activeModules = c
+                                                    root.triggerFastfetchCustomUpdate()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // CARD 2: Branding & Color Accents
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 18
+
+                            // Logos / Emblems Card
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+                                implicitHeight: logoCol.implicitHeight + 36
+
+                                ColumnLayout {
+                                    id: logoCol
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 12
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        RyzoraIcon { name: "image"; size: 14; color: theme.accent }
+                                        Text {
+                                            text: "Logo & Distro Branding"
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: theme.text
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Text {
+                                            text: root.selectedFastfetchLogo || "auto"
+                                            font.pixelSize: 11
+                                            color: theme.accent
+                                            font.bold: true
+                                        }
+                                    }
 
                                     Text {
-                                        text: "fastfetch -c " + (root.selectedFastfetchPreset || "default")
+                                        text: "Select ASCII art emblem or distro logo."
                                         font.pixelSize: 11
-                                        font.family: "monospace"
-                                        color: "#71717a"
+                                        color: theme.textSecondary
                                     }
 
-                                    Item { Layout.fillWidth: true }
+                                    // Logo chips
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Repeater {
+                                            model: ["auto", "arch", "garuda", "cachyos", "fedora", "ubuntu", "debian", "nixos", "none"]
+                                            Rectangle {
+                                                height: 28
+                                                width: lgTxt.implicitWidth + 20
+                                                radius: 14
+                                                property bool isLg: root.selectedFastfetchLogo === modelData
+                                                color: isLg ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.22) : (lgM.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                                border.color: isLg ? theme.accent : theme.borderSubtle
+                                                border.width: 1
+
+                                                Text {
+                                                    id: lgTxt
+                                                    anchors.centerIn: parent
+                                                    text: modelData.toUpperCase()
+                                                    font.pixelSize: 10
+                                                    font.bold: parent.isLg
+                                                    color: parent.isLg ? theme.accent : theme.textSecondary
+                                                }
+
+                                                MouseArea {
+                                                    id: lgM
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        root.selectedFastfetchLogo = modelData
+                                                        root.triggerFastfetchCustomUpdate()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
-                            // Terminal Output Area
-                            Flickable {
-                                anchors.top: termTitleBar.bottom
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 14
-                                contentWidth: termText.implicitWidth
-                                contentHeight: termText.implicitHeight
-                                clip: true
+                            // Color Accent Card
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+                                implicitHeight: colorCol.implicitHeight + 36
 
-                                Text {
-                                    id: termText
-                                    text: backend.fastfetchHtml || "<span style='color:#71717a;'>Press Refresh to load fastfetch output...</span>"
-                                    textFormat: Text.RichText
-                                    font.family: "monospace"
-                                    font.pixelSize: 11
-                                    color: "#f4f4f5"
+                                ColumnLayout {
+                                    id: colorCol
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 12
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        RyzoraIcon { name: "palette"; size: 14; color: theme.accent }
+                                        Text {
+                                            text: "Terminal Accent Palette"
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: theme.text
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Text {
+                                            text: root.fastfetchColorAccent.toUpperCase()
+                                            font.pixelSize: 11
+                                            color: theme.accent
+                                            font.bold: true
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "Color styling applied to labels and hardware keys."
+                                        font.pixelSize: 11
+                                        color: theme.textSecondary
+                                    }
+
+                                    // Color chips
+                                    RowLayout {
+                                        spacing: 10
+                                        Repeater {
+                                            model: [
+                                                { id: "cyan", hex: "#06b6d4" },
+                                                { id: "green", hex: "#10b981" },
+                                                { id: "blue", hex: "#3b82f6" },
+                                                { id: "magenta", hex: "#8b5cf6" },
+                                                { id: "yellow", hex: "#f59e0b" },
+                                                { id: "red", hex: "#f43f5e" },
+                                                { id: "white", hex: "#f8fafc" },
+                                                { id: "default", hex: "#71717a" }
+                                            ]
+
+                                            Rectangle {
+                                                width: 30; height: 30; radius: 15
+                                                color: modelData.hex
+                                                property bool isClr: root.fastfetchColorAccent === modelData.id
+                                                border.color: isClr ? "#ffffff" : theme.borderStrong
+                                                border.width: isClr ? 2 : 1
+
+                                                RyzoraIcon {
+                                                    anchors.centerIn: parent
+                                                    name: "check"
+                                                    size: 12
+                                                    color: modelData.id === "white" ? "#09090b" : "#ffffff"
+                                                    visible: parent.isClr
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        root.fastfetchColorAccent = modelData.id
+                                                        root.triggerFastfetchCustomUpdate()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

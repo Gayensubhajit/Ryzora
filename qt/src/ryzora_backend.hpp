@@ -90,6 +90,9 @@ public:
     Q_INVOKABLE void loadPresets();
     Q_INVOKABLE void requestFastfetchPreview(const QString &presetName);
     Q_INVOKABLE void cancelFastfetch();
+    Q_INVOKABLE bool applyFastfetchPreset(const QString &presetName);
+    Q_INVOKABLE bool launchFastfetchTerminal(const QString &presetName);
+    Q_INVOKABLE void requestCustomFastfetchPreview(const QString &structure, const QString &logo, const QString &color);
     Q_INVOKABLE void loadSnapshots();
     Q_INVOKABLE void loadUpdates();
     Q_INVOKABLE void loadSettings();

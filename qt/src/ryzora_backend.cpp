@@ -3,6 +3,8 @@
 #include <QUrl>
 #include <QSaveFile>
 #include <QSettings>
+#include <QStandardPaths>
+#include <QProcess>
 #include "ryzora_backend.hpp"
 #include "preview_stubs.hpp"
 #include <QJsonDocument>
@@ -39,6 +41,7 @@ extern "C" {
     char* ryzora_load_system_info();
     char* ryzora_load_updates();
     char* ryzora_list_presets();
+    char* ryzora_apply_fastfetch_preset(const char* preset);
     char* ryzora_install_package(const char* package_id);
     char* ryzora_test_package(const char* package_id);
     char* ryzora_uninstall_package(const char* package_id);
@@ -234,10 +237,10 @@ void RyzoraBackend::requestFastfetchPreview(const QString &presetName) {
             if (self && reqId == self->m_currentFastfetchReqId.load()) {
                 self->m_isFastfetchLoading = false;
                 self->m_isFastfetchCancelled = cancelled;
+                self->m_fastfetchHtml = html;
                 if (cancelled) {
                     self->m_statusMessage = QString("Cancelled preview for %1").arg(presetName);
                 } else if (success) {
-                    self->m_fastfetchHtml = html;
                     self->m_statusMessage = QString("Rendered %1 in %2 ms").arg(presetName).arg(QString::number(execMs, 'f', 1));
                 } else {
                     self->m_fastfetchError = err.isEmpty() ? "Execution failed" : err;
@@ -259,6 +262,86 @@ void RyzoraBackend::cancelFastfetch() {
     ryzora_cancel_fastfetch();
     emit fastfetchLoadingChanged();
     emit statusMessageChanged();
+}
+
+bool RyzoraBackend::applyFastfetchPreset(const QString &presetName) {
+    if (m_isShutdown.load()) return false;
+    QByteArray ba = presetName.toUtf8();
+    char* raw = ryzora_apply_fastfetch_preset(ba.constData());
+    if (!raw) return false;
+    QString jsonStr = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    QJsonObject obj = doc.object();
+    bool success = obj.value("success").toBool();
+    QString msg = obj.value("message").toString();
+
+    if (success) {
+        postNotification("success", "Fastfetch Configuration", msg);
+        m_statusMessage = msg;
+        emit statusMessageChanged();
+    } else {
+        postNotification("warning", "Fastfetch Error", msg);
+        m_statusMessage = QString("Failed to apply preset: %1").arg(msg);
+        emit statusMessageChanged();
+    }
+    return success;
+}
+
+bool RyzoraBackend::launchFastfetchTerminal(const QString &presetName) {
+    if (m_isShutdown.load()) return false;
+    QString preset = presetName.trimmed();
+    if (preset.isEmpty()) preset = m_selectedPreset;
+
+    QString cmd = QString("fastfetch -c %1").arg(preset);
+
+    QStringList terms = {"kitty", "foot", "alacritty", "konsole", "xterm", "gnome-terminal", "xfce4-terminal"};
+    QString chosenTerm = "";
+    for (const QString &t : terms) {
+        if (!QStandardPaths::findExecutable(t).isEmpty()) {
+            chosenTerm = t;
+            break;
+        }
+    }
+
+    if (chosenTerm.isEmpty()) {
+        QString envTerm = qEnvironmentVariable("TERMINAL");
+        if (!envTerm.isEmpty() && !QStandardPaths::findExecutable(envTerm).isEmpty()) {
+            chosenTerm = envTerm;
+        }
+    }
+
+    if (chosenTerm.isEmpty()) {
+        postNotification("warning", "Terminal Not Found", "No supported terminal emulator (kitty, foot, alacritty, konsole, xterm) found.");
+        return false;
+    }
+
+    bool spawned = false;
+    if (chosenTerm == "kitty") {
+        spawned = QProcess::startDetached("kitty", QStringList() << "--hold" << "sh" << "-c" << cmd);
+    } else if (chosenTerm == "foot") {
+        spawned = QProcess::startDetached("foot", QStringList() << "-H" << "sh" << "-c" << QString("%1; exec bash").arg(cmd));
+    } else if (chosenTerm == "alacritty") {
+        spawned = QProcess::startDetached("alacritty", QStringList() << "-e" << "sh" << "-c" << QString("%1; exec bash").arg(cmd));
+    } else if (chosenTerm == "konsole") {
+        spawned = QProcess::startDetached("konsole", QStringList() << "--noclose" << "-e" << "fastfetch" << "-c" << preset);
+    } else {
+        spawned = QProcess::startDetached(chosenTerm, QStringList() << "-e" << "sh" << "-c" << QString("%1; exec bash").arg(cmd));
+    }
+
+    if (spawned) {
+        postNotification("info", "Fastfetch Terminal", QString("Launched %1 with preset %2").arg(chosenTerm, preset));
+        return true;
+    } else {
+        postNotification("warning", "Terminal Launch Failed", QString("Could not launch %1").arg(chosenTerm));
+        return false;
+    }
+}
+
+void RyzoraBackend::requestCustomFastfetchPreview(const QString &structure, const QString &logo, const QString &color) {
+    QString customPreset = QString("custom:structure=%1;logo=%2;color=%3").arg(structure, logo, color);
+    requestFastfetchPreview(customPreset);
 }
 
 void RyzoraBackend::loadSnapshots() {
@@ -432,6 +515,13 @@ void RyzoraBackend::loadPresets() {
             if (self && !list.isEmpty()) {
                 self->m_availablePresets = list;
                 emit self->availablePresetsChanged();
+                if (!list.contains(self->m_selectedPreset)) {
+                    QString defaultPreset = list.contains("archey") ? "archey"
+                                          : (list.contains("all") ? "all"
+                                          : (list.contains("fastfetch-preset-2") ? "fastfetch-preset-2"
+                                          : list.first().toString()));
+                    self->requestFastfetchPreview(defaultPreset);
+                }
             }
         });
     });

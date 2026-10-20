@@ -980,6 +980,17 @@ pub fn validate_preset_identifier(preset_id: &str) -> Result<String, String> {
 pub fn resolve_preset_path(preset_id: &str) -> Result<(PathBuf, PathBuf), String> {
     let valid_id = validate_preset_identifier(preset_id)?;
 
+    // 0. Default user configuration ~/.config/fastfetch/config.jsonc
+    if valid_id == "default" || valid_id == "current" {
+        if let Some(home) = BackendState::system_home_dir() {
+            let p0 = home.join(".config/fastfetch/config.jsonc");
+            if p0.is_file() {
+                let parent = p0.parent().unwrap().to_path_buf();
+                return Ok((p0, parent));
+            }
+        }
+    }
+
     // 1. User presets in ~/.config/fastfetch/presets/
     if let Some(home) = BackendState::system_home_dir() {
         let p1 = home.join(".config/fastfetch/presets").join(&valid_id).join("config.jsonc");
@@ -1039,6 +1050,9 @@ pub fn discover_fastfetch_presets() -> Vec<String> {
     let mut presets = std::collections::BTreeSet::new();
 
     if let Some(home) = BackendState::system_home_dir() {
+        if home.join(".config/fastfetch/config.jsonc").is_file() {
+            presets.insert("default".to_string());
+        }
         let user_p = home.join(".config/fastfetch/presets");
         if user_p.is_dir() {
             if let Ok(entries) = fs::read_dir(&user_p) {
@@ -2521,6 +2535,31 @@ impl BackendState {
             return self.run_command_cancellable("sleep", &["5"], None, req_id);
         }
 
+        if let Some(custom_args) = preset_trimmed.strip_prefix("custom:") {
+            let mut args: Vec<String> = vec!["--pipe".to_string(), "false".to_string()];
+            for part in custom_args.split(';') {
+                let part = part.trim();
+                if let Some((k, v)) = part.split_once('=') {
+                    let k = k.trim();
+                    let v = v.trim();
+                    if !v.is_empty() && v.chars().all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-' || c == '.') {
+                        if k == "structure" {
+                            args.push("--structure".to_string());
+                            args.push(v.to_string());
+                        } else if k == "logo" && v != "auto" {
+                            args.push("--logo".to_string());
+                            args.push(v.to_string());
+                        } else if k == "color" && v != "default" {
+                            args.push("--color-keys".to_string());
+                            args.push(v.to_string());
+                        }
+                    }
+                }
+            }
+            let str_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            return self.run_command_cancellable("fastfetch", &str_args, None, req_id);
+        }
+
         match resolve_preset_path(preset_trimmed) {
             Ok((config_path, working_dir)) => {
                 let path_str = config_path.to_string_lossy().to_string();
@@ -2544,6 +2583,30 @@ impl BackendState {
     /// Stage D package installation boundary.
     ///
     /// Validates package identifier and verifies presence in repository index.
+    pub fn apply_fastfetch_preset(&self, preset_id: &str) -> Result<String, String> {
+        let (config_path, _) = resolve_preset_path(preset_id)?;
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        let ff_dir = home.join(".config/fastfetch");
+        fs::create_dir_all(&ff_dir).map_err(|e| format!("Failed to create fastfetch directory: {}", e))?;
+        let target = ff_dir.join("config.jsonc");
+        let content = fs::read_to_string(&config_path).map_err(|e| format!("Failed to read preset config: {}", e))?;
+
+        if target.exists() {
+            let backup = ff_dir.join("config.jsonc.ryzora.bak");
+            let _ = fs::copy(&target, &backup);
+        }
+
+        let rand_nano = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = ff_dir.join(format!(".config.jsonc.tmp.{}", rand_nano));
+        fs::write(&tmp, &content).map_err(|e| format!("Failed to write config: {}", e))?;
+        fs::rename(&tmp, &target).map_err(|e| format!("Failed to atomically update ~/.config/fastfetch/config.jsonc: {}", e))?;
+
+        Ok(format!("Successfully applied preset '{}' to ~/.config/fastfetch/config.jsonc", preset_id))
+    }
+
     pub fn install_package(&self, package_id: &str) -> Result<String, String> {
         let valid_id = validate_preset_identifier(package_id)?;
         let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
@@ -3846,6 +3909,27 @@ pub extern "C" fn ryzora_free_string(s: *mut c_char) {
             let _ = CString::from_raw(s);
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_apply_fastfetch_preset(preset: *const c_char) -> *mut c_char {
+    if preset.is_null() {
+        return CString::new(r#"{"success":false,"message":"Preset name is null"}"#).unwrap().into_raw();
+    }
+    let p_str = unsafe { match CStr::from_ptr(preset).to_str() { Ok(s) => s, Err(_) => return CString::new(r#"{"success":false,"message":"Invalid utf8"}"#).unwrap().into_raw() } };
+    let res = match get_backend().apply_fastfetch_preset(p_str) {
+        Ok(msg) => serde_json::json!({
+            "success": true,
+            "preset": p_str,
+            "message": msg
+        }),
+        Err(err) => serde_json::json!({
+            "success": false,
+            "preset": p_str,
+            "message": err
+        }),
+    };
+    CString::new(serde_json::to_string(&res).unwrap_or_default()).unwrap().into_raw()
 }
 
 #[no_mangle]
