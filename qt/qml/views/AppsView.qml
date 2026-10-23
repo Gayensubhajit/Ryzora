@@ -13,6 +13,17 @@ Item {
     property alias selectedPackage: root.selectedApp
     property int featuredIndex: 0
 
+    // Dynamic responsive column count (cards stay between 220px and 270px wide)
+    readonly property int responsiveColumns: {
+        var w = root.width - (root.width < 600 ? 24 : 40)
+        if (w < 440) return 1
+        if (w < 680) return 2
+        if (w < 960) return 3
+        if (w < 1240) return 4
+        if (w < 1520) return 5
+        return 6
+    }
+
     signal appSelected(var appData)
     signal packageSelected(var appData)
     signal installRequested(string appId)
@@ -161,19 +172,20 @@ Item {
     // Stable ID of featured app to exclude from adjacent sections
     readonly property string featuredAppId: activeFeaturedApp ? activeFeaturedApp.id : ""
 
-    // Curated Popular Apps (pick 4 apps not matching featuredAppId, only when on All and no search)
+    // Curated Popular Apps matching exactly one responsive row across the screen
     readonly property var popularApps: {
         if (root.searchQuery !== "" || root.selectedCategory !== "All") {
             return []
         }
         var list = backend.appsList || []
-        var preferredPopular = ["code", "vlc", "discord", "blender", "obs-studio", "spotify", "chromium", "steam", "gimp"]
+        var preferredPopular = ["code", "vlc", "discord", "blender", "obs-studio", "spotify", "chromium", "steam", "gimp", "inkscape", "alacritty"]
         var res = []
         var seen = {}
         if (root.featuredAppId) {
             seen[root.featuredAppId] = true
         }
-        for (var p = 0; p < preferredPopular.length && res.length < 4; p++) {
+        var maxItems = Math.min(6, root.responsiveColumns)
+        for (var p = 0; p < preferredPopular.length && res.length < maxItems; p++) {
             var pid = preferredPopular[p]
             if (seen[pid]) continue
             for (var i = 0; i < list.length; i++) {
@@ -210,14 +222,14 @@ Item {
         return res
     }
 
-    // ── REUSABLE CLEAN ICON-ONLY APPLICATION CARD ──
+    // ── REUSABLE MICROSOFT STORE-INSPIRED APP CARD (BIG 68px ICON + LARGER DESCRIPTION) ──
     component AppCard: Rectangle {
         id: cardRoot
         property var appData: null
         readonly property bool isInstalled: Boolean(cardRoot.appData && cardRoot.appData.is_installed)
 
         Layout.fillWidth: true
-        height: 142
+        height: 200
         radius: theme.radiusMd
         color: cardMouse.containsMouse ? theme.surfaceHover : theme.surface
         border.color: cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
@@ -240,25 +252,26 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 14
-            spacing: 6
+            spacing: 8
 
-            // Top Row: Prominent 48x48 Icon + App Name / Category + Action Pill
+            // Top Header: Prominent 68x68 Square App Icon + Action Pill Button
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: 10
 
+                // Big 68x68 Icon Container (as in Windows 11 Microsoft Store)
                 Rectangle {
-                    width: 48
-                    height: 48
-                    radius: 10
+                    width: 68
+                    height: 68
+                    radius: 14
                     color: theme.surfaceElevated
                     border.color: theme.borderSubtle
                     border.width: 1
 
                     Image {
                         anchors.centerIn: parent
-                        width: 38
-                        height: 38
+                        width: 52
+                        height: 52
                         source: (cardRoot.appData && cardRoot.appData.icon_url) ? cardRoot.appData.icon_url : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
@@ -269,37 +282,18 @@ Item {
                         anchors.centerIn: parent
                         visible: !cardRoot.appData || !cardRoot.appData.icon_url || cardRoot.appData.icon_url === ""
                         name: cardRoot.appData ? root.getCategoryIcon(cardRoot.appData.category) : "layout-grid"
-                        size: 24
+                        size: 34
                         color: theme.textMuted
                     }
                 }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
+                Item { Layout.fillWidth: true }
 
-                    Text {
-                        text: cardRoot.appData ? (cardRoot.appData.display_name || cardRoot.appData.name || "") : ""
-                        font.pixelSize: 13
-                        font.bold: true
-                        color: theme.text
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-
-                    Text {
-                        text: cardRoot.appData ? ((cardRoot.appData.publisher ? cardRoot.appData.publisher + " · " : "") + (cardRoot.appData.category || "App")) : ""
-                        font.pixelSize: 10
-                        color: theme.textMuted
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                }
-
-                // Action Pill
+                // Action Pill Button (Get / Open)
                 Rectangle {
-                    height: 26
-                    implicitWidth: 66
+                    Layout.alignment: Qt.AlignTop
+                    height: 28
+                    implicitWidth: 68
                     radius: theme.radiusSm
                     color: cardRoot.isInstalled
                         ? (actionBtnMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
@@ -313,13 +307,13 @@ Item {
 
                         RyzoraIcon {
                             name: cardRoot.isInstalled ? "play" : "download"
-                            size: 9
+                            size: 10
                             color: cardRoot.isInstalled ? "#10b981" : "#ffffff"
                         }
 
                         Text {
                             text: cardRoot.isInstalled ? "Open" : "Get"
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.bold: true
                             color: cardRoot.isInstalled ? theme.text : "#ffffff"
                         }
@@ -342,10 +336,30 @@ Item {
                 }
             }
 
-            // Middle: 2-line concise summary / description
+            // Application Name (Clear, bold title)
+            Text {
+                text: cardRoot.appData ? (cardRoot.appData.display_name || cardRoot.appData.name || "") : ""
+                font.pixelSize: 15
+                font.bold: true
+                color: theme.text
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            // Category & Publisher
+            Text {
+                text: cardRoot.appData ? ((cardRoot.appData.publisher ? cardRoot.appData.publisher + " · " : "") + (cardRoot.appData.category || "App")) : ""
+                font.pixelSize: 11
+                color: theme.textMuted
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            // Description: Noticeably bigger font (12.5px) with comfortable line height
             Text {
                 text: cardRoot.appData ? (cardRoot.appData.summary || cardRoot.appData.description || "") : ""
-                font.pixelSize: 11
+                font.pixelSize: 13
+                lineHeight: 1.25
                 color: theme.textSecondary
                 maximumLineCount: 2
                 wrapMode: Text.WordWrap
@@ -364,7 +378,7 @@ Item {
                     text: cardRoot.appData && cardRoot.appData.is_installed
                         ? ("● Installed · v" + (cardRoot.appData.installed_version || cardRoot.appData.version || "1.0"))
                         : ((cardRoot.appData && cardRoot.appData.repository ? cardRoot.appData.repository : "extra") + " repository")
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     font.weight: cardRoot.appData && cardRoot.appData.is_installed ? Font.Medium : Font.Normal
                     color: cardRoot.appData && cardRoot.appData.is_installed ? "#10b981" : theme.textMuted
                 }
@@ -373,7 +387,7 @@ Item {
 
                 Text {
                     text: (cardRoot.appData && cardRoot.appData.license) ? cardRoot.appData.license : "Native"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     color: theme.textMuted
                 }
             }
@@ -388,7 +402,7 @@ Item {
         anchors.fill: parent
         visible: root.selectedApp === null
         contentWidth: width
-        contentHeight: pageCol.implicitHeight + 36
+        contentHeight: pageCol.implicitHeight + 40
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -407,7 +421,7 @@ Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.margins: 20
+            anchors.margins: root.width < 600 ? 12 : 20
             spacing: 16
 
             // ── 1. COMPACT PAGE HEADER ──
@@ -496,7 +510,7 @@ Item {
                 id: heroPanel
                 visible: root.activeFeaturedApp !== null
                 Layout.fillWidth: true
-                height: 240
+                height: root.width < 700 ? 270 : 240
                 radius: theme.radiusLg
                 border.color: theme.borderSubtle
                 border.width: 1
@@ -526,11 +540,11 @@ Item {
                     anchors.fill: parent
                     spacing: 0
 
-                    // Left Column: Application Information & Actions (~48% width)
+                    // Left Column: Application Information & Actions (~48-55% width)
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        Layout.margins: 22
+                        Layout.margins: root.width < 700 ? 16 : 22
                         spacing: 8
 
                         // Badge / Tag Row
@@ -601,18 +615,19 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
-                                font.pixelSize: 22
+                                font.pixelSize: root.width < 700 ? 19 : 22
                                 font.bold: true
                                 color: theme.text
                                 elide: Text.ElideRight
                             }
                         }
 
-                        // Summary description
+                        // Summary description: Noticeably bigger font (13.5px) for clear reading
                         Text {
                             Layout.fillWidth: true
                             text: heroPanel.currentItem ? (heroPanel.currentItem.summary || heroPanel.currentItem.description || "") : ""
-                            font.pixelSize: 12
+                            font.pixelSize: 14
+                            lineHeight: 1.3
                             color: theme.textSecondary
                             maximumLineCount: 2
                             wrapMode: Text.WordWrap
@@ -789,9 +804,9 @@ Item {
                         }
                     }
 
-                    // Right Column: Authentic Application Artwork (~52% width)
+                    // Right Column: Authentic Application Artwork (~50% width)
                     Rectangle {
-                        Layout.preferredWidth: Math.max(300, Math.round(heroPanel.width * 0.52))
+                        Layout.preferredWidth: Math.max(260, Math.round(heroPanel.width * (root.width < 700 ? 0.40 : 0.50)))
                         Layout.fillHeight: true
                         color: "transparent"
                         clip: true
@@ -814,7 +829,7 @@ Item {
                             anchors.left: parent.left
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
-                            width: 160
+                            width: root.width < 700 ? 90 : 160
                             z: 2
                             gradient: Gradient {
                                 orientation: Gradient.Horizontal
@@ -963,7 +978,7 @@ Item {
                 }
             }
 
-            // ── 4. CURATED ROW OF POPULAR APPLICATIONS (4 Icon-Based Cards) ──
+            // ── 4. CURATED ROW OF POPULAR APPLICATIONS (Responsive Row of Cards) ──
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 10
@@ -991,7 +1006,7 @@ Item {
 
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: root.width < 560 ? 1 : (root.width < 860 ? 2 : (root.width < 1180 ? 3 : 4))
+                    columns: root.responsiveColumns
                     rowSpacing: 12
                     columnSpacing: 12
 
@@ -1068,7 +1083,7 @@ Item {
                 GridLayout {
                     id: catalogGrid
                     Layout.fillWidth: true
-                    columns: root.width < 560 ? 1 : (root.width < 860 ? 2 : (root.width < 1180 ? 3 : 4))
+                    columns: root.responsiveColumns
                     rowSpacing: 12
                     columnSpacing: 12
 
