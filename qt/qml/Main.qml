@@ -85,6 +85,16 @@ ApplicationWindow {
                 backend.loadFastfetchInstalledPresets();
             }
         }
+        function onAppInstalled(appId, success, message) {
+            if (appsView) {
+                backend.filterApps(appsView.selectedCategory, appsView.searchQuery);
+            }
+        }
+        function onAppUninstalled(appId, success, message) {
+            if (appsView) {
+                backend.filterApps(appsView.selectedCategory, appsView.searchQuery);
+            }
+        }
     }
 
     function handlePackageAction(action, data, targetOverride) {
@@ -354,13 +364,14 @@ ApplicationWindow {
                         discoverView.updateFilter()
                     } else if (stackLayout.currentTab === "apps") {
                         appsView.searchQuery = q
+                        backend.filterApps(appsView.selectedCategory, q)
                     }
                 }
                 onRefreshClicked: {
                     if (stackLayout.currentTab === "discover") {
                         discoverView.updateFilter()
                     } else if (stackLayout.currentTab === "apps") {
-                        backend.filterCatalog("all", "")
+                        backend.filterApps(appsView.selectedCategory, appsView.searchQuery)
                     } else if (stackLayout.currentTab === "library") {
                         backend.loadLibrary(true)
                     } else if (stackLayout.currentTab === "backups") {
@@ -419,14 +430,27 @@ ApplicationWindow {
                     id: appsView
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "apps"
-                    onPackageSelected: function(pkg) {
-                        appsView.setSelectedPackage(pkg)
+                    onAppSelected: function(app) {
+                        appsView.setSelectedApp(app)
                     }
-                    onActionRequested: function(action, data, targetOverride) {
-                        window.handlePackageAction(action, data, targetOverride)
+                    onPackageSelected: function(app) {
+                        appsView.setSelectedApp(app)
+                    }
+                    onInstallRequested: function(appId) {
+                        backend.installApp(appId)
+                    }
+                    onUninstallRequested: function(appId) {
+                        backend.uninstallApp(appId)
+                    }
+                    onLaunchRequested: function(appId) {
+                        backend.launchApp(appId)
+                    }
+                    onCategorySelected: function(cat) {
+                        backend.filterApps(cat, appsView.searchQuery)
                     }
                     onClearSearchRequested: {
                         topBar.searchQuery = ""
+                        backend.filterApps(appsView.selectedCategory, "")
                     }
                 }
 

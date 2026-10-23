@@ -27,6 +27,10 @@ extern "C" {
     bool ryzora_is_process_active();
     uint32_t ryzora_active_pid();
     char* ryzora_query_catalog(const char* repo_root, const char* category, const char* search);
+    char* ryzora_query_applications(const char* repo_root, const char* category, const char* search);
+    char* ryzora_install_application(const char* app_id);
+    char* ryzora_uninstall_application(const char* app_id);
+    char* ryzora_launch_application(const char* app_id);
     char* ryzora_load_library(bool force_refresh);
     char* ryzora_run_fastfetch(const char* preset, uint64_t req_id);
     bool ryzora_cancel_fastfetch();
@@ -91,6 +95,7 @@ RyzoraBackend::RyzoraBackend(QObject *parent) : QObject(parent) {
 
     ryzora_init();
     filterCatalog("all", "");
+    filterApps("all", "");
     loadLibrary(false);
     loadFastfetchInstalledPresets();
     loadFastfetchLocalEmblems();
@@ -156,6 +161,128 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
                 self->m_isCatalogLoading = false;
                 emit self->catalogChanged();
                 emit self->catalogLoadingChanged();
+            }
+        });
+    });
+}
+
+void RyzoraBackend::filterApps(const QString &category, const QString &query) {
+    if (m_isShutdown.load()) return;
+    uint64_t reqId = ryzora_allocate_request_id();
+    updateMonotonicReqId(m_currentAppsReqId, reqId);
+    m_isAppsLoading = true;
+    emit appsLoadingChanged();
+
+    QPointer<RyzoraBackend> self = this;
+    QString repoRoot = QDir::currentPath();
+
+    m_threadPool.start([self, repoRoot, category, query, reqId]() {
+        QByteArray bRoot = repoRoot.toUtf8();
+        QByteArray bCat = category.toUtf8();
+        QByteArray bQuery = query.toUtf8();
+
+        char* rawJson = ryzora_query_applications(bRoot.constData(), bCat.constData(), bQuery.constData());
+        QString jsonStr = QString::fromUtf8(rawJson);
+        ryzora_free_string(rawJson);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        QVariantList list;
+        if (doc.isArray()) {
+            list = doc.array().toVariantList();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, list, reqId]() {
+            if (self && reqId == self->m_currentAppsReqId.load()) {
+                self->m_appsList = list;
+                self->m_isAppsLoading = false;
+                emit self->appsChanged();
+                emit self->appsLoadingChanged();
+            }
+        });
+    });
+}
+
+void RyzoraBackend::installApp(const QString &appId) {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, appId]() {
+        QByteArray bId = appId.toUtf8();
+        char* raw = ryzora_install_application(bId.constData());
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        bool success = false;
+        QString message;
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            success = obj["success"].toBool();
+            message = obj["message"].toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, appId, success, message]() {
+            if (self) {
+                emit self->appInstalled(appId, success, message);
+                self->postNotification(success ? "success" : "error",
+                                        success ? "Application Installed" : "Installation Failed",
+                                        message);
+                self->filterApps("all", "");
+            }
+        });
+    });
+}
+
+void RyzoraBackend::uninstallApp(const QString &appId) {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, appId]() {
+        QByteArray bId = appId.toUtf8();
+        char* raw = ryzora_uninstall_application(bId.constData());
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        bool success = false;
+        QString message;
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            success = obj["success"].toBool();
+            message = obj["message"].toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, appId, success, message]() {
+            if (self) {
+                emit self->appUninstalled(appId, success, message);
+                self->postNotification(success ? "info" : "error",
+                                        success ? "Application Removed" : "Removal Failed",
+                                        message);
+                self->filterApps("all", "");
+            }
+        });
+    });
+}
+
+void RyzoraBackend::launchApp(const QString &appId) {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, appId]() {
+        QByteArray bId = appId.toUtf8();
+        char* raw = ryzora_launch_application(bId.constData());
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        bool success = false;
+        QString message;
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            success = obj["success"].toBool();
+            message = obj["message"].toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, appId, success, message]() {
+            if (self && !success) {
+                self->postNotification("error", "Launch Failed", message);
             }
         });
     });

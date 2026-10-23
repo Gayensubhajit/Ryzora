@@ -73,6 +73,32 @@ pub struct CatalogItem {
     pub media_type: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApplicationItem {
+    pub id: String,
+    pub name: String,
+    pub display_name: String,
+    pub summary: String,
+    pub description: String,
+    pub category: String,
+    pub version: String,
+    pub publisher: String,
+    pub repository: String,
+    pub icon_url: String,
+    pub banner_url: String,
+    pub screenshots: Vec<String>,
+    pub is_installed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launchable: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub website: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    pub is_curated: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct SilentSddmDef {
     pub id: &'static str,
@@ -577,6 +603,7 @@ pub struct BackendState {
     rollback_mock: Mutex<Option<String>>,
     desktop_mock: Mutex<Option<String>>,
     pub tested_packages: Mutex<HashSet<String>>,
+    pub test_installed_apps: Mutex<HashSet<String>>,
 }
 
 pub fn resolve_preview_url(repo_root: &Path, hero_opt: Option<&str>, package_id: &str) -> String {
@@ -1408,6 +1435,7 @@ impl BackendState {
             rollback_mock: Mutex::new(None),
             desktop_mock: Mutex::new(None),
             tested_packages: Mutex::new(HashSet::new()),
+            test_installed_apps: Mutex::new(HashSet::new()),
         }
     }
 
@@ -1423,6 +1451,7 @@ impl BackendState {
             rollback_mock: Mutex::new(None),
             desktop_mock: Mutex::new(None),
             tested_packages: Mutex::new(HashSet::new()),
+            test_installed_apps: Mutex::new(HashSet::new()),
         }
     }
 
@@ -1788,6 +1817,546 @@ impl BackendState {
                 true
             })
             .collect()
+    }
+
+    pub fn check_app_installed(&self, id: &str) -> (bool, Option<String>) {
+        if self.test_installed_apps.lock().unwrap().contains(id) {
+            return (true, Some("1.0.0-test".to_string()));
+        }
+
+        let local_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+            PathBuf::from(sys_root).join("var/lib/pacman/local")
+        } else {
+            PathBuf::from("/var/lib/pacman/local")
+        };
+
+        if local_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&local_dir) {
+                let prefix = format!("{}-", id);
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with(&prefix) {
+                        let version = name.trim_start_matches(&prefix).to_string();
+                        return (true, Some(version));
+                    }
+                }
+            }
+        }
+
+        if std::env::var("RYZORA_SYSTEM_ROOT").is_err() && self.home_dir_override.lock().unwrap().is_none() {
+            let bin = PathBuf::from("/usr/bin").join(id);
+            if bin.is_file() {
+                return (true, None);
+            }
+        }
+
+        (false, None)
+    }
+
+    pub fn query_applications(&self, repo_root_hint: Option<&Path>, category: &str, search: &str) -> Vec<ApplicationItem> {
+        let repo_root = Self::resolve_repo_root(repo_root_hint);
+        let apps_dir = repo_root.join("public/assets/apps");
+
+        let make_asset_url = |rel: &str| -> String {
+            let p = apps_dir.join(rel);
+            if p.is_file() {
+                let s = p.to_string_lossy();
+                if s.starts_with('/') {
+                    format!("file://{}", s)
+                } else {
+                    format!("file:///{}", s)
+                }
+            } else {
+                String::new()
+            }
+        };
+
+        let curated_defs = [
+            (
+                "firefox",
+                "Firefox",
+                "Mozilla",
+                "Internet",
+                "130.0.1",
+                "extra",
+                "Fast, private, and extensible web browser from Mozilla",
+                "Firefox is an independent, user-first web browser designed for speed, privacy, and full open-standards compliance with Enhanced Tracking Protection.",
+                "firefox/icon.svg",
+                "firefox/screen1.jpg",
+                vec!["firefox/screen1.jpg", "firefox/screen2.jpg"],
+                "https://www.mozilla.org/firefox/",
+                "MPL-2.0",
+            ),
+            (
+                "chromium",
+                "Chromium",
+                "Chromium Authors",
+                "Internet",
+                "128.0.6613",
+                "extra",
+                "Open-source web browser built for speed, simplicity, and security",
+                "Chromium is an open-source browser project that aims to build a safer, faster, and more stable way for all Internet users to experience the web.",
+                "chromium/icon.png",
+                "chromium/screen1.jpg",
+                vec!["chromium/screen1.jpg", "chromium/screen2.jpg"],
+                "https://www.chromium.org/Home",
+                "BSD-3-Clause",
+            ),
+            (
+                "code",
+                "Visual Studio Code (OSS)",
+                "Microsoft / Community",
+                "Development",
+                "1.93.1",
+                "extra",
+                "Extensible open-source code editor with rich language support",
+                "Visual Studio Code Open Source release with native sandboxing, telemetry disabled, and rich extension ecosystem.",
+                "code/icon.png",
+                "code/screen1.jpg",
+                vec!["code/screen1.jpg", "code/screen2.jpg"],
+                "https://github.com/microsoft/vscode",
+                "MIT",
+            ),
+            (
+                "discord",
+                "Discord",
+                "Discord Inc.",
+                "Internet",
+                "0.0.64",
+                "extra",
+                "Voice, video, and text communication platform for communities",
+                "All-in-one voice and text chat for communities and gamers that is free, secure, and works on desktop.",
+                "discord/icon.png",
+                "",
+                vec![],
+                "https://discord.com",
+                "Proprietary",
+            ),
+            (
+                "steam",
+                "Steam",
+                "Valve Corporation",
+                "Games",
+                "1.0.0.79",
+                "multilib",
+                "Digital distribution platform and launcher for desktop games",
+                "Valve's digital gaming distribution platform, Proton compatibility runtime, and community launcher.",
+                "steam/icon.png",
+                "",
+                vec![],
+                "https://store.steampowered.com/",
+                "Proprietary",
+            ),
+            (
+                "vlc",
+                "VLC Media Player",
+                "VideoLAN",
+                "Multimedia",
+                "3.0.21",
+                "extra",
+                "Versatile, open-source multi-format media player and streaming engine",
+                "High-performance, multi-platform media player and streaming server capable of playing virtually any media codec.",
+                "vlc/icon.svg",
+                "",
+                vec![],
+                "https://www.videolan.org/vlc/",
+                "GPL-2.0-or-later",
+            ),
+            (
+                "gimp",
+                "GIMP",
+                "GIMP Team",
+                "Graphics",
+                "2.10.38",
+                "extra",
+                "GNU Image Manipulation Program for digital art and photo editing",
+                "Extensible GNU Image Manipulation Program for photo retouching, image composition, and graphic authoring.",
+                "gimp/icon.svg",
+                "gimp/screen1.jpg",
+                vec!["gimp/screen1.jpg"],
+                "https://www.gimp.org/",
+                "GPL-3.0-or-later",
+            ),
+            (
+                "obs-studio",
+                "OBS Studio",
+                "OBS Project",
+                "Multimedia",
+                "30.2.3",
+                "extra",
+                "Free and open-source software for video recording and live streaming",
+                "Free and open source software for video recording and live streaming equipped with real-time video/audio capturing and mixing.",
+                "obs-studio/icon.svg",
+                "",
+                vec![],
+                "https://obsproject.com/",
+                "GPL-2.0-or-later",
+            ),
+            (
+                "blender",
+                "Blender",
+                "Blender Foundation",
+                "Graphics",
+                "4.2.1",
+                "extra",
+                "Full-featured open-source 3D creation suite: modeling, animation, rendering",
+                "Fully integrated 3D creation suite supporting modeling, rigging, animation, simulation, rendering, compositing and motion tracking.",
+                "blender/icon.svg",
+                "blender/screen1.jpg",
+                vec!["blender/screen1.jpg"],
+                "https://www.blender.org/",
+                "GPL-3.0-or-later",
+            ),
+            (
+                "inkscape",
+                "Inkscape",
+                "Inkscape Developers",
+                "Graphics",
+                "1.3.2",
+                "extra",
+                "Professional vector graphics editor using SVG open standard",
+                "Professional vector graphics editor for Linux, Windows, and macOS with comprehensive vector illustration tools.",
+                "inkscape/icon.svg",
+                "",
+                vec![],
+                "https://inkscape.org/",
+                "GPL-3.0-or-later",
+            ),
+            (
+                "alacritty",
+                "Alacritty",
+                "Alacritty Authors",
+                "Utilities",
+                "0.13.2",
+                "extra",
+                "Fast, cross-platform, GPU-accelerated terminal emulator written in Rust",
+                "A fast, cross-platform, OpenGL-accelerated terminal emulator focused on simplicity and performance.",
+                "alacritty/icon.svg",
+                "",
+                vec![],
+                "https://alacritty.org",
+                "Apache-2.0",
+            ),
+            (
+                "kitty",
+                "Kitty",
+                "Kovid Goyal",
+                "Utilities",
+                "0.36.1",
+                "extra",
+                "Fast, feature-rich, GPU-based terminal emulator with image protocol",
+                "The fast, feature-rich, GPU based terminal emulator with rich text formatting, splits, and graphics protocol support.",
+                "",
+                "",
+                vec![],
+                "https://sw.kovidgoyal.net/kitty/",
+                "GPL-3.0-or-later",
+            ),
+            (
+                "neovim",
+                "Neovim",
+                "Neovim Project",
+                "Development",
+                "0.10.1",
+                "extra",
+                "Hyperextensible, modern Vim-fork focused on LSP agility and extensibility",
+                "Hyperextensible, modern Vim-fork focused on extensibility, Lua plugin ecosystem, and first-class Language Server Protocol support.",
+                "",
+                "",
+                vec![],
+                "https://neovim.io",
+                "Apache-2.0",
+            ),
+            (
+                "spotify",
+                "Spotify",
+                "Spotify AB",
+                "Multimedia",
+                "1.2.42",
+                "extra",
+                "Digital music, podcast, and streaming audio desktop application",
+                "Official desktop client for the Spotify music and podcast streaming service.",
+                "spotify/icon.png",
+                "",
+                vec![],
+                "https://spotify.com",
+                "Proprietary",
+            ),
+            (
+                "telegram-desktop",
+                "Telegram Desktop",
+                "Telegram FZ-LLC",
+                "Internet",
+                "5.4.1",
+                "extra",
+                "Official fast and secure messaging client with cloud synchronization",
+                "Official fast and secure desktop messaging client with cloud synchronization, channels, voice, and media sharing.",
+                "telegram-desktop/icon.png",
+                "",
+                vec![],
+                "https://desktop.telegram.org/",
+                "GPL-3.0-or-later",
+            ),
+            (
+                "thunderbird",
+                "Thunderbird",
+                "Mozilla",
+                "Productivity",
+                "128.2.0",
+                "extra",
+                "Standalone email, calendar, RSS feed, and chat client from Mozilla",
+                "Free and open-source personal information manager and email client developed by Mozilla and community volunteers.",
+                "",
+                "",
+                vec![],
+                "https://www.thunderbird.net/",
+                "MPL-2.0",
+            ),
+            (
+                "mpv",
+                "mpv",
+                "mpv Authors",
+                "Multimedia",
+                "0.38.0",
+                "extra",
+                "Lightweight, scriptable media player with high-quality video output",
+                "Free, open source, and cross-platform media player software with Vulkan and OpenGL video output.",
+                "",
+                "",
+                vec![],
+                "https://mpv.io/",
+                "GPL-2.0-or-later",
+            ),
+            (
+                "btop",
+                "btop",
+                "aristocratos",
+                "System",
+                "1.3.2",
+                "extra",
+                "A beautiful, responsive resource monitor for Linux processors, memory, and disks",
+                "Resource monitor that shows usage and stats for processor, memory, disks, network and processes with clean TUI graphics.",
+                "",
+                "",
+                vec![],
+                "https://github.com/aristocratos/btop",
+                "Apache-2.0",
+            ),
+            (
+                "git",
+                "Git",
+                "Software Freedom Conservancy",
+                "Development",
+                "2.46.0",
+                "extra",
+                "Fast, distributed version control system created by Linus Torvalds",
+                "Fast, scalable, distributed revision control system with an unusually rich command set that provides both high-level operations and full access to internals.",
+                "",
+                "",
+                vec![],
+                "https://git-scm.com/",
+                "GPL-2.0-only",
+            ),
+            (
+                "cursor",
+                "Cursor",
+                "Anysphere",
+                "Development",
+                "0.40.4",
+                "system",
+                "AI-first code editor designed for pair-programming and accelerated coding",
+                "Built to make you extraordinarily productive, Cursor is the best way to code with AI.",
+                "cursor/icon.svg",
+                "",
+                vec![],
+                "https://cursor.com",
+                "Proprietary",
+            ),
+            (
+                "visual-studio-code-bin",
+                "Visual Studio Code",
+                "Microsoft",
+                "Development",
+                "1.93.1",
+                "system",
+                "Official Visual Studio Code binary distribution with full marketplace support",
+                "Code editing redefined. Build and debug modern web and cloud applications with Microsoft's official VS Code package.",
+                "visual-studio-code-bin/icon.png",
+                "visual-studio-code-bin/screen1.jpg",
+                vec!["visual-studio-code-bin/screen1.jpg", "visual-studio-code-bin/screen2.jpg"],
+                "https://code.visualstudio.com/",
+                "Proprietary",
+            ),
+            (
+                "fastfetch",
+                "Fastfetch",
+                "Fastfetch Team",
+                "System",
+                "2.26.1",
+                "extra",
+                "Fast system information tool and CLI fetch utility written in C",
+                "Fastfetch is a neofetch-like tool for fetching system information and displaying them in a pretty way, written in C for performance.",
+                "",
+                "",
+                vec![],
+                "https://github.com/fastfetch-cli/fastfetch",
+                "MIT",
+            ),
+        ];
+
+        let mut items = Vec::new();
+
+        for def in &curated_defs {
+            let id = def.0;
+            let display_name = def.1;
+            let publisher = def.2;
+            let cat = def.3;
+            let version = def.4;
+            let repository = def.5;
+            let summary = def.6;
+            let description = def.7;
+            let icon_rel = def.8;
+            let banner_rel = def.9;
+            let screenshots_rel = &def.10;
+            let website = def.11;
+            let license = def.12;
+
+            let (is_installed, installed_version) = self.check_app_installed(id);
+
+            let icon_url = if !icon_rel.is_empty() {
+                make_asset_url(icon_rel)
+            } else {
+                String::new()
+            };
+
+            let banner_url = if !banner_rel.is_empty() {
+                make_asset_url(banner_rel)
+            } else {
+                String::new()
+            };
+
+            let screenshots: Vec<String> = screenshots_rel.iter().map(|s| make_asset_url(s)).filter(|s| !s.is_empty()).collect();
+
+            items.push(ApplicationItem {
+                id: id.to_string(),
+                name: id.to_string(),
+                display_name: display_name.to_string(),
+                summary: summary.to_string(),
+                description: description.to_string(),
+                category: cat.to_string(),
+                version: version.to_string(),
+                publisher: publisher.to_string(),
+                repository: repository.to_string(),
+                icon_url,
+                banner_url,
+                screenshots,
+                is_installed,
+                installed_version,
+                launchable: Some(id.to_string()),
+                website: Some(website.to_string()),
+                license: Some(license.to_string()),
+                is_curated: true,
+            });
+        }
+
+        let cat_trimmed = category.trim().to_lowercase();
+        let q_trimmed = search.trim().to_lowercase();
+
+        items.into_iter().filter(|item| {
+            if !cat_trimmed.is_empty() && cat_trimmed != "all" {
+                if cat_trimmed == "installed" {
+                    if !item.is_installed {
+                        return false;
+                    }
+                } else if item.category.to_lowercase() != cat_trimmed {
+                    return false;
+                }
+            }
+
+            if !q_trimmed.is_empty() {
+                let m_name = item.name.to_lowercase().contains(&q_trimmed);
+                let m_display = item.display_name.to_lowercase().contains(&q_trimmed);
+                let m_summary = item.summary.to_lowercase().contains(&q_trimmed);
+                let m_pub = item.publisher.to_lowercase().contains(&q_trimmed);
+                let m_id = item.id.to_lowercase().contains(&q_trimmed);
+                let m_desc = item.description.to_lowercase().contains(&q_trimmed);
+                if !m_name && !m_display && !m_summary && !m_pub && !m_id && !m_desc {
+                    return false;
+                }
+            }
+
+            true
+        }).collect()
+    }
+
+    pub fn install_application(&self, app_id: &str) -> Result<String, String> {
+        if app_id.is_empty() || app_id.contains('/') || app_id.contains(';') || app_id.contains('&') {
+            return Err("Invalid application identifier".to_string());
+        }
+
+        if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() || self.home_dir_override.lock().unwrap().is_some() {
+            self.test_installed_apps.lock().unwrap().insert(app_id.to_string());
+            return Ok(format!("Application '{}' installed successfully in test environment", app_id));
+        }
+
+        let helper = Path::new("/usr/lib/ryzora/ryzora-package-helper");
+        if helper.is_file() {
+            let output = Command::new("pkexec")
+                .args(["/usr/lib/ryzora/ryzora-package-helper", "install", app_id])
+                .output()
+                .map_err(|e| format!("Failed to invoke privileged package helper: {}", e))?;
+            if output.status.success() {
+                return Ok(format!("Application '{}' installed successfully", app_id));
+            } else {
+                let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                return Err(if err.is_empty() { format!("Installation failed with exit code {:?}", output.status.code()) } else { err });
+            }
+        }
+
+        Err("Privileged package helper not found at /usr/lib/ryzora/ryzora-package-helper. Please authorize or install the Ryzora package helper to manage system packages.".to_string())
+    }
+
+    pub fn uninstall_application(&self, app_id: &str) -> Result<String, String> {
+        if app_id.is_empty() || app_id.contains('/') || app_id.contains(';') || app_id.contains('&') {
+            return Err("Invalid application identifier".to_string());
+        }
+
+        if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() || self.home_dir_override.lock().unwrap().is_some() {
+            self.test_installed_apps.lock().unwrap().remove(app_id);
+            return Ok(format!("Application '{}' uninstalled successfully in test environment", app_id));
+        }
+
+        let helper = Path::new("/usr/lib/ryzora/ryzora-package-helper");
+        if helper.is_file() {
+            let output = Command::new("pkexec")
+                .args(["/usr/lib/ryzora/ryzora-package-helper", "uninstall", app_id])
+                .output()
+                .map_err(|e| format!("Failed to invoke privileged package helper: {}", e))?;
+            if output.status.success() {
+                return Ok(format!("Application '{}' uninstalled successfully", app_id));
+            } else {
+                let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                return Err(if err.is_empty() { format!("Uninstallation failed with exit code {:?}", output.status.code()) } else { err });
+            }
+        }
+
+        Err("Privileged package helper not found at /usr/lib/ryzora/ryzora-package-helper.".to_string())
+    }
+
+    pub fn launch_application(&self, app_id: &str) -> Result<String, String> {
+        if app_id.is_empty() {
+            return Err("Invalid application identifier".to_string());
+        }
+
+        if Command::new("gtk-launch").arg(app_id).spawn().is_ok() {
+            return Ok(format!("Launched application '{}'", app_id));
+        }
+
+        if Command::new(app_id).spawn().is_ok() {
+            return Ok(format!("Launched application '{}'", app_id));
+        }
+
+        Err(format!("Could not launch application '{}': desktop entry or executable not found", app_id))
     }
 
     pub fn load_library(&self, force_refresh: bool) -> Vec<InstalledItem> {
@@ -4737,6 +5306,63 @@ pub extern "C" fn ryzora_active_pid() -> u32 {
 }
 
 #[no_mangle]
+pub extern "C" fn ryzora_query_applications(
+    repo_root: *const c_char,
+    category: *const c_char,
+    search: *const c_char,
+) -> *mut c_char {
+    let root_opt = unsafe {
+        if repo_root.is_null() { None }
+        else { CStr::from_ptr(repo_root).to_str().ok().map(Path::new) }
+    };
+    let cat_str = unsafe { if category.is_null() { "all" } else { CStr::from_ptr(category).to_str().unwrap_or("all") } };
+    let q_str = unsafe { if search.is_null() { "" } else { CStr::from_ptr(search).to_str().unwrap_or("") } };
+
+    let items = get_backend().query_applications(root_opt, cat_str, q_str);
+    let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
+    CString::new(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_install_application(app_id: *const c_char) -> *mut c_char {
+    if app_id.is_null() {
+        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+    }
+    let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
+    let res = match get_backend().install_application(aid) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
+        Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_uninstall_application(app_id: *const c_char) -> *mut c_char {
+    if app_id.is_null() {
+        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+    }
+    let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
+    let res = match get_backend().uninstall_application(aid) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
+        Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_launch_application(app_id: *const c_char) -> *mut c_char {
+    if app_id.is_null() {
+        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+    }
+    let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
+    let res = match get_backend().launch_application(aid) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
+        Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
 pub extern "C" fn ryzora_query_catalog(
     repo_root: *const c_char,
     category: *const c_char,
@@ -6733,5 +7359,65 @@ hyprlock
         assert!(def_cfg.contains("https://github.com/fastfetch-cli/fastfetch"));
         assert!(def_cfg.contains("38;2;100;136;232"), "Default config must use Ryzora blue accent");
         assert!(!def_cfg.to_lowercase().contains("ryoku") && !def_cfg.contains("力"), "Default config must not contain Ryoku branding");
+    }
+
+    #[test]
+    fn test_applications_catalog_and_lifecycle() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home.clone());
+
+        // 1. Query applications catalog
+        let apps = backend.query_applications(None, "all", "");
+        assert!(!apps.is_empty(), "Applications catalog must not be empty");
+
+        // Verify genuine software applications are present
+        let ids: HashSet<String> = apps.iter().map(|a| a.id.clone()).collect();
+        assert!(ids.contains("firefox"), "firefox must be present in apps catalog");
+        assert!(ids.contains("chromium"), "chromium must be present in apps catalog");
+        assert!(ids.contains("code"), "code must be present in apps catalog");
+        assert!(ids.contains("vlc"), "vlc must be present in apps catalog");
+        assert!(ids.contains("gimp"), "gimp must be present in apps catalog");
+        assert!(ids.contains("blender"), "blender must be present in apps catalog");
+
+        // Verify NO customization packages leak into applications catalog
+        for app in &apps {
+            assert!(!app.id.starts_with("rice-"), "Rice packages must not be in apps catalog");
+            assert!(!app.id.starts_with("lockscreen-"), "Lockscreen packages must not be in apps catalog");
+            assert!(!app.id.starts_with("silentsddm-"), "SilentSDDM packages must not be in apps catalog");
+            assert!(!app.id.starts_with("wallpaper-"), "Wallpapers must not be in apps catalog");
+            assert!(!app.id.starts_with("theme-"), "Themes must not be in apps catalog");
+            assert!(!app.id.starts_with("fastfetch-preset-"), "Fastfetch presets must not be in apps catalog");
+            assert!(!app.id.starts_with("fastfetch-emblem-"), "Fastfetch emblems must not be in apps catalog");
+        }
+
+        // 2. Test category filtering
+        let internet_apps = backend.query_applications(None, "internet", "");
+        assert!(internet_apps.iter().any(|a| a.id == "firefox"));
+        assert!(!internet_apps.iter().any(|a| a.id == "blender"));
+
+        let graphics_apps = backend.query_applications(None, "graphics", "");
+        assert!(graphics_apps.iter().any(|a| a.id == "blender" || a.id == "gimp"));
+        assert!(!graphics_apps.iter().any(|a| a.id == "firefox"));
+
+        // 3. Test search filtering
+        let search_res = backend.query_applications(None, "all", "mozilla");
+        assert!(search_res.iter().any(|a| a.id == "firefox" || a.id == "thunderbird"));
+        assert!(!search_res.iter().any(|a| a.id == "blender"));
+
+        // 4. Test installation lifecycle in test environment
+        assert!(!backend.check_app_installed("blender").0);
+        let inst_res = backend.install_application("blender");
+        assert!(inst_res.is_ok(), "Installing blender in test environment must succeed: {:?}", inst_res);
+        assert!(backend.check_app_installed("blender").0, "blender must now be marked installed");
+
+        let installed_apps = backend.query_applications(None, "installed", "");
+        assert!(installed_apps.iter().any(|a| a.id == "blender"));
+
+        let uninst_res = backend.uninstall_application("blender");
+        assert!(uninst_res.is_ok(), "Uninstalling blender in test environment must succeed: {:?}", uninst_res);
+        assert!(!backend.check_app_installed("blender").0, "blender must now be uninstalled");
     }
 }

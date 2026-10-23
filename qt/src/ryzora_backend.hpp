@@ -27,6 +27,11 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(bool isLibraryLoading READ isLibraryLoading NOTIFY libraryLoadingChanged)
     Q_PROPERTY(QString libraryError READ libraryError NOTIFY libraryErrorChanged)
 
+    // Software Applications Catalog (Distinct from Customization Catalog)
+    Q_PROPERTY(QVariantList appsList READ appsList NOTIFY appsChanged)
+    Q_PROPERTY(int appsCount READ appsCount NOTIFY appsChanged)
+    Q_PROPERTY(bool isAppsLoading READ isAppsLoading NOTIFY appsLoadingChanged)
+
     // Fastfetch
     Q_PROPERTY(QString fastfetchHtml READ fastfetchHtml NOTIFY fastfetchChanged)
     Q_PROPERTY(bool isFastfetchLoading READ isFastfetchLoading NOTIFY fastfetchLoadingChanged)
@@ -70,6 +75,10 @@ public:
     bool isLibraryLoading() const { return m_isLibraryLoading; }
     QString libraryError() const { return m_libraryError; }
 
+    QVariantList appsList() const { return m_appsList; }
+    int appsCount() const { return m_appsList.size(); }
+    bool isAppsLoading() const { return m_isAppsLoading; }
+
     QString fastfetchHtml() const { return m_fastfetchHtml; }
     bool isFastfetchLoading() const { return m_isFastfetchLoading; }
     bool isFastfetchCancelled() const { return m_isFastfetchCancelled; }
@@ -95,6 +104,10 @@ public:
 
     // Invokable Methods
     Q_INVOKABLE void filterCatalog(const QString &category, const QString &query);
+    Q_INVOKABLE void filterApps(const QString &category, const QString &query);
+    Q_INVOKABLE void installApp(const QString &appId);
+    Q_INVOKABLE void uninstallApp(const QString &appId);
+    Q_INVOKABLE void launchApp(const QString &appId);
     Q_INVOKABLE void loadLibrary(bool forceRefresh = false);
     Q_INVOKABLE void loadPresets();
     Q_INVOKABLE void requestFastfetchPreview(const QString &presetName);
@@ -159,6 +172,10 @@ public:
 
 signals:
     void catalogChanged();
+    void appsChanged();
+    void appsLoadingChanged();
+    void appInstalled(const QString &appId, bool success, const QString &message);
+    void appUninstalled(const QString &appId, bool success, const QString &message);
     void libraryChanged();
     void activeConfigurationChanged();
     void decoderSlotAvailable();
@@ -201,6 +218,9 @@ private:
     QString resolveSystemRoot() const;
 
     QVariantList m_catalogList;
+    QVariantList m_appsList;
+    bool m_isAppsLoading{false};
+    std::atomic<uint64_t> m_currentAppsReqId{0};
     QVariantList m_libraryList;
     bool m_isCatalogLoading{false};
     bool m_isLibraryLoading{false};
