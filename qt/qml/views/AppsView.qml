@@ -12,6 +12,9 @@ Item {
     property var selectedApp: null
     property alias selectedPackage: root.selectedApp
     property int featuredIndex: 0
+    property int selectedScreenshotIndex: 0
+    property string pendingAppId: ""
+    property string pendingAction: ""
 
     // Dynamic responsive column count (cards stay between 220px and 270px wide)
     readonly property int responsiveColumns: {
@@ -33,11 +36,25 @@ Item {
     signal clearSearchRequested()
 
     function setSelectedApp(app) {
+        root.selectedScreenshotIndex = 0
         root.selectedApp = app
     }
 
     function setSelectedPackage(pkg) {
+        root.selectedScreenshotIndex = 0
         root.selectedApp = pkg
+    }
+
+    function requestInstall(appId) {
+        root.pendingAppId = appId
+        root.pendingAction = "install"
+        root.installRequested(appId)
+    }
+
+    function requestUninstall(appId) {
+        root.pendingAppId = appId
+        root.pendingAction = "uninstall"
+        root.uninstallRequested(appId)
     }
 
     Connections {
@@ -51,6 +68,18 @@ Item {
                         break
                     }
                 }
+            }
+        }
+        function onAppInstalled(appId, success, message) {
+            if (root.pendingAppId === appId) {
+                root.pendingAppId = ""
+                root.pendingAction = ""
+            }
+        }
+        function onAppUninstalled(appId, success, message) {
+            if (root.pendingAppId === appId) {
+                root.pendingAppId = ""
+                root.pendingAction = ""
             }
         }
     }
@@ -1209,6 +1238,8 @@ Item {
     // ──────────────────────────────────────────────────────────────────────────
     // 2. DEDICATED APPLICATION DETAIL VIEW (Overlay for full software details)
     // ──────────────────────────────────────────────────────────────────────────
+    // 6. DEDICATED APPLICATION DETAILS PRODUCT PAGE (Microsoft & Mac Store Inspired)
+    // ──────────────────────────────────────────────────────────────────────────
     Rectangle {
         id: appDetailOverlay
         anchors.fill: parent
@@ -1217,9 +1248,10 @@ Item {
         z: 10
 
         Flickable {
+            id: detailFlickable
             anchors.fill: parent
             contentWidth: width
-            contentHeight: detailCol.implicitHeight + 60
+            contentHeight: detailCol.implicitHeight + 80
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
@@ -1238,70 +1270,90 @@ Item {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.margins: 28
-                spacing: 20
+                anchors.margins: root.width < 760 ? 18 : 32
+                spacing: 24
 
-                // Back Navigation Button
-                Rectangle {
-                    height: 32
-                    implicitWidth: backRow.implicitWidth + 18
-                    radius: theme.radiusSm
-                    color: backMouse.containsMouse ? theme.surfaceHover : theme.surface
-                    border.color: theme.borderSubtle
-                    border.width: 1
+                // ── 1. Top Back Navigation Bar ──
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
 
-                    RowLayout {
-                        id: backRow
-                        anchors.centerIn: parent
-                        spacing: 6
-                        RyzoraIcon { name: "arrow-right"; size: 12; color: theme.textSecondary; rotation: 180 }
-                        Text {
-                            text: "Back to Applications"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: theme.text
+                    Rectangle {
+                        height: 34
+                        implicitWidth: backRow.implicitWidth + 22
+                        radius: theme.radiusSm
+                        color: backMouse.containsMouse ? theme.surfaceHover : theme.surface
+                        border.color: theme.borderSubtle
+                        border.width: 1
+
+                        RowLayout {
+                            id: backRow
+                            anchors.centerIn: parent
+                            spacing: 8
+                            RyzoraIcon { name: "arrow-right"; size: 12; color: theme.textSecondary; rotation: 180 }
+                            Text {
+                                text: "Back to Applications"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: theme.text
+                            }
+                        }
+
+                        MouseArea {
+                            id: backMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.setSelectedApp(null)
                         }
                     }
 
-                    MouseArea {
-                        id: backMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.setSelectedApp(null)
-                    }
+                    Item { Layout.fillWidth: true }
                 }
 
-                // App Hero Header: Large Icon + Name + Publisher + Install/Launch Actions
+                // ── 2. Product Header Area (Large Icon + Identity + Actions) ──
                 Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: headerRow.implicitHeight + 36
+                    implicitHeight: headerContent.implicitHeight + 40
                     radius: theme.radiusLg
                     color: theme.surface
                     border.color: theme.borderSubtle
                     border.width: 1
 
-                    RowLayout {
-                        id: headerRow
+                    // Subtle background gradient for product header
+                    Rectangle {
                         anchors.fill: parent
-                        anchors.margins: 18
-                        spacing: 20
+                        radius: theme.radiusLg
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: theme.resolvedTheme === "light" ? "#F8FAFD" : "#131A2B" }
+                            GradientStop { position: 1.0; color: theme.resolvedTheme === "light" ? "#EEF4FC" : "#0F1626" }
+                        }
+                    }
 
-                        // Big App Icon
+                    RowLayout {
+                        id: headerContent
+                        anchors.fill: parent
+                        anchors.margins: root.width < 760 ? 18 : 24
+                        spacing: 24
+
+                        // Prominent 92x92 Squircle App Icon
                         Rectangle {
-                            width: 72
-                            height: 72
-                            radius: theme.radiusMd
+                            Layout.alignment: Qt.AlignVCenter
+                            width: root.width < 760 ? 76 : 92
+                            height: root.width < 760 ? 76 : 92
+                            radius: 18
                             color: theme.surfaceElevated
                             border.color: theme.borderSubtle
                             border.width: 1
 
                             Image {
                                 anchors.centerIn: parent
-                                width: 48
-                                height: 48
+                                width: root.width < 760 ? 54 : 64
+                                height: root.width < 760 ? 54 : 64
                                 source: root.selectedApp ? (root.selectedApp.icon_url || "") : ""
                                 fillMode: Image.PreserveAspectFit
+                                smooth: true
                                 visible: status === Image.Ready
                             }
 
@@ -1309,86 +1361,116 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !root.selectedApp || !root.selectedApp.icon_url || root.selectedApp.icon_url === ""
                                 name: root.selectedApp ? root.getCategoryIcon(root.selectedApp.category) : "layout-grid"
-                                size: 36
+                                size: 40
                                 color: theme.textMuted
                             }
                         }
 
-                        // App Info
+                        // App Name, Metadata & Summary
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 4
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 8
 
+                            // Title & Installed State Badge
                             RowLayout {
-                                spacing: 8
+                                Layout.fillWidth: true
+                                spacing: 12
+
                                 Text {
-                                    text: root.selectedApp ? (root.selectedApp.display_name || root.selectedApp.name) : ""
-                                    font.pixelSize: 22
+                                    text: root.selectedApp ? (root.selectedApp.display_name || root.selectedApp.name || "") : ""
+                                    font.pixelSize: root.width < 760 ? 22 : 28
                                     font.bold: true
                                     color: theme.text
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
+
+                                // Status Badge
                                 Rectangle {
-                                    visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
-                                    height: 18
-                                    implicitWidth: instBadgeTxt.implicitWidth + 10
-                                    radius: 9
-                                    color: Qt.rgba(16/255, 185/255, 129/255, 0.15)
-                                    border.color: "#10b981"
+                                    height: 24
+                                    radius: 12
+                                    implicitWidth: badgeText.implicitWidth + 18
+                                    color: root.selectedApp && root.selectedApp.is_installed
+                                        ? (theme.resolvedTheme === "light" ? "#ECFDF5" : "#064E3B")
+                                        : theme.surfaceElevated
+                                    border.color: root.selectedApp && root.selectedApp.is_installed
+                                        ? "#10B981"
+                                        : theme.borderSubtle
                                     border.width: 1
-                                    Text {
-                                        id: instBadgeTxt
+
+                                    RowLayout {
                                         anchors.centerIn: parent
-                                        text: "INSTALLED"
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        color: "#10b981"
+                                        spacing: 5
+                                        Rectangle {
+                                            width: 6; height: 6; radius: 3
+                                            color: root.selectedApp && root.selectedApp.is_installed ? "#10B981" : theme.accent
+                                        }
+                                        Text {
+                                            id: badgeText
+                                            text: root.selectedApp && root.selectedApp.is_installed ? "Installed" : "Available"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            color: root.selectedApp && root.selectedApp.is_installed
+                                                ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399")
+                                                : theme.textSecondary
+                                        }
                                     }
                                 }
                             }
 
+                            // Publisher, Category, and Repository line
                             Text {
-                                text: root.selectedApp ? (root.selectedApp.publisher + " · " + root.selectedApp.category + " · " + (root.selectedApp.repository || "Arch Native")) : ""
-                                font.pixelSize: 12
-                                color: theme.textSecondary
-                            }
-
-                            Text {
-                                text: root.selectedApp ? (root.selectedApp.summary || root.selectedApp.description || "") : ""
+                                Layout.fillWidth: true
+                                text: root.selectedApp ? (root.selectedApp.publisher + " · " + root.selectedApp.category + " · " + (root.selectedApp.repository ? (root.selectedApp.repository + " (Arch Native)") : "Official Arch Linux")) : ""
                                 font.pixelSize: 12
                                 color: theme.textMuted
+                                elide: Text.ElideRight
+                            }
+
+                            // Summary Description
+                            Text {
                                 Layout.fillWidth: true
+                                text: root.selectedApp ? (root.selectedApp.summary || root.selectedApp.description || "") : ""
+                                font.pixelSize: 14
+                                lineHeight: 1.35
+                                color: theme.textSecondary
                                 wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
                             }
                         }
 
-                        // Action Buttons: Open, Install, Uninstall
-                        RowLayout {
-                            spacing: 10
+                        // Action Buttons Column
+                        ColumnLayout {
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 8
 
+                            // Primary Action: Open Application (if installed)
                             Rectangle {
                                 visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
-                                height: 36
-                                implicitWidth: launchBtnRow.implicitWidth + 24
+                                height: 40
+                                implicitWidth: Math.max(160, openBtnRow.implicitWidth + 30)
                                 radius: theme.radiusSm
-                                color: theme.surfaceElevated
-                                border.color: theme.accent
-                                border.width: 1
+                                color: openBtnMouse.containsMouse ? theme.accentHover : theme.accent
 
                                 RowLayout {
-                                    id: launchBtnRow
+                                    id: openBtnRow
                                     anchors.centerIn: parent
-                                    spacing: 6
-                                    RyzoraIcon { name: "play"; size: 12; color: theme.accent }
+                                    spacing: 8
+                                    RyzoraIcon { name: "play"; size: 13; color: "#ffffff" }
                                     Text {
-                                        text: "Open"
-                                        font.pixelSize: 12
+                                        text: "Open Application"
+                                        font.pixelSize: 13
                                         font.bold: true
-                                        color: theme.text
+                                        color: "#ffffff"
                                     }
                                 }
 
                                 MouseArea {
+                                    id: openBtnMouse
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (root.selectedApp) {
@@ -1398,64 +1480,83 @@ Item {
                                 }
                             }
 
+                            // Primary Action: Get / Install (if not installed)
                             Rectangle {
                                 visible: Boolean(root.selectedApp && !root.selectedApp.is_installed)
-                                height: 36
-                                implicitWidth: instBtnRow.implicitWidth + 28
+                                height: 40
+                                implicitWidth: Math.max(160, installBtnRow.implicitWidth + 30)
                                 radius: theme.radiusSm
-                                color: theme.accent
+                                color: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "")
+                                    ? theme.borderStrong
+                                    : (installBtnMouse.containsMouse ? theme.accentHover : theme.accent)
 
                                 RowLayout {
-                                    id: instBtnRow
+                                    id: installBtnRow
                                     anchors.centerIn: parent
-                                    spacing: 6
-                                    RyzoraIcon { name: "download"; size: 12; color: "#ffffff" }
+                                    spacing: 8
+                                    RyzoraIcon {
+                                        name: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "") ? "refresh-cw" : "download"
+                                        size: 13
+                                        color: "#ffffff"
+                                    }
                                     Text {
-                                        text: "Install"
-                                        font.pixelSize: 12
+                                        text: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "") ? "Installing..." : "Get Application"
+                                        font.pixelSize: 13
                                         font.bold: true
                                         color: "#ffffff"
                                     }
                                 }
 
                                 MouseArea {
+                                    id: installBtnMouse
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    enabled: root.pendingAppId !== (root.selectedApp ? root.selectedApp.id : "")
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                     onClicked: {
                                         if (root.selectedApp) {
-                                            root.installRequested(root.selectedApp.id)
+                                            root.requestInstall(root.selectedApp.id)
                                         }
                                     }
                                 }
                             }
 
+                            // Secondary Action: Uninstall (if installed)
                             Rectangle {
                                 visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
-                                height: 36
-                                implicitWidth: uninstBtnRow.implicitWidth + 20
+                                height: 34
+                                implicitWidth: Math.max(160, uninstBtnRow.implicitWidth + 24)
                                 radius: theme.radiusSm
-                                color: theme.surfaceElevated
-                                border.color: theme.borderStrong
+                                color: uninstBtnMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#FEE2E2" : "#451A1A") : theme.surfaceElevated
+                                border.color: uninstBtnMouse.containsMouse ? "#EF4444" : theme.borderSubtle
                                 border.width: 1
 
                                 RowLayout {
                                     id: uninstBtnRow
                                     anchors.centerIn: parent
                                     spacing: 6
-                                    RyzoraIcon { name: "trash"; size: 12; color: "#ef4444" }
+                                    RyzoraIcon {
+                                        name: "trash"
+                                        size: 11
+                                        color: uninstBtnMouse.containsMouse ? "#DC2626" : theme.textSecondary
+                                    }
                                     Text {
-                                        text: "Uninstall"
-                                        font.pixelSize: 12
-                                        color: "#ef4444"
+                                        text: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "") && root.pendingAction === "uninstall" ? "Removing..." : "Uninstall"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        color: uninstBtnMouse.containsMouse ? "#DC2626" : theme.textSecondary
                                     }
                                 }
 
                                 MouseArea {
+                                    id: uninstBtnMouse
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    enabled: root.pendingAppId !== (root.selectedApp ? root.selectedApp.id : "")
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                     onClicked: {
                                         if (root.selectedApp) {
-                                            root.uninstallRequested(root.selectedApp.id)
+                                            root.requestUninstall(root.selectedApp.id)
                                         }
                                     }
                                 }
@@ -1464,129 +1565,244 @@ Item {
                     }
                 }
 
-                // Screenshots Carousel (if screenshots exist)
-                ColumnLayout {
-                    visible: Boolean(root.selectedApp && root.selectedApp.screenshots && root.selectedApp.screenshots.length > 0)
+                // ── 3. Two-Column Content Layout (Responsive: Stacks on root.width < 900) ──
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    columns: root.width < 900 ? 1 : 2
+                    columnSpacing: 24
+                    rowSpacing: 24
 
-                    Text {
-                        text: "Screenshots"
-                        font.pixelSize: 16
-                        font.bold: true
-                        color: theme.text
-                    }
-
-                    Flickable {
+                    // Main Column: Media Showcase + Description
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        height: 220
-                        contentWidth: screenRow.implicitWidth
-                        contentHeight: 220
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
+                        spacing: 24
 
-                        RowLayout {
-                            id: screenRow
-                            spacing: 14
+                        // Genuine Screenshots Showcase
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            visible: Boolean(root.selectedApp && root.selectedApp.screenshots && root.selectedApp.screenshots.length > 0)
 
-                            Repeater {
-                                model: root.selectedApp && root.selectedApp.screenshots ? root.selectedApp.screenshots : []
-                                Rectangle {
-                                    width: 390
-                                    height: 220
-                                    radius: theme.radiusMd
-                                    color: theme.surface
-                                    border.color: theme.borderSubtle
-                                    border.width: 1
-                                    clip: true
+                            Text {
+                                text: "Screenshots & Previews"
+                                font.pixelSize: 16
+                                font.bold: true
+                                color: theme.text
+                            }
 
-                                    Image {
-                                        anchors.fill: parent
-                                        source: modelData
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                        cache: true
-                                        smooth: true
+                            // Large Main Screenshot Frame
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: Math.min(380, Math.round(width * 0.56))
+                                radius: theme.radiusMd
+                                color: theme.surfaceElevated
+                                border.color: theme.borderSubtle
+                                border.width: 1
+                                clip: true
+
+                                Image {
+                                    id: mainScreenImg
+                                    anchors.fill: parent
+                                    source: (root.selectedApp && root.selectedApp.screenshots && root.selectedApp.screenshots.length > root.selectedScreenshotIndex)
+                                        ? root.selectedApp.screenshots[root.selectedScreenshotIndex]
+                                        : ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    cache: true
+                                    smooth: true
+                                    visible: status === Image.Ready
+                                    opacity: status === Image.Ready ? 1.0 : 0.0
+                                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                                }
+                            }
+
+                            // Thumbnail Strip (if > 1 screenshot)
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+                                visible: Boolean(root.selectedApp && root.selectedApp.screenshots && root.selectedApp.screenshots.length > 1)
+
+                                Repeater {
+                                    model: (root.selectedApp && root.selectedApp.screenshots) ? root.selectedApp.screenshots : []
+
+                                    Rectangle {
+                                        width: 100
+                                        height: 60
+                                        radius: 6
+                                        color: theme.surfaceElevated
+                                        border.color: index === root.selectedScreenshotIndex ? theme.accent : theme.borderSubtle
+                                        border.width: index === root.selectedScreenshotIndex ? 2 : 1
+                                        clip: true
+
+                                        Image {
+                                            anchors.fill: parent
+                                            source: modelData
+                                            fillMode: Image.PreserveAspectCrop
+                                            smooth: true
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.selectedScreenshotIndex = index
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }
 
-                // Full Application Description & Metadata
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    Text {
-                        text: "About this application"
-                        font.pixelSize: 16
-                        font.bold: true
-                        color: theme.text
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: descCol.implicitHeight + 28
-                        radius: theme.radiusMd
-                        color: theme.surface
-                        border.color: theme.borderSubtle
-                        border.width: 1
-
+                        // "About this application" Section
                         ColumnLayout {
-                            id: descCol
-                            anchors.fill: parent
-                            anchors.margins: 14
+                            Layout.fillWidth: true
                             spacing: 12
 
                             Text {
-                                Layout.fillWidth: true
-                                text: root.selectedApp ? (root.selectedApp.description || root.selectedApp.summary || "") : ""
-                                font.pixelSize: 13
+                                text: "About this application"
+                                font.pixelSize: 16
+                                font.bold: true
                                 color: theme.text
-                                wrapMode: Text.WordWrap
-                                lineHeight: 1.4
                             }
 
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 1
-                                color: theme.borderSubtle
+                                implicitHeight: aboutDescCol.implicitHeight + 36
+                                radius: theme.radiusMd
+                                color: theme.surface
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                ColumnLayout {
+                                    id: aboutDescCol
+                                    anchors.fill: parent
+                                    anchors.margins: 20
+                                    spacing: 14
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.selectedApp ? (root.selectedApp.description || root.selectedApp.summary || "") : ""
+                                        font.pixelSize: 14
+                                        lineHeight: 1.5
+                                        color: theme.text
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
                             }
+                        }
+                    }
 
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: 2
-                                rowSpacing: 8
-                                columnSpacing: 20
+                    // Side Column: Specifications & Information (320px on wide, fillWidth on narrow)
+                    ColumnLayout {
+                        Layout.preferredWidth: root.width < 900 ? detailCol.width : 320
+                        Layout.fillWidth: root.width < 900
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 12
 
-                                Text { text: "Version:"; font.pixelSize: 11; font.bold: true; color: theme.textSecondary }
-                                Text { text: root.selectedApp ? root.selectedApp.version : ""; font.pixelSize: 11; font.family: "monospace"; color: theme.text }
+                        Text {
+                            text: "Information"
+                            font.pixelSize: 16
+                            font.bold: true
+                            color: theme.text
+                        }
 
-                                Text { text: "Publisher:"; font.pixelSize: 11; font.bold: true; color: theme.textSecondary }
-                                Text { text: root.selectedApp ? root.selectedApp.publisher : ""; font.pixelSize: 11; color: theme.text }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: specCol.implicitHeight + 28
+                            radius: theme.radiusMd
+                            color: theme.surface
+                            border.color: theme.borderSubtle
+                            border.width: 1
 
-                                Text { text: "Repository:"; font.pixelSize: 11; font.bold: true; color: theme.textSecondary }
-                                Text { text: root.selectedApp ? (root.selectedApp.repository + " (Official Arch Native)") : ""; font.pixelSize: 11; color: theme.text }
+                            ColumnLayout {
+                                id: specCol
+                                anchors.fill: parent
+                                anchors.margins: 18
+                                spacing: 14
 
-                                Text { text: "License:"; font.pixelSize: 11; font.bold: true; color: theme.textSecondary }
-                                Text { text: root.selectedApp && root.selectedApp.license ? root.selectedApp.license : "Open Source"; font.pixelSize: 11; color: theme.text }
+                                // Developer / Publisher
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Developer"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    Text { text: root.selectedApp ? (root.selectedApp.publisher || "Community") : ""; font.pixelSize: 13; color: theme.text }
+                                }
 
-                                Text { text: "Website:"; font.pixelSize: 11; font.bold: true; color: theme.textSecondary }
-                                Text {
-                                    text: root.selectedApp && root.selectedApp.website ? root.selectedApp.website : ""
-                                    font.pixelSize: 11
-                                    color: theme.accent
-                                    elide: Text.ElideRight
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (root.selectedApp && root.selectedApp.website) {
-                                                Qt.openUrlExternally(root.selectedApp.website)
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // Category
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Category"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    Text { text: root.selectedApp ? (root.selectedApp.category || "General") : ""; font.pixelSize: 13; color: theme.text }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // Version
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Version"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    Text { text: root.selectedApp ? root.selectedApp.version : ""; font.pixelSize: 12; font.family: "monospace"; color: theme.text }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // Source / Repository
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Software Source"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    Text { text: root.selectedApp ? (root.selectedApp.repository ? (root.selectedApp.repository + " (Official Arch Native)") : "Official Arch Linux") : ""; font.pixelSize: 13; color: theme.text }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // License
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "License"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    Text { text: root.selectedApp && root.selectedApp.license ? root.selectedApp.license : "Open Source"; font.pixelSize: 13; color: theme.text }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // Architecture
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Architecture"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    Text { text: "x86_64 (Linux 64-bit)"; font.pixelSize: 12; color: theme.text }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle; visible: Boolean(root.selectedApp && root.selectedApp.website) }
+
+                                // Official Website
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    visible: Boolean(root.selectedApp && root.selectedApp.website)
+                                    Text { text: "Official Website"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
+                                    RowLayout {
+                                        spacing: 6
+                                        Text {
+                                            text: root.selectedApp && root.selectedApp.website ? root.selectedApp.website : ""
+                                            font.pixelSize: 12
+                                            color: theme.accent
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (root.selectedApp && root.selectedApp.website) {
+                                                        Qt.openUrlExternally(root.selectedApp.website)
+                                                    }
+                                                }
                                             }
                                         }
+                                        RyzoraIcon { name: "arrow-right"; size: 10; color: theme.accent }
                                     }
                                 }
                             }
