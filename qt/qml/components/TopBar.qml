@@ -18,6 +18,8 @@ Rectangle {
     signal searchChanged(string text)
     signal libraryClicked()
     property string searchQuery: ""
+    property string currentTab: "hub"
+    readonly property string placeholderText: currentTab === "apps" ? "Search applications…" : "Search rices, themes, lockscreens…"
 
     RowLayout {
         anchors.fill: parent
@@ -146,7 +148,7 @@ Rectangle {
 
                     Text {
                         anchors.fill: parent
-                        text: "Search rices, themes, lockscreens…"
+                        text: root.placeholderText
                         font.pixelSize: theme.fontNav
                         color: theme.textMuted
                         visible: !searchInput.text && !searchInput.activeFocus

@@ -228,6 +228,15 @@ ApplicationWindow {
         }
         navHistoryIndex = navHistory.length - 1;
         stackLayout.currentTab = tab;
+        if (topBar) {
+            if (tab === "apps") {
+                topBar.searchQuery = appsView ? appsView.searchQuery : "";
+            } else if (tab === "discover") {
+                topBar.searchQuery = discoverView ? discoverView.searchQuery : "";
+            } else {
+                topBar.searchQuery = "";
+            }
+        }
     }
 
     function goBack() {
@@ -353,6 +362,7 @@ ApplicationWindow {
             TopBar {
                 id: topBar
                 Layout.fillWidth: true
+                currentTab: stackLayout.currentTab
                 canGoBack: window.canGoBack
                 canGoForward: window.canGoForward
                 onNavigateBack: window.goBack()

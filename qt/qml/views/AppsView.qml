@@ -148,6 +148,34 @@ Item {
         return res
     }
 
+    // Active Featured App (only when on All and no search)
+    readonly property var activeFeaturedApp: {
+        if (root.searchQuery !== "" || root.selectedCategory !== "All" || root.featuredItems.length === 0) {
+            return null
+        }
+        var idx = root.featuredIndex
+        if (idx < 0 || idx >= root.featuredItems.length) idx = 0
+        return root.featuredItems[idx]
+    }
+
+    // Stable ID of featured app to exclude from adjacent grid
+    readonly property string featuredAppId: activeFeaturedApp ? activeFeaturedApp.id : ""
+
+    // Visible items in the catalog grid (de-duplicated so featured item is not repeated)
+    readonly property var visibleCatalogApps: {
+        var all = root.filteredApps
+        var featId = root.featuredAppId
+        if (!featId || featId === "") return all
+        var res = []
+        for (var i = 0; i < all.length; i++) {
+            var it = all[i]
+            if (it && it.id !== featId) {
+                res.push(it)
+            }
+        }
+        return res
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // 1. MAIN BROWSE VIEW
     // ──────────────────────────────────────────────────────────────────────────
@@ -181,7 +209,7 @@ Item {
             // ── 1. COMPACT PAGE HEADER ──
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 14
+                spacing: 12
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -203,103 +231,57 @@ Item {
                     }
                 }
 
-                // In-page Search Input
+                // Contextual search feedback pill when search query is active
                 Rectangle {
-                    Layout.preferredWidth: Math.min(240, Math.max(160, root.width * 0.24))
-                    height: 32
+                    visible: root.searchQuery !== ""
+                    height: 28
+                    implicitWidth: searchTagRow.implicitWidth + 16
                     radius: theme.radiusSm
-                    color: theme.surface
-                    border.color: searchInp.activeFocus ? theme.accent : theme.borderSubtle
+                    color: theme.surfaceElevated
+                    border.color: theme.accent
                     border.width: 1
 
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 8
+                        id: searchTagRow
+                        anchors.centerIn: parent
                         spacing: 6
 
                         RyzoraIcon {
                             name: "search"
-                            size: 13
-                            color: theme.textMuted
+                            size: 11
+                            color: theme.accent
                         }
 
-                        TextInput {
-                            id: searchInp
-                            Layout.fillWidth: true
-                            text: root.searchQuery
-                            font.pixelSize: 12
+                        Text {
+                            text: 'Query: "' + root.searchQuery + '"'
+                            font.pixelSize: 11
                             color: theme.text
-                            clip: true
-                            selectByMouse: true
-                            onTextChanged: {
-                                root.searchQuery = text
-                                backend.filterApps(root.selectedCategory, text)
-                            }
-
-                            Text {
-                                visible: !searchInp.text && !searchInp.activeFocus
-                                text: "Search applications…"
-                                font.pixelSize: 12
-                                color: theme.textMuted
-                            }
                         }
 
                         Rectangle {
-                            visible: searchInp.text.length > 0
-                            width: 16
-                            height: 16
-                            radius: 8
-                            color: "transparent"
+                            width: 14
+                            height: 14
+                            radius: 7
+                            color: clearQueryMouse.containsMouse ? theme.surfaceHover : "transparent"
+
                             RyzoraIcon {
                                 anchors.centerIn: parent
                                 name: "x"
-                                size: 10
-                                color: theme.textMuted
+                                size: 9
+                                color: theme.textSecondary
                             }
+
                             MouseArea {
+                                id: clearQueryMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    searchInp.text = ""
+                                    root.searchQuery = ""
                                     root.clearSearchRequested()
+                                    backend.filterApps(root.selectedCategory, "")
                                 }
                             }
-                        }
-                    }
-                }
-
-                // Sort Control
-                Rectangle {
-                    height: 32
-                    implicitWidth: sortRow.implicitWidth + 16
-                    radius: theme.radiusSm
-                    color: theme.surface
-                    border.color: sortMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
-                    border.width: 1
-
-                    RowLayout {
-                        id: sortRow
-                        anchors.centerIn: parent
-                        spacing: 6
-                        RyzoraIcon { name: "filter"; size: 11; color: theme.textMuted }
-                        Text {
-                            text: "Sort: " + (root.sortBy === "status" ? "Status" : (root.sortBy === "category" ? "Category" : "Name"))
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                            color: theme.textSecondary
-                        }
-                    }
-
-                    MouseArea {
-                        id: sortMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.sortBy === "name") root.sortBy = "category"
-                            else if (root.sortBy === "category") root.sortBy = "status"
-                            else root.sortBy = "name"
                         }
                     }
                 }
@@ -340,7 +322,9 @@ Item {
                             height: 30
                             implicitWidth: catInnerRow.implicitWidth + 18
                             radius: theme.radiusSm
-                            color: isSelected ? theme.surfaceElevated : (catMouse.containsMouse ? theme.surfaceHover : theme.surface)
+                            color: isSelected 
+                                ? (theme.resolvedTheme === "light" ? "#EBF2FE" : "#1B283D")
+                                : (catMouse.containsMouse ? theme.surfaceHover : theme.surface)
                             border.color: isSelected ? theme.accent : (catMouse.containsMouse ? theme.borderStrong : theme.borderSubtle)
                             border.width: 1
 
@@ -359,7 +343,7 @@ Item {
                                     text: modelData.label
                                     font.pixelSize: 11
                                     font.weight: isSelected ? Font.DemiBold : Font.Medium
-                                    color: isSelected ? theme.text : theme.textSecondary
+                                    color: isSelected ? (theme.resolvedTheme === "light" ? theme.accent : "#ffffff") : theme.textSecondary
                                 }
 
                                 Text {
@@ -386,25 +370,32 @@ Item {
                 }
             }
 
-            // ── 3. FEATURED APPLICATION HERO PANEL (168px high) ──
+            // ── 3. FEATURED APPLICATION HERO PANEL (Balanced 2-Column, 176px high) ──
             Rectangle {
                 id: heroPanel
-                visible: root.searchQuery === "" && root.featuredItems.length > 0 && root.selectedCategory === "All"
+                visible: root.activeFeaturedApp !== null
                 Layout.fillWidth: true
-                height: 168
+                height: 176
                 radius: theme.radiusMd
                 color: theme.surface
                 border.color: theme.borderSubtle
                 border.width: 1
                 clip: true
 
-                readonly property var currentItem: (root.featuredItems.length > 0 && root.featuredIndex < root.featuredItems.length) ? root.featuredItems[root.featuredIndex] : null
+                // Subtle accent tint background
+                Rectangle {
+                    anchors.fill: parent
+                    color: theme.accent
+                    opacity: theme.resolvedTheme === "light" ? 0.04 : 0.07
+                }
+
+                readonly property var currentItem: root.activeFeaturedApp
 
                 RowLayout {
                     anchors.fill: parent
                     spacing: 0
 
-                    // Left Column: Application Information & Actions
+                    // Left Column: Application Information & Actions (~58% width)
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -419,7 +410,7 @@ Item {
                                 radius: 4
                                 implicitWidth: featBadgeTxt.implicitWidth + 10
                                 color: theme.surfaceElevated
-                                border.color: theme.borderStrong
+                                border.color: theme.accent
                                 border.width: 1
 
                                 Text {
@@ -439,13 +430,14 @@ Item {
                                 font.letterSpacing: 0.5
                                 color: theme.textMuted
                                 elide: Text.ElideRight
+                                Layout.fillWidth: true
                             }
                         }
 
                         Text {
                             Layout.fillWidth: true
                             text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
-                            font.pixelSize: 18
+                            font.pixelSize: 19
                             font.bold: true
                             color: theme.text
                             elide: Text.ElideRight
@@ -465,11 +457,11 @@ Item {
 
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 12
+                            spacing: 10
 
                             Rectangle {
-                                height: 28
-                                implicitWidth: exploreRow.implicitWidth + 20
+                                height: 30
+                                implicitWidth: exploreRow.implicitWidth + 22
                                 radius: theme.radiusSm
                                 color: heroBtnMouse.containsMouse ? theme.accentHover : theme.accent
 
@@ -477,15 +469,15 @@ Item {
                                     id: exploreRow
                                     anchors.centerIn: parent
                                     spacing: 6
+                                    RyzoraIcon {
+                                        name: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "play" : "download"
+                                        size: 11
+                                        color: "#ffffff"
+                                    }
                                     Text {
                                         text: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "Open Application" : "Get Application"
                                         font.pixelSize: 11
                                         font.bold: true
-                                        color: "#ffffff"
-                                    }
-                                    RyzoraIcon {
-                                        name: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "play" : "download"
-                                        size: 11
                                         color: "#ffffff"
                                     }
                                 }
@@ -509,10 +501,10 @@ Item {
 
                             // Secondary: View Details
                             Rectangle {
-                                height: 28
-                                implicitWidth: detailRow.implicitWidth + 16
+                                height: 30
+                                implicitWidth: detailRow.implicitWidth + 18
                                 radius: theme.radiusSm
-                                color: theme.surfaceElevated
+                                color: detailMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                                 border.color: detailMouse.containsMouse ? theme.accent : theme.borderStrong
                                 border.width: 1
 
@@ -573,11 +565,11 @@ Item {
                         color: theme.borderSubtle
                     }
 
-                    // Right Column: Authentic Application Screenshot / Banner
+                    // Right Column: Authentic Application Artwork (~42% width)
                     Rectangle {
-                        Layout.preferredWidth: Math.min(360, Math.max(240, heroPanel.width * 0.40))
+                        Layout.preferredWidth: Math.max(260, Math.round(heroPanel.width * 0.42))
                         Layout.fillHeight: true
-                        color: theme.resolvedTheme === "light" ? "#F0F2F5" : "#14171D"
+                        color: theme.resolvedTheme === "light" ? "#F0F2F5" : "#13161C"
                         clip: true
 
                         Image {
@@ -587,41 +579,52 @@ Item {
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
-                            sourceSize.width: 720
-                            sourceSize.height: 405
+                            sourceSize.width: 960
+                            sourceSize.height: 540
                             smooth: true
                             visible: status === Image.Ready
                         }
 
-                        // Fallback when banner is loading or unavailable
+                        // Clean Fallback when banner is not available (prominent real app icon)
                         ColumnLayout {
                             anchors.centerIn: parent
                             spacing: 8
                             visible: heroImg.status !== Image.Ready
 
-                            Image {
+                            Rectangle {
                                 Layout.alignment: Qt.AlignHCenter
-                                width: 48
-                                height: 48
-                                source: heroPanel.currentItem ? (heroPanel.currentItem.icon_url || "") : ""
-                                fillMode: Image.PreserveAspectFit
-                                visible: status === Image.Ready
-                            }
+                                width: 56
+                                height: 56
+                                radius: 12
+                                color: theme.surfaceElevated
+                                border.color: theme.borderSubtle
+                                border.width: 1
 
-                            RyzoraIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                visible: !heroPanel.currentItem || !heroPanel.currentItem.icon_url
-                                name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
-                                size: 32
-                                color: theme.textMuted
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 42
+                                    height: 42
+                                    source: heroPanel.currentItem ? (heroPanel.currentItem.icon_url || "") : ""
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                    visible: status === Image.Ready
+                                }
+
+                                RyzoraIcon {
+                                    anchors.centerIn: parent
+                                    visible: !heroPanel.currentItem || !heroPanel.currentItem.icon_url
+                                    name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
+                                    size: 28
+                                    color: theme.textMuted
+                                }
                             }
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: heroPanel.currentItem ? heroPanel.currentItem.display_name : ""
+                                text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name) : ""
                                 font.pixelSize: 12
                                 font.bold: true
-                                color: theme.textMuted
+                                color: theme.textSecondary
                             }
                         }
 
@@ -639,51 +642,88 @@ Item {
                 }
             }
 
-            // ── 4. MAIN APPLICATIONS GRID (4-5 Columns on Desktop) ──
+            // ── 4. MAIN APPLICATIONS GRID ──
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 12
 
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
 
                     Text {
-                        text: root.selectedCategory === "All" ? "All Applications" : root.selectedCategory
+                        text: (root.featuredAppId !== "") ? "More applications" : (root.selectedCategory === "All" ? "All applications" : root.selectedCategory)
                         font.pixelSize: 15
                         font.bold: true
                         color: theme.text
                     }
 
                     Text {
-                        text: "(" + root.filteredApps.length + ")"
+                        text: "(" + root.visibleCatalogApps.length + ")"
                         font.pixelSize: 12
                         font.family: "monospace"
                         color: theme.textMuted
                     }
 
                     Item { Layout.fillWidth: true }
+
+                    // Sort Control neatly aligned with grid header
+                    Rectangle {
+                        height: 28
+                        implicitWidth: sortRow.implicitWidth + 16
+                        radius: theme.radiusSm
+                        color: theme.surface
+                        border.color: sortMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
+                        border.width: 1
+
+                        RowLayout {
+                            id: sortRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            RyzoraIcon { name: "filter"; size: 11; color: theme.textMuted }
+                            Text {
+                                text: "Sort: " + (root.sortBy === "status" ? "Status" : (root.sortBy === "category" ? "Category" : "Name"))
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                                color: theme.textSecondary
+                            }
+                        }
+
+                        MouseArea {
+                            id: sortMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (root.sortBy === "name") root.sortBy = "category"
+                                else if (root.sortBy === "category") root.sortBy = "status"
+                                else root.sortBy = "name"
+                            }
+                        }
+                    }
                 }
 
                 GridLayout {
                     id: catalogGrid
                     Layout.fillWidth: true
-                    columns: root.width < 520 ? 1 : (root.width < 760 ? 2 : (root.width < 1000 ? 3 : (root.width < 1300 ? 4 : 5)))
-                    rowSpacing: 14
-                    columnSpacing: 14
+                    columns: root.width < 560 ? 1 : (root.width < 860 ? 2 : (root.width < 1180 ? 3 : 4))
+                    rowSpacing: 12
+                    columnSpacing: 12
 
                     Repeater {
-                        model: root.filteredApps
+                        model: root.visibleCatalogApps
 
                         delegate: Rectangle {
                             id: appCard
                             Layout.fillWidth: true
-                            height: 220
+                            height: 154
                             radius: theme.radiusMd
                             color: cardMouse.containsMouse ? theme.surfaceHover : theme.surface
                             border.color: cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
                             border.width: 1
                             clip: true
+
+                            readonly property bool hasScreenshot: Boolean(modelData.banner_url && modelData.banner_url !== "")
 
                             MouseArea {
                                 id: cardMouse
@@ -696,18 +736,19 @@ Item {
                                 }
                             }
 
+                            // ── CARD VARIANT 1: GENUINE SCREENSHOT HERO (For apps with real screenshots) ──
                             ColumnLayout {
                                 anchors.fill: parent
                                 spacing: 0
+                                visible: appCard.hasScreenshot
 
-                                // Top Landscape Area (116px): Genuine Screenshot or Neutral Framed Icon
+                                // Top Landscape Screenshot (94px)
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 116
-                                    color: theme.resolvedTheme === "light" ? "#F1F3F6" : "#14171D"
+                                    Layout.preferredHeight: 94
+                                    color: theme.resolvedTheme === "light" ? "#F1F3F6" : "#13161C"
                                     clip: true
 
-                                    // 1. Screenshot banner if available
                                     Image {
                                         id: cardBannerImg
                                         anchors.fill: parent
@@ -718,45 +759,9 @@ Item {
                                         sourceSize.width: 480
                                         sourceSize.height: 270
                                         smooth: true
-                                        visible: modelData.banner_url !== "" && status === Image.Ready
                                     }
 
-                                    // 2. Centered Authentic Icon if no screenshot banner
-                                    Item {
-                                        anchors.fill: parent
-                                        visible: !cardBannerImg.visible
-
-                                        Rectangle {
-                                            anchors.centerIn: parent
-                                            width: 56
-                                            height: 56
-                                            radius: theme.radiusMd
-                                            color: theme.surface
-                                            border.color: theme.borderSubtle
-                                            border.width: 1
-
-                                            Image {
-                                                id: fallbackIconImg
-                                                anchors.centerIn: parent
-                                                width: 36
-                                                height: 36
-                                                source: modelData.icon_url || ""
-                                                fillMode: Image.PreserveAspectFit
-                                                smooth: true
-                                                visible: status === Image.Ready
-                                            }
-
-                                            RyzoraIcon {
-                                                anchors.centerIn: parent
-                                                visible: fallbackIconImg.status !== Image.Ready
-                                                name: root.getCategoryIcon(modelData.category)
-                                                size: 24
-                                                color: theme.textMuted
-                                            }
-                                        }
-                                    }
-
-                                    // Subtle divider
+                                    // Subtle bottom divider
                                     Rectangle {
                                         anchors.bottom: parent.bottom
                                         anchors.left: parent.left
@@ -766,125 +771,249 @@ Item {
                                     }
                                 }
 
-                                // Compact Information Block (104px)
-                                ColumnLayout {
+                                // Bottom Row (60px)
+                                RowLayout {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     Layout.leftMargin: 12
                                     Layout.rightMargin: 12
-                                    Layout.topMargin: 10
-                                    Layout.bottomMargin: 10
-                                    spacing: 4
+                                    spacing: 10
 
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 8
+                                    // Real App Icon
+                                    Rectangle {
+                                        width: 34
+                                        height: 34
+                                        radius: 8
+                                        color: theme.surfaceElevated
+                                        border.color: theme.borderSubtle
+                                        border.width: 1
 
-                                        // Mini App Icon in Header
-                                        Rectangle {
-                                            width: 20
-                                            height: 20
-                                            radius: 4
-                                            color: theme.surfaceElevated
-                                            border.color: theme.borderSubtle
-                                            border.width: 1
-
-                                            Image {
-                                                anchors.centerIn: parent
-                                                width: 14
-                                                height: 14
-                                                source: modelData.icon_url || ""
-                                                fillMode: Image.PreserveAspectFit
-                                                visible: status === Image.Ready
-                                            }
-
-                                            RyzoraIcon {
-                                                anchors.centerIn: parent
-                                                visible: !modelData.icon_url || modelData.icon_url === ""
-                                                name: root.getCategoryIcon(modelData.category)
-                                                size: 10
-                                                color: theme.textSecondary
-                                            }
+                                        Image {
+                                            anchors.centerIn: parent
+                                            width: 26
+                                            height: 26
+                                            source: modelData.icon_url || ""
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            visible: status === Image.Ready
                                         }
 
+                                        RyzoraIcon {
+                                            anchors.centerIn: parent
+                                            visible: !modelData.icon_url || modelData.icon_url === ""
+                                            name: root.getCategoryIcon(modelData.category)
+                                            size: 18
+                                            color: theme.textMuted
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+
                                         Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.display_name || modelData.name || modelData.id
+                                            text: modelData.display_name || modelData.name || ""
                                             font.pixelSize: 13
                                             font.bold: true
                                             color: theme.text
                                             elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Text {
+                                            text: (modelData.publisher || "Native") + " · " + (modelData.category || "App")
+                                            font.pixelSize: 10
+                                            color: theme.textMuted
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
                                         }
                                     }
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.summary || modelData.description || "Linux desktop application."
-                                        font.pixelSize: 11
-                                        color: theme.textSecondary
-                                        maximumLineCount: 2
-                                        wrapMode: Text.WordWrap
-                                        elide: Text.ElideRight
+                                    // Action Pill: Open (if installed) or Get (if uninstalled)
+                                    Rectangle {
+                                        height: 26
+                                        implicitWidth: 64
+                                        radius: theme.radiusSm
+                                        color: modelData.is_installed
+                                            ? (cardActionMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                            : (cardActionMouse.containsMouse ? theme.accentHover : theme.accent)
+                                        border.color: modelData.is_installed ? theme.borderStrong : theme.accent
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 4
+
+                                            RyzoraIcon {
+                                                name: modelData.is_installed ? "play" : "download"
+                                                size: 9
+                                                color: modelData.is_installed ? "#10b981" : "#ffffff"
+                                            }
+
+                                            Text {
+                                                text: modelData.is_installed ? "Open" : "Get"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                color: modelData.is_installed ? theme.text : "#ffffff"
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: cardActionMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (modelData.is_installed) {
+                                                    root.launchRequested(modelData.id)
+                                                } else {
+                                                    root.installRequested(modelData.id)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── CARD VARIANT 2: PROMINENT SQUARE APP ICON (For apps with no screenshots) ──
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+                                visible: !appCard.hasScreenshot
+
+                                // Top Row: Prominent 48x48 Real Icon + Name/Category + Action Button
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Rectangle {
+                                        width: 48
+                                        height: 48
+                                        radius: 10
+                                        color: theme.surfaceElevated
+                                        border.color: theme.borderSubtle
+                                        border.width: 1
+
+                                        Image {
+                                            anchors.centerIn: parent
+                                            width: 38
+                                            height: 38
+                                            source: modelData.icon_url || ""
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            visible: status === Image.Ready
+                                        }
+
+                                        RyzoraIcon {
+                                            anchors.centerIn: parent
+                                            visible: !modelData.icon_url || modelData.icon_url === ""
+                                            name: root.getCategoryIcon(modelData.category)
+                                            size: 24
+                                            color: theme.textMuted
+                                        }
                                     }
 
-                                    Item { Layout.fillHeight: true }
-
-                                    RowLayout {
+                                    ColumnLayout {
                                         Layout.fillWidth: true
-                                        spacing: 6
+                                        spacing: 2
 
                                         Text {
+                                            text: modelData.display_name || modelData.name || ""
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: theme.text
+                                            elide: Text.ElideRight
                                             Layout.fillWidth: true
+                                        }
+
+                                        Text {
                                             text: (modelData.publisher || "Arch Native") + " · " + (modelData.category || "App")
                                             font.pixelSize: 10
                                             color: theme.textMuted
                                             elide: Text.ElideRight
+                                            Layout.fillWidth: true
                                         }
+                                    }
 
-                                        // Action Pill: Open (if installed) or Get (if uninstalled)
-                                        Rectangle {
-                                            height: 22
-                                            implicitWidth: cardBtnRow.implicitWidth + 14
-                                            radius: 4
-                                            color: modelData.is_installed
-                                                ? (actionMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                                : (actionMouse.containsMouse ? theme.accentHover : theme.accent)
-                                            border.color: modelData.is_installed ? theme.borderStrong : theme.accent
-                                            border.width: 1
+                                    // Action Pill
+                                    Rectangle {
+                                        height: 26
+                                        implicitWidth: 64
+                                        radius: theme.radiusSm
+                                        color: modelData.is_installed
+                                            ? (iconCardActionMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                                            : (iconCardActionMouse.containsMouse ? theme.accentHover : theme.accent)
+                                        border.color: modelData.is_installed ? theme.borderStrong : theme.accent
+                                        border.width: 1
 
-                                            RowLayout {
-                                                id: cardBtnRow
-                                                anchors.centerIn: parent
-                                                spacing: 4
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 4
 
-                                                RyzoraIcon {
-                                                    name: modelData.is_installed ? "play" : "download"
-                                                    size: 9
-                                                    color: modelData.is_installed ? "#10b981" : "#ffffff"
-                                                }
-
-                                                Text {
-                                                    text: modelData.is_installed ? "Open" : "Get"
-                                                    font.pixelSize: 10
-                                                    font.bold: true
-                                                    color: modelData.is_installed ? theme.text : "#ffffff"
-                                                }
+                                            RyzoraIcon {
+                                                name: modelData.is_installed ? "play" : "download"
+                                                size: 9
+                                                color: modelData.is_installed ? "#10b981" : "#ffffff"
                                             }
 
-                                            MouseArea {
-                                                id: actionMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (modelData.is_installed) {
-                                                        root.launchRequested(modelData.id)
-                                                    } else {
-                                                        root.installRequested(modelData.id)
-                                                    }
+                                            Text {
+                                                text: modelData.is_installed ? "Open" : "Get"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                color: modelData.is_installed ? theme.text : "#ffffff"
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: iconCardActionMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (modelData.is_installed) {
+                                                    root.launchRequested(modelData.id)
+                                                } else {
+                                                    root.installRequested(modelData.id)
                                                 }
                                             }
                                         }
+                                    }
+                                }
+
+                                // Middle: 2-line concise summary / description
+                                Text {
+                                    text: modelData.summary || modelData.description || ""
+                                    font.pixelSize: 11
+                                    color: theme.textSecondary
+                                    maximumLineCount: 2
+                                    wrapMode: Text.WordWrap
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+
+                                Item { Layout.fillHeight: true }
+
+                                // Bottom Metadata Row: Repository / Installed state
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Text {
+                                        text: modelData.is_installed
+                                            ? ("● Installed · v" + (modelData.installed_version || modelData.version))
+                                            : ((modelData.repository || "extra") + " repository")
+                                        font.pixelSize: 10
+                                        font.weight: modelData.is_installed ? Font.Medium : Font.Normal
+                                        color: modelData.is_installed ? "#10b981" : theme.textMuted
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: modelData.license ? modelData.license : "Native"
+                                        font.pixelSize: 10
+                                        color: theme.textMuted
                                     }
                                 }
                             }
@@ -895,8 +1024,8 @@ Item {
                 // Empty State
                 EmptyState {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 280
-                    visible: root.filteredApps.length === 0
+                    Layout.preferredHeight: 240
+                    visible: root.visibleCatalogApps.length === 0
                     iconName: "layout-grid"
                     title: "No Applications Found"
                     message: "No software applications match category '" + root.selectedCategory + "'" + (root.searchQuery ? " and query '" + root.searchQuery + "'" : "") + "."
@@ -904,7 +1033,6 @@ Item {
                     onActionClicked: {
                         root.selectedCategory = "All"
                         root.searchQuery = ""
-                        searchInp.text = ""
                         root.clearSearchRequested()
                         backend.filterApps("All", "")
                     }
@@ -912,6 +1040,7 @@ Item {
             }
         }
     }
+
 
     // ──────────────────────────────────────────────────────────────────────────
     // 2. DEDICATED APPLICATION DETAIL VIEW (Overlay for full software details)

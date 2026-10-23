@@ -1853,6 +1853,32 @@ impl BackendState {
         (false, None)
     }
 
+    pub fn resolve_system_app_icon(id: &str) -> Option<String> {
+        let aliases: &[&str] = match id {
+            "neovim" => &["nvim", "neovim"],
+            _ => &[id],
+        };
+        let candidates = [
+            "/usr/share/icons/hicolor/scalable/apps",
+            "/usr/share/icons/hicolor/256x256/apps",
+            "/usr/share/icons/hicolor/128x128/apps",
+            "/usr/share/icons/hicolor/64x64/apps",
+            "/usr/share/icons/hicolor/48x48/apps",
+            "/usr/share/pixmaps",
+        ];
+        for alias in aliases {
+            for dir in candidates {
+                for ext in &[".svg", ".png"] {
+                    let p = Path::new(dir).join(format!("{}{}", alias, ext));
+                    if p.is_file() {
+                        return Some(format!("file://{}", p.to_string_lossy()));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     pub fn query_applications(&self, repo_root_hint: Option<&Path>, category: &str, search: &str) -> Vec<ApplicationItem> {
         let repo_root = Self::resolve_repo_root(repo_root_hint);
         let apps_dir = repo_root.join("public/assets/apps");
@@ -2225,6 +2251,8 @@ impl BackendState {
 
             let icon_url = if !icon_rel.is_empty() {
                 make_asset_url(icon_rel)
+            } else if let Some(sys_icon) = Self::resolve_system_app_icon(id) {
+                sys_icon
             } else {
                 String::new()
             };
