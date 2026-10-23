@@ -26,16 +26,22 @@ ApplicationWindow {
     // Navigation History Stack
     property var navHistory: ["discover"]
     property int navHistoryIndex: 0
-    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen"))
+    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen"))
     readonly property bool canGoForward: navHistoryIndex < navHistory.length - 1
 
     function showPackageDetail(pkg, originTab) {
         var tab = originTab || stackLayout.currentTab;
-        if (tab === "lockscreens" && lockscreenView) {
+        if (tab === "apps" && appsView) {
             if (discoverView) discoverView.setSelectedPackage(null);
+            if (lockscreenView) lockscreenView.setSelectedPackage(null);
+            appsView.setSelectedPackage(pkg);
+        } else if (tab === "lockscreens" && lockscreenView) {
+            if (discoverView) discoverView.setSelectedPackage(null);
+            if (appsView) appsView.setSelectedPackage(null);
             lockscreenView.setSelectedPackage(pkg);
         } else {
             if (lockscreenView) lockscreenView.setSelectedPackage(null);
+            if (appsView) appsView.setSelectedPackage(null);
             discoverView.setSelectedPackage(pkg);
             navigateTo("discover");
         }
@@ -66,6 +72,18 @@ ApplicationWindow {
         target: backend
         function onNotificationPosted(type, title, message) {
             toast.show(type, title, message)
+        }
+        function onPackageInstalled(packageId, success, message) {
+            if (success) {
+                backend.loadFastfetchLocalEmblems();
+                backend.loadFastfetchInstalledPresets();
+            }
+        }
+        function onPackageUninstalled(packageId, success, message) {
+            if (success) {
+                backend.loadFastfetchLocalEmblems();
+                backend.loadFastfetchInstalledPresets();
+            }
         }
     }
 
@@ -115,14 +133,23 @@ ApplicationWindow {
             backend.uninstallPackage(data.id);
         } else if (action === "open_fastfetch") {
             detailDrawer.isOpen = false;
+            var ffOrigin = stackLayout ? stackLayout.currentTab : "discover";
             discoverView.setSelectedPackage(null);
-            window.navigateTo("fastfetch");
+            if (appsView) appsView.setSelectedPackage(null);
+            window.openStudioWithRoute("fastfetch", data ? data.id : null, ffOrigin);
+            if (fastfetchView && data && data.id && typeof fastfetchView.loadPackage === "function") {
+                fastfetchView.loadPackage(data.id);
+            }
         } else if (action === "open_lockscreen") {
             detailDrawer.isOpen = false;
             discoverView.setSelectedPackage(null);
-            window.navigateTo("lockscreens");
+            if (appsView) appsView.setSelectedPackage(null);
+            var lockOrigin = stackLayout ? stackLayout.currentTab : "discover";
+            window.openStudioWithRoute("lockscreen", data ? data.id : null, lockOrigin);
         } else if (action === "open_studio") {
             detailDrawer.isOpen = false;
+            discoverView.setSelectedPackage(null);
+            if (appsView) appsView.setSelectedPackage(null);
             var origin = stackLayout ? stackLayout.currentTab : "discover";
             var cat = String(data.category || "").toLowerCase();
             var pt = String(data.package_type || "").toLowerCase();
@@ -143,6 +170,7 @@ ApplicationWindow {
         } else if (action === "open_library") {
             detailDrawer.isOpen = false;
             discoverView.setSelectedPackage(null);
+            if (appsView) appsView.setSelectedPackage(null);
             window.navigateTo("library");
         } else {
             backend.postNotification("info", "Package Details", "Package " + data.name + " is selected.");
@@ -193,6 +221,10 @@ ApplicationWindow {
     }
 
     function goBack() {
+        if (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) {
+            appsView.setSelectedPackage(null);
+            return;
+        }
         if (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) {
             discoverView.setSelectedPackage(null);
             return;
@@ -327,6 +359,8 @@ ApplicationWindow {
                 onRefreshClicked: {
                     if (stackLayout.currentTab === "discover") {
                         discoverView.updateFilter()
+                    } else if (stackLayout.currentTab === "apps") {
+                        backend.filterCatalog("all", "")
                     } else if (stackLayout.currentTab === "library") {
                         backend.loadLibrary(true)
                     } else if (stackLayout.currentTab === "backups") {
@@ -386,7 +420,10 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "apps"
                     onPackageSelected: function(pkg) {
-                        window.showPackageDetail(pkg)
+                        appsView.setSelectedPackage(pkg)
+                    }
+                    onActionRequested: function(action, data, targetOverride) {
+                        window.handlePackageAction(action, data, targetOverride)
                     }
                     onClearSearchRequested: {
                         topBar.searchQuery = ""

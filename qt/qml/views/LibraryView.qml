@@ -10,6 +10,103 @@ Item {
     signal navigateRequested(string tabName)
     signal customizeRequested(string subpage, var packageData)
 
+    property string searchQuery: ""
+    property string selectedCategory: "all" // "all" | "lockscreens" | "fastfetch" | "emblems" | "wallpapers"
+    property string selectedStatusFilter: "all" // "all" | "active"
+    property var pendingUninstallPackage: null
+
+    function getPackageCategory(item) {
+        if (!item) return "other"
+        var id = String(item.id || "").toLowerCase()
+        var cat = String(item.category || "").toLowerCase()
+        var ptype = String(item.package_type || "").toLowerCase()
+        var sub = String(item.subfilter || "").toLowerCase()
+
+        if (id.indexOf("fastfetch-emblem-") === 0 || sub === "emblem" || (cat === "fastfetch" && ptype === "emblem")) {
+            return "emblems"
+        }
+        if (cat === "fastfetch" || ptype === "fastfetch" || id.indexOf("fastfetch-") === 0) {
+            return "fastfetch"
+        }
+        if (ptype === "wallpaper" && !item.supports_sddm && sub !== "silentsddm") {
+            return "wallpapers"
+        }
+        if (cat === "lockscreens" || cat === "lockscreen" || cat === "sddm" || ptype === "lockscreen" || item.supports_sddm || id.indexOf("lockscreen-") === 0 || id.indexOf("silentsddm-") === 0) {
+            return "lockscreens"
+        }
+        return "other"
+    }
+
+    function getCategoryLabel(catKey) {
+        if (catKey === "lockscreens") return "Lockscreen"
+        if (catKey === "fastfetch") return "Fastfetch"
+        if (catKey === "emblems") return "Emblem"
+        if (catKey === "wallpapers") return "Wallpaper"
+        return "Package"
+    }
+
+    function getCategoryCount(catKey) {
+        var list = backend.libraryList || []
+        if (catKey === "all") return list.length
+        var count = 0
+        for (var i = 0; i < list.length; ++i) {
+            if (getPackageCategory(list[i]) === catKey) count++
+        }
+        return count
+    }
+
+    function getActiveCount() {
+        var list = backend.libraryList || []
+        var count = 0
+        for (var i = 0; i < list.length; ++i) {
+            if (list[i] && list[i].is_active) count++
+        }
+        return count
+    }
+
+    function getFilteredList() {
+        var list = backend.libraryList || []
+        var q = root.searchQuery.trim().toLowerCase()
+        var cat = root.selectedCategory
+        var status = root.selectedStatusFilter
+
+        var res = []
+        for (var i = 0; i < list.length; ++i) {
+            var item = list[i]
+            if (!item) continue
+            var itemCat = getPackageCategory(item)
+
+            if (cat !== "all" && itemCat !== cat) continue
+            if (status === "active" && !item.is_active) continue
+
+            if (q.length > 0) {
+                var name = String(item.name || "").toLowerCase()
+                var id = String(item.id || "").toLowerCase()
+                var desc = String(item.description || "").toLowerCase()
+                if (name.indexOf(q) === -1 && id.indexOf(q) === -1 && desc.indexOf(q) === -1) {
+                    continue
+                }
+            }
+            res.push(item)
+        }
+        return res
+    }
+
+    function canOpenInStudio(item) {
+        if (!item) return false
+        var cat = getPackageCategory(item)
+        return cat === "lockscreens" || cat === "fastfetch" || cat === "emblems" || cat === "wallpapers"
+    }
+
+    function openInStudio(item) {
+        if (!item) return
+        var cat = getPackageCategory(item)
+        var subpage = (cat === "lockscreens") ? "lockscreen" :
+                      (cat === "fastfetch" || cat === "emblems") ? "fastfetch" :
+                      (cat === "wallpapers") ? "wallpapers" : "lockscreen"
+        root.customizeRequested(subpage, item)
+    }
+
     ScrollView {
         anchors.fill: parent
         clip: true
@@ -17,299 +114,250 @@ Item {
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
         ColumnLayout {
-            width: parent.width
-            anchors.margins: 20
+            width: Math.max(300, parent.width - 40)
+            x: 20
             spacing: 16
 
-            // ── 1. Top Header Banner Card ──
-            Rectangle {
-                id: bannerCard
+            Item { width: 1; height: 4 }
+
+            // ── 1. Header Toolbar ──
+            RowLayout {
                 Layout.fillWidth: true
-                height: Math.max(76, bannerRow.implicitHeight + 28)
-                radius: theme.radiusMd
-                color: theme.surface
-                border.color: theme.borderSubtle
-                border.width: 1
+                spacing: 16
 
-                RowLayout {
-                    id: bannerRow
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 16
+                ColumnLayout {
+                    spacing: 2
+                    Layout.fillWidth: true
 
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 220
-
-                        Text {
-                            text: "Installed Packages"
-                            font.pixelSize: theme.fontTitle
-                            font.bold: true
-                            color: theme.text
-                        }
-
-                        Text {
-                            text: backend.libraryCount + " installed configuration" + (backend.libraryCount === 1 ? "" : "s") + " · " + backend.activeCount + " active on system."
-                            font.pixelSize: theme.fontCardDesc
-                            color: theme.textMuted
-                        }
-                    }
-
-                    // Collision-Free Explicit Header Actions
-                    RowLayout {
-                        spacing: 8
-                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-
-                        // Check for Updates Button
-                        ActionButton {
-                            id: btnCheckUpdates
-                            iconText: backend.isUpdatesLoading ? "⌛" : "↻"
-                            label: backend.isUpdatesLoading ? "Checking…" : "Check for Updates"
-                            onClicked: backend.loadUpdates()
-                        }
-
-                        // Updates Button
-                        ActionButton {
-                            id: btnUpdatesNav
-                            label: "Updates"
-                            onClicked: root.navigateRequested("updates")
-                        }
-
-                        // View Backups Button
-                        ActionButton {
-                            id: btnBackupsNav
-                            label: "View Backups"
-                            onClicked: root.navigateRequested("backups")
-                        }
-                    }
-                }
-            }
-
-            // ── 2. Available Updates Alert (if any updates detected) ──
-            Rectangle {
-                visible: backend.updatesCount > 0
-                Layout.fillWidth: true
-                height: 44
-                radius: theme.radiusMd
-                color: "#1e293b"
-                border.color: "#38bdf8"
-                border.width: 1
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 10
-
-                    Text { text: "⬆️"; font.pixelSize: 14 }
                     Text {
-                        text: backend.updatesCount + " package update" + (backend.updatesCount === 1 ? "" : "s") + " available. Click to review."
-                        font.pixelSize: 12
+                        text: "Library"
+                        font.pixelSize: 22
                         font.bold: true
-                        color: "#7dd3fc"
-                        Layout.fillWidth: true
+                        color: theme.text
                     }
 
-                    Rectangle {
-                        height: 26
-                        width: 90
-                        radius: 4
-                        color: "#0369a1"
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Open Updates"
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: "#ffffff"
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.navigateRequested("updates")
-                        }
+                    Text {
+                        text: "Manage your installed packages · " + backend.libraryCount + " installed · " + root.getActiveCount() + " active"
+                        font.pixelSize: 12
+                        color: theme.textMuted
                     }
                 }
-            }
 
-            // ── 3. Current Configuration Section: Real Host State Driven ──
-            // Case A: Real Active Lock Screen Exists
-            Rectangle {
-                visible: Boolean(backend.activeConfiguration && backend.activeConfiguration.has_active)
-                Layout.fillWidth: true
-                height: 84
-                radius: theme.radiusXl
-                color: theme.surfaceElevated
-                border.color: theme.borderStrong
-                border.width: 1
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 14
-
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: theme.radiusLg
-                        color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.15)
-                        border.color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.3)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✨"
-                            font.pixelSize: 16
-                        }
-                    }
-
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-
-                        RowLayout {
-                            spacing: 8
-                            Text {
-                                text: {
-                                    if (!backend.activeConfiguration) return "ACTIVE CONFIGURATION"
-                                    var t = backend.activeConfiguration.active_type
-                                    return t === "theme" ? "ACTIVE LOCK SCREEN THEME" :
-                                           t === "wallpaper" ? "ACTIVE WALLPAPER" : "ACTIVE LOCK SCREEN"
-                                }
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: theme.text
-                            }
-
-                            // Active Indicator Pill
-                            Rectangle {
-                                height: 18
-                                width: 56
-                                radius: 9
-                                color: "#10b981"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "ACTIVE"
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    color: "#ffffff"
-                                }
-                            }
-
-                            // Target Pills
-                            Rectangle {
-                                visible: Boolean(backend.activeConfiguration && backend.activeConfiguration.sddm_login_active)
-                                height: 18
-                                width: 76
-                                radius: 4
-                                color: "#451a03"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "SDDM Login"
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    color: "#fde68a"
-                                }
-                            }
-                        }
-
-                        Text {
-                            text: {
-                                if (!backend.activeConfiguration) return ""
-                                return backend.activeConfiguration.active_title + " · " + backend.activeConfiguration.description
-                            }
-                            font.pixelSize: 11
-                            color: theme.textMuted
-                        }
-                    }
+                // Compact Search Input
+                Rectangle {
+                    width: 210
+                    height: 32
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: searchInput.activeFocus ? theme.accent : theme.borderSubtle
+                    border.width: 1
 
                     RowLayout {
-                        spacing: 8
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 6
 
-                        ActionButton {
-                            label: "Customize in Studio"
-                            iconText: "🎨"
-                            onClicked: root.customizeRequested("lockscreen", null)
+                        RyzoraIcon {
+                            name: "search"
+                            size: 13
+                            color: theme.textMuted
                         }
 
-                        // Verified Safe Deactivate Action (NEVER UNINSTALLS)
-                        Rectangle {
-                            height: 30
-                            width: deactTxt.implicitWidth + 20
-                            radius: theme.radiusSm
-                            color: deactArea.containsMouse ? "#3b1219" : theme.surface
-                            border.color: deactArea.containsMouse ? "#ef4444" : theme.borderStrong
-                            border.width: 1
+                        TextInput {
+                            id: searchInput
+                            Layout.fillWidth: true
+                            font.pixelSize: 11
+                            color: theme.text
+                            text: root.searchQuery
+                            selectByMouse: true
+                            clip: true
+                            onTextChanged: root.searchQuery = text
 
                             Text {
-                                id: deactTxt
-                                anchors.centerIn: parent
-                                text: "Deactivate"
+                                text: "Search installed…"
                                 font.pixelSize: 11
-                                font.bold: true
-                                color: deactArea.containsMouse ? "#f87171" : theme.textMuted
+                                color: theme.textMuted
+                                visible: !searchInput.text && !searchInput.activeFocus
                             }
+                        }
 
+                        Rectangle {
+                            visible: root.searchQuery.length > 0
+                            width: 16; height: 16; radius: 8
+                            color: clrSearchM.containsMouse ? theme.surfaceHover : "transparent"
+                            RyzoraIcon {
+                                anchors.centerIn: parent
+                                name: "x"
+                                size: 9
+                                color: theme.textMuted
+                            }
                             MouseArea {
-                                id: deactArea
+                                id: clrSearchM
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: backend.deactivateTarget("all")
+                                onClicked: {
+                                    root.searchQuery = ""
+                                    searchInput.text = ""
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Case B: Honest Inactive Status (When no target is currently active)
-            Rectangle {
-                visible: !Boolean(backend.activeConfiguration && backend.activeConfiguration.has_active)
-                Layout.fillWidth: true
-                height: 52
-                radius: theme.radiusMd
-                color: theme.surface
-                border.color: theme.borderSubtle
-                border.width: 1
+                // Check Updates Action
+                Rectangle {
+                    height: 32
+                    width: checkRow.implicitWidth + 20
+                    radius: theme.radiusSm
+                    color: checkM.containsMouse ? theme.surfaceHover : theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 10
+                    RowLayout {
+                        id: checkRow
+                        anchors.centerIn: parent
+                        spacing: 6
 
-                    Text { text: "🔒"; font.pixelSize: 14 }
-                    Text {
-                        text: "No active lock screen or login theme configured. System default greeter is currently active."
-                        font.pixelSize: 11
-                        color: theme.textMuted
-                        Layout.fillWidth: true
+                        RyzoraIcon {
+                            name: "refresh"
+                            size: 13
+                            color: backend.isUpdatesLoading ? theme.accent : theme.textSecondary
+                        }
+
+                        Text {
+                            text: backend.isUpdatesLoading ? "Checking…" : "Check for Updates"
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: theme.textSecondary
+                        }
                     }
-                    ActionButton {
-                        label: "Browse Themes"
-                        onClicked: root.navigateRequested("discover")
+
+                    MouseArea {
+                        id: checkM
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.loadUpdates()
                     }
                 }
             }
 
-            // ── 4. Installed Packages Header & Grid ──
+            // ── 2. Filter Pills Bar ──
             RowLayout {
                 Layout.fillWidth: true
-                visible: backend.libraryCount > 0
+                spacing: 8
 
-                Text {
-                    text: backend.libraryCount + " installed package" + (backend.libraryCount === 1 ? "" : "s") + (backend.activeCount > 0 ? (" · " + backend.activeCount + " active") : "")
-                    font.pixelSize: 12
-                    color: theme.textFaint
+                // Category Filter Pills
+                Repeater {
+                    model: [
+                        { id: "all", label: "All", count: root.getCategoryCount("all") },
+                        { id: "lockscreens", label: "Lockscreen", count: root.getCategoryCount("lockscreens") },
+                        { id: "fastfetch", label: "Fastfetch", count: root.getCategoryCount("fastfetch") },
+                        { id: "emblems", label: "Emblems", count: root.getCategoryCount("emblems") },
+                        { id: "wallpapers", label: "Wallpapers", count: root.getCategoryCount("wallpapers") }
+                    ]
+
+                    Rectangle {
+                        property bool isSel: root.selectedCategory === modelData.id
+                        height: 28
+                        width: catPillRow.implicitWidth + 18
+                        radius: 14
+                        color: isSel ? theme.accentFaint : (catM.containsMouse ? theme.surfaceHover : theme.surface)
+                        border.color: isSel ? theme.accent : theme.borderSubtle
+                        border.width: 1
+
+                        RowLayout {
+                            id: catPillRow
+                            anchors.centerIn: parent
+                            spacing: 5
+
+                            Text {
+                                text: modelData.label
+                                font.pixelSize: 11
+                                font.weight: parent.parent.isSel ? Font.DemiBold : Font.Normal
+                                color: parent.parent.isSel ? theme.accent : theme.textSecondary
+                            }
+
+                            Text {
+                                text: String(modelData.count)
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: parent.parent.isSel ? theme.accent : theme.textMuted
+                            }
+                        }
+
+                        MouseArea {
+                            id: catM
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.selectedCategory = modelData.id
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 1
+                    height: 18
+                    color: theme.borderSubtle
+                }
+
+                // Active-Only Status Filter Pill
+                Rectangle {
+                    property bool isSel: root.selectedStatusFilter === "active"
+                    height: 28
+                    width: actPillRow.implicitWidth + 18
+                    radius: 14
+                    color: isSel ? theme.accentFaint : (actM.containsMouse ? theme.surfaceHover : theme.surface)
+                    border.color: isSel ? theme.accent : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: actPillRow
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        Rectangle {
+                            width: 6; height: 6; radius: 3
+                            color: "#10b981"
+                        }
+
+                        Text {
+                            text: "Active Only"
+                            font.pixelSize: 11
+                            font.weight: parent.parent.isSel ? Font.DemiBold : Font.Normal
+                            color: parent.parent.isSel ? theme.accent : theme.textSecondary
+                        }
+
+                        Text {
+                            text: String(root.getActiveCount())
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: parent.parent.isSel ? theme.accent : theme.textMuted
+                        }
+                    }
+
+                    MouseArea {
+                        id: actM
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.selectedStatusFilter = (root.selectedStatusFilter === "active" ? "all" : "active")
+                    }
                 }
 
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: "Click 'History' on any package for historical snapshots & rollback."
+                    text: root.getFilteredList().length + " of " + backend.libraryCount + " packages"
                     font.pixelSize: 11
                     color: theme.textMuted
                 }
             }
 
-            // Empty State
+            // ── 3. Empty State (No Installed Packages on Host) ──
             Rectangle {
                 visible: backend.libraryCount === 0 && !backend.isLibraryLoading
                 Layout.fillWidth: true
@@ -321,34 +369,43 @@ Item {
 
                 ColumnLayout {
                     anchors.centerIn: parent
-                    spacing: 12
+                    spacing: 10
 
-                    Text {
-                        text: "📦"
-                        font.pixelSize: 32
+                    RyzoraIcon {
+                        name: "library"
+                        size: 32
+                        color: theme.textMuted
                         Layout.alignment: Qt.AlignHCenter
                     }
 
                     Text {
-                        text: "No packages currently installed."
+                        text: "No packages installed yet"
                         font.pixelSize: 14
-                        font.bold: true
+                        font.weight: Font.DemiBold
+                        color: theme.text
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Text {
+                        text: "Explore themes, lockscreens, and fastfetch presets in Discover."
+                        font.pixelSize: 11
                         color: theme.textMuted
                         Layout.alignment: Qt.AlignHCenter
                     }
 
                     Rectangle {
-                        height: 34
-                        width: 160
+                        height: 32
+                        width: discTxt.implicitWidth + 24
                         radius: theme.radiusSm
                         color: theme.accent
                         Layout.alignment: Qt.AlignHCenter
 
                         Text {
+                            id: discTxt
                             anchors.centerIn: parent
-                            text: "Browse Marketplace"
-                            font.pixelSize: 12
-                            font.bold: true
+                            text: "Browse Discover"
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
                             color: "#ffffff"
                         }
 
@@ -361,77 +418,470 @@ Item {
                 }
             }
 
-            // Flow Grid of Rich PackageCard items matching React grid-cols
-            Flow {
-                id: cardsGrid
+            // ── 4. Empty State (Filtered / Search Result Empty) ──
+            Rectangle {
+                visible: backend.libraryCount > 0 && root.getFilteredList().length === 0
                 Layout.fillWidth: true
-                spacing: 14
-                visible: backend.libraryCount > 0
+                height: 180
+                radius: theme.radiusMd
+                color: theme.surface
+                border.color: theme.borderSubtle
+                border.width: 1
 
-                Repeater {
-                    model: backend.libraryList
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
 
-                    PackageCard {
-                        width: {
-                            var avail = cardsGrid.width
-                            var cols = avail >= 1100 ? 4 : (avail >= 800 ? 3 : (avail >= 460 ? 2 : 1))
-                            return Math.floor((avail - (cols - 1) * 14) / cols)
+                    RyzoraIcon {
+                        name: "filter"
+                        size: 24
+                        color: theme.textMuted
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Text {
+                        text: "No packages match your search or filter"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                        color: theme.text
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Rectangle {
+                        height: 28
+                        width: rstTxt.implicitWidth + 20
+                        radius: theme.radiusSm
+                        color: theme.surfaceHover
+                        border.color: theme.borderSubtle
+                        border.width: 1
+                        Layout.alignment: Qt.AlignHCenter
+
+                        Text {
+                            id: rstTxt
+                            anchors.centerIn: parent
+                            text: "Clear Filters"
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: theme.textSecondary
                         }
-                        itemData: modelData
-                        onCardClicked: root.packageSelected(modelData)
-                        onHistoryClicked: root.navigateRequested("backups")
-                        onCustomizeClicked: {
-                            var cat = String(modelData.category || "").toLowerCase()
-                            var sub = (cat === "lockscreens" || cat === "sddm") ? "lockscreen" : (cat === "fastfetch" ? "fastfetch" : (cat === "wallpapers" ? "wallpapers" : "overview"))
-                            root.customizeRequested(sub, modelData)
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.searchQuery = ""
+                                searchInput.text = ""
+                                root.selectedCategory = "all"
+                                root.selectedStatusFilter = "all"
+                            }
                         }
                     }
                 }
             }
+
+            // ── 5. Installed Packages Grid ──
+            Grid {
+                id: packageGrid
+                Layout.fillWidth: true
+                visible: root.getFilteredList().length > 0
+                columns: {
+                    var w = width
+                    if (w >= 1100) return 4
+                    if (w >= 780) return 3
+                    if (w >= 500) return 2
+                    return 1
+                }
+                spacing: 14
+                readonly property real itemWidth: Math.floor((width - (columns - 1) * spacing) / Math.max(1, columns))
+
+                Repeater {
+                    model: root.getFilteredList()
+
+                    Rectangle {
+                        width: packageGrid.itemWidth
+                        height: 228
+                        radius: theme.radiusMd
+                        color: theme.surface
+                        border.color: modelData.is_active ? theme.accent : theme.borderSubtle
+                        border.width: modelData.is_active ? 2 : 1
+                        clip: true
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 0
+
+                            // 1. Thumbnail Header
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 116
+                                color: "#07090D"
+                                clip: true
+
+                                Image {
+                                    id: cardImg
+                                    anchors.fill: parent
+                                    source: modelData.preview_url || ""
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                    mipmap: true
+                                    asynchronous: true
+                                }
+
+                                // Fallback Icon if Image Missing
+                                RyzoraIcon {
+                                    visible: !cardImg.source || cardImg.status === Image.Error || cardImg.status === Image.Null
+                                    anchors.centerIn: parent
+                                    name: {
+                                        var c = root.getPackageCategory(modelData)
+                                        if (c === "lockscreens") return "lock"
+                                        if (c === "fastfetch") return "terminal"
+                                        if (c === "emblems" || c === "wallpapers") return "image"
+                                        return "package"
+                                    }
+                                    size: 28
+                                    color: theme.textMuted
+                                }
+
+                                // Category Pill (Top-Left)
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.margins: 8
+                                    height: 20
+                                    width: catTxt.implicitWidth + 12
+                                    radius: 10
+                                    color: "#B3000000"
+                                    border.color: theme.borderSubtle
+                                    border.width: 1
+
+                                    Text {
+                                        id: catTxt
+                                        anchors.centerIn: parent
+                                        text: root.getCategoryLabel(root.getPackageCategory(modelData))
+                                        font.pixelSize: 9
+                                        font.weight: Font.DemiBold
+                                        color: "#E2E8F0"
+                                    }
+                                }
+
+                                // Active Badge (Top-Right)
+                                Rectangle {
+                                    visible: Boolean(modelData.is_active)
+                                    anchors.top: parent.top
+                                    anchors.right: parent.right
+                                    anchors.margins: 8
+                                    height: 20
+                                    width: actBadgeRow.implicitWidth + 12
+                                    radius: 10
+                                    color: "#064E3B"
+                                    border.color: "#10B981"
+                                    border.width: 1
+
+                                    RowLayout {
+                                        id: actBadgeRow
+                                        anchors.centerIn: parent
+                                        spacing: 4
+                                        Rectangle {
+                                            width: 5; height: 5; radius: 2.5
+                                            color: "#34D399"
+                                        }
+                                        Text {
+                                            text: "ACTIVE"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                            color: "#A7F3D0"
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.packageSelected(modelData)
+                                }
+                            }
+
+                            // 2. Info & Metadata Area
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.margins: 10
+                                spacing: 4
+
+                                // Package Title
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.name || modelData.id
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+                                    color: theme.text
+                                    elide: Text.ElideRight
+                                }
+
+                                // Version and Details Meta
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Text {
+                                        text: modelData.version ? ("v" + modelData.version) : "v1.0.0"
+                                        font.pixelSize: 10
+                                        font.family: "JetBrains Mono, monospace"
+                                        color: theme.accent
+                                    }
+
+                                    Text {
+                                        text: "·"
+                                        font.pixelSize: 10
+                                        color: theme.textMuted
+                                    }
+
+                                    Text {
+                                        text: modelData.author || "Community"
+                                        font.pixelSize: 10
+                                        color: theme.textMuted
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+
+                                Item { Layout.fillHeight: true }
+
+                                // 3. Action Buttons Row
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    // View Details Button
+                                    Rectangle {
+                                        Layout.fillWidth: !root.canOpenInStudio(modelData)
+                                        width: root.canOpenInStudio(modelData) ? (detTxt.implicitWidth + 14) : undefined
+                                        height: 26
+                                        radius: theme.radiusSm
+                                        color: detM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                        border.color: theme.borderSubtle
+                                        border.width: 1
+
+                                        Text {
+                                            id: detTxt
+                                            anchors.centerIn: parent
+                                            text: "Details"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Medium
+                                            color: theme.textSecondary
+                                        }
+
+                                        MouseArea {
+                                            id: detM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.packageSelected(modelData)
+                                        }
+                                    }
+
+                                    // Open in Studio Button (If compatible editor exists)
+                                    Rectangle {
+                                        visible: root.canOpenInStudio(modelData)
+                                        Layout.fillWidth: true
+                                        height: 26
+                                        radius: theme.radiusSm
+                                        color: stdM.containsMouse ? theme.accent : theme.accentFaint
+                                        border.color: theme.accent
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 4
+
+                                            RyzoraIcon {
+                                                name: "sliders-horizontal"
+                                                size: 11
+                                                color: stdM.containsMouse ? "#FFFFFF" : theme.accent
+                                            }
+
+                                            Text {
+                                                text: "Studio"
+                                                font.pixelSize: 11
+                                                font.weight: Font.DemiBold
+                                                color: stdM.containsMouse ? "#FFFFFF" : theme.accent
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: stdM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.openInStudio(modelData)
+                                        }
+                                    }
+
+                                    // Uninstall Button (Secondary with confirmation)
+                                    Rectangle {
+                                        width: 26; height: 26
+                                        radius: theme.radiusSm
+                                        color: unM.containsMouse ? Qt.rgba(239/255, 68/255, 68/255, 0.15) : theme.surfaceElevated
+                                        border.color: unM.containsMouse ? "#EF4444" : theme.borderSubtle
+                                        border.width: 1
+
+                                        RyzoraIcon {
+                                            anchors.centerIn: parent
+                                            name: "trash"
+                                            size: 11
+                                            color: unM.containsMouse ? "#EF4444" : theme.textMuted
+                                        }
+
+                                        MouseArea {
+                                            id: unM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.pendingUninstallPackage = modelData
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item { width: 1; height: 20 }
         }
     }
 
-    component ActionButton : Rectangle {
-        id: actBtn
-        property string label: ""
-        property string iconText: ""
-        signal clicked()
-
-        implicitHeight: 32
-        implicitWidth: btnRow.implicitWidth + 24
-        Layout.preferredHeight: 32
-        Layout.preferredWidth: implicitWidth
-        radius: theme.radiusSm
-        color: btnMouse.containsMouse ? theme.surfaceElevated : "transparent"
-        border.color: theme.borderSubtle
-        border.width: 1
-
-        RowLayout {
-            id: btnRow
-            anchors.centerIn: parent
-            spacing: 6
-
-            Text {
-                visible: actBtn.iconText !== ""
-                text: actBtn.iconText
-                font.pixelSize: 12
-                color: theme.textSecondary
-            }
-
-            Text {
-                text: actBtn.label
-                font.pixelSize: theme.fontNav
-                font.bold: true
-                color: btnMouse.containsMouse ? theme.text : theme.textSecondary
-            }
-        }
+    // ── 6. Uninstall Confirmation Dialog ──
+    Rectangle {
+        visible: root.pendingUninstallPackage !== null
+        anchors.fill: parent
+        color: "#B3000000"
+        z: 1000
 
         MouseArea {
-            id: btnMouse
             anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: actBtn.clicked()
+            onClicked: root.pendingUninstallPackage = null
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 40, 420)
+            height: confirmCol.implicitHeight + 36
+            radius: theme.radiusMd
+            color: theme.surface
+            border.color: theme.borderStrong
+            border.width: 1
+
+            MouseArea { anchors.fill: parent }
+
+            ColumnLayout {
+                id: confirmCol
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 14
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Rectangle {
+                        width: 32; height: 32; radius: 16
+                        color: Qt.rgba(239/255, 68/255, 68/255, 0.15)
+                        RyzoraIcon {
+                            anchors.centerIn: parent
+                            name: "trash"
+                            size: 14
+                            color: "#EF4444"
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: "Uninstall Package"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: theme.text
+                        }
+                        Text {
+                            text: "Confirm package removal"
+                            font.pixelSize: 11
+                            color: theme.textMuted
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: root.pendingUninstallPackage
+                          ? ("Are you sure you want to uninstall \"" + (root.pendingUninstallPackage.name || root.pendingUninstallPackage.id) + "\"? This will remove all package files and revert any associated configurations.")
+                          : ""
+                    font.pixelSize: 12
+                    color: theme.textSecondary
+                    wrapMode: Text.Wrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true }
+
+                    Rectangle {
+                        width: cnlTxt.implicitWidth + 24
+                        height: 32
+                        radius: theme.radiusSm
+                        color: cnlM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                        border.color: theme.borderSubtle
+                        border.width: 1
+
+                        Text {
+                            id: cnlTxt
+                            anchors.centerIn: parent
+                            text: "Cancel"
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            color: theme.text
+                        }
+
+                        MouseArea {
+                            id: cnlM
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.pendingUninstallPackage = null
+                        }
+                    }
+
+                    Rectangle {
+                        width: unTxt.implicitWidth + 24
+                        height: 32
+                        radius: theme.radiusSm
+                        color: "#DC2626"
+
+                        Text {
+                            id: unTxt
+                            anchors.centerIn: parent
+                            text: "Uninstall"
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            color: "#FFFFFF"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (root.pendingUninstallPackage && root.pendingUninstallPackage.id) {
+                                    backend.uninstallPackage(root.pendingUninstallPackage.id)
+                                }
+                                root.pendingUninstallPackage = null
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -253,7 +253,7 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     // Also capture installed package detail (Clockwork Orbital)
     QVariantList catListShots = backend->catalogList();
     for (const QVariant &v : catListShots) {
-        if (v.toMap().value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+        if (v.toMap().value("id").toString() == "lockscreen-qylock-enfield" || (v.toMap().value("category").toString() == "lockscreens" && v.toMap().value("is_installed").toBool())) {
             QObject *discView = rootObj ? rootObj->findChild<QObject*>("discoverView") : nullptr;
             if (discView) {
                 QMetaObject::invokeMethod(discView, "setSelectedPackage", Q_ARG(QVariant, v));
@@ -382,7 +382,7 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
         pumpEvents(15, 20000);
     }
 
-    // 19b. Unified Personalization Studio Subpages (Ryoku Design Pattern)
+    // 19b. Unified Personalization Studio Subpages
     auto setStudioSub = [&](const QString &sub) {
         navigate("studio");
         QObject *studioObj = rootObj ? rootObj->findChild<QObject*>("studioView") : nullptr;
@@ -485,16 +485,22 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     QString homePath = testHome.path();
     qInfo() << "[SETUP] Isolated test sandbox mounted at:" << homePath;
 
+    QSet<QString> testedThemeIds;
+    const QString initialSeededThemeId = "lockscreen-qylock-enfield";
+    const QString initialSeededThemeName = "Enfield";
+    const QString initialSeededThemeSddm = "ryzora-enfield";
+    testedThemeIds.insert(initialSeededThemeId);
+
     QDir(homePath).mkpath(".local/share/ryzora/state");
     QDir(homePath).mkpath(".local/share/ryzora/installed");
     QDir(homePath).mkpath(".local/share/ryzora/snapshots");
     QDir(homePath).mkpath(".config/hypr/hypridle.conf.d");
 
-    // Write installed record file
-    QString instJsonPath = homePath + "/.local/share/ryzora/installed/lockscreen-qylock-clockwork-orbital.json";
+    // Write installed record file for initial test fixture (Enfield)
+    QString instJsonPath = homePath + "/.local/share/ryzora/installed/" + initialSeededThemeId + ".json";
     QJsonObject instObj;
-    instObj["package_id"] = "lockscreen-qylock-clockwork-orbital";
-    instObj["name"] = "Clockwork (Orbital)";
+    instObj["package_id"] = initialSeededThemeId;
+    instObj["name"] = initialSeededThemeName;
     instObj["version"] = "1.0.0";
     instObj["package_type"] = "lockscreen";
     instObj["category"] = "lockscreens";
@@ -502,7 +508,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     instObj["snapshot_id"] = "";
     instObj["installed_files"] = QJsonArray();
     instObj["files"] = QJsonArray();
-    instObj["package_source_path"] = QDir::currentPath() + "/repositories/community/packages/lockscreen-qylock-clockwork-orbital";
+    instObj["package_source_path"] = QDir::currentPath() + "/repositories/community/packages/" + initialSeededThemeId;
     QFile instFile(instJsonPath);
     if (instFile.open(QIODevice::WriteOnly)) {
         instFile.write(QJsonDocument(instObj).toJson());
@@ -545,6 +551,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     };
 
     for (const QString &pkgId : testRoutingPkgs) {
+        testedThemeIds.insert(pkgId);
         QVariant chosen;
         for (const QVariant &item : backend->catalogList()) {
             if (item.toMap().value("id").toString() == pkgId) {
@@ -733,14 +740,14 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     bool found = false;
     for (const QVariant &item : backend->catalogList()) {
         QVariantMap m = item.toMap();
-        if (m.value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+        if (m.value("id").toString() == initialSeededThemeId) {
             activePkg = m;
             found = true;
             break;
         }
     }
     if (!found) {
-        qCritical() << "FAIL: lockscreen-qylock-clockwork-orbital not found in catalog!";
+        qCritical() << "FAIL: " << initialSeededThemeId << " not found in catalog!";
         return 5;
     }
 
@@ -778,7 +785,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
 
     QElapsedTimer applyTimer;
     applyTimer.start();
-    backend->applyTarget("lockscreen-qylock-clockwork-orbital", "session_lock");
+    backend->applyTarget(initialSeededThemeId, "session_lock");
 
     while (!applyEmitted && applyTimer.elapsed() < 5000) {
         pumpEvents(5, 5000);
@@ -827,13 +834,13 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     QString sddmDropinPath = sddmDropinDir + "/zz-ryzora-theme.conf";
     QFile sddmDropinFile(sddmDropinPath);
     if (sddmDropinFile.open(QIODevice::WriteOnly)) {
-        sddmDropinFile.write(QByteArray("[Theme]\nCurrent=ryzora-clockwork-orbital\n"));
+        sddmDropinFile.write(QByteArray("[Theme]\nCurrent=" + initialSeededThemeSddm.toUtf8() + "\n"));
         sddmDropinFile.close();
     }
 
     QJsonObject sddmStateObj;
-    sddmStateObj["sddm_login"] = "lockscreen-qylock-clockwork-orbital";
-    sddmStateObj["sddm"] = "lockscreen-qylock-clockwork-orbital";
+    sddmStateObj["sddm_login"] = initialSeededThemeId;
+    sddmStateObj["sddm"] = initialSeededThemeId;
     sddmStateObj["session_lock"] = QJsonValue::Null;
     sddmStateObj["quickshell"] = QJsonValue::Null;
     QFile sddmStateFile(stateJsonPath);
@@ -857,7 +864,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     // Re-select package in discoverView
     for (const QVariant &item : backend->catalogList()) {
         QVariantMap m = item.toMap();
-        if (m.value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+        if (m.value("id").toString() == initialSeededThemeId) {
             discoverView->setProperty("selectedPackage", m);
             break;
         }
@@ -960,7 +967,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     pumpEvents(10, 5000);
     if (!testEmitted) {
         qWarning() << "  -> Test QMouseEvent click did not reach MouseArea; calling backend directly";
-        backend->testPackage("lockscreen-qylock-clockwork-orbital");
+        backend->testPackage(initialSeededThemeId);
     }
 
     while (!testEmitted && testTimer.elapsed() < 5000) {
@@ -1026,7 +1033,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     qInfo() << "  -> CONFIRMED: Backend error reported correctly and NOT swallowed! Error:" << errMsg;
 
     // Re-apply SDDM target so package is active before testing uninstall refusal invariant
-    backend->applyTarget("lockscreen-qylock-clockwork-orbital", "sddm_login");
+    backend->applyTarget(initialSeededThemeId, "sddm_login");
     pumpEvents(25, 10000);
 
     qInfo() << "[STEP 5] Testing uninstall safety invariant (active package must refuse uninstall)...";
@@ -1041,7 +1048,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
             uninstMsg = msg;
         });
 
-    backend->uninstallPackage("lockscreen-qylock-clockwork-orbital");
+    backend->uninstallPackage(initialSeededThemeId);
     QElapsedTimer uninstTimer;
     uninstTimer.start();
     while (!uninstEmitted && uninstTimer.elapsed() < 3000) {
@@ -1082,7 +1089,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
             uninstSuccess = success;
             uninstMsg = msg;
         });
-    backend->uninstallPackage("lockscreen-qylock-clockwork-orbital");
+    backend->uninstallPackage(initialSeededThemeId);
     uninstTimer.restart();
     while (!uninstEmitted && uninstTimer.elapsed() < 5000) {
         pumpEvents(5, 5000);
@@ -1097,6 +1104,9 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     qInfo() << "  -> CONFIRMED: Uninstall succeeded cleanly after deactivation.";
 
     qInfo() << "[STEP 6B] Testing install-then-return bug: Install Theme 1 -> Return -> Open Theme 2 -> Verify no stale data...";
+    testedThemeIds.insert("lockscreen-qylock-forest");
+    testedThemeIds.insert("lockscreen-qylock-dog-samurai");
+    testedThemeIds.insert("lockscreen-qylock-field");
     // 1. Open Theme 1 (Forest)
     QVariant forestToInstall;
     for (const QVariant &item : backend->catalogList()) {
@@ -1284,16 +1294,102 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     pumpEvents(25, 10000);
 
     QObject *openFfBtn = packageDetailView->findChild<QObject*>("openFastfetchButton");
+    QObject *dupStudioBtn = packageDetailView->findChild<QObject*>("openStudioButton");
     QObject *uninstFfBtn = packageDetailView->findChild<QObject*>("uninstallButton");
     if (!openFfBtn || !openFfBtn->property("visible").toBool()) {
         qCritical() << "FAIL: openFastfetchButton not visible for installed Fastfetch package!";
         return 125;
     }
+    if (dupStudioBtn && dupStudioBtn->property("visible").toBool()) {
+        qCritical() << "FAIL: Duplicate openStudioButton is visible alongside openFastfetchButton on Fastfetch package!";
+        return 1251;
+    }
     if (!uninstFfBtn || !uninstFfBtn->property("visible").toBool()) {
         qCritical() << "FAIL: uninstallButton not visible for installed Fastfetch package!";
         return 126;
     }
-    qInfo() << "  -> CONFIRMED: Installed Fastfetch displays 'Open in Fastfetch Studio' and 'Uninstall'.";
+    qInfo() << "  -> CONFIRMED: Installed Fastfetch displays exactly ONE 'Open in Fastfetch Studio' button and 'Uninstall'.";
+
+    // Verify Open in Fastfetch Studio navigation & Fastfetch Studio interactive preview updates
+    QMetaObject::invokeMethod(rootObj, "handlePackageAction",
+        Q_ARG(QVariant, "open_fastfetch"),
+        Q_ARG(QVariant, qmlFfData),
+        Q_ARG(QVariant, QVariant()));
+    pumpEvents(35, 10000);
+
+    QObject *ffStudioObj = rootObj->findChild<QObject*>("installedStylesDropdownTrigger");
+    if (!ffStudioObj) {
+        qCritical() << "FAIL: installedStylesDropdownTrigger not found in FastfetchView!";
+        return 1252;
+    }
+    // Locate studioFastfetchView via its unique property 'selectedPresetId'
+    QObject *ffViewObj = nullptr;
+    for (QObject *obj : rootObj->findChildren<QObject*>()) {
+        if (obj->property("selectedPresetId").isValid() && obj->property("emblemType").isValid()) {
+            if (obj->property("visible").toBool()) {
+                ffViewObj = obj;
+                break;
+            }
+            if (!ffViewObj) ffViewObj = obj;
+        }
+    }
+    if (!ffViewObj) {
+        qCritical() << "FAIL: Could not locate FastfetchView instance!";
+        return 1253;
+    }
+    if (ffViewObj->property("selectedPresetId").toString() != "fastfetch-preset-2") {
+        qCritical() << "FAIL: Open in Fastfetch Studio did not load fastfetch-preset-2! Got:"
+                    << ffViewObj->property("selectedPresetId").toString();
+        return 1254;
+    }
+    // Verify selecting preset did NOT auto-activate it
+    if (ffViewObj->property("activeFastfetchId").toString() == "fastfetch-preset-2") {
+        qCritical() << "FAIL: Selecting style in Studio auto-activated it on host config!";
+        return 1255;
+    }
+
+    // Wait for initial Fastfetch preview output to complete
+    QElapsedTimer ffPrevTimer;
+    ffPrevTimer.start();
+    while ((backend->isFastfetchLoading() || backend->fastfetchHtml().trimmed().isEmpty()) && ffPrevTimer.elapsed() < 5000) {
+        pumpEvents(10, 10000);
+    }
+    QString initialHtml = backend->fastfetchHtml();
+    if (initialHtml.trimmed().isEmpty()) {
+        qCritical() << "FAIL: Fastfetch live preview HTML is empty after loading preset!";
+        return 1256;
+    }
+
+    // Change emblem mode, dimensions, and accent color and verify live preview updates
+    ffViewObj->setProperty("emblemType", "image");
+    ffViewObj->setProperty("selectedEmblemId", "katana");
+    ffViewObj->setProperty("widthCols", 40);
+    ffViewObj->setProperty("heightLines", 20);
+    ffViewObj->setProperty("accentColor", "#10B981");
+    ffViewObj->setProperty("colorModified", true);
+    QMetaObject::invokeMethod(ffViewObj, "markModified");
+    QMetaObject::invokeMethod(ffViewObj, "updatePreview");
+    pumpEvents(10, 10000);
+    ffPrevTimer.restart();
+    while (backend->isFastfetchLoading() && ffPrevTimer.elapsed() < 5000) {
+        pumpEvents(10, 10000);
+    }
+    pumpEvents(15, 10000);
+
+    QString updatedHtml = backend->fastfetchHtml();
+    if (updatedHtml.trimmed().isEmpty() || !updatedHtml.contains("16, 185, 129")) {
+        // #10B981 is rgb(16, 185, 129) or #10b981 in ANSI-to-HTML output
+        if (!updatedHtml.toLower().contains("10b981") && !updatedHtml.contains("16, 185, 129") && updatedHtml == initialHtml) {
+            qCritical() << "FAIL: Fastfetch live preview did not update after changing accentColor and emblem!";
+            return 1257;
+        }
+    }
+    QObject *emblemImgObj = ffViewObj->findChild<QObject*>("fastfetchPreviewEmblemImage");
+    if (!emblemImgObj || emblemImgObj->property("width").toDouble() < 180.0 || emblemImgObj->property("height").toDouble() < 200.0) {
+        qCritical() << "FAIL: Emblem preview dimensions did not reflect enlarged widthCols/heightLines!";
+        return 1258;
+    }
+    qInfo() << "  -> CONFIRMED: Fastfetch Studio dropdown, non-auto-applying preset selection, larger emblem sizing, and live preview updates verified!";
 
     // Clean uninstall Fastfetch package
     bool ffUninstEmitted = false;
@@ -1308,6 +1404,9 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     pumpEvents(20, 10000);
 
     // Back to Discover
+    if (rootObj) {
+        QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    }
     QMetaObject::invokeMethod(discoverView, "setSelectedPackage", Q_ARG(QVariant, QVariant()));
     pumpEvents(15, 10000);
 
@@ -1354,10 +1453,12 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         pumpEvents(15, 10000);
     }
 
-    // 3. LOCKSCREEN PACKAGE VALIDATION (Clockwork Orbital)
+    // 3. LOCKSCREEN PACKAGE VALIDATION (Static Image Theme: Girl Coffee)
+    const QString staticLockscreenId = "lockscreen-qylock-girl-coffee";
+    testedThemeIds.insert(staticLockscreenId);
     QVariant lockscreenItem;
     for (const QVariant &item : backend->catalogList()) {
-        if (item.toMap().value("id").toString() == "lockscreen-qylock-clockwork-orbital") {
+        if (item.toMap().value("id").toString() == staticLockscreenId) {
             lockscreenItem = item;
             break;
         }
@@ -1389,11 +1490,11 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
             return 134;
         }
 
-        // Install Clockwork Orbital to test installed lockscreen action states
+        // Install Girl Coffee to test installed lockscreen action states
         bool lsInstEmitted = false;
         QMetaObject::Connection connLsInst = QObject::connect(backend, &RyzoraBackend::packageInstalled,
             [&](const QString &, bool, const QString &) { lsInstEmitted = true; });
-        backend->installPackage("lockscreen-qylock-clockwork-orbital");
+        backend->installPackage(staticLockscreenId);
         QElapsedTimer lsTimer;
         lsTimer.start();
         while (!lsInstEmitted && lsTimer.elapsed() < 5000) {
@@ -1423,11 +1524,11 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         }
         qInfo() << "  -> CONFIRMED: Lockscreen package correctly displays 'Get' when uninstalled, and 'Preview Theme' + 'Apply to Login Screen' + 'Open in Studio' when installed.";
 
-        // Clean up: uninstall Clockwork Orbital
+        // Clean up: uninstall Girl Coffee
         bool lsUninstEmitted = false;
         QMetaObject::Connection connLsUninst = QObject::connect(backend, &RyzoraBackend::packageUninstalled,
             [&](const QString &, bool, const QString &) { lsUninstEmitted = true; });
-        backend->uninstallPackage("lockscreen-qylock-clockwork-orbital");
+        backend->uninstallPackage(staticLockscreenId);
         lsTimer.restart();
         while (!lsUninstEmitted && lsTimer.elapsed() < 5000) {
             pumpEvents(5, 5000);
@@ -1479,6 +1580,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     QStringList expectedSilent = {"silentsddm-default", "silentsddm-smoky", "silentsddm-mountain",
                                   "silentsddm-ken", "silentsddm-rei", "silentsddm-silvia"};
     for (const QString &sId : expectedSilent) {
+        testedThemeIds.insert(sId);
         bool found = false;
         for (const QVariant &item : backend->catalogList()) {
             QVariantMap m = item.toMap();
@@ -1686,6 +1788,10 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     qInfo() << "  -> CONFIRMED: Studio navigation, subpage switching, and state binding verified!";
 
     qInfo() << "[STEP 8] Testing Studio Lockscreen Theme Details route, capability probing, and return navigation...";
+    testedThemeIds.insert("lockscreen-qylock-clockwork-orbital");
+    testedThemeIds.insert("lockscreen-qylock-sword");
+    testedThemeIds.insert("lockscreen-qylock-clockwork-tape");
+    testedThemeIds.insert("lockscreen-qylock-genshin");
     QMetaObject::invokeMethod(studioViewObj, "selectSubpage", Q_ARG(QVariant, "lockscreen"), Q_ARG(QVariant, QVariant()));
     pumpEvents(10, 20000);
 
@@ -1843,6 +1949,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     qInfo() << "  -> CONFIRMED: Lockscreen Studio initial installedThemes contains strictly installed themes (" << initialCount << "themes), 0 wallpaper leaks.";
 
     // 2. Install a second theme: lockscreen-qylock-field
+    testedThemeIds.insert("lockscreen-qylock-field");
     bool instFldEmitted = false;
     bool instFldSuccess = false;
     QString instFldMsg;
@@ -2025,6 +2132,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     qInfo() << "  -> CONFIRMED: Base engine initially reported uninstalled.";
 
     // 10C. Install wallpaper asset silentsddm-ken
+    testedThemeIds.insert("silentsddm-ken");
     QString kenInstMsg;
     bool kenInstReceived = false;
     QObject::connect(backend, &RyzoraBackend::packageInstalled, [&](const QString &pkgId, bool success, const QString &message) {
@@ -2272,6 +2380,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     qInfo() << "  -> CONFIRMED: SilentSDDM per-theme default resolution, isolation, and Reset to Defaults strictly verified!";
 
     // 10F.4: Test Applying Silvia and Verifying Non-Fallback Configuration & Video Assets
+    testedThemeIds.insert("silentsddm-silvia");
     bool silviaInstReceived = false;
     QMetaObject::Connection silviaInstConn = QObject::connect(backend, &RyzoraBackend::packageInstalled,
         [&](const QString &pkgId, bool success, const QString &message) {
@@ -2377,6 +2486,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
 
     QVariantList cat = backend->catalogList();
     for (auto it = themeExpectations.constBegin(); it != themeExpectations.constEnd(); ++it) {
+        testedThemeIds.insert(it.key());
         QString targetId = it.key();
         QString expVideo = it.value().at(0);
         QString expPoster = it.value().at(1);
@@ -2444,6 +2554,13 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     }
     qInfo() << "  -> CONFIRMED: Rapid theme switching settled cleanly to final theme without stale leaks.";
 
+    // Allow any asynchronous in-flight decoders from rapid switching to finish releasing slots
+    QElapsedTimer slotDrainTimer;
+    slotDrainTimer.start();
+    while (backend->activeDecoderCount() != 0 && slotDrainTimer.elapsed() < 3000) {
+        pumpEvents(5, 10000);
+    }
+
     // 4. Decoder slot pool bounded concurrency & recycling verification
     if (backend->activeDecoderCount() != 0) {
         qCritical() << "FAIL: Initial activeDecoderCount must be 0, got:" << backend->activeDecoderCount();
@@ -2480,6 +2597,15 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
         return 2414;
     }
     qInfo() << "  -> CONFIRMED: Decoder slot pool strictly bounds concurrency to 6 and recycles cleanly.";
+
+    qInfo() << "[STEP 11] Anti-Regression Invariant: Multi-Theme Test Matrix Non-Collapse Verification...";
+    qInfo() << "  -> Total distinct themes exercised in test run:" << testedThemeIds.size() << testedThemeIds.values();
+    if (testedThemeIds.size() < 10) {
+        qCritical() << "FAIL: Regression detected! Multi-theme test matrix collapsed to fewer than 10 distinct themes: count ="
+                    << testedThemeIds.size() << "themes:" << testedThemeIds.values();
+        return 300;
+    }
+    qInfo() << "  -> CONFIRMED: Multi-theme test matrix successfully exercised" << testedThemeIds.size() << "distinct real themes without collapsing!";
 
     backend->setTestHomeOverride(QString());
     backend->setTestSystemRootOverride(QString());
@@ -2648,6 +2774,11 @@ static int runPreviewSmoke(QGuiApplication &app, QQmlApplicationEngine &engine, 
 }
 
 int main(int argc, char *argv[]) {
+    // Preview clips are tiny (400x224); a CUDA/VAAPI context per MediaPlayer exhausts VRAM
+    // (CUDA_ERROR_OUT_OF_MEMORY) and stalls the UI. Use FFmpeg software decoding unless overridden.
+    if (!qEnvironmentVariableIsSet("QT_FFMPEG_DECODING_HW_DEVICE_TYPES")) {
+        qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",");
+    }
     QGuiApplication app(argc, argv);
     app.setApplicationName("Ryzora");
     app.setOrganizationName("Ryzora");

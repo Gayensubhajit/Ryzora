@@ -105,6 +105,23 @@ Canvas {
             ctx.lineTo(12, 15);
             ctx.lineTo(18, 9);
             ctx.stroke();
+        } else if (n === "chevron-up") {
+            ctx.beginPath();
+            ctx.moveTo(18, 15);
+            ctx.lineTo(12, 9);
+            ctx.lineTo(6, 15);
+            ctx.stroke();
+        } else if (n === "eye-off") {
+            ctx.beginPath();
+            ctx.moveTo(2, 12);
+            ctx.bezierCurveTo(6, 6, 18, 6, 22, 12);
+            ctx.bezierCurveTo(18, 18, 6, 18, 2, 12);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(3, 3);
+            ctx.lineTo(21, 21);
+            ctx.stroke();
         } else if (n === "filter") {
             ctx.beginPath();
             ctx.moveTo(4, 5); ctx.lineTo(20, 5);
@@ -178,6 +195,13 @@ Canvas {
             ctx.beginPath(); ctx.arc(4, 12, 2, 0, 2 * Math.PI); ctx.stroke();
             ctx.beginPath(); ctx.arc(12, 10, 2, 0, 2 * Math.PI); ctx.stroke();
             ctx.beginPath(); ctx.arc(20, 14, 2, 0, 2 * Math.PI); ctx.stroke();
+        } else if (n === "sliders-horizontal") {
+            ctx.beginPath();
+            ctx.moveTo(3, 8); ctx.lineTo(21, 8);
+            ctx.moveTo(3, 16); ctx.lineTo(21, 16);
+            ctx.moveTo(8, 5); ctx.lineTo(8, 11);
+            ctx.moveTo(16, 13); ctx.lineTo(16, 19);
+            ctx.stroke();
         } else if (n === "play") {
             ctx.beginPath();
             ctx.moveTo(7, 5);
@@ -239,7 +263,15 @@ Canvas {
             ctx.moveTo(15, 9); ctx.lineTo(13.5, 13.5); ctx.lineTo(9, 15); ctx.lineTo(10.5, 10.5);
             ctx.closePath();
             ctx.stroke();
-        } else if (n === "book" || n === "library") {
+        } else if (n === "library" || n === "library-big") {
+            ctx.beginPath();
+            roundedRect(ctx, 4, 4, 4, 16, 1);
+            roundedRect(ctx, 9, 4, 4, 16, 1);
+            ctx.moveTo(15, 4.5); ctx.lineTo(18.5, 5.5); ctx.lineTo(15.5, 20); ctx.lineTo(12, 19);
+            ctx.closePath();
+            ctx.moveTo(2, 20); ctx.lineTo(22, 20);
+            ctx.stroke();
+        } else if (n === "book") {
             ctx.beginPath();
             ctx.moveTo(4, 19.5); ctx.bezierCurveTo(4, 18, 5.5, 17, 7.5, 17); ctx.lineTo(20, 17);
             ctx.moveTo(4, 4.5); ctx.bezierCurveTo(4, 6, 5.5, 7, 7.5, 7); ctx.lineTo(20, 7);
@@ -256,6 +288,25 @@ Canvas {
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(21, 7.5); ctx.lineTo(21, 16.5); ctx.lineTo(12, 21.5);
+            ctx.stroke();
+        } else if (n === "layout-grid" || n === "grid" || n === "apps") {
+            ctx.beginPath();
+            roundedRect(ctx, 3, 3, 7, 7, 1.5);
+            ctx.stroke();
+            ctx.beginPath();
+            roundedRect(ctx, 14, 3, 7, 7, 1.5);
+            ctx.stroke();
+            ctx.beginPath();
+            roundedRect(ctx, 14, 14, 7, 7, 1.5);
+            ctx.stroke();
+            ctx.beginPath();
+            roundedRect(ctx, 3, 14, 7, 7, 1.5);
+            ctx.stroke();
+        } else if (n === "arrow-up-circle") {
+            ctx.beginPath();
+            ctx.arc(12, 12, 9, 0, 2 * Math.PI);
+            ctx.moveTo(12, 16); ctx.lineTo(12, 8);
+            ctx.moveTo(8.5, 11.5); ctx.lineTo(12, 8); ctx.lineTo(15.5, 11.5);
             ctx.stroke();
         } else if (n === "arrow-up" || n === "updates") {
             ctx.beginPath();
@@ -342,6 +393,87 @@ Canvas {
             ctx.beginPath();
             ctx.moveTo(13, 2); ctx.lineTo(5, 13); ctx.lineTo(12, 13); ctx.lineTo(11, 22); ctx.lineTo(19, 11); ctx.lineTo(12, 11);
             ctx.closePath();
+            ctx.stroke();
+        } else if (n === "plus") {
+            ctx.beginPath();
+            ctx.moveTo(12, 5); ctx.lineTo(12, 19);
+            ctx.moveTo(5, 12); ctx.lineTo(19, 12);
+            ctx.stroke();
+        } else if (n === "save") {
+            ctx.beginPath();
+            ctx.moveTo(19, 21); ctx.lineTo(5, 21);
+            ctx.bezierCurveTo(3.9, 21, 3, 20.1, 3, 19);
+            ctx.lineTo(3, 5);
+            ctx.bezierCurveTo(3, 3.9, 3.9, 3, 5, 3);
+            ctx.lineTo(16, 3); ctx.lineTo(21, 8); ctx.lineTo(21, 19);
+            ctx.bezierCurveTo(21, 20.1, 20.1, 21, 19, 21);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(17, 21); ctx.lineTo(17, 13); ctx.lineTo(7, 13); ctx.lineTo(7, 21);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(7, 3); ctx.lineTo(7, 8); ctx.lineTo(15, 8);
+            ctx.stroke();
+        } else if (n === "upload") {
+            ctx.beginPath();
+            ctx.moveTo(4, 17); ctx.lineTo(4, 19);
+            ctx.bezierCurveTo(4, 20.1, 4.9, 21, 6, 21);
+            ctx.lineTo(18, 21);
+            ctx.bezierCurveTo(19.1, 21, 20, 20.1, 20, 19);
+            ctx.lineTo(20, 17);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(12, 15); ctx.lineTo(12, 3);
+            ctx.moveTo(7, 8); ctx.lineTo(12, 3); ctx.lineTo(17, 8);
+            ctx.stroke();
+        } else if (n === "rotate-ccw") {
+            ctx.beginPath();
+            ctx.arc(12, 12, 8, -Math.PI / 2, Math.PI, true);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(1, 4); ctx.lineTo(4, 4); ctx.lineTo(4, 1);
+            ctx.stroke();
+        } else if (n === "file-text") {
+            ctx.beginPath();
+            ctx.moveTo(14, 2); ctx.lineTo(6, 2);
+            ctx.bezierCurveTo(4.9, 2, 4, 2.9, 4, 4);
+            ctx.lineTo(4, 20);
+            ctx.bezierCurveTo(4, 21.1, 4.9, 22, 6, 22);
+            ctx.lineTo(18, 22);
+            ctx.bezierCurveTo(19.1, 22, 20, 21.1, 20, 20);
+            ctx.lineTo(20, 8); ctx.lineTo(14, 2);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(14, 2); ctx.lineTo(14, 8); ctx.lineTo(20, 8);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(8, 13); ctx.lineTo(16, 13);
+            ctx.moveTo(8, 17); ctx.lineTo(14, 17);
+            ctx.stroke();
+        } else if (n === "archive") {
+            ctx.beginPath();
+            roundedRect(ctx, 3, 4, 18, 4, 1);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(4, 8); ctx.lineTo(4, 19);
+            ctx.arcTo(4, 20, 5, 20, 1);
+            ctx.lineTo(19, 20);
+            ctx.arcTo(20, 20, 20, 19, 1);
+            ctx.lineTo(20, 8);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(10, 12); ctx.lineTo(14, 12);
+            ctx.stroke();
+        } else if (n === "activity") {
+            ctx.beginPath();
+            ctx.moveTo(2, 12);
+            ctx.lineTo(6, 12);
+            ctx.lineTo(9, 4);
+            ctx.lineTo(15, 20);
+            ctx.lineTo(18, 12);
+            ctx.lineTo(22, 12);
             ctx.stroke();
         }
     }

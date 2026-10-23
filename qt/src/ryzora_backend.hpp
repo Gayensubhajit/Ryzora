@@ -6,6 +6,9 @@
 #include <QString>
 #include <QPointer>
 #include <QThreadPool>
+#include <QHash>
+#include <QMutex>
+#include <QElapsedTimer>
 #include <atomic>
 
 class PreviewConfig;
@@ -31,6 +34,9 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(QString fastfetchError READ fastfetchError NOTIFY fastfetchErrorChanged)
     Q_PROPERTY(QString selectedPreset READ selectedPreset NOTIFY selectedPresetChanged)
     Q_PROPERTY(QVariantList availablePresets READ availablePresets NOTIFY availablePresetsChanged)
+    Q_PROPERTY(QVariantList fastfetchInstalledPresets READ fastfetchInstalledPresets NOTIFY fastfetchInstalledPresetsChanged)
+    Q_PROPERTY(QVariantList fastfetchLocalEmblems READ fastfetchLocalEmblems NOTIFY fastfetchLocalEmblemsChanged)
+    Q_PROPERTY(QString fastfetchSavedConfig READ fastfetchSavedConfig NOTIFY fastfetchSavedConfigChanged)
 
     // Snapshots / Backups
     Q_PROPERTY(QVariantList snapshotsList READ snapshotsList NOTIFY snapshotsChanged)
@@ -70,6 +76,9 @@ public:
     QString fastfetchError() const { return m_fastfetchError; }
     QString selectedPreset() const { return m_selectedPreset; }
     QVariantList availablePresets() const { return m_availablePresets; }
+    QVariantList fastfetchInstalledPresets() const { return m_fastfetchInstalledPresets; }
+    QVariantList fastfetchLocalEmblems() const { return m_fastfetchLocalEmblems; }
+    QString fastfetchSavedConfig() const { return m_fastfetchSavedConfig; }
 
     QVariantList snapshotsList() const { return m_snapshotsList; }
     int snapshotsCount() const { return m_snapshotsList.size(); }
@@ -93,6 +102,16 @@ public:
     Q_INVOKABLE bool applyFastfetchPreset(const QString &presetName);
     Q_INVOKABLE bool launchFastfetchTerminal(const QString &presetName);
     Q_INVOKABLE void requestCustomFastfetchPreview(const QString &structure, const QString &logo, const QString &color);
+    Q_INVOKABLE void loadFastfetchInstalledPresets();
+    Q_INVOKABLE void loadFastfetchLocalEmblems();
+    Q_INVOKABLE QString getFastfetchPresetConfig(const QString &presetId);
+    Q_INVOKABLE QString getFastfetchSavedConfig();
+    Q_INVOKABLE void requestDraftPreview(const QString &draftJson);
+    Q_INVOKABLE bool saveFastfetchConfiguration(const QString &configJson, const QString &presetId);
+    Q_INVOKABLE bool resetFastfetchDefault();
+    Q_INVOKABLE bool removeInstalledFastfetchStyle(const QString &presetId);
+    Q_INVOKABLE bool launchTerminalWithDraft(const QString &draftJson);
+    Q_INVOKABLE void openFastfetchConfigInEditor();
     Q_INVOKABLE void loadSnapshots();
     Q_INVOKABLE void loadUpdates();
     Q_INVOKABLE void loadSettings();
@@ -152,6 +171,9 @@ signals:
     void fastfetchErrorChanged();
     void selectedPresetChanged();
     void availablePresetsChanged();
+    void fastfetchInstalledPresetsChanged();
+    void fastfetchLocalEmblemsChanged();
+    void fastfetchSavedConfigChanged();
 
     void snapshotsChanged();
     void snapshotsLoadingChanged();
@@ -187,11 +209,21 @@ private:
     QVariantMap m_activeConfiguration;
 
     QString m_fastfetchHtml;
+    // Draft-preview output cache: key = sha1(effective draft + fastfetch binary identity).
+    // Display-only; never used as evidence of a successful save/apply.
+    struct FastfetchPreviewCacheEntry { QString html; qint64 producedAtMs = 0; };
+    QHash<QByteArray, FastfetchPreviewCacheEntry> m_fastfetchPreviewCache;
+    QList<QByteArray> m_fastfetchPreviewCacheOrder;
+    QByteArray fastfetchPreviewCacheKey(const QString &draftJson) const;
+    void storeFastfetchPreview(const QByteArray &key, const QString &html);
     bool m_isFastfetchLoading{false};
     bool m_isFastfetchCancelled{false};
     QString m_fastfetchError{""};
     QString m_selectedPreset{"dr460nized"};
     QVariantList m_availablePresets;
+    QVariantList m_fastfetchInstalledPresets;
+    QVariantList m_fastfetchLocalEmblems;
+    QString m_fastfetchSavedConfig;
 
     QVariantList m_snapshotsList;
     bool m_isSnapshotsLoading{false};

@@ -103,6 +103,31 @@ Item {
         })
     }
 
+    readonly property var allFastfetchPackages: {
+        var list = backend.catalogList || []
+        return list.filter(function(item) {
+            var cat = String(item && item.category ? item.category : "").toLowerCase()
+            var pt = String(item && item.package_type ? item.package_type : "").toLowerCase()
+            return cat === "fastfetch" || pt === "fastfetch"
+        })
+    }
+
+    readonly property int fastfetchConfigsCount: {
+        var list = root.allFastfetchPackages;
+        return list.filter(function(item) {
+            var isEmb = item && (String(item.subfilter).toLowerCase() === "emblems" || String(item.subfilter).toLowerCase() === "emblem" || String(item.id).indexOf("emblem") !== -1 || (item.tags && item.tags.indexOf("emblem") !== -1));
+            return !isEmb;
+        }).length;
+    }
+
+    readonly property int fastfetchEmblemsCount: {
+        var list = root.allFastfetchPackages;
+        return list.filter(function(item) {
+            var isEmb = item && (String(item.subfilter).toLowerCase() === "emblems" || String(item.subfilter).toLowerCase() === "emblem" || String(item.id).indexOf("emblem") !== -1 || (item.tags && item.tags.indexOf("emblem") !== -1));
+            return isEmb;
+        }).length;
+    }
+
     readonly property var filteredPackages: {
         var list = backend.catalogList || []
 
@@ -112,6 +137,22 @@ Item {
             list = list.filter(function(item) {
                 return String(item && item.category ? item.category : "").toLowerCase() === cat
             })
+        }
+
+        // Subfilter filtering when in Fastfetch category
+        if (root.selectedCategory === "fastfetch" && root.selectedSubFilter && root.selectedSubFilter !== "All") {
+            var ffSub = root.selectedSubFilter
+            if (ffSub === "Configs") {
+                list = list.filter(function(item) {
+                    var isEmb = item && (String(item.subfilter).toLowerCase() === "emblems" || String(item.subfilter).toLowerCase() === "emblem" || String(item.id).indexOf("emblem") !== -1 || (item.tags && item.tags.indexOf("emblem") !== -1))
+                    return !isEmb
+                })
+            } else if (ffSub === "Emblems") {
+                list = list.filter(function(item) {
+                    var isEmb = item && (String(item.subfilter).toLowerCase() === "emblems" || String(item.subfilter).toLowerCase() === "emblem" || String(item.id).indexOf("emblem") !== -1 || (item.tags && item.tags.indexOf("emblem") !== -1))
+                    return isEmb
+                })
+            }
         }
 
         // Subfilter filtering when in Lock Screens category
@@ -505,6 +546,54 @@ Item {
             }
         }
 
+        // ── Row 2c: Dedicated Fastfetch Subcategory Row (Visible only when Fastfetch is active) ──
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 24
+            Layout.rightMargin: 24
+            visible: root.selectedCategory === "fastfetch"
+            spacing: 8
+
+            ScrollView {
+                Layout.fillWidth: true
+                height: 30
+                clip: true
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
+                RowLayout {
+                    spacing: 6
+
+                    DiscoverSubFilterChip {
+                        label: "All"
+                        subId: "All"
+                        iconName: "terminal"
+                        count: root.allFastfetchPackages.length
+                        isSelected: root.selectedSubFilter === "All"
+                        onClicked: root.selectedSubFilter = "All"
+                    }
+
+                    DiscoverSubFilterChip {
+                        label: "Configs"
+                        subId: "Configs"
+                        iconName: "sliders"
+                        count: root.fastfetchConfigsCount
+                        isSelected: root.selectedSubFilter === "Configs"
+                        onClicked: root.selectedSubFilter = "Configs"
+                    }
+
+                    DiscoverSubFilterChip {
+                        label: "Emblems"
+                        subId: "Emblems"
+                        iconName: "image"
+                        count: root.fastfetchEmblemsCount
+                        isSelected: root.selectedSubFilter === "Emblems"
+                        onClicked: root.selectedSubFilter = "Emblems"
+                    }
+                }
+            }
+        }
+
         // ── 3. Image-First Package Grid Area ──
         Item {
             Layout.fillWidth: true
@@ -876,7 +965,7 @@ Item {
         id: detailView
         objectName: "packageDetailView"
         anchors.fill: parent
-        visible: root.selectedPackage !== null
+        visible: root.visible && root.selectedPackage !== null
         packageData: root.selectedPackage
         fromRoute: "discover"
         onBackRequested: root.setSelectedPackage(null)

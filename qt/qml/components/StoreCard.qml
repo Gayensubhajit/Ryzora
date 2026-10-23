@@ -74,6 +74,15 @@ Rectangle {
     readonly property bool isHovered: mouseArea.containsMouse
 
     property string currentItemId: ""
+    readonly property int staggerMs: {
+        var s = currentItemId || (card.itemData && card.itemData.id ? String(card.itemData.id) : "")
+        var h = 0
+        for (var i = 0; i < s.length; ++i) {
+            h = (h * 31 + s.charCodeAt(i)) & 0x7fffffff
+        }
+        return 45 + (h % 9) * 35
+    }
+
     onItemDataChanged: {
         var newId = (card.itemData && card.itemData.id) ? String(card.itemData.id) : ""
         if (newId !== currentItemId) {
@@ -85,11 +94,8 @@ Rectangle {
             card.playVideoActive = false
             card.releaseSlot()
             if (card.shouldPlayVideo) {
-                if (card.tryAcquireSlot()) {
-                    card.playVideoActive = true
-                } else {
-                    playDebounceTimer.restart()
-                }
+                playDebounceTimer.interval = card.staggerMs
+                playDebounceTimer.restart()
             }
         }
     }
@@ -118,11 +124,8 @@ Rectangle {
 
     onIsPageVisibleChanged: {
         if (isPageVisible && shouldPlayVideo) {
-            if (card.tryAcquireSlot()) {
-                card.playVideoActive = true
-            } else {
-                playDebounceTimer.restart()
-            }
+            playDebounceTimer.interval = card.staggerMs
+            playDebounceTimer.restart()
         } else if (!isPageVisible) {
             playDebounceTimer.stop()
             card.playVideoActive = false
@@ -133,11 +136,8 @@ Rectangle {
     Component.onCompleted: {
         card.scrollContainer = card.findScrollContainer()
         if (card.shouldPlayVideo) {
-            if (card.tryAcquireSlot()) {
-                card.playVideoActive = true
-            } else {
-                playDebounceTimer.restart()
-            }
+            playDebounceTimer.interval = card.staggerMs
+            playDebounceTimer.restart()
         }
     }
 
@@ -158,7 +158,10 @@ Rectangle {
     }
 
     // Direct reactive viewport detection: autoplays immediately on page load and continuously while in view
-    readonly property bool isInViewport: checkViewport()
+    readonly property bool isInViewport: {
+        var _ = card.y + card.height + (card.parent ? card.parent.y : 0) + (card.scrollContainer ? card.scrollContainer.contentY + card.scrollContainer.height : 0)
+        return checkViewport()
+    }
 
     readonly property bool shouldPlayVideo: isPageVisible && isInViewport && hasVideo && videoSource !== "" && allowAutoplay
 
@@ -181,24 +184,8 @@ Rectangle {
         target: backend
         function onDecoderSlotAvailable() {
             if (card.shouldPlayVideo && !card.playVideoActive && !card.hasDecoderSlot) {
+                playDebounceTimer.interval = card.staggerMs
                 playDebounceTimer.restart()
-            }
-        }
-    }
-
-    Connections {
-        target: card.scrollContainer
-        function onContentYChanged() {
-            var inView = card.checkViewport()
-            if (inView && card.shouldPlayVideo && !card.playVideoActive) {
-                if (card.tryAcquireSlot()) {
-                    card.playVideoActive = true
-                } else {
-                    playDebounceTimer.restart()
-                }
-            } else if (!inView && card.playVideoActive) {
-                card.playVideoActive = false
-                card.releaseSlot()
             }
         }
     }
@@ -219,7 +206,7 @@ Rectangle {
         interval: 80
         repeat: false
         onTriggered: {
-            if (card.shouldPlayVideo) {
+            if (card.shouldPlayVideo && !card.playVideoActive) {
                 if (card.tryAcquireSlot()) {
                     card.playVideoActive = true
                 }
@@ -229,17 +216,27 @@ Rectangle {
 
     onShouldPlayVideoChanged: {
         if (shouldPlayVideo) {
+            stopDebounceTimer.stop()
             if (!card.playVideoActive) {
-                if (card.tryAcquireSlot()) {
-                    card.playVideoActive = true
-                } else {
-                    playDebounceTimer.restart()
-                }
+                playDebounceTimer.interval = card.staggerMs
+                playDebounceTimer.restart()
             }
         } else {
             playDebounceTimer.stop()
-            card.playVideoActive = false
-            card.releaseSlot()
+            stopDebounceTimer.restart()
+        }
+    }
+
+    // Delayed teardown: avoids destroy/recreate flicker when visibility/viewport briefly toggles
+    Timer {
+        id: stopDebounceTimer
+        interval: 700
+        repeat: false
+        onTriggered: {
+            if (!card.shouldPlayVideo) {
+                card.playVideoActive = false
+                card.releaseSlot()
+            }
         }
     }
 
@@ -353,7 +350,8 @@ Rectangle {
             Loader {
                 id: videoLoader
                 anchors.fill: parent
-                active: card.playVideoActive && card.shouldPlayVideo
+                asynchronous: true
+                active: card.playVideoActive
                 sourceComponent: demoVideoComp
             }
 
@@ -382,18 +380,14 @@ Rectangle {
                         loops: MediaPlayer.Infinite
                         source: card.videoSource
                         Component.onCompleted: play()
-                        onPlaybackStateChanged: {
-                            if (playbackState === MediaPlayer.PlayingState) {
+                        onPositionChanged: {
+                            if (!videoRoot.hasFirstFrame && position > 0) {
                                 videoRoot.hasFirstFrame = true
                             }
                         }
                         onMediaStatusChanged: {
                             if (mediaStatus === MediaPlayer.LoadedMedia || mediaStatus === MediaPlayer.BufferedMedia) {
-                                videoRoot.hasFirstFrame = true
-                                play()
-                            } else if (mediaStatus === MediaPlayer.EndOfMedia) {
-                                position = 0
-                                play()
+                                if (playbackState !== MediaPlayer.PlayingState) play()
                             }
                         }
                     }

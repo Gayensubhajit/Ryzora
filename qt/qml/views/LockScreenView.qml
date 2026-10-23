@@ -524,7 +524,7 @@ Item {
         id: lockscreenDetailView
         objectName: "lockscreenPackageDetailView"
         anchors.fill: parent
-        visible: root.selectedPackage !== null
+        visible: root.visible && root.selectedPackage !== null
         packageData: root.selectedPackage
         fromRoute: "lockscreens"
         onBackRequested: root.setSelectedPackage(null)

@@ -18,7 +18,7 @@ Rectangle {
     readonly property real aspect: Screen.width > 0 && Screen.height > 0 ? Math.max(1.5, Math.min(2.4, Screen.width / Screen.height)) : 16 / 9
     readonly property string pkgId: packageData && packageData.id ? String(packageData.id) : ""
     readonly property string realUrl: pkgId !== "" ? backend.themePreviewMainUrl(pkgId) : ""
-    readonly property bool isReal: realUrl !== "" && realLoader.status !== Loader.Error
+    readonly property bool isReal: realUrl !== "" && realLoader.status === Loader.Ready
     readonly property string videoSource: videoFor(packageData)
     readonly property bool hasVideo: videoSource !== ""
     property bool hasFirstFrame: false
@@ -26,7 +26,9 @@ Rectangle {
     readonly property bool isPlaying: isReal ? (realLoader.status === Loader.Ready) : videoPlaying
     property bool isLoginScreenState: false
 
-    onPackageDataChanged: hasFirstFrame = false
+    onPackageDataChanged: {
+        hasFirstFrame = false
+    }
     onVideoSourceChanged: hasFirstFrame = false
 
     function isTruthy(v) {
@@ -51,24 +53,20 @@ Rectangle {
         repeat: false
         onTriggered: {
             if (root.active && root.realUrl !== "") {
-                var u = root.realUrl
-                realLoader.source = ""
-                realLoader.source = u
+                realLoader.active = false
+                realLoader.active = true
             }
         }
     }
 
     onPkgIdChanged: {
         root.isLoginScreenState = false
-        if (root.pkgId !== "" && root.config && typeof backend !== "undefined" && backend) {
-            backend.updatePreviewDraft(root.pkgId, root.config)
-        }
+        hasFirstFrame = false
     }
 
     onConfigChanged: {
         if (root.pkgId !== "" && root.config && typeof backend !== "undefined" && backend) {
             backend.updatePreviewDraft(root.pkgId, root.config)
-            reloadDebounceTimer.restart()
         }
     }
 
@@ -91,15 +89,7 @@ Rectangle {
         if (!t) return ""
         var pid = String(t.id || "")
         if (pid.indexOf("silentsddm-") === 0) {
-            var name = pid.substring(11)
-            var localPosters = [
-                "file://" + backend.resolveHomePath() + "/.local/share/ryzora/lockscreens/silentsddm/posters/" + pid + ".png",
-                "file:///usr/share/sddm/themes/ryzora-silent/backgrounds/" + name + ".png",
-                "file:///usr/share/sddm/themes/ryzora-silent/backgrounds/" + name + ".jpg"
-            ]
-            for (var i = 0; i < localPosters.length; ++i) {
-                return localPosters[i]
-            }
+            return "file://" + backend.resolveHomePath() + "/.local/share/ryzora/lockscreens/silentsddm/posters/" + pid + ".png"
         }
         return fileUrl(String(t.preview_url || "").trim())
     }
@@ -157,8 +147,9 @@ Rectangle {
             id: realLoader
             anchors.fill: parent
             active: root.active && root.realUrl !== ""
-            source: active ? root.realUrl : ""
+            source: (root.active && root.realUrl !== "") ? root.realUrl : ""
             asynchronous: false
+            visible: status === Loader.Ready
             onLoaded: {
                 if (realLoader.item && realLoader.item.state !== undefined) {
                     realLoader.item.state = root.isLoginScreenState ? "loginState" : "lockState"
@@ -241,18 +232,18 @@ Rectangle {
             videoOutput: vout
             audioOutput: AudioOutput { muted: true; volume: 0.0 }
             loops: MediaPlayer.Infinite
-            source: (root.active && !root.isReal && root.hasVideo && root.isTruthy(root.config.enableAnimations !== undefined ? root.config.enableAnimations : true)) ? root.videoSource : ""
-            Component.onCompleted: if (root.active && !root.isReal && source != "") play()
+            source: (root.active && root.realUrl === "" && !root.isReal && root.hasVideo && root.isTruthy(root.config.enableAnimations !== undefined ? root.config.enableAnimations : true)) ? root.videoSource : ""
+            Component.onCompleted: if (root.active && root.realUrl === "" && !root.isReal && source != "") play()
             onPlaybackStateChanged: {
                 if (playbackState === MediaPlayer.PlayingState) {
                     root.hasFirstFrame = true
                 }
             }
-            onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && root.active && !root.isReal) play()
+            onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && root.active && root.realUrl === "" && !root.isReal) play()
             onSourceChanged: {
                 root.hasFirstFrame = false
                 if (source == "") stop()
-                else if (root.active && !root.isReal) play()
+                else if (root.active && root.realUrl === "" && !root.isReal) play()
             }
         }
 

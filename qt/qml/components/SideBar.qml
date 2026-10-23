@@ -148,8 +148,17 @@ Rectangle {
                 }
 
                 NavButton {
+                    label: "Apps"
+                    iconName: "layout-grid"
+                    tabId: "apps"
+                    isActive: root.currentTab === "apps"
+                    collapsed: root.isCollapsed
+                    onClicked: root.tabSelected("apps")
+                }
+
+                NavButton {
                     label: "Library"
-                    iconName: "book"
+                    iconName: "library"
                     tabId: "library"
                     badgeCount: backend.libraryCount
                     isActive: root.currentTab === "library"
@@ -159,7 +168,7 @@ Rectangle {
 
                 NavButton {
                     label: "Updates"
-                    iconName: "arrow-up"
+                    iconName: "arrow-up-circle"
                     tabId: "updates"
                     badgeCount: backend.updatesCount
                     isActive: root.currentTab === "updates"
@@ -172,7 +181,7 @@ Rectangle {
 
                 NavButton {
                     label: "Studio"
-                    iconName: "palette"
+                    iconName: "sliders-horizontal"
                     tabId: "studio"
                     isActive: root.currentTab === "studio" || root.currentTab === "lockscreens" || root.currentTab === "fastfetch"
                     collapsed: root.isCollapsed
@@ -184,7 +193,7 @@ Rectangle {
 
                 NavButton {
                     label: "Backups"
-                    iconName: "shield"
+                    iconName: "archive"
                     tabId: "backups"
                     badgeCount: backend.snapshotsCount
                     isActive: root.currentTab === "backups"
@@ -194,7 +203,7 @@ Rectangle {
 
                 NavButton {
                     label: "Diagnostics"
-                    iconName: "desktop"
+                    iconName: "activity"
                     tabId: "system"
                     isActive: root.currentTab === "system" || root.currentTab === "compat_lab" || root.currentTab === "integrity" || root.currentTab === "activity" || root.currentTab === "author"
                     collapsed: root.isCollapsed
@@ -427,8 +436,8 @@ Rectangle {
 
             RyzoraIcon {
                 name: (navBtn.iconName && navBtn.iconName.length > 0) ? navBtn.iconName : "compass"
-                size: 14
-                color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textMuted)
+                size: 16
+                color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textSecondary)
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -493,8 +502,8 @@ Rectangle {
             RyzoraIcon {
                 anchors.centerIn: parent
                 name: (navBtn.iconName && navBtn.iconName.length > 0) ? navBtn.iconName : "compass"
-                size: 14
-                color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textMuted)
+                size: 16
+                color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textSecondary)
             }
 
             Rectangle {

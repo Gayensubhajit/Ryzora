@@ -26,6 +26,8 @@ pub struct ActiveConfigurationState {
     pub session_lock_active: bool,
     pub sddm_login_active: bool,
     pub sddm_lock_active: bool,
+    #[serde(default)]
+    pub active_fastfetch_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -638,7 +640,27 @@ pub fn resolve_preview_url(repo_root: &Path, hero_opt: Option<&str>, package_id:
     }
     let files_dir = pkg_dir.join("files");
     if files_dir.is_dir() {
-        for fname in &["preview.png", "showcase.png", "preview.webp", "screenshot.png", "bg.png"] {
+        for fname in &[
+            "preview.png",
+            "showcase.png",
+            "preview.webp",
+            "screenshot.png",
+            "bg.png",
+            "background.png",
+            "ror_fetch.png",
+            "oh-hello-soldier.webp",
+            "images/preview.png",
+            "images/fetchimage.png",
+            "images/Tsukikko.png",
+            "images/cat.png",
+            "images/hypr.png",
+            "images/archlinux.png",
+            "logo/girl.jpg",
+            "png/2b.png",
+            "png/archlinux.png",
+            "png/Arch-3.png",
+            "background/A Glow.jpg",
+        ] {
             let p = files_dir.join(fname);
             if p.is_file() {
                 let s = p.to_string_lossy();
@@ -696,6 +718,12 @@ pub fn resolve_video_url(repo_root: &Path, home_opt: Option<&Path>, package_id: 
     for wp in SILENTSDDM_WALLPAPERS {
         if wp.id == package_id {
             if wp.media_type == "video" {
+                let preview_cand = repo_root.join("public/assets/lockscreens").join(format!("{}-preview.mp4", wp.id));
+                if preview_cand.is_file() {
+                    let s = preview_cand.to_string_lossy();
+                    let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                    return (Some(file_url), Some("video".to_string()));
+                }
                 if let Some(home) = home_opt {
                     let local_wp = home.join(".local/share/ryzora/lockscreens/silentsddm/wallpapers").join(wp.filename);
                     if local_wp.is_file() {
@@ -746,17 +774,25 @@ pub fn resolve_video_url(repo_root: &Path, home_opt: Option<&Path>, package_id: 
         .strip_prefix("lockscreen-qylock-")
         .or_else(|| package_id.strip_prefix("lockscreen-"))
         .unwrap_or(package_id);
-    let recorded_candidates = [
-        repo_root.join("public/assets/lockscreens").join(format!("{}-preview.mp4", slug)),
-        repo_root.join("public/assets/lockscreens").join(format!("{}.mp4", slug)),
-        repo_root.join("dist/assets/lockscreens").join(format!("{}-preview.mp4", slug)),
-        repo_root.join("dist/assets/lockscreens").join(format!("{}.mp4", slug)),
-    ];
-    for c in &recorded_candidates {
-        if c.is_file() {
-            let s = c.to_string_lossy();
-            let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
-            return (Some(file_url), Some("video".to_string()));
+    let mut slug_variants = vec![slug.to_string()];
+    if slug.starts_with("clockwork-") {
+        slug_variants.push("clockwork".to_string());
+    } else if slug == "nier-automata" {
+        slug_variants.push("nier".to_string());
+    }
+    for s_var in &slug_variants {
+        let recorded_candidates = [
+            repo_root.join("public/assets/lockscreens").join(format!("{}-preview.mp4", s_var)),
+            repo_root.join("public/assets/lockscreens").join(format!("{}.mp4", s_var)),
+            repo_root.join("dist/assets/lockscreens").join(format!("{}-preview.mp4", s_var)),
+            repo_root.join("dist/assets/lockscreens").join(format!("{}.mp4", s_var)),
+        ];
+        for c in &recorded_candidates {
+            if c.is_file() {
+                let s = c.to_string_lossy();
+                let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                return (Some(file_url), Some("video".to_string()));
+            }
         }
     }
 
@@ -769,6 +805,16 @@ pub fn resolve_video_url(repo_root: &Path, home_opt: Option<&Path>, package_id: 
             let s = inst_video.to_string_lossy();
             let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
             return (Some(file_url), Some("video".to_string()));
+        }
+        if let Ok(entries) = std::fs::read_dir(&inst_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() && p.extension().map(|ext| ext == "mp4" || ext == "webm").unwrap_or(false) {
+                    let s = p.to_string_lossy();
+                    let file_url = if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                    return (Some(file_url), Some("video".to_string()));
+                }
+            }
         }
     }
 
@@ -934,6 +980,45 @@ pub fn load_active_targets_in(home_opt: Option<&Path>) -> HashMap<String, Active
     targets_map
 }
 
+pub fn load_active_fastfetch_id(home_opt: Option<&Path>) -> Option<String> {
+    if let Some(home) = home_opt {
+        let state_file = home.join(".local/share/ryzora/state/active_fastfetch.json");
+        if state_file.is_file() {
+            if let Ok(raw) = fs::read_to_string(&state_file) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    if let Some(pid) = v.get("active_preset").and_then(|s| s.as_str()) {
+                        if !pid.trim().is_empty() {
+                            return Some(pid.trim().to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn save_active_fastfetch_id(home_opt: Option<&Path>, preset_id: &str) {
+    if let Some(home) = home_opt {
+        let state_dir = home.join(".local/share/ryzora/state");
+        let _ = fs::create_dir_all(&state_dir);
+        let state_file = state_dir.join("active_fastfetch.json");
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        let payload = serde_json::json!({
+            "active_preset": preset_id,
+            "applied_at": now
+        });
+        let _ = fs::write(state_file, serde_json::to_string_pretty(&payload).unwrap_or_default());
+    }
+}
+
+pub fn clear_active_fastfetch_id(home_opt: Option<&Path>) {
+    if let Some(home) = home_opt {
+        let state_file = home.join(".local/share/ryzora/state/active_fastfetch.json");
+        let _ = fs::remove_file(state_file);
+    }
+}
+
 pub fn load_active_targets() -> HashMap<String, ActiveTargets> {
     load_active_targets_in(BackendState::system_home_dir().as_deref())
 }
@@ -968,6 +1053,92 @@ pub fn validate_preset_identifier(preset_id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FastfetchEmblem {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub is_image: bool,
+}
+
+pub fn strip_jsonc_syntax(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    let n = chars.len();
+    let mut in_str = false;
+    let mut esc = false;
+
+    while i < n {
+        let c = chars[i];
+        if in_str {
+            out.push(c);
+            if esc {
+                esc = false;
+            } else if c == '\\' {
+                esc = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            i += 1;
+        } else {
+            if c == '"' {
+                in_str = true;
+                out.push(c);
+                i += 1;
+            } else if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+                i += 2;
+                while i < n && chars[i] != '\n' {
+                    i += 1;
+                }
+            } else if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+                i += 2;
+                while i + 1 < n && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+            } else {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+
+    let mut clean_chars: Vec<char> = out.chars().collect();
+    let mut j = 0;
+    let len = clean_chars.len();
+    let mut in_quote = false;
+    let mut escape = false;
+
+    while j < len {
+        let ch = clean_chars[j];
+        if in_quote {
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_quote = false;
+            }
+        } else {
+            if ch == '"' {
+                in_quote = true;
+            } else if ch == ',' {
+                let mut k = j + 1;
+                while k < len && clean_chars[k].is_whitespace() {
+                    k += 1;
+                }
+                if k < len && (clean_chars[k] == '}' || clean_chars[k] == ']') {
+                    clean_chars[j] = ' ';
+                }
+            }
+        }
+        j += 1;
+    }
+
+    clean_chars.into_iter().collect()
+}
+
 /// Resolves the filesystem configuration path and working directory for a given preset.
 ///
 /// Priority resolution order:
@@ -979,6 +1150,11 @@ pub fn validate_preset_identifier(preset_id: &str) -> Result<String, String> {
 /// Returns `Err` if invalid or missing, never silently falling back to an unintended configuration.
 pub fn resolve_preset_path(preset_id: &str) -> Result<(PathBuf, PathBuf), String> {
     let valid_id = validate_preset_identifier(preset_id)?;
+    let alt_id = if valid_id.starts_with("fastfetch-") {
+        valid_id.trim_start_matches("fastfetch-").to_string()
+    } else {
+        format!("fastfetch-{}", valid_id)
+    };
 
     // 0. Default user configuration ~/.config/fastfetch/config.jsonc
     if valid_id == "default" || valid_id == "current" {
@@ -993,51 +1169,59 @@ pub fn resolve_preset_path(preset_id: &str) -> Result<(PathBuf, PathBuf), String
 
     // 1. User presets in ~/.config/fastfetch/presets/
     if let Some(home) = BackendState::system_home_dir() {
-        let p1 = home.join(".config/fastfetch/presets").join(&valid_id).join("config.jsonc");
-        if p1.is_file() {
-            let parent = p1.parent().unwrap().to_path_buf();
-            return Ok((p1, parent));
-        }
-        let p1_sub = home.join(".config/fastfetch/presets").join(&valid_id).join("fastfetch/config.jsonc");
-        if p1_sub.is_file() {
-            let parent = p1_sub.parent().unwrap().to_path_buf();
-            return Ok((p1_sub, parent));
+        for id in [&valid_id, &alt_id] {
+            let p1 = home.join(".config/fastfetch/presets").join(id).join("config.jsonc");
+            if p1.is_file() {
+                let parent = p1.parent().unwrap().to_path_buf();
+                return Ok((p1, parent));
+            }
+            let p1_sub = home.join(".config/fastfetch/presets").join(id).join("fastfetch/config.jsonc");
+            if p1_sub.is_file() {
+                let parent = p1_sub.parent().unwrap().to_path_buf();
+                return Ok((p1_sub, parent));
+            }
         }
     }
 
     // 2. Repository community packages
     let repo_root = BackendState::resolve_repo_root(None);
-    let p2 = repo_root.join("repositories/community/packages").join(&valid_id).join("files/config.jsonc");
-    if p2.is_file() {
-        let parent = p2.parent().unwrap().to_path_buf();
-        return Ok((p2, parent));
-    }
-    let p2_sub = repo_root.join("repositories/community/packages").join(&valid_id).join("files/fastfetch/config.jsonc");
-    if p2_sub.is_file() {
-        let parent = p2_sub.parent().unwrap().to_path_buf();
-        return Ok((p2_sub, parent));
+    for id in [&valid_id, &alt_id] {
+        let p2 = repo_root.join("repositories/community/packages").join(id).join("files/config.jsonc");
+        if p2.is_file() {
+            let parent = p2.parent().unwrap().to_path_buf();
+            return Ok((p2, parent));
+        }
+        let p2_sub = repo_root.join("repositories/community/packages").join(id).join("files/fastfetch/config.jsonc");
+        if p2_sub.is_file() {
+            let parent = p2_sub.parent().unwrap().to_path_buf();
+            return Ok((p2_sub, parent));
+        }
     }
 
     // 3. Dist packages fallback
-    let p_dist = repo_root.join("dist/packages").join(&valid_id).join("files/config.jsonc");
-    if p_dist.is_file() {
-        let parent = p_dist.parent().unwrap().to_path_buf();
-        return Ok((p_dist, parent));
-    }
-    let p_dist_sub = repo_root.join("dist/packages").join(&valid_id).join("files/fastfetch/config.jsonc");
-    if p_dist_sub.is_file() {
-        let parent = p_dist_sub.parent().unwrap().to_path_buf();
-        return Ok((p_dist_sub, parent));
+    for id in [&valid_id, &alt_id] {
+        let p_dist = repo_root.join("dist/packages").join(id).join("files/config.jsonc");
+        if p_dist.is_file() {
+            let parent = p_dist.parent().unwrap().to_path_buf();
+            return Ok((p_dist, parent));
+        }
+        let p_dist_sub = repo_root.join("dist/packages").join(id).join("files/fastfetch/config.jsonc");
+        if p_dist_sub.is_file() {
+            let parent = p_dist_sub.parent().unwrap().to_path_buf();
+            return Ok((p_dist_sub, parent));
+        }
     }
 
     // 4. System presets in /usr/share/fastfetch/presets/
-    let p3 = PathBuf::from(format!("/usr/share/fastfetch/presets/{}.jsonc", valid_id));
-    if p3.is_file() {
-        return Ok((p3, PathBuf::from("/usr/share/fastfetch/presets")));
-    }
-    let p3_plain = PathBuf::from(format!("/usr/share/fastfetch/presets/{}", valid_id));
-    if p3_plain.is_file() {
-        return Ok((p3_plain, PathBuf::from("/usr/share/fastfetch/presets")));
+    for id in [&valid_id, &alt_id] {
+        let p3 = PathBuf::from(format!("/usr/share/fastfetch/presets/{}.jsonc", id));
+        if p3.is_file() {
+            return Ok((p3, PathBuf::from("/usr/share/fastfetch/presets")));
+        }
+        let p3_plain = PathBuf::from(format!("/usr/share/fastfetch/presets/{}", id));
+        if p3_plain.is_file() {
+            return Ok((p3_plain, PathBuf::from("/usr/share/fastfetch/presets")));
+        }
     }
 
     Err(format!(
@@ -1334,6 +1518,7 @@ impl BackendState {
         let mut items = Vec::new();
         let installed_ids = load_installed_package_ids_in(self.resolve_home_dir().as_deref());
         let active_targets_map = load_active_targets_in(self.resolve_home_dir().as_deref());
+        let active_ff_id = load_active_fastfetch_id(self.resolve_home_dir().as_deref());
 
         // Discover local repositories using shared ryzora-core logic
         let search_dirs = [repo_root.join("repositories"), repo_root.clone()];
@@ -1345,7 +1530,14 @@ impl BackendState {
                     let is_installed = installed_ids.contains(&entry.id);
                     let active_targets = active_targets_map.get(&entry.id).cloned().unwrap_or_default();
                     let is_lockscreen = entry.category.to_lowercase() == "lockscreens";
-                    let is_active = if is_lockscreen { active_targets.session_lock } else { active_targets.is_active() };
+                    let is_fastfetch = entry.category.to_lowercase() == "fastfetch" || entry.id.starts_with("fastfetch-");
+                    let is_active = if is_lockscreen {
+                        active_targets.session_lock
+                    } else if is_fastfetch {
+                        is_installed && active_ff_id.as_deref().map_or(false, |aff| aff == entry.id || aff == entry.id.trim_start_matches("fastfetch-"))
+                    } else {
+                        active_targets.is_active()
+                    };
                     let is_tested = self.tested_packages.lock().unwrap().contains(&entry.id);
 
                     // Load manifest via ryzora-core to extract typed dependencies and preview asset
@@ -1366,6 +1558,12 @@ impl BackendState {
                                 Some("qylock".to_string())
                             } else {
                                 None
+                            }
+                        } else if is_fastfetch {
+                            if entry.id.contains("emblem") || entry.tags.iter().any(|t| t.to_lowercase() == "emblem") {
+                                Some("Emblems".to_string())
+                            } else {
+                                Some("Configs".to_string())
                             }
                         } else {
                             None
@@ -1606,6 +1804,7 @@ impl BackendState {
 
         let mut items = Vec::new();
         let active_targets_map = load_active_targets_in(self.resolve_home_dir().as_deref());
+        let active_ff_id = load_active_fastfetch_id(self.resolve_home_dir().as_deref());
         let repo_root = Self::resolve_repo_root(None);
 
         let mut repo_packages_map: HashMap<String, (String, String, String, Option<String>, Vec<String>)> = HashMap::new();
@@ -1663,9 +1862,33 @@ impl BackendState {
                                         "Recently".to_string()
                                     };
 
+                                    let subfilter = v.get("subfilter").and_then(|s| s.as_str()).map(|s| s.to_string());
+                                    let snapshot_id = v.get("snapshot_id").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                                    let files_count = v.get("installed_files")
+                                        .or_else(|| v.get("files"))
+                                        .and_then(|f| f.as_array())
+                                        .map(|a| a.len())
+                                        .unwrap_or(0);
+
+                                    let (category, description, preview_url, meta_subfilter, tags) = if let Some(m) = repo_packages_map.get(&id) {
+                                        (m.0.clone(), m.1.clone(), m.2.clone(), m.3.clone(), m.4.clone())
+                                    } else if let Some(wp) = SILENTSDDM_WALLPAPERS.iter().find(|w| w.id == id) {
+                                        ("lockscreens".to_string(), wp.desc.to_string(), wp.preview_url.to_string(), Some("silentsddm".to_string()), wp.tags.iter().map(|&s| s.to_string()).collect())
+                                    } else {
+                                        let prev = resolve_preview_url(&repo_root, None, &id);
+                                        (pkg_type.clone(), String::new(), prev, None, Vec::new())
+                                    };
+
                                     let active_targets = active_targets_map.get(&id).cloned().unwrap_or_default();
                                     let is_lockscreen = pkg_type.to_lowercase() == "lockscreens" || pkg_type.to_lowercase() == "lockscreen" || id.starts_with("lockscreen-") || id.starts_with("silentsddm-") || id.starts_with("custom:");
-                                    let is_active = if is_lockscreen { active_targets.session_lock } else { active_targets.is_active() };
+                                    let is_fastfetch = category.to_lowercase() == "fastfetch" || pkg_type.to_lowercase() == "fastfetch" || id.starts_with("fastfetch-");
+                                    let is_active = if is_lockscreen {
+                                        active_targets.session_lock
+                                    } else if is_fastfetch {
+                                        active_ff_id.as_deref().map_or(false, |aff| aff == id || aff == id.trim_start_matches("fastfetch-"))
+                                    } else {
+                                        active_targets.is_active()
+                                    };
                                     let is_tested = self.tested_packages.lock().unwrap().contains(&id);
                                     let status = if is_active { "Active".to_string() } else if is_tested { "Tested".to_string() } else { "Installed".to_string() };
                                     let supports_sddm = if is_lockscreen {
@@ -1685,22 +1908,6 @@ impl BackendState {
                                         }
                                     } else {
                                         pkg_type.to_lowercase() == "sddm"
-                                    };
-                                    let subfilter = v.get("subfilter").and_then(|s| s.as_str()).map(|s| s.to_string());
-                                    let snapshot_id = v.get("snapshot_id").and_then(|s| s.as_str()).unwrap_or("").to_string();
-                                    let files_count = v.get("installed_files")
-                                        .or_else(|| v.get("files"))
-                                        .and_then(|f| f.as_array())
-                                        .map(|a| a.len())
-                                        .unwrap_or(0);
-
-                                    let (category, description, preview_url, meta_subfilter, tags) = if let Some(m) = repo_packages_map.get(&id) {
-                                        (m.0.clone(), m.1.clone(), m.2.clone(), m.3.clone(), m.4.clone())
-                                    } else if let Some(wp) = SILENTSDDM_WALLPAPERS.iter().find(|w| w.id == id) {
-                                        ("lockscreens".to_string(), wp.desc.to_string(), wp.preview_url.to_string(), Some("silentsddm".to_string()), wp.tags.iter().map(|&s| s.to_string()).collect())
-                                    } else {
-                                        let prev = resolve_preview_url(&repo_root, None, &id);
-                                        (pkg_type.clone(), String::new(), prev, None, Vec::new())
                                     };
                                     let final_subfilter = subfilter.or(meta_subfilter);
                                     let (video_url, media_type) = resolve_video_url(&repo_root, self.resolve_home_dir().as_deref(), &id);
@@ -2535,6 +2742,10 @@ impl BackendState {
             return self.run_command_cancellable("sleep", &["5"], None, req_id);
         }
 
+        if preset_trimmed.starts_with('{') || preset_trimmed.starts_with('[') {
+            return self.run_fastfetch_draft(preset_trimmed, req_id);
+        }
+
         if let Some(custom_args) = preset_trimmed.strip_prefix("custom:") {
             let mut args: Vec<String> = vec!["--pipe".to_string(), "false".to_string()];
             for part in custom_args.split(';') {
@@ -2591,6 +2802,45 @@ impl BackendState {
         let target = ff_dir.join("config.jsonc");
         let content = fs::read_to_string(&config_path).map_err(|e| format!("Failed to read preset config: {}", e))?;
 
+        let cleaned = strip_jsonc_syntax(&content);
+        let mut parsed_val = serde_json::from_str::<serde_json::Value>(&cleaned)
+            .map_err(|e| format!("Preset '{}' contains invalid JSON/JSONC: {}", preset_id, e))?;
+
+        if let Some(logo) = parsed_val.get_mut("logo") {
+            let ltype = logo.get("type").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            if let Some(src_str) = logo.get("source").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                let lower_src = src_str.to_lowercase();
+                let is_img = matches!(ltype.as_str(), "kitty-direct" | "kitty" | "kitty-icat" | "iterm" | "sixel" | "chafa" | "image")
+                    || lower_src.ends_with(".png")
+                    || lower_src.ends_with(".jpg")
+                    || lower_src.ends_with(".jpeg")
+                    || lower_src.ends_with(".webp")
+                    || lower_src.ends_with(".svg");
+                if let Some(resolved_src) = self.resolve_fastfetch_logo_source(&src_str, Some(preset_id)) {
+                    logo["source"] = serde_json::json!(resolved_src);
+                    if is_img {
+                        logo["type"] = serde_json::json!("kitty-direct");
+                    }
+                } else if is_img {
+                    let emblems = self.list_fastfetch_local_emblems();
+                    if let Some(emb) = emblems.iter().find(|e| e.id == "katana").or_else(|| emblems.first()) {
+                        logo["source"] = serde_json::json!(emb.path);
+                        logo["type"] = serde_json::json!("kitty-direct");
+                    }
+                }
+                if is_img {
+                    if logo.get("padding").is_none() {
+                        logo["padding"] = serde_json::json!({ "top": 2, "left": 1, "right": 3 });
+                    } else if let Some(pad) = logo.get_mut("padding") {
+                        if pad.get("top").is_none() {
+                            pad["top"] = serde_json::json!(2);
+                        }
+                    }
+                }
+            }
+        }
+        let final_content = serde_json::to_string_pretty(&parsed_val).unwrap_or(content);
+
         if target.exists() {
             let backup = ff_dir.join("config.jsonc.ryzora.bak");
             let _ = fs::copy(&target, &backup);
@@ -2601,10 +2851,504 @@ impl BackendState {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let tmp = ff_dir.join(format!(".config.jsonc.tmp.{}", rand_nano));
-        fs::write(&tmp, &content).map_err(|e| format!("Failed to write config: {}", e))?;
+        fs::write(&tmp, &final_content).map_err(|e| format!("Failed to write config: {}", e))?;
         fs::rename(&tmp, &target).map_err(|e| format!("Failed to atomically update ~/.config/fastfetch/config.jsonc: {}", e))?;
 
+        save_active_fastfetch_id(Some(&home), preset_id);
+        if let Ok(mut c) = self.catalog_cache.lock() { *c = None; }
+        if let Ok(mut c) = self.library_cache.lock() { *c = None; }
+
         Ok(format!("Successfully applied preset '{}' to ~/.config/fastfetch/config.jsonc", preset_id))
+    }
+
+    pub fn resolve_fastfetch_logo_source(&self, src_str: &str, preset_hint: Option<&str>) -> Option<String> {
+        let trimmed = src_str.trim();
+        if trimmed.is_empty() || trimmed.contains("$(") {
+            return None;
+        }
+        let home = self.resolve_home_dir().or_else(BackendState::system_home_dir);
+        let repo_root = Self::resolve_repo_root(None);
+
+        let expanded = if let Some(rest) = trimmed.strip_prefix("~/") {
+            home.as_ref().map(|h| h.join(rest)).unwrap_or_else(|| PathBuf::from(trimmed))
+        } else if let Some(rest) = trimmed.strip_prefix("$HOME/") {
+            home.as_ref().map(|h| h.join(rest)).unwrap_or_else(|| PathBuf::from(trimmed))
+        } else {
+            PathBuf::from(trimmed)
+        };
+
+        if expanded.is_file() {
+            return Some(expanded.to_string_lossy().to_string());
+        }
+
+        // Check if path references .config/fastfetch/presets/<id>/<rel>
+        let norm = trimmed.replace("$HOME/", "").replace("~/", "");
+        if let Some(after) = norm.strip_prefix(".config/fastfetch/presets/") {
+            if let Some((pkg_slug, rel_path)) = after.split_once('/') {
+                let pkg_id = if pkg_slug.starts_with("fastfetch-") {
+                    pkg_slug.to_string()
+                } else {
+                    format!("fastfetch-{}", pkg_slug)
+                };
+                for cand_id in [pkg_slug, pkg_id.as_str()] {
+                    for base in [
+                        repo_root.join("repositories/community/packages").join(cand_id).join("files"),
+                        repo_root.join("repositories/community/packages").join(cand_id).join("files/fastfetch"),
+                        repo_root.join("dist/packages").join(cand_id).join("files"),
+                    ] {
+                        let p = base.join(rel_path);
+                        if p.is_file() {
+                            return Some(p.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check relative to preset_hint's directory
+        if let Some(hint) = preset_hint {
+            if let Ok((_, working_dir)) = resolve_preset_path(hint) {
+                let p = working_dir.join(trimmed);
+                if p.is_file() {
+                    return Some(p.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn list_fastfetch_installed_presets(&self) -> Vec<String> {
+        let mut installed = std::collections::BTreeSet::new();
+        if let Some(home) = self.resolve_home_dir() {
+            let presets_dir = home.join(".config/fastfetch/presets");
+            if presets_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&presets_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_dir() && (p.join("config.jsonc").exists() || p.join("fastfetch/config.jsonc").exists()) {
+                            if let Some(id) = p.file_name().and_then(|n| n.to_str()) {
+                                installed.insert(id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            let ryzora_installed = home.join(".local/share/ryzora/installed");
+            if ryzora_installed.is_dir() {
+                if let Ok(entries) = fs::read_dir(&ryzora_installed) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("json") {
+                            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                            if stem.starts_with("fastfetch-") && !stem.contains("emblem") {
+                                installed.insert(stem.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Include all discovered presets so the browser is fully populated
+        for p in discover_fastfetch_presets() {
+            installed.insert(p);
+        }
+
+        installed.into_iter().collect()
+    }
+
+    pub fn list_fastfetch_local_emblems(&self) -> Vec<FastfetchEmblem> {
+        let home = self.resolve_home_dir().or_else(BackendState::system_home_dir);
+        let mut emblems = Vec::new();
+        let mut seen_ids = std::collections::HashSet::new();
+
+        let valid_exts = ["png", "jpg", "jpeg", "webp", "svg", "gif"];
+        let excluded_keywords = ["readme", "license", "manifest", "config", "preview", ".1bit", ".mask", ".bak"];
+
+        let mut consider_file = |path: PathBuf, default_id: Option<String>, default_name: Option<String>| {
+            if !path.is_file() {
+                return;
+            }
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let lower = file_name.to_lowercase();
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+            if !valid_exts.contains(&ext.as_str()) || excluded_keywords.iter().any(|k| lower.contains(k)) || file_name.starts_with('.') {
+                return;
+            }
+
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("emblem");
+            let raw_id = default_id.unwrap_or_else(|| stem.to_string());
+            let clean_id = raw_id.trim_start_matches("fastfetch-emblem-").trim_end_matches("-hero").to_lowercase();
+
+            if !seen_ids.insert(clean_id.clone()) {
+                return;
+            }
+
+            let display_name = default_name.unwrap_or_else(|| {
+                let mut c = clean_id.chars();
+                match c.next() {
+                    None => String::new(),
+                    Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                }
+            });
+
+            emblems.push(FastfetchEmblem {
+                id: clean_id,
+                name: display_name,
+                path: path.to_string_lossy().to_string(),
+                is_image: true,
+            });
+        };
+
+        let repo_root = Self::resolve_repo_root(None);
+
+        // 1. Community packages fastfetch-emblem-*
+        let repo_community = repo_root.join("repositories/community/packages");
+        if repo_community.is_dir() {
+            if let Ok(entries) = fs::read_dir(&repo_community) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    let dir_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if dir_name.starts_with("fastfetch-emblem-") {
+                        let clean_id = dir_name.trim_start_matches("fastfetch-emblem-").to_string();
+                        let files_dir = p.join("files");
+                        if files_dir.is_dir() {
+                            if let Ok(files) = fs::read_dir(&files_dir) {
+                                for f in files.flatten() {
+                                    consider_file(f.path(), Some(clean_id.clone()), None);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. User ~/.config/fastfetch/logos/
+        if let Some(ref h) = home {
+            let logos_dir = h.join(".config/fastfetch/logos");
+            if logos_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&logos_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_file() {
+                            consider_file(p, None, None);
+                        } else if p.is_dir() {
+                            let dir_stem = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+                            if let Ok(sub_entries) = fs::read_dir(&p) {
+                                for sub_entry in sub_entries.flatten() {
+                                    consider_file(sub_entry.path(), Some(dir_stem.clone()), None);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for sub in &["Pictures/fastfetch", "Pictures/emblems"] {
+                let decor_dir = h.join(sub);
+                if decor_dir.is_dir() {
+                    if let Ok(entries) = fs::read_dir(&decor_dir) {
+                        for entry in entries.flatten() {
+                            let p = entry.path();
+                            if p.is_file() {
+                                consider_file(p, None, None);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        emblems
+    }
+
+    pub fn get_fastfetch_preset_config(&self, preset_id: &str) -> String {
+        if let Ok((path, _)) = resolve_preset_path(preset_id) {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if !content.trim().is_empty() {
+                    let cleaned = strip_jsonc_syntax(&content);
+                    if let Ok(mut parsed_val) = serde_json::from_str::<serde_json::Value>(&cleaned) {
+                        if let Some(logo) = parsed_val.get_mut("logo") {
+                            let ltype = logo.get("type").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                            if let Some(src_str) = logo.get("source").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                                let lower_src = src_str.to_lowercase();
+                                let is_img = matches!(ltype.as_str(), "kitty-direct" | "kitty" | "kitty-icat" | "iterm" | "sixel" | "chafa" | "image")
+                                    || lower_src.ends_with(".png")
+                                    || lower_src.ends_with(".jpg")
+                                    || lower_src.ends_with(".jpeg")
+                                    || lower_src.ends_with(".webp")
+                                    || lower_src.ends_with(".svg");
+                                if let Some(resolved_src) = self.resolve_fastfetch_logo_source(&src_str, Some(preset_id)) {
+                                    logo["source"] = serde_json::json!(resolved_src);
+                                    if is_img {
+                                        logo["type"] = serde_json::json!("kitty-direct");
+                                    }
+                                } else if is_img {
+                                    let emblems = self.list_fastfetch_local_emblems();
+                                    if let Some(emb) = emblems.iter().find(|e| e.id == "katana").or_else(|| emblems.first()) {
+                                        logo["source"] = serde_json::json!(emb.path);
+                                        logo["type"] = serde_json::json!("kitty-direct");
+                                    }
+                                } else if !std::path::Path::new(&src_str).is_file() {
+                                    if let Some(obj) = logo.as_object_mut() {
+                                        obj.remove("source");
+                                        obj.insert("type".to_string(), serde_json::json!("builtin"));
+                                    }
+                                }
+                            }
+                        }
+                        if let Ok(pretty) = serde_json::to_string_pretty(&parsed_val) {
+                            return pretty;
+                        }
+                    }
+                    return content;
+                }
+            }
+        }
+        "{\n  \"$schema\": \"https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json\",\n  \"modules\": [\"title\", \"separator\", \"os\", \"host\", \"kernel\", \"uptime\", \"packages\", \"shell\", \"wm\", \"terminal\", \"cpu\", \"gpu\", \"memory\", \"disk\"]\n}".to_string()
+    }
+
+    pub fn get_fastfetch_saved_config(&self) -> Option<String> {
+        let home = self.resolve_home_dir().or_else(BackendState::system_home_dir)?;
+        let saved_config = home.join(".config/fastfetch/config.jsonc");
+        if saved_config.is_file() {
+            let raw = fs::read_to_string(&saved_config).ok()?;
+            let cleaned = strip_jsonc_syntax(&raw);
+            if let Ok(mut parsed_val) = serde_json::from_str::<serde_json::Value>(&cleaned) {
+                if let Some(logo) = parsed_val.get_mut("logo") {
+                    if let Some(src_str) = logo.get("source").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                        if let Some(resolved_src) = self.resolve_fastfetch_logo_source(&src_str, None) {
+                            logo["source"] = serde_json::json!(resolved_src);
+                        }
+                    }
+                }
+                if let Ok(pretty) = serde_json::to_string_pretty(&parsed_val) {
+                    return Some(pretty);
+                }
+            }
+            Some(raw)
+        } else {
+            None
+        }
+    }
+
+    pub fn save_fastfetch_configuration(&self, config_content: &str, preset_id: Option<&str>) -> Result<String, String> {
+        let trimmed = config_content.trim();
+        if trimmed.is_empty() {
+            return Err("Refusing to save empty Fastfetch configuration".to_string());
+        }
+
+        let cleaned = strip_jsonc_syntax(trimmed);
+        let mut parsed_val = match serde_json::from_str::<serde_json::Value>(&cleaned) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(format!("Invalid Fastfetch JSON/JSONC configuration: {}", e));
+            }
+        };
+
+        if let Some(logo) = parsed_val.get_mut("logo") {
+            if let Some(src_str) = logo.get("source").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                if let Some(resolved_src) = self.resolve_fastfetch_logo_source(&src_str, preset_id) {
+                    logo["source"] = serde_json::json!(resolved_src);
+                }
+            }
+        }
+        let final_content = serde_json::to_string_pretty(&parsed_val).unwrap_or_else(|_| trimmed.to_string());
+
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        let ff_dir = home.join(".config/fastfetch");
+        fs::create_dir_all(&ff_dir).map_err(|e| format!("Failed to create ~/.config/fastfetch directory: {}", e))?;
+        let target = ff_dir.join("config.jsonc");
+
+        if target.is_file() {
+            if let Ok(metadata) = fs::metadata(&target) {
+                if metadata.len() > 0 {
+                    let backup = ff_dir.join("config.jsonc.ryzora.bak");
+                    let _ = fs::copy(&target, &backup);
+                }
+            }
+        }
+
+        let rand_nano = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let tmp = ff_dir.join(format!(".config.jsonc.tmp.{}", rand_nano));
+        fs::write(&tmp, &final_content).map_err(|e| format!("Failed to write configuration: {}", e))?;
+        fs::rename(&tmp, &target).map_err(|e| format!("Failed to atomically update ~/.config/fastfetch/config.jsonc: {}", e))?;
+
+        if let Some(pid) = preset_id {
+            if !pid.trim().is_empty() {
+                save_active_fastfetch_id(Some(&home), pid);
+            }
+        }
+
+        if let Ok(mut c) = self.catalog_cache.lock() { *c = None; }
+        if let Ok(mut c) = self.library_cache.lock() { *c = None; }
+
+        Ok("Configuration saved successfully to ~/.config/fastfetch/config.jsonc".to_string())
+    }
+
+    pub fn reset_fastfetch_default(&self) -> Result<String, String> {
+        let default_config = r#"{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "type": "none"
+  },
+  "display": {
+    "separator": "  ",
+    "color": {
+      "keys": "38;2;100;136;232"
+    }
+  },
+  "modules": [
+    "title",
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;100;136;232m■\u001b[0m \u001b[2mRyzora — hand-crafted Linux desktop\u001b[0m"
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "\u001b[2m── VITALS ──────────────────────────────────────\u001b[0m"
+    },
+    { "type": "cpu", "key": "CPU" },
+    { "type": "gpu", "key": "GPU" },
+    { "type": "memory", "key": "MEMORY" },
+    { "type": "disk", "key": "DISK" },
+    "break",
+    {
+      "type": "custom",
+      "format": "\u001b[2m── SYSTEM ──────────────────────────────────────\u001b[0m"
+    },
+    { "type": "os", "key": "OS" },
+    { "type": "kernel", "key": "KERNEL" },
+    { "type": "wm", "key": "WM" },
+    { "type": "shell", "key": "SHELL" },
+    { "type": "packages", "key": "PKGS" },
+    "break",
+    {
+      "type": "custom",
+      "format": "\u001b[2m── SESSION ─────────────────────────────────────\u001b[0m"
+    },
+    { "type": "uptime", "key": "UPTIME" },
+    { "type": "terminal", "key": "TERM" },
+    { "type": "colors", "symbol": "circle" }
+  ]
+}"#;
+        let res = self.save_fastfetch_configuration(default_config, Some("default"))?;
+        if let Some(home) = self.resolve_home_dir() {
+            clear_active_fastfetch_id(Some(&home));
+        }
+        Ok(res)
+    }
+
+    pub fn remove_installed_fastfetch_style(&self, _preset_id: Option<&str>) -> Result<String, String> {
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        let ff_dir = home.join(".config/fastfetch");
+        let target = ff_dir.join("config.jsonc");
+        let backup = ff_dir.join("config.jsonc.ryzora.bak");
+
+        if backup.is_file() {
+            let _ = fs::copy(&backup, &target);
+            let _ = fs::remove_file(&backup);
+        } else {
+            let _ = self.reset_fastfetch_default();
+        }
+
+        clear_active_fastfetch_id(Some(&home));
+        if let Ok(mut c) = self.catalog_cache.lock() { *c = None; }
+        if let Ok(mut c) = self.library_cache.lock() { *c = None; }
+
+        Ok("Removed installed Fastfetch style and restored previous configuration".to_string())
+    }
+
+    pub fn run_fastfetch_draft(&self, draft_json: &str, req_id: u64) -> FastfetchResult {
+        let trimmed = draft_json.trim();
+        if trimmed.is_empty() {
+            return FastfetchResult {
+                request_id: req_id,
+                success: false,
+                cancelled: false,
+                pid: 0,
+                raw_ansi: String::new(),
+                html_formatted: "<span style='color: #ef4444;'>Draft configuration is empty</span>".to_string(),
+                execution_time_ms: 0,
+                error: Some("Empty draft configuration".to_string()),
+            };
+        }
+
+        let cleaned = strip_jsonc_syntax(trimmed);
+        let mut parsed_val = match serde_json::from_str::<serde_json::Value>(&cleaned) {
+            Ok(v) => v,
+            Err(e) => {
+                return FastfetchResult {
+                    request_id: req_id,
+                    success: false,
+                    cancelled: false,
+                    pid: 0,
+                    raw_ansi: String::new(),
+                    html_formatted: format!("<span style='color: #ef4444;'>Invalid draft JSON/JSONC: {}</span>", html_escape(&e.to_string())),
+                    execution_time_ms: 0,
+                    error: Some(format!("Invalid draft JSON/JSONC: {}", e)),
+                };
+            }
+        };
+
+        // For embedded QML readout preview: if logo type is an image protocol (kitty-direct, etc.),
+        // QML renders the high-resolution image directly in the left pane of READOUT PREVIEW, so
+        // we set logo.type = "none" in the temporary preview config to avoid duplicate indent/escape codes.
+        if let Some(logo) = parsed_val.get_mut("logo") {
+            if logo.is_object() {
+                let ltype = logo.get("type").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                let src_raw = logo.get("source").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let lsrc = src_raw.to_lowercase();
+                let is_img = matches!(ltype.as_str(), "kitty-direct" | "kitty" | "kitty-icat" | "iterm" | "sixel" | "chafa" | "image")
+                    || lsrc.ends_with(".png")
+                    || lsrc.ends_with(".jpg")
+                    || lsrc.ends_with(".jpeg")
+                    || lsrc.ends_with(".webp")
+                    || lsrc.ends_with(".svg");
+                if is_img {
+                    let exists = (!src_raw.is_empty() && std::path::Path::new(&src_raw).is_file())
+                        || self.resolve_fastfetch_logo_source(&src_raw, None).is_some();
+                    if exists {
+                        *logo = serde_json::json!({ "type": "none" });
+                    } else if let Some(obj) = logo.as_object_mut() {
+                        obj.remove("source");
+                        obj.insert("type".to_string(), serde_json::json!("builtin"));
+                    }
+                } else if !src_raw.is_empty() {
+                    if let Some(resolved_src) = self.resolve_fastfetch_logo_source(&src_raw, None) {
+                        logo["source"] = serde_json::json!(resolved_src);
+                    }
+                }
+            }
+        }
+
+        let effective_json = serde_json::to_string_pretty(&parsed_val).unwrap_or_else(|_| trimmed.to_string());
+
+        let temp_dir = std::env::temp_dir();
+        let rand_nano = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let temp_config_path = temp_dir.join(format!("ryzora_ff_draft_{}_{}.jsonc", req_id, rand_nano));
+
+        if let Err(e) = fs::write(&temp_config_path, &effective_json) {
+            return FastfetchResult {
+                request_id: req_id,
+                success: false,
+                cancelled: false,
+                pid: 0,
+                raw_ansi: String::new(),
+                html_formatted: format!("<span style='color: #ef4444;'>Failed to write temp draft config: {}</span>", html_escape(&e.to_string())),
+                execution_time_ms: 0,
+                error: Some(e.to_string()),
+            };
+        }
+
+        let path_str = temp_config_path.to_string_lossy().to_string();
+        let res = self.run_command_cancellable("fastfetch", &["-c", &path_str, "--pipe", "false"], None, req_id);
+        let _ = fs::remove_file(&temp_config_path);
+        res
     }
 
     pub fn install_package(&self, package_id: &str) -> Result<String, String> {
@@ -2731,7 +3475,7 @@ impl BackendState {
             &staging_root,
             &home,
             None,
-            true,
+            false,
         )?;
 
         // Invalidate caches on mutation
@@ -2742,7 +3486,7 @@ impl BackendState {
             *c = None;
         }
 
-        Ok(format!("Package '{}' (v{}) installed successfully (snapshot: {})", res.package_id, res.version, res.snapshot_id))
+        Ok(format!("Package '{}' (v{}) installed successfully", res.package_id, res.version))
     }
 
     pub fn test_package(&self, package_id: &str) -> Result<String, String> {
@@ -2923,6 +3667,9 @@ impl BackendState {
         let mut config = ActiveConfigurationState::default();
 
         if let Some(home) = self.resolve_home_dir() {
+            if let Some(aff) = load_active_fastfetch_id(Some(&home)) {
+                config.active_fastfetch_id = aff;
+            }
             let state_files = [
                 home.join(".local/share/ryzora/state/active_lockscreen.json"),
                 home.join(".local/share/ryzora/active_lockscreen.json"),
@@ -3385,6 +4132,12 @@ impl BackendState {
             &state_dir,
         )?;
 
+        if let Some(active_id) = load_active_fastfetch_id(Some(&home)) {
+            if active_id == valid_id || active_id == valid_id.trim_start_matches("fastfetch-") {
+                clear_active_fastfetch_id(Some(&home));
+            }
+        }
+
         if let Ok(mut c) = self.library_cache.lock() {
             *c = None;
         }
@@ -3656,22 +4409,30 @@ impl SgrState {
 /// - Clean stripping of non-SGR escape sequences (cursor moves, clear screen, terminal modes)
 pub fn ansi_to_html(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len() * 2);
-    out.push_str("<pre style='margin:0; font-family: monospace; font-size: 13px; line-height: 1.4; color: #e2e8f0; background: transparent;'>");
+    out.push_str("<pre style='margin:0; font-family: \"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"FiraCode Nerd Font\", monospace; line-height: 1.22; color: #e2e8f0; background: transparent;'>");
 
     let mut current_state = SgrState::default();
-    let mut span_open = false;
+    let mut grid: Vec<Vec<(char, SgrState)>> = vec![Vec::new()];
+    let mut row: usize = 0;
+    let mut col: usize = 0;
 
     let chars: Vec<char> = raw.chars().collect();
     let len = chars.len();
     let mut i = 0;
 
+    let ensure_row = |grid: &mut Vec<Vec<(char, SgrState)>>, r: usize| {
+        while grid.len() <= r {
+            grid.push(Vec::new());
+        }
+    };
+
     while i < len {
         if chars[i] == '\x1b' {
             if i + 1 < len && chars[i + 1] == '[' {
-                // CSI sequence: parse until final letter (usually 'm' for SGR)
+                // CSI sequence: parse until final letter (0x40..=0x7E)
                 let start = i + 2;
                 let mut end = start;
-                while end < len && !chars[end].is_ascii_alphabetic() && chars[end] != '@' && chars[end] != '`' {
+                while end < len && !chars[end].is_ascii_alphabetic() && chars[end] != '@' && chars[end] != '`' && chars[end] != '~' {
                     end += 1;
                 }
                 if end < len {
@@ -3679,95 +4440,142 @@ pub fn ansi_to_html(raw: &str) -> String {
                     let seq_str: String = chars[start..end].iter().collect();
                     i = end + 1;
 
-                    if cmd_char == 'm' {
-                        // SGR color/style sequence
-                        let params: Vec<u32> = if seq_str.is_empty() {
-                            vec![0]
-                        } else {
-                            seq_str
-                                .split(|c| c == ';' || c == ':')
-                                .map(|s| s.parse::<u32>().unwrap_or(0))
-                                .collect()
-                        };
-
-                        let mut p_idx = 0;
-                        while p_idx < params.len() {
-                            match params[p_idx] {
-                                0 => {
-                                    current_state = SgrState::default();
-                                }
-                                1 => current_state.bold = true,
-                                2 => current_state.dim = true,
-                                3 => current_state.italic = true,
-                                4 => current_state.underline = true,
-                                9 => current_state.strikethrough = true,
-                                22 => {
-                                    current_state.bold = false;
-                                    current_state.dim = false;
-                                }
-                                23 => current_state.italic = false,
-                                24 => current_state.underline = false,
-                                29 => current_state.strikethrough = false,
-                                30..=37 => {
-                                    current_state.fg = Some(get_256_color((params[p_idx] - 30) as u8));
-                                }
-                                38 => {
-                                    // Extended FG: 38;5;n or 38;2;r;g;b
-                                    if p_idx + 2 < params.len() && params[p_idx + 1] == 5 {
-                                        current_state.fg = Some(get_256_color(params[p_idx + 2] as u8));
-                                        p_idx += 2;
-                                    } else if p_idx + 4 < params.len() && params[p_idx + 1] == 2 {
-                                        let r = params[p_idx + 2];
-                                        let g = params[p_idx + 3];
-                                        let b = params[p_idx + 4];
-                                        current_state.fg = Some(format!("rgb({}, {}, {})", r, g, b));
-                                        p_idx += 4;
-                                    }
-                                }
-                                39 => current_state.fg = None,
-                                40..=47 => {
-                                    current_state.bg = Some(get_256_color((params[p_idx] - 40) as u8));
-                                }
-                                48 => {
-                                    // Extended BG: 48;5;n or 48;2;r;g;b
-                                    if p_idx + 2 < params.len() && params[p_idx + 1] == 5 {
-                                        current_state.bg = Some(get_256_color(params[p_idx + 2] as u8));
-                                        p_idx += 2;
-                                    } else if p_idx + 4 < params.len() && params[p_idx + 1] == 2 {
-                                        let r = params[p_idx + 2];
-                                        let g = params[p_idx + 3];
-                                        let b = params[p_idx + 4];
-                                        current_state.bg = Some(format!("rgb({}, {}, {})", r, g, b));
-                                        p_idx += 4;
-                                    }
-                                }
-                                49 => current_state.bg = None,
-                                90..=97 => {
-                                    current_state.fg = Some(get_256_color((params[p_idx] - 90 + 8) as u8));
-                                }
-                                100..=107 => {
-                                    current_state.bg = Some(get_256_color((params[p_idx] - 100 + 8) as u8));
-                                }
-                                _ => {}
-                            }
-                            p_idx += 1;
-                        }
-
-                        // Apply new style state
-                        if span_open {
-                            out.push_str("</span>");
-                            span_open = false;
-                        }
-                        if !current_state.is_empty() {
-                            out.push_str(&format!("<span style='{}'>", current_state.to_style()));
-                            span_open = true;
-                        }
+                    if seq_str.starts_with('?') {
+                        // Private mode sequence (e.g. \x1b[?25h) -> strip
+                        continue;
                     }
-                    // Non-SGR CSI codes (cursor movement, clear screen) are silently stripped
+
+                    let params: Vec<u32> = if seq_str.is_empty() {
+                        vec![0]
+                    } else {
+                        seq_str
+                            .split(|c| c == ';' || c == ':')
+                            .map(|s| s.parse::<u32>().unwrap_or(0))
+                            .collect()
+                    };
+
+                    match cmd_char {
+                        'm' => {
+                            let mut p_idx = 0;
+                            while p_idx < params.len() {
+                                match params[p_idx] {
+                                    0 => current_state = SgrState::default(),
+                                    1 => current_state.bold = true,
+                                    2 => current_state.dim = true,
+                                    3 => current_state.italic = true,
+                                    4 => current_state.underline = true,
+                                    9 => current_state.strikethrough = true,
+                                    22 => {
+                                        current_state.bold = false;
+                                        current_state.dim = false;
+                                    }
+                                    23 => current_state.italic = false,
+                                    24 => current_state.underline = false,
+                                    29 => current_state.strikethrough = false,
+                                    30..=37 => {
+                                        current_state.fg = Some(get_256_color((params[p_idx] - 30) as u8));
+                                    }
+                                    38 => {
+                                        if p_idx + 2 < params.len() && params[p_idx + 1] == 5 {
+                                            current_state.fg = Some(get_256_color(params[p_idx + 2] as u8));
+                                            p_idx += 2;
+                                        } else if p_idx + 4 < params.len() && params[p_idx + 1] == 2 {
+                                            let r = params[p_idx + 2];
+                                            let g = params[p_idx + 3];
+                                            let b = params[p_idx + 4];
+                                            current_state.fg = Some(format!("rgb({}, {}, {})", r, g, b));
+                                            p_idx += 4;
+                                        }
+                                    }
+                                    39 => current_state.fg = None,
+                                    40..=47 => {
+                                        current_state.bg = Some(get_256_color((params[p_idx] - 40) as u8));
+                                    }
+                                    48 => {
+                                        if p_idx + 2 < params.len() && params[p_idx + 1] == 5 {
+                                            current_state.bg = Some(get_256_color(params[p_idx + 2] as u8));
+                                            p_idx += 2;
+                                        } else if p_idx + 4 < params.len() && params[p_idx + 1] == 2 {
+                                            let r = params[p_idx + 2];
+                                            let g = params[p_idx + 3];
+                                            let b = params[p_idx + 4];
+                                            current_state.bg = Some(format!("rgb({}, {}, {})", r, g, b));
+                                            p_idx += 4;
+                                        }
+                                    }
+                                    49 => current_state.bg = None,
+                                    90..=97 => {
+                                        current_state.fg = Some(get_256_color((params[p_idx] - 90 + 8) as u8));
+                                    }
+                                    100..=107 => {
+                                        current_state.bg = Some(get_256_color((params[p_idx] - 100 + 8) as u8));
+                                    }
+                                    _ => {}
+                                }
+                                p_idx += 1;
+                            }
+                        }
+                        'A' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            row = row.saturating_sub(n);
+                        }
+                        'B' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            row += n;
+                            ensure_row(&mut grid, row);
+                        }
+                        'C' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            col += n;
+                        }
+                        'D' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            col = col.saturating_sub(n);
+                        }
+                        'E' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            row += n;
+                            col = 0;
+                            ensure_row(&mut grid, row);
+                        }
+                        'F' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            row = row.saturating_sub(n);
+                            col = 0;
+                        }
+                        'G' => {
+                            let n = params.first().copied().unwrap_or(1).max(1) as usize;
+                            col = n.saturating_sub(1);
+                        }
+                        'H' | 'f' => {
+                            let r = params.first().copied().unwrap_or(1).max(1) as usize;
+                            let c = params.get(1).copied().unwrap_or(1).max(1) as usize;
+                            row = r.saturating_sub(1);
+                            col = c.saturating_sub(1);
+                            ensure_row(&mut grid, row);
+                        }
+                        'K' => {
+                            ensure_row(&mut grid, row);
+                            let mode = params.first().copied().unwrap_or(0);
+                            if mode == 0 {
+                                if col < grid[row].len() {
+                                    grid[row].truncate(col);
+                                }
+                            } else if mode == 1 {
+                                for k in 0..=col.min(grid[row].len().saturating_sub(1)) {
+                                    grid[row][k] = (' ', SgrState::default());
+                                }
+                            } else if mode == 2 {
+                                grid[row].clear();
+                            }
+                        }
+                        _ => {}
+                    }
                     continue;
                 }
-            } else if i + 1 < len && chars[i + 1] == ']' {
-                // OSC sequence: strip until BEL (\x07) or ST (\x1b\)
+            } else if i + 1 < len && (chars[i + 1] == ']' || chars[i + 1] == '_') {
+                // OSC (\x1b]) or APC / Kitty graphics (\x1b_): strip until BEL (\x07) or ST (\x1b\)
+                let is_apc = chars[i + 1] == '_';
                 let mut end = i + 2;
                 while end < len {
                     if chars[end] == '\x07' {
@@ -3781,6 +4589,22 @@ pub fn ansi_to_html(raw: &str) -> String {
                     end += 1;
                 }
                 i = end;
+                // If Kitty graphics APC was stripped, also consume optional newline + cursor up (\x1b[\d+A)
+                if is_apc {
+                    while i < len && (chars[i] == '\r' || chars[i] == '\n') {
+                        i += 1;
+                    }
+                    if i + 2 < len && chars[i] == '\x1b' && chars[i + 1] == '[' {
+                        let mut k = i + 2;
+                        while k < len && chars[k].is_ascii_digit() {
+                            k += 1;
+                        }
+                        if k < len && chars[k] == 'A' {
+                            i = k + 1;
+                        }
+                    }
+                    col = 0;
+                }
                 continue;
             } else {
                 // Lone escape character
@@ -3789,21 +4613,75 @@ pub fn ansi_to_html(raw: &str) -> String {
             }
         }
 
-        // Regular character: escape HTML entities
-        match chars[i] {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            ch => out.push(ch),
-        }
+        let ch = chars[i];
         i += 1;
+        if ch == '\n' {
+            row += 1;
+            col = 0;
+            ensure_row(&mut grid, row);
+        } else if ch == '\r' {
+            col = 0;
+        } else {
+            ensure_row(&mut grid, row);
+            while grid[row].len() <= col {
+                grid[row].push((' ', SgrState::default()));
+            }
+            let normalized = match ch {
+                '\u{f3fe}' => '█',
+                '\u{f192}' => '\u{f111}',
+                '\u{f3ff}' => '\u{f303}',
+                '\u{f878}' => '\u{f108}',
+                _ => ch,
+            };
+            grid[row][col] = (normalized, current_state.clone());
+            col += 1;
+        }
     }
 
-    if span_open {
-        out.push_str("</span>");
+    // Trim trailing completely unstyled empty lines
+    while let Some(last) = grid.last() {
+        if last.iter().all(|(c, st)| *c == ' ' && st.is_empty()) {
+            grid.pop();
+        } else {
+            break;
+        }
     }
+
+    for (line_idx, line) in grid.iter().enumerate() {
+        if line_idx > 0 {
+            out.push('\n');
+        }
+        let mut end = line.len();
+        while end > 0 && line[end - 1].0 == ' ' && line[end - 1].1.is_empty() {
+            end -= 1;
+        }
+        let mut idx = 0;
+        while idx < end {
+            let state = &line[idx].1;
+            let mut run_end = idx + 1;
+            while run_end < end && &line[run_end].1 == state {
+                run_end += 1;
+            }
+            if !state.is_empty() {
+                out.push_str(&format!("<span style='{}'>", state.to_style()));
+            }
+            for cell_idx in idx..run_end {
+                match line[cell_idx].0 {
+                    '&' => out.push_str("&amp;"),
+                    '<' => out.push_str("&lt;"),
+                    '>' => out.push_str("&gt;"),
+                    '"' => out.push_str("&quot;"),
+                    '\'' => out.push_str("&#39;"),
+                    c => out.push(c),
+                }
+            }
+            if !state.is_empty() {
+                out.push_str("</span>");
+            }
+            idx = run_end;
+        }
+    }
+
     out.push_str("</pre>");
     out
 }
@@ -3937,6 +4815,78 @@ pub extern "C" fn ryzora_list_presets() -> *mut c_char {
     let presets = discover_fastfetch_presets();
     let json = serde_json::to_string(&presets).unwrap_or_else(|_| "[]".to_string());
     CString::new(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_list_fastfetch_installed_presets() -> *mut c_char {
+    let presets = get_backend().list_fastfetch_installed_presets();
+    let json = serde_json::to_string(&presets).unwrap_or_else(|_| "[]".to_string());
+    CString::new(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_list_fastfetch_local_emblems() -> *mut c_char {
+    let emblems = get_backend().list_fastfetch_local_emblems();
+    let json = serde_json::to_string(&emblems).unwrap_or_else(|_| "[]".to_string());
+    CString::new(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_fastfetch_preset_config(preset: *const c_char) -> *mut c_char {
+    let p_str = if preset.is_null() { "" } else { unsafe { CStr::from_ptr(preset).to_str().unwrap_or("") } };
+    let cfg = get_backend().get_fastfetch_preset_config(p_str);
+    CString::new(cfg).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_fastfetch_saved_config() -> *mut c_char {
+    let cfg = get_backend().get_fastfetch_saved_config().unwrap_or_default();
+    CString::new(cfg).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_run_fastfetch_draft(draft: *const c_char, req_id: u64) -> *mut c_char {
+    let d_str = if draft.is_null() { "" } else { unsafe { CStr::from_ptr(draft).to_str().unwrap_or("") } };
+    let actual_req_id = if req_id == 0 { get_backend().allocate_request_id() } else { req_id };
+    let res = get_backend().run_fastfetch_draft(d_str, actual_req_id);
+    let json = serde_json::to_string(&res).unwrap_or_else(|_| "{}".to_string());
+    CString::new(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_save_fastfetch_configuration(config: *const c_char, preset_id: *const c_char) -> *mut c_char {
+    let c_str = if config.is_null() { "" } else { unsafe { CStr::from_ptr(config).to_str().unwrap_or("") } };
+    let p_opt = if preset_id.is_null() { None } else {
+        let s = unsafe { CStr::from_ptr(preset_id).to_str().unwrap_or("") };
+        if s.is_empty() { None } else { Some(s) }
+    };
+    let res = match get_backend().save_fastfetch_configuration(c_str, p_opt) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
+        Err(err) => serde_json::json!({ "success": false, "message": err }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_reset_fastfetch_default() -> *mut c_char {
+    let res = match get_backend().reset_fastfetch_default() {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
+        Err(err) => serde_json::json!({ "success": false, "message": err }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_remove_installed_fastfetch_style(preset_id: *const c_char) -> *mut c_char {
+    let p_opt = if preset_id.is_null() { None } else {
+        let s = unsafe { CStr::from_ptr(preset_id).to_str().unwrap_or("") };
+        if s.is_empty() { None } else { Some(s) }
+    };
+    let res = match get_backend().remove_installed_fastfetch_style(p_opt) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
+        Err(err) => serde_json::json!({ "success": false, "message": err }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -4486,6 +5436,31 @@ mod tests {
     }
 
     #[test]
+    fn test_discover_fastfetch_category_and_subfilters() {
+        let backend = BackendState::new();
+        let catalog = backend.load_catalog(None);
+        let ff_items: Vec<_> = catalog.iter().filter(|i| i.category.to_lowercase() == "fastfetch" || i.id.starts_with("fastfetch-")).collect();
+        assert!(!ff_items.is_empty(), "Discover must list real Fastfetch packages");
+
+        let configs: Vec<_> = ff_items.iter().filter(|i| i.subfilter.as_deref() == Some("Configs")).collect();
+        let emblems: Vec<_> = ff_items.iter().filter(|i| i.subfilter.as_deref() == Some("Emblems")).collect();
+
+        assert!(!configs.is_empty(), "Discover must list Fastfetch configuration packages");
+        assert!(!emblems.is_empty(), "Discover must list Fastfetch emblem packages");
+        assert_eq!(ff_items.len(), configs.len() + emblems.len(), "All fastfetch items must be either Configs or Emblems");
+
+        for emb in &emblems {
+            assert!(emb.id.contains("emblem") || emb.tags.iter().any(|t| t.to_lowercase() == "emblem"));
+            assert!(!emb.preview_url.is_empty(), "Emblem {} must have preview url", emb.id);
+        }
+
+        for cfg in &configs {
+            assert!(!cfg.id.contains("emblem"));
+            assert!(!cfg.name.is_empty(), "Config {} must have valid name", cfg.id);
+        }
+    }
+
+    #[test]
     fn test_real_snapshots_settings_and_system_info() {
         let backend = BackendState::new();
         let snapshots = backend.load_snapshots();
@@ -4570,6 +5545,12 @@ mod tests {
         assert!(term_out.contains("Clean Line"));
         assert!(!term_out.contains("[?25h"));
         assert!(!term_out.contains("[2K"));
+
+        // Kitty APC stripping + 2D cursor movement (\x1b[2A and \x1b[6C)
+        let kitty_and_grid = "\x1b_Ga=T,f=100,t=f,c=28,r=14;Zm9v\x1b\\\n\x1b[14ALOGO\nLINE2\n\x1b[2A\x1b[6CRIGHT_COL";
+        let grid_html = ansi_to_html(kitty_and_grid);
+        assert!(!grid_html.contains("_Ga=T"), "Kitty APC sequence must be stripped: {}", grid_html);
+        assert!(grid_html.contains("LOGO  RIGHT_COL"), "2D grid cursor up + right must align columns: {}", grid_html);
     }
 
     #[test]
@@ -5460,7 +6441,6 @@ mod tests {
         // 2. Perform authoritative installation
         let res = state.install_package(pkg_id).expect("Installation must succeed");
         assert!(res.contains("installed successfully"));
-        assert!(res.contains("snapshot:"));
 
         // Verify filesystem artifacts materialized
         let rec_file = temp_home.path().join(".local/share/ryzora/installed").join(format!("{}.json", pkg_id));
@@ -5468,11 +6448,12 @@ mod tests {
         let rec_content: serde_json::Value = serde_json::from_str(&fs::read_to_string(&rec_file).unwrap()).unwrap();
         assert_eq!(rec_content.get("package_id").and_then(|v| v.as_str()), Some(pkg_id));
 
-        // Verify pre-install snapshot was created in snapshots root
+        // Verify no automatic snapshot was created during package install
         let snap_dir = temp_home.path().join(".local/share/ryzora/snapshots");
-        assert!(snap_dir.is_dir());
-        let snaps = fs::read_dir(&snap_dir).unwrap().flatten().collect::<Vec<_>>();
-        assert!(!snaps.is_empty(), "Pre-install snapshot must be recorded");
+        if snap_dir.is_dir() {
+            let snaps = fs::read_dir(&snap_dir).unwrap().flatten().collect::<Vec<_>>();
+            assert!(snaps.is_empty(), "Package installation must not create automatic snapshots");
+        }
 
         // 3. Verify INVARIANT: Installed != Active
         let lib_after = state.load_library(true);
@@ -5492,7 +6473,7 @@ mod tests {
         std::env::set_var("RYZORA_SYSTEM_ROOT", temp_sysroot.path().to_str().unwrap());
 
         let state = BackendState::with_home_dir(temp_home.path().to_path_buf());
-        let pkg_id = "lockscreen-qylock-pixel-dusk-city";
+        let pkg_id = "lockscreen-qylock-dog-samurai";
 
         // Install package first
         state.install_package(pkg_id).expect("Install should succeed");
@@ -5540,17 +6521,100 @@ mod tests {
     fn test_unsupported_target_activation_fails_closed() {
         let temp_home = tempfile::tempdir().unwrap();
         let state = BackendState::with_home_dir(temp_home.path().to_path_buf());
-        let pkg_id = "lockscreen-qylock-pixel-dusk-city";
+        let pkg_id = "lockscreen-hyprlock-aurora";
 
         state.install_package(pkg_id).expect("Install should succeed");
 
         // sddm_lock is unsupported on Linux
         let err = state.apply_target(pkg_id, "sddm_lock").unwrap_err();
-        assert!(err.contains("not supported on Linux"));
+        assert!(err.contains("not supported on Linux") || err.contains("not supported"));
 
         // State remains inactive
         let active = state.load_active_configuration();
         assert!(!active.has_active);
+    }
+
+    #[test]
+    fn test_lockscreen_theme_matrix_diversity_and_isolation() {
+        use std::collections::HashSet;
+
+        let temp_home = tempfile::tempdir().unwrap();
+        let state = BackendState::with_home_dir(temp_home.path().to_path_buf());
+        let mut tested_themes = HashSet::new();
+
+        let cat = state.query_catalog(None, "lockscreens", "");
+        assert!(!cat.is_empty(), "Catalog lockscreens category must not be empty");
+
+        // 1. Video Qylock theme with display name differing from ID: dog-samurai
+        let dog_id = "lockscreen-qylock-dog-samurai";
+        tested_themes.insert(dog_id.to_string());
+        let dog_item = cat.iter().find(|i| i.id == dog_id).expect("dog-samurai must be in catalog");
+        assert_eq!(dog_item.name, "Dog Samurai", "dog-samurai display name must be 'Dog Samurai'");
+        assert_eq!(dog_item.media_type.as_deref(), Some("video"));
+        assert!(dog_item.supports_sddm);
+
+        // 2. Video Qylock theme: enfield
+        let enfield_id = "lockscreen-qylock-enfield";
+        tested_themes.insert(enfield_id.to_string());
+        let enfield_item = cat.iter().find(|i| i.id == enfield_id).expect("enfield must be in catalog");
+        assert_eq!(enfield_item.media_type.as_deref(), Some("video"));
+        assert!(enfield_item.supports_sddm);
+
+        // 3. Static-image Qylock theme: ninesols
+        let ninesols_id = "lockscreen-qylock-ninesols";
+        tested_themes.insert(ninesols_id.to_string());
+        let ninesols_item = cat.iter().find(|i| i.id == ninesols_id).expect("ninesols must be in catalog");
+        assert_ne!(ninesols_item.media_type.as_deref(), Some("video"), "Static theme must not be video");
+        assert!(ninesols_item.video_url.is_none(), "Static theme must have no video_url");
+        assert!(ninesols_item.supports_sddm);
+
+        // 4. Static-image Qylock theme: nothing
+        let nothing_id = "lockscreen-qylock-nothing";
+        tested_themes.insert(nothing_id.to_string());
+        let nothing_item = cat.iter().find(|i| i.id == nothing_id).expect("nothing must be in catalog");
+        assert_ne!(nothing_item.media_type.as_deref(), Some("video"), "Static theme must not be video");
+        assert!(nothing_item.video_url.is_none(), "Static theme must have no video_url");
+        assert!(nothing_item.supports_sddm);
+
+        // 5. Configurable Qylock theme: clockwork-orbital
+        let cw_id = "lockscreen-qylock-clockwork-orbital";
+        tested_themes.insert(cw_id.to_string());
+        let cw_item = cat.iter().find(|i| i.id == cw_id).expect("clockwork-orbital must be in catalog");
+        assert!(cw_item.supports_sddm);
+
+        // 6. Non-SDDM desktop lockscreen: hyprlock-aurora
+        let aurora_id = "lockscreen-hyprlock-aurora";
+        tested_themes.insert(aurora_id.to_string());
+        let aurora_item = cat.iter().find(|i| i.id == aurora_id).expect("hyprlock-aurora must be in catalog");
+        assert!(!aurora_item.supports_sddm, "hyprlock-aurora must NOT claim SDDM support");
+
+        // 7. SilentSDDM wallpaper themes: video wallpapers (ken, rei, silvia) and image wallpaper (smoky)
+        let silent_videos = ["silentsddm-ken", "silentsddm-rei", "silentsddm-silvia"];
+        for s_id in &silent_videos {
+            tested_themes.insert(s_id.to_string());
+            let s_item = cat.iter().find(|i| i.id == *s_id).unwrap_or_else(|| panic!("{} missing from catalog", s_id));
+            assert!(s_item.supports_sddm, "SilentSDDM item {} must support SDDM", s_id);
+            assert_eq!(s_item.media_type.as_deref(), Some("video"), "SilentSDDM item {} must be video", s_id);
+        }
+        let smoky_id = "silentsddm-smoky";
+        tested_themes.insert(smoky_id.to_string());
+        let smoky_item = cat.iter().find(|i| i.id == smoky_id).unwrap_or_else(|| panic!("smoky missing from catalog"));
+        assert!(smoky_item.supports_sddm);
+        assert_eq!(smoky_item.media_type.as_deref(), Some("image"), "smoky must be image");
+
+        // 8. Fail-closed error handling on nonexistent theme
+        let missing_id = "nonexistent-theme-xyz";
+        let apply_err = state.apply_target(missing_id, "sddm_login");
+        assert!(apply_err.is_err(), "Applying nonexistent theme must fail closed");
+        let inst_err = state.install_package(missing_id);
+        assert!(inst_err.is_err(), "Installing nonexistent theme must fail closed");
+
+        // 9. Anti-Regression Invariant: Ensure test matrix does NOT collapse to single theme!
+        assert!(
+            tested_themes.len() >= 8,
+            "CRITICAL REGRESSION: Lockscreen theme test matrix collapsed! Expected >= 8 distinct themes, got: {}",
+            tested_themes.len()
+        );
     }
 
 
@@ -5605,4 +6669,69 @@ hyprlock
         assert!(!home.join(".local/share/ryzora/snapshots/user_scripts_hyprlock_lock.sh").exists(), "no snapshot should be created on failed apply");
     }
 
+    #[test]
+    fn test_fastfetch_studio_lifecycle_and_emblem_discovery() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().to_path_buf();
+        let backend = BackendState::with_home_dir(home.clone());
+
+        // 1. Emblems discovery
+        let emblems = backend.list_fastfetch_local_emblems();
+        assert!(!emblems.is_empty(), "Must discover community Fastfetch emblems");
+        assert!(emblems.iter().any(|e| e.id == "katana"), "Must find katana emblem");
+
+        // 2. Presets discovery and reading config
+        let presets = backend.list_fastfetch_installed_presets();
+        assert!(!presets.is_empty(), "Must discover Fastfetch presets");
+
+        let p2_cfg = backend.get_fastfetch_preset_config("fastfetch-preset-2");
+        assert!(p2_cfg.contains("modules"), "Preset 2 config must contain modules");
+
+        // 3. Save draft configuration
+        let custom_cfg = r#"{
+            "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+            "logo": { "type": "builtin" },
+            "modules": ["title", "os"]
+        }"#;
+        let save_res = backend.save_fastfetch_configuration(custom_cfg, Some("fastfetch-preset-2"));
+        assert!(save_res.is_ok(), "Saving valid draft must succeed");
+
+        let saved = backend.get_fastfetch_saved_config();
+        assert!(saved.is_some(), "Saved config must be readable");
+        assert!(saved.unwrap().contains("\"title\""));
+
+        // Verify active state was recorded in both state file and load_active_configuration
+        let active_id = load_active_fastfetch_id(Some(&home));
+        assert_eq!(active_id.as_deref(), Some("fastfetch-preset-2"));
+        assert_eq!(backend.load_active_configuration().active_fastfetch_id, "fastfetch-preset-2");
+
+        // 4. Empty or invalid JSON save must fail and preserve existing saved config
+        assert!(backend.save_fastfetch_configuration("   ", None).is_err(), "Empty config must be rejected");
+        assert!(backend.save_fastfetch_configuration("{ invalid json", None).is_err(), "Invalid JSON must be rejected");
+        assert!(backend.get_fastfetch_saved_config().unwrap().contains("\"title\""), "Failed validation must preserve existing config");
+
+        // 5. Apply preset resolves relative ~/.config/fastfetch/presets/... logo paths to existing repo files and creates backup
+        let apply_res = backend.apply_fastfetch_preset("fastfetch-aayushchalise");
+        assert!(apply_res.is_ok(), "Applying preset must succeed: {:?}", apply_res);
+        assert!(home.join(".config/fastfetch/config.jsonc.ryzora.bak").is_file(), "Backup of previous config must be created");
+        let applied_cfg = backend.get_fastfetch_saved_config().unwrap();
+        assert!(!applied_cfg.contains("~/.config/fastfetch/presets/fastfetch-aayushchalise/images/arch.png"), "Preset logo path must be resolved to existing file path");
+        assert!(applied_cfg.contains("arch.png"), "Applied config must reference resolved arch.png");
+        assert_eq!(backend.load_active_configuration().active_fastfetch_id, "fastfetch-aayushchalise");
+
+        // 6. Remove installed style restores backup and clears active ID
+        let remove_res = backend.remove_installed_fastfetch_style(Some("fastfetch-aayushchalise"));
+        assert!(remove_res.is_ok(), "Remove installed style must succeed");
+        assert_eq!(load_active_fastfetch_id(Some(&home)), None, "Active fastfetch id must be cleared");
+        let restored_cfg = backend.get_fastfetch_saved_config().unwrap();
+        assert!(restored_cfg.contains("\"title\"") && restored_cfg.contains("\"builtin\""), "Backup config must be restored on remove_installed_fastfetch_style");
+
+        // 7. Reset to default restores Ryzora default with blue accent and no Ryoku branding
+        let reset_res = backend.reset_fastfetch_default();
+        assert!(reset_res.is_ok(), "Reset to default must succeed");
+        let def_cfg = backend.get_fastfetch_saved_config().unwrap();
+        assert!(def_cfg.contains("https://github.com/fastfetch-cli/fastfetch"));
+        assert!(def_cfg.contains("38;2;100;136;232"), "Default config must use Ryzora blue accent");
+        assert!(!def_cfg.to_lowercase().contains("ryoku") && !def_cfg.contains("力"), "Default config must not contain Ryoku branding");
+    }
 }

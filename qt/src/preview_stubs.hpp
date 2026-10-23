@@ -111,8 +111,16 @@ public:
 // and dynamic property lookup so SilentSDDM's Config.qml singleton resolves all settings.
 class PreviewConfig : public QQmlPropertyMap {
     Q_OBJECT
+    Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
 public:
     explicit PreviewConfig(QObject *p = nullptr) : QQmlPropertyMap(this, p) {}
+
+    int revision() const { return m_revision; }
+
+    void bumpRevision() {
+        m_revision++;
+        emit revisionChanged();
+    }
 
     void load(const QString &iniPath) {
         for (const QString &k : keys()) {
@@ -120,7 +128,11 @@ public:
         }
 
         QFile file(iniPath);
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            m_revision++;
+            emit revisionChanged();
+            return;
+        }
         QTextStream in(&file);
         QString section;
         while (!in.atEnd()) {
@@ -144,6 +156,8 @@ public:
                 insert(key, val);
             }
         }
+        m_revision++;
+        emit revisionChanged();
     }
 
     Q_INVOKABLE QString stringValue(const QString &key) const {
@@ -161,4 +175,10 @@ public:
         QString s = v.toString().trimmed().toLower();
         return (s == "true" || s == "1" || s == "yes");
     }
+
+signals:
+    void revisionChanged();
+
+private:
+    int m_revision = 0;
 };

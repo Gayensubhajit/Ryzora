@@ -235,7 +235,7 @@ Rectangle {
 
                 // Emblem
                 Rectangle {
-                    visible: card.itemData && (card.itemData.subfilter === "emblem" || (card.itemData.tags && card.itemData.tags.indexOf("emblem") !== -1))
+                    visible: card.itemData && (String(card.itemData.subfilter || "").toLowerCase().indexOf("emblem") !== -1 || String(card.itemData.id || "").indexOf("emblem") !== -1 || (card.itemData.tags && card.itemData.tags.some(function(t) { return String(t).toLowerCase() === "emblem" })))
                     height: 20; width: embTxt.width + 10; radius: 4
                     color: "#33ef4444"; border.color: "#66ef4444"
                     Text { id: embTxt; anchors.centerIn: parent; text: "EMBLEM"; font.pixelSize: theme.fontBadge; font.bold: true; color: "#fca5a5" }

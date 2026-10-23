@@ -298,7 +298,10 @@ Item {
 
     function isFastfetch() {
         if (!root.packageData) return false
-        return String(root.packageData.category || "").toLowerCase() === "fastfetch"
+        var cat = String(root.packageData.category || "").toLowerCase()
+        var pt = String(root.packageData.package_type || "").toLowerCase()
+        var id = String(root.packageData.id || "")
+        return cat === "fastfetch" || pt === "fastfetch" || id.indexOf("fastfetch-") === 0
     }
 
     function supportsSddm() {
@@ -1262,11 +1265,11 @@ Item {
                                         }
                                     }
 
-                                    // ── STATE 2D: OPEN IN STUDIO (For All Installed Packages) ──
+                                    // ── STATE 2D: OPEN IN STUDIO (For Installed Packages with Studio Support, excluding Fastfetch which uses openFastfetchButton) ──
                                     Rectangle {
                                         id: openStudioBtn
                                         objectName: "openStudioButton"
-                                        visible: Boolean(root.packageData && root.isInstalled())
+                                        visible: Boolean(root.packageData && root.isInstalled() && !root.isFastfetch() && root.getStudioSubpage() !== "overview")
                                         Layout.fillWidth: true
                                         height: 38
                                         radius: theme.radiusSm
@@ -2050,7 +2053,7 @@ Item {
                                     StoreCard {
                                         anchors.fill: parent
                                         itemData: modelData
-                                        isPageVisible: root.visible
+                                        isPageVisible: root.visible && (root.parent ? root.parent.visible : true)
                                         allowAutoplay: true
                                         onCardClicked: function(data) {
                                             root.packageSelected(data)

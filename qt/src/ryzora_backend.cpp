@@ -6,6 +6,9 @@
 #include <QStandardPaths>
 #include <QProcess>
 #include "ryzora_backend.hpp"
+#include <QDateTime>
+#include <QElapsedTimer>
+#include <QCryptographicHash>
 #include "preview_stubs.hpp"
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -41,6 +44,14 @@ extern "C" {
     char* ryzora_load_system_info();
     char* ryzora_load_updates();
     char* ryzora_list_presets();
+    char* ryzora_list_fastfetch_installed_presets();
+    char* ryzora_list_fastfetch_local_emblems();
+    char* ryzora_get_fastfetch_preset_config(const char* preset);
+    char* ryzora_get_fastfetch_saved_config();
+    char* ryzora_run_fastfetch_draft(const char* draft, uint64_t req_id);
+    char* ryzora_save_fastfetch_configuration(const char* config, const char* preset_id);
+    char* ryzora_reset_fastfetch_default();
+    char* ryzora_remove_installed_fastfetch_style(const char* preset_id);
     char* ryzora_apply_fastfetch_preset(const char* preset);
     char* ryzora_install_package(const char* package_id);
     char* ryzora_test_package(const char* package_id);
@@ -66,7 +77,7 @@ void RyzoraBackend::updateMonotonicReqId(std::atomic<uint64_t> &target, uint64_t
 }
 
 RyzoraBackend::RyzoraBackend(QObject *parent) : QObject(parent) {
-    m_threadPool.setMaxThreadCount(4);
+    m_threadPool.setMaxThreadCount(12);
     m_availablePresets = QVariantList{
         "dr460nized",
         "fastfetch-preset-2",
@@ -81,7 +92,9 @@ RyzoraBackend::RyzoraBackend(QObject *parent) : QObject(parent) {
     ryzora_init();
     filterCatalog("all", "");
     loadLibrary(false);
-    requestFastfetchPreview("dr460nized");
+    loadFastfetchInstalledPresets();
+    loadFastfetchLocalEmblems();
+    getFastfetchSavedConfig();
     loadSnapshots();
     loadUpdates();
     loadSettings();
@@ -281,6 +294,8 @@ bool RyzoraBackend::applyFastfetchPreset(const QString &presetName) {
         postNotification("success", "Fastfetch Configuration", msg);
         m_statusMessage = msg;
         emit statusMessageChanged();
+        getFastfetchSavedConfig();
+        loadLibrary(true);
     } else {
         postNotification("warning", "Fastfetch Error", msg);
         m_statusMessage = QString("Failed to apply preset: %1").arg(msg);
@@ -342,6 +357,311 @@ bool RyzoraBackend::launchFastfetchTerminal(const QString &presetName) {
 void RyzoraBackend::requestCustomFastfetchPreview(const QString &structure, const QString &logo, const QString &color) {
     QString customPreset = QString("custom:structure=%1;logo=%2;color=%3").arg(structure, logo, color);
     requestFastfetchPreview(customPreset);
+}
+
+void RyzoraBackend::loadFastfetchInstalledPresets() {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self]() {
+        char* raw = ryzora_list_fastfetch_installed_presets();
+        if (!raw) return;
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        QVariantList list = doc.array().toVariantList();
+        QMetaObject::invokeMethod(qApp, [self, list]() {
+            if (self) {
+                self->m_fastfetchInstalledPresets = list;
+                emit self->fastfetchInstalledPresetsChanged();
+            }
+        });
+    });
+}
+
+void RyzoraBackend::loadFastfetchLocalEmblems() {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self]() {
+        char* raw = ryzora_list_fastfetch_local_emblems();
+        if (!raw) return;
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        QVariantList list = doc.array().toVariantList();
+        QMetaObject::invokeMethod(qApp, [self, list]() {
+            if (self) {
+                self->m_fastfetchLocalEmblems = list;
+                emit self->fastfetchLocalEmblemsChanged();
+            }
+        });
+    });
+}
+
+QString RyzoraBackend::getFastfetchPresetConfig(const QString &presetId) {
+    QByteArray ba = presetId.toUtf8();
+    char* raw = ryzora_get_fastfetch_preset_config(ba.constData());
+    if (!raw) return QString();
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
+}
+
+QString RyzoraBackend::getFastfetchSavedConfig() {
+    char* raw = ryzora_get_fastfetch_saved_config();
+    if (!raw) return QString();
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    m_fastfetchSavedConfig = res;
+    emit fastfetchSavedConfigChanged();
+    return res;
+}
+
+QByteArray RyzoraBackend::fastfetchPreviewCacheKey(const QString &draftJson) const {
+    static const QByteArray binIdentity = []() {
+        const QString exe = QStandardPaths::findExecutable(QStringLiteral("fastfetch"));
+        const QFileInfo fi(exe);
+        return (exe + QLatin1Char('|') + QString::number(fi.size()) + QLatin1Char('|')
+                + QString::number(fi.lastModified().toMSecsSinceEpoch())).toUtf8();
+    }();
+    return QCryptographicHash::hash(binIdentity + '\n' + draftJson.toUtf8(), QCryptographicHash::Sha1);
+}
+
+void RyzoraBackend::storeFastfetchPreview(const QByteArray &key, const QString &html) {
+    FastfetchPreviewCacheEntry e;
+    e.html = html;
+    e.producedAtMs = QDateTime::currentMSecsSinceEpoch();
+    m_fastfetchPreviewCacheOrder.removeAll(key);
+    m_fastfetchPreviewCacheOrder.append(key);
+    m_fastfetchPreviewCache.insert(key, e);
+    while (m_fastfetchPreviewCacheOrder.size() > 48) {
+        m_fastfetchPreviewCache.remove(m_fastfetchPreviewCacheOrder.takeFirst());
+    }
+}
+
+void RyzoraBackend::requestDraftPreview(const QString &draftJson) {
+    if (m_isShutdown.load()) return;
+    // Cached real output is reused for this many ms before a background refresh is required
+    // (system telemetry such as memory/uptime drifts over time).
+    constexpr qint64 kFreshMs = 30000;
+    const QByteArray key = fastfetchPreviewCacheKey(draftJson);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    uint64_t reqId = ryzora_allocate_request_id();
+    updateMonotonicReqId(m_currentFastfetchReqId, reqId);
+    m_fastfetchError = "";
+
+    auto hit = m_fastfetchPreviewCache.constFind(key);
+    if (hit != m_fastfetchPreviewCache.constEnd()) {
+        // Show the cached real output for this exact configuration immediately.
+        m_fastfetchHtml = hit->html;
+        const bool fresh = (now - hit->producedAtMs) < kFreshMs;
+        m_isFastfetchLoading = !fresh;
+        emit fastfetchChanged();
+        emit fastfetchErrorChanged();
+        emit fastfetchLoadingChanged();
+        if (fresh) return;  // identical config, recent output: no process needed
+    } else {
+        // Keep the last valid preview on screen while the new one is produced.
+        m_isFastfetchLoading = true;
+        emit fastfetchErrorChanged();
+        emit fastfetchLoadingChanged();
+    }
+    m_isFastfetchCancelled = false;
+
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, draftJson, reqId, key]() {
+        QElapsedTimer timer;
+        timer.start();
+        QByteArray bDraft = draftJson.toUtf8();
+        char* rawJson = ryzora_run_fastfetch_draft(bDraft.constData(), reqId);
+        QString jsonStr = QString::fromUtf8(rawJson);
+        ryzora_free_string(rawJson);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        QJsonObject obj = doc.object();
+        bool success = obj.value("success").toBool();
+        bool cancelled = obj.value("cancelled").toBool();
+        QString html = obj.value("html_formatted").toString();
+        QString err = obj.value("error").toString();
+        const qint64 totalMs = timer.elapsed();
+        const qint64 execMs = obj.value("execution_time_ms").toInteger();
+
+        QMetaObject::invokeMethod(qApp, [self, reqId, success, cancelled, html, err, key, totalMs, execMs]() {
+            if (!self) return;
+            if (qEnvironmentVariableIsSet("RYZORA_FF_TIMING")) {
+                qInfo().noquote() << QString("[ff-preview] req=%1 total=%2ms fastfetch=%3ms ok=%4 cancelled=%5")
+                                         .arg(reqId).arg(totalMs).arg(execMs).arg(success).arg(cancelled);
+            }
+            if (success && !cancelled) {
+                self->storeFastfetchPreview(key, html);
+            }
+            // Ignore stale results: an older process must never replace a newer preview.
+            if (reqId != self->m_currentFastfetchReqId.load()) return;
+            self->m_isFastfetchLoading = false;
+            self->m_isFastfetchCancelled = cancelled;
+            if (success) {
+                self->m_fastfetchHtml = html;
+                self->m_fastfetchError = "";
+            } else if (!cancelled) {
+                // Report the error but keep the last valid preview visible.
+                self->m_fastfetchError = err.isEmpty() ? "Execution failed" : err;
+                if (self->m_fastfetchHtml.isEmpty()) self->m_fastfetchHtml = html;
+            }
+            emit self->fastfetchLoadingChanged();
+            emit self->fastfetchChanged();
+            emit self->fastfetchErrorChanged();
+        });
+    });
+}
+
+bool RyzoraBackend::saveFastfetchConfiguration(const QString &configJson, const QString &presetId) {
+    if (m_isShutdown.load()) return false;
+    QByteArray bConfig = configJson.toUtf8();
+    QByteArray bPreset = presetId.toUtf8();
+    char* raw = ryzora_save_fastfetch_configuration(bConfig.constData(), bPreset.constData());
+    if (!raw) return false;
+    QString jsonStr = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    QJsonObject obj = doc.object();
+    bool success = obj.value("success").toBool();
+    QString msg = obj.value("message").toString();
+
+    if (success) {
+        m_fastfetchSavedConfig = configJson;
+        emit fastfetchSavedConfigChanged();
+        postNotification("success", "Fastfetch Saved", msg);
+        loadLibrary(true);
+    } else {
+        postNotification("warning", "Fastfetch Save Error", msg);
+    }
+    return success;
+}
+
+bool RyzoraBackend::resetFastfetchDefault() {
+    if (m_isShutdown.load()) return false;
+    char* raw = ryzora_reset_fastfetch_default();
+    if (!raw) return false;
+    QString jsonStr = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    QJsonObject obj = doc.object();
+    bool success = obj.value("success").toBool();
+    QString msg = obj.value("message").toString();
+
+    if (success) {
+        getFastfetchSavedConfig();
+        postNotification("info", "Fastfetch Reset", "Reset to default Fastfetch configuration.");
+        loadLibrary(true);
+    } else {
+        postNotification("warning", "Fastfetch Reset Error", msg);
+    }
+    return success;
+}
+
+bool RyzoraBackend::removeInstalledFastfetchStyle(const QString &presetId) {
+    if (m_isShutdown.load()) return false;
+    QByteArray bPreset = presetId.toUtf8();
+    char* raw = ryzora_remove_installed_fastfetch_style(bPreset.constData());
+    if (!raw) return false;
+    QString jsonStr = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    QJsonObject obj = doc.object();
+    bool success = obj.value("success").toBool();
+    QString msg = obj.value("message").toString();
+
+    if (success) {
+        getFastfetchSavedConfig();
+        postNotification("info", "Fastfetch Style", msg);
+        loadLibrary(true);
+    } else {
+        postNotification("warning", "Fastfetch Error", msg);
+    }
+    return success;
+}
+
+bool RyzoraBackend::launchTerminalWithDraft(const QString &draftJson) {
+    QString tempPath = QDir::tempPath() + QString("/ryzora_ff_draft_%1.jsonc").arg(QDateTime::currentMSecsSinceEpoch());
+    QFile file(tempPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        postNotification("warning", "Terminal Preview", "Failed to write temporary preview config");
+        return false;
+    }
+    file.write(draftJson.toUtf8());
+    file.close();
+
+    QStringList candidates = { "kitty", "ghostty", "wezterm", "foot", "alacritty", "ptyxis", "konsole", "gnome-terminal", "xfce4-terminal", "xterm" };
+    QString chosenTerm;
+    for (const QString &t : candidates) {
+        if (!QStandardPaths::findExecutable(t).isEmpty()) {
+            chosenTerm = t;
+            break;
+        }
+    }
+
+    if (chosenTerm.isEmpty()) {
+        QString envTerm = qEnvironmentVariable("TERMINAL");
+        if (!envTerm.isEmpty() && !QStandardPaths::findExecutable(envTerm).isEmpty()) {
+            chosenTerm = envTerm;
+        }
+    }
+
+    if (chosenTerm.isEmpty()) {
+        postNotification("warning", "Terminal Not Found", "No supported terminal emulator found.");
+        return false;
+    }
+
+    QString runCmd = QString("clear; fastfetch -c \"%1\"; echo ''; printf '\\033[2mPress Enter to close preview...\\033[0m'; read _; rm -f \"%1\"").arg(tempPath);
+    bool spawned = false;
+    if (chosenTerm == "kitty") {
+        spawned = QProcess::startDetached("kitty", QStringList() << "-e" << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "ghostty") {
+        spawned = QProcess::startDetached("ghostty", QStringList() << "-e" << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "wezterm") {
+        spawned = QProcess::startDetached("wezterm", QStringList() << "start" << "--" << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "foot") {
+        spawned = QProcess::startDetached("foot", QStringList() << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "alacritty") {
+        spawned = QProcess::startDetached("alacritty", QStringList() << "-e" << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "ptyxis") {
+        spawned = QProcess::startDetached("ptyxis", QStringList() << "--" << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "konsole") {
+        spawned = QProcess::startDetached("konsole", QStringList() << "-e" << "sh" << "-c" << runCmd);
+    } else if (chosenTerm == "gnome-terminal") {
+        spawned = QProcess::startDetached("gnome-terminal", QStringList() << "--" << "sh" << "-c" << runCmd);
+    } else {
+        spawned = QProcess::startDetached(chosenTerm, QStringList() << "-e" << "sh" << "-c" << runCmd);
+    }
+
+    if (spawned) {
+        postNotification("info", "Fastfetch Terminal", QString("Launched %1 with live draft preview").arg(chosenTerm));
+        return true;
+    }
+    postNotification("warning", "Terminal Launch Error", QString("Failed to spawn %1").arg(chosenTerm));
+    return false;
+}
+
+void RyzoraBackend::openFastfetchConfigInEditor() {
+    QString configDir = QDir::homePath() + "/.config/fastfetch";
+    QDir().mkpath(configDir);
+    QString configPath = configDir + "/config.jsonc";
+    if (!QFile::exists(configPath)) {
+        resetFastfetchDefault();
+    }
+    QStringList guiEditors = { "code", "codium", "zed", "kate", "gedit", "mousepad", "gnome-text-editor", "xdg-open" };
+    for (const QString &ed : guiEditors) {
+        if (!QStandardPaths::findExecutable(ed).isEmpty()) {
+            if (QProcess::startDetached(ed, QStringList() << configPath)) {
+                postNotification("info", "Fastfetch Config", QString("Opened ~/.config/fastfetch/config.jsonc in %1").arg(ed));
+                return;
+            }
+        }
+    }
+    postNotification("warning", "Editor Not Found", "Could not find an external editor for ~/.config/fastfetch/config.jsonc");
 }
 
 void RyzoraBackend::loadSnapshots() {
@@ -1204,6 +1524,10 @@ QString RyzoraBackend::themePreviewMainUrl(const QString &packageId) const {
                 "autoPlay: false",
                 "autoPlay: true"
             );
+            content.replace(
+                "property string tsource: root.state === \"lockState\" ? Config.lockScreenBackground : Config.loginScreenBackground",
+                QString("property string tsource: (root.state === \"lockState\" ? Config.lockScreenBackground : Config.loginScreenBackground) || \"%1.mp4\"").arg(slug)
+            );
             if (!content.contains("visible: (!backgroundImage.isVideo")) {
                 content.replace(
                     "// Background effects\n            id: backgroundEffect\n            source: backgroundImage\n            anchors.fill: parent",
@@ -1227,9 +1551,36 @@ QString RyzoraBackend::themePreviewMainUrl(const QString &packageId) const {
         if (!QFileInfo::exists(linkPath)) QFile::link(target, linkPath);
     };
     ensureLink(silentBase + "/qmldir", previewDir + "/qmldir");
-    for (const QString &sub : {QString("components"), QString("fonts"), QString("icons"), QString("images")}) {
+    for (const QString &sub : {QString("fonts"), QString("icons"), QString("images")}) {
         const QString src = silentBase + "/" + sub;
         if (QFileInfo::exists(src)) ensureLink(src, previewDir + "/" + sub);
+    }
+
+    // Isolate components per preview so Config.qml singleton has a unique canonical URL
+    // and binds reactively to config.revision for instant live theme switching.
+    const QString previewComponentsDir = previewDir + "/components";
+    QFileInfo compFi(previewComponentsDir);
+    if (compFi.isSymLink()) {
+        QFile::remove(previewComponentsDir);
+    }
+    QDir().mkpath(previewComponentsDir);
+
+    const QString silentComponentsDir = silentBase + "/components";
+    QDir scDir(silentComponentsDir);
+    for (const QFileInfo &fi : scDir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot)) {
+        const QString fileName = fi.fileName();
+        const QString targetPath = previewComponentsDir + "/" + fileName;
+        if (fileName == QStringLiteral("Config.qml")) {
+            QFile srcCfg(fi.absoluteFilePath());
+            if (srcCfg.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QFile outCfg(targetPath);
+                if (outCfg.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    outCfg.write(srcCfg.readAll());
+                }
+            }
+        } else {
+            ensureLink(fi.absoluteFilePath(), targetPath);
+        }
     }
 
     // Backgrounds: create directory and symlink shipped backgrounds + user wallpapers + posters
@@ -2042,6 +2393,7 @@ void RyzoraBackend::updatePreviewDraft(const QString &packageId, const QVariantM
             m_previewConfig->load(previewConfPath);
         }
     }
+    m_previewConfig->bumpRevision();
 }
 
 QVariantMap RyzoraBackend::saveThemeConfig(const QString &packageId, const QVariantMap &config) {
@@ -2338,7 +2690,7 @@ void RyzoraBackend::uninstallSilentEngine() {
 
 bool RyzoraBackend::acquireDecoderSlot() {
     int current = m_activeDecoderCount.load();
-    while (current < 6) {
+    while (current < 10) {
         if (m_activeDecoderCount.compare_exchange_weak(current, current + 1)) {
             return true;
         }
