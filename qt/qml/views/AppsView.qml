@@ -137,7 +137,7 @@ Item {
         }
 
         if (res.length === 0) {
-            for (var j = 0; j < list.length && res.length < 4; j++) {
+            for (var j = 0; j < list.length && res.length < 5; j++) {
                 var cand = list[j]
                 if (cand && !seen[cand.id] && cand.banner_url) {
                     res.push(cand)
@@ -158,22 +158,226 @@ Item {
         return root.featuredItems[idx]
     }
 
-    // Stable ID of featured app to exclude from adjacent grid
+    // Stable ID of featured app to exclude from adjacent sections
     readonly property string featuredAppId: activeFeaturedApp ? activeFeaturedApp.id : ""
 
-    // Visible items in the catalog grid (de-duplicated so featured item is not repeated)
+    // Curated Popular Apps (pick 4 apps not matching featuredAppId, only when on All and no search)
+    readonly property var popularApps: {
+        if (root.searchQuery !== "" || root.selectedCategory !== "All") {
+            return []
+        }
+        var list = backend.appsList || []
+        var preferredPopular = ["code", "vlc", "discord", "blender", "obs-studio", "spotify", "chromium", "steam", "gimp"]
+        var res = []
+        var seen = {}
+        if (root.featuredAppId) {
+            seen[root.featuredAppId] = true
+        }
+        for (var p = 0; p < preferredPopular.length && res.length < 4; p++) {
+            var pid = preferredPopular[p]
+            if (seen[pid]) continue
+            for (var i = 0; i < list.length; i++) {
+                var item = list[i]
+                if (item && item.id === pid && !seen[item.id]) {
+                    res.push(item)
+                    seen[item.id] = true
+                    break
+                }
+            }
+        }
+        return res
+    }
+
+    // Visible items in the main catalog grid (de-duplicated against featured & popular)
     readonly property var visibleCatalogApps: {
         var all = root.filteredApps
-        var featId = root.featuredAppId
-        if (!featId || featId === "") return all
+        if (root.searchQuery !== "" || root.selectedCategory !== "All") {
+            return all
+        }
+        var excluded = {}
+        if (root.featuredAppId) excluded[root.featuredAppId] = true
+        var pop = root.popularApps
+        for (var p = 0; p < pop.length; p++) {
+            if (pop[p]) excluded[pop[p].id] = true
+        }
         var res = []
         for (var i = 0; i < all.length; i++) {
             var it = all[i]
-            if (it && it.id !== featId) {
+            if (it && !excluded[it.id]) {
                 res.push(it)
             }
         }
         return res
+    }
+
+    // ── REUSABLE CLEAN ICON-ONLY APPLICATION CARD ──
+    component AppCard: Rectangle {
+        id: cardRoot
+        property var appData: null
+        readonly property bool isInstalled: Boolean(cardRoot.appData && cardRoot.appData.is_installed)
+
+        Layout.fillWidth: true
+        height: 142
+        radius: theme.radiusMd
+        color: cardMouse.containsMouse ? theme.surfaceHover : theme.surface
+        border.color: cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
+        border.width: 1
+        clip: true
+
+        MouseArea {
+            id: cardMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (cardRoot.appData) {
+                    root.setSelectedApp(cardRoot.appData)
+                    root.appSelected(cardRoot.appData)
+                }
+            }
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 6
+
+            // Top Row: Prominent 48x48 Icon + App Name / Category + Action Pill
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Rectangle {
+                    width: 48
+                    height: 48
+                    radius: 10
+                    color: theme.surfaceElevated
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    Image {
+                        anchors.centerIn: parent
+                        width: 38
+                        height: 38
+                        source: (cardRoot.appData && cardRoot.appData.icon_url) ? cardRoot.appData.icon_url : ""
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        visible: status === Image.Ready
+                    }
+
+                    RyzoraIcon {
+                        anchors.centerIn: parent
+                        visible: !cardRoot.appData || !cardRoot.appData.icon_url || cardRoot.appData.icon_url === ""
+                        name: cardRoot.appData ? root.getCategoryIcon(cardRoot.appData.category) : "layout-grid"
+                        size: 24
+                        color: theme.textMuted
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: cardRoot.appData ? (cardRoot.appData.display_name || cardRoot.appData.name || "") : ""
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: theme.text
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+
+                    Text {
+                        text: cardRoot.appData ? ((cardRoot.appData.publisher ? cardRoot.appData.publisher + " · " : "") + (cardRoot.appData.category || "App")) : ""
+                        font.pixelSize: 10
+                        color: theme.textMuted
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // Action Pill
+                Rectangle {
+                    height: 26
+                    implicitWidth: 66
+                    radius: theme.radiusSm
+                    color: cardRoot.isInstalled
+                        ? (actionBtnMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                        : (actionBtnMouse.containsMouse ? theme.accentHover : theme.accent)
+                    border.color: cardRoot.isInstalled ? theme.borderStrong : theme.accent
+                    border.width: 1
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        RyzoraIcon {
+                            name: cardRoot.isInstalled ? "play" : "download"
+                            size: 9
+                            color: cardRoot.isInstalled ? "#10b981" : "#ffffff"
+                        }
+
+                        Text {
+                            text: cardRoot.isInstalled ? "Open" : "Get"
+                            font.pixelSize: 10
+                            font.bold: true
+                            color: cardRoot.isInstalled ? theme.text : "#ffffff"
+                        }
+                    }
+
+                    MouseArea {
+                        id: actionBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!cardRoot.appData) return
+                            if (cardRoot.isInstalled) {
+                                root.launchRequested(cardRoot.appData.id)
+                            } else {
+                                root.installRequested(cardRoot.appData.id)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Middle: 2-line concise summary / description
+            Text {
+                text: cardRoot.appData ? (cardRoot.appData.summary || cardRoot.appData.description || "") : ""
+                font.pixelSize: 11
+                color: theme.textSecondary
+                maximumLineCount: 2
+                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            Item { Layout.fillHeight: true }
+
+            // Bottom Metadata Row: Repository / Installed state + Platform Tag
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: cardRoot.appData && cardRoot.appData.is_installed
+                        ? ("● Installed · v" + (cardRoot.appData.installed_version || cardRoot.appData.version || "1.0"))
+                        : ((cardRoot.appData && cardRoot.appData.repository ? cardRoot.appData.repository : "extra") + " repository")
+                    font.pixelSize: 10
+                    font.weight: cardRoot.appData && cardRoot.appData.is_installed ? Font.Medium : Font.Normal
+                    color: cardRoot.appData && cardRoot.appData.is_installed ? "#10b981" : theme.textMuted
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Text {
+                    text: (cardRoot.appData && cardRoot.appData.license) ? cardRoot.appData.license : "Native"
+                    font.pixelSize: 10
+                    color: theme.textMuted
+                }
+            }
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -204,7 +408,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: 20
-            spacing: 14
+            spacing: 16
 
             // ── 1. COMPACT PAGE HEADER ──
             RowLayout {
@@ -287,7 +491,396 @@ Item {
                 }
             }
 
-            // ── 2. REAL SOFTWARE CATEGORIES FILTER BAR ──
+            // ── 2. FEATURED APPLICATION CAROUSEL (Microsoft Store-inspired, 240px high) ──
+            Rectangle {
+                id: heroPanel
+                visible: root.activeFeaturedApp !== null
+                Layout.fillWidth: true
+                height: 240
+                radius: theme.radiusLg
+                border.color: theme.borderSubtle
+                border.width: 1
+                clip: true
+
+                // Rich theme-aware background gradient
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: theme.resolvedTheme === "light" ? "#E8EEF8" : "#101624" }
+                        GradientStop { position: 0.55; color: theme.resolvedTheme === "light" ? "#DFE7F3" : "#151C2C" }
+                        GradientStop { position: 1.0; color: theme.resolvedTheme === "light" ? "#D5DFEE" : "#0C121B" }
+                    }
+                }
+
+                // Subtle Accent ambient glow
+                Rectangle {
+                    anchors.fill: parent
+                    color: theme.accent
+                    opacity: theme.resolvedTheme === "light" ? 0.04 : 0.07
+                }
+
+                readonly property var currentItem: root.activeFeaturedApp
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    // Left Column: Application Information & Actions (~48% width)
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.margins: 22
+                        spacing: 8
+
+                        // Badge / Tag Row
+                        RowLayout {
+                            spacing: 8
+
+                            Rectangle {
+                                height: 20
+                                radius: 4
+                                implicitWidth: featBadgeTxt.implicitWidth + 12
+                                color: theme.surfaceElevated
+                                border.color: theme.accent
+                                border.width: 1
+
+                                Text {
+                                    id: featBadgeTxt
+                                    anchors.centerIn: parent
+                                    text: "FEATURED SPOTLIGHT"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    font.letterSpacing: 0.8
+                                    color: theme.accent
+                                }
+                            }
+
+                            Text {
+                                text: heroPanel.currentItem ? (String(heroPanel.currentItem.category || "Application").toUpperCase() + " · " + (heroPanel.currentItem.publisher || "Arch Linux Native")) : ""
+                                font.pixelSize: 11
+                                font.letterSpacing: 0.5
+                                color: theme.textMuted
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        // App Icon + Name Row
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Rectangle {
+                                width: 44
+                                height: 44
+                                radius: 10
+                                color: theme.surfaceElevated
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 34
+                                    height: 34
+                                    source: heroPanel.currentItem ? (heroPanel.currentItem.icon_url || "") : ""
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                    visible: status === Image.Ready
+                                }
+
+                                RyzoraIcon {
+                                    anchors.centerIn: parent
+                                    visible: !heroPanel.currentItem || !heroPanel.currentItem.icon_url || heroPanel.currentItem.icon_url === ""
+                                    name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
+                                    size: 24
+                                    color: theme.textMuted
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
+                                font.pixelSize: 22
+                                font.bold: true
+                                color: theme.text
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // Summary description
+                        Text {
+                            Layout.fillWidth: true
+                            text: heroPanel.currentItem ? (heroPanel.currentItem.summary || heroPanel.currentItem.description || "") : ""
+                            font.pixelSize: 12
+                            color: theme.textSecondary
+                            maximumLineCount: 2
+                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
+                        }
+
+                        Item { Layout.fillHeight: true }
+
+                        // Action Row + Carousel Controls
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            // Primary Button: Get / Open Application
+                            Rectangle {
+                                height: 32
+                                implicitWidth: heroBtnRow.implicitWidth + 22
+                                radius: theme.radiusSm
+                                color: heroBtnMouse.containsMouse ? theme.accentHover : theme.accent
+
+                                RowLayout {
+                                    id: heroBtnRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    RyzoraIcon {
+                                        name: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "play" : "download"
+                                        size: 11
+                                        color: "#ffffff"
+                                    }
+                                    Text {
+                                        text: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "Open Application" : "Get Application"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        color: "#ffffff"
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: heroBtnMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (heroPanel.currentItem) {
+                                            if (heroPanel.currentItem.is_installed) {
+                                                root.launchRequested(heroPanel.currentItem.id)
+                                            } else {
+                                                root.installRequested(heroPanel.currentItem.id)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Secondary Button: View Details
+                            Rectangle {
+                                height: 32
+                                implicitWidth: detailBtnRow.implicitWidth + 18
+                                radius: theme.radiusSm
+                                color: detailBtnMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                border.color: detailBtnMouse.containsMouse ? theme.accent : theme.borderStrong
+                                border.width: 1
+
+                                RowLayout {
+                                    id: detailBtnRow
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    Text {
+                                        text: "See Details"
+                                        font.pixelSize: 11
+                                        color: theme.text
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: detailBtnMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (heroPanel.currentItem) {
+                                            root.setSelectedApp(heroPanel.currentItem)
+                                            root.appSelected(heroPanel.currentItem)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            // Carousel Navigation Controls (‹ Prev, Dots, Next ›)
+                            RowLayout {
+                                spacing: 8
+                                visible: root.featuredItems.length > 1
+
+                                // Prev Arrow
+                                Rectangle {
+                                    width: 26
+                                    height: 26
+                                    radius: 13
+                                    color: prevMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                    border.color: prevMouse.containsMouse ? theme.accent : theme.borderStrong
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "‹"
+                                        font.pixelSize: 16
+                                        font.bold: true
+                                        color: theme.text
+                                    }
+
+                                    MouseArea {
+                                        id: prevMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            var n = root.featuredItems.length
+                                            root.featuredIndex = (root.featuredIndex - 1 + n) % n
+                                        }
+                                    }
+                                }
+
+                                // Pagination Pills
+                                RowLayout {
+                                    spacing: 5
+                                    Repeater {
+                                        model: root.featuredItems.length
+                                        Rectangle {
+                                            width: modelData === root.featuredIndex ? 20 : 6
+                                            height: 6
+                                            radius: 3
+                                            color: modelData === root.featuredIndex ? theme.accent : theme.borderStrong
+                                            Behavior on width { NumberAnimation { duration: 150 } }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.featuredIndex = modelData
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Next Arrow
+                                Rectangle {
+                                    width: 26
+                                    height: 26
+                                    radius: 13
+                                    color: nextMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                    border.color: nextMouse.containsMouse ? theme.accent : theme.borderStrong
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "›"
+                                        font.pixelSize: 16
+                                        font.bold: true
+                                        color: theme.text
+                                    }
+
+                                    MouseArea {
+                                        id: nextMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            var n = root.featuredItems.length
+                                            root.featuredIndex = (root.featuredIndex + 1) % n
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Right Column: Authentic Application Artwork (~52% width)
+                    Rectangle {
+                        Layout.preferredWidth: Math.max(300, Math.round(heroPanel.width * 0.52))
+                        Layout.fillHeight: true
+                        color: "transparent"
+                        clip: true
+
+                        Image {
+                            id: heroImg
+                            anchors.fill: parent
+                            source: heroPanel.currentItem ? (heroPanel.currentItem.banner_url || (heroPanel.currentItem.screenshots && heroPanel.currentItem.screenshots.length > 0 ? heroPanel.currentItem.screenshots[0] : "")) : ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            cache: true
+                            sourceSize.width: 1080
+                            sourceSize.height: 600
+                            smooth: true
+                            visible: status === Image.Ready
+                        }
+
+                        // Left-edge gradient overlay for seamless blending into left card background
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 160
+                            z: 2
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: theme.resolvedTheme === "light" ? "#DFE7F3" : "#151C2C" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
+
+                        // Clean fallback if screenshot is not ready
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            visible: heroImg.status !== Image.Ready
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignHCenter
+                                width: 64
+                                height: 64
+                                radius: 14
+                                color: theme.surfaceElevated
+                                border.color: theme.borderSubtle
+                                border.width: 1
+
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 48
+                                    height: 48
+                                    source: heroPanel.currentItem ? (heroPanel.currentItem.icon_url || "") : ""
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                    visible: status === Image.Ready
+                                }
+
+                                RyzoraIcon {
+                                    anchors.centerIn: parent
+                                    visible: !heroPanel.currentItem || !heroPanel.currentItem.icon_url
+                                    name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
+                                    size: 32
+                                    color: theme.textMuted
+                                }
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name) : ""
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: theme.textSecondary
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (heroPanel.currentItem) {
+                                    root.setSelectedApp(heroPanel.currentItem)
+                                    root.appSelected(heroPanel.currentItem)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── 3. REAL SOFTWARE CATEGORIES FILTER BAR ──
             Flickable {
                 Layout.fillWidth: true
                 height: 32
@@ -370,279 +963,48 @@ Item {
                 }
             }
 
-            // ── 3. FEATURED APPLICATION HERO PANEL (Balanced 2-Column, 176px high) ──
-            Rectangle {
-                id: heroPanel
-                visible: root.activeFeaturedApp !== null
+            // ── 4. CURATED ROW OF POPULAR APPLICATIONS (4 Icon-Based Cards) ──
+            ColumnLayout {
                 Layout.fillWidth: true
-                height: 176
-                radius: theme.radiusMd
-                color: theme.surface
-                border.color: theme.borderSubtle
-                border.width: 1
-                clip: true
-
-                // Subtle accent tint background
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme.accent
-                    opacity: theme.resolvedTheme === "light" ? 0.04 : 0.07
-                }
-
-                readonly property var currentItem: root.activeFeaturedApp
+                spacing: 10
+                visible: root.popularApps.length > 0
 
                 RowLayout {
-                    anchors.fill: parent
-                    spacing: 0
+                    Layout.fillWidth: true
+                    spacing: 8
 
-                    // Left Column: Application Information & Actions (~58% width)
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.margins: 18
-                        spacing: 6
-
-                        RowLayout {
-                            spacing: 8
-
-                            Rectangle {
-                                height: 18
-                                radius: 4
-                                implicitWidth: featBadgeTxt.implicitWidth + 10
-                                color: theme.surfaceElevated
-                                border.color: theme.accent
-                                border.width: 1
-
-                                Text {
-                                    id: featBadgeTxt
-                                    anchors.centerIn: parent
-                                    text: "FEATURED"
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    font.letterSpacing: 0.8
-                                    color: theme.accent
-                                }
-                            }
-
-                            Text {
-                                text: heroPanel.currentItem ? (String(heroPanel.currentItem.category || "Application").toUpperCase() + " · " + (heroPanel.currentItem.publisher || "Arch Linux Native")) : ""
-                                font.pixelSize: 10
-                                font.letterSpacing: 0.5
-                                color: theme.textMuted
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
-                            font.pixelSize: 19
-                            font.bold: true
-                            color: theme.text
-                            elide: Text.ElideRight
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: heroPanel.currentItem ? (heroPanel.currentItem.summary || heroPanel.currentItem.description || "") : ""
-                            font.pixelSize: 12
-                            color: theme.textSecondary
-                            maximumLineCount: 2
-                            wrapMode: Text.WordWrap
-                            elide: Text.ElideRight
-                        }
-
-                        Item { Layout.fillHeight: true }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Rectangle {
-                                height: 30
-                                implicitWidth: exploreRow.implicitWidth + 22
-                                radius: theme.radiusSm
-                                color: heroBtnMouse.containsMouse ? theme.accentHover : theme.accent
-
-                                RowLayout {
-                                    id: exploreRow
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    RyzoraIcon {
-                                        name: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "play" : "download"
-                                        size: 11
-                                        color: "#ffffff"
-                                    }
-                                    Text {
-                                        text: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "Open Application" : "Get Application"
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        color: "#ffffff"
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: heroBtnMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (heroPanel.currentItem) {
-                                            if (heroPanel.currentItem.is_installed) {
-                                                root.launchRequested(heroPanel.currentItem.id)
-                                            } else {
-                                                root.installRequested(heroPanel.currentItem.id)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Secondary: View Details
-                            Rectangle {
-                                height: 30
-                                implicitWidth: detailRow.implicitWidth + 18
-                                radius: theme.radiusSm
-                                color: detailMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                                border.color: detailMouse.containsMouse ? theme.accent : theme.borderStrong
-                                border.width: 1
-
-                                RowLayout {
-                                    id: detailRow
-                                    anchors.centerIn: parent
-                                    spacing: 4
-                                    Text {
-                                        text: "Details"
-                                        font.pixelSize: 11
-                                        color: theme.text
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: detailMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (heroPanel.currentItem) {
-                                            root.setSelectedApp(heroPanel.currentItem)
-                                            root.appSelected(heroPanel.currentItem)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Carousel Dots
-                            RowLayout {
-                                spacing: 5
-                                visible: root.featuredItems.length > 1
-                                Repeater {
-                                    model: root.featuredItems.length
-                                    Rectangle {
-                                        width: modelData === root.featuredIndex ? 16 : 6
-                                        height: 6
-                                        radius: 3
-                                        color: modelData === root.featuredIndex ? theme.accent : theme.borderStrong
-                                        Behavior on width { NumberAnimation { duration: 140 } }
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.featuredIndex = modelData
-                                        }
-                                    }
-                                }
-                            }
-
-                            Item { Layout.fillWidth: true }
-                        }
+                    Text {
+                        text: "Popular Applications"
+                        font.pixelSize: 15
+                        font.bold: true
+                        color: theme.text
                     }
 
-                    // Subtle Vertical Divider
-                    Rectangle {
-                        Layout.fillHeight: true
-                        width: 1
-                        color: theme.borderSubtle
+                    Text {
+                        text: "Curated desktop essentials"
+                        font.pixelSize: 11
+                        color: theme.textMuted
                     }
 
-                    // Right Column: Authentic Application Artwork (~42% width)
-                    Rectangle {
-                        Layout.preferredWidth: Math.max(260, Math.round(heroPanel.width * 0.42))
-                        Layout.fillHeight: true
-                        color: theme.resolvedTheme === "light" ? "#F0F2F5" : "#13161C"
-                        clip: true
+                    Item { Layout.fillWidth: true }
+                }
 
-                        Image {
-                            id: heroImg
-                            anchors.fill: parent
-                            source: heroPanel.currentItem ? (heroPanel.currentItem.banner_url || (heroPanel.currentItem.screenshots && heroPanel.currentItem.screenshots.length > 0 ? heroPanel.currentItem.screenshots[0] : "")) : ""
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            cache: true
-                            sourceSize.width: 960
-                            sourceSize.height: 540
-                            smooth: true
-                            visible: status === Image.Ready
-                        }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: root.width < 560 ? 1 : (root.width < 860 ? 2 : (root.width < 1180 ? 3 : 4))
+                    rowSpacing: 12
+                    columnSpacing: 12
 
-                        // Clean Fallback when banner is not available (prominent real app icon)
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
-                            visible: heroImg.status !== Image.Ready
-
-                            Rectangle {
-                                Layout.alignment: Qt.AlignHCenter
-                                width: 56
-                                height: 56
-                                radius: 12
-                                color: theme.surfaceElevated
-                                border.color: theme.borderSubtle
-                                border.width: 1
-
-                                Image {
-                                    anchors.centerIn: parent
-                                    width: 42
-                                    height: 42
-                                    source: heroPanel.currentItem ? (heroPanel.currentItem.icon_url || "") : ""
-                                    fillMode: Image.PreserveAspectFit
-                                    smooth: true
-                                    visible: status === Image.Ready
-                                }
-
-                                RyzoraIcon {
-                                    anchors.centerIn: parent
-                                    visible: !heroPanel.currentItem || !heroPanel.currentItem.icon_url
-                                    name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
-                                    size: 28
-                                    color: theme.textMuted
-                                }
-                            }
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name) : ""
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: theme.textSecondary
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (heroPanel.currentItem) {
-                                    root.setSelectedApp(heroPanel.currentItem)
-                                    root.appSelected(heroPanel.currentItem)
-                                }
-                            }
+                    Repeater {
+                        model: root.popularApps
+                        delegate: AppCard {
+                            appData: modelData
                         }
                     }
                 }
             }
 
-            // ── 4. MAIN APPLICATIONS GRID ──
+            // ── 5. MAIN APPLICATIONS GRID (All Remaining Applications) ──
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 12
@@ -652,7 +1014,7 @@ Item {
                     spacing: 8
 
                     Text {
-                        text: (root.featuredAppId !== "") ? "More applications" : (root.selectedCategory === "All" ? "All applications" : root.selectedCategory)
+                        text: (root.featuredAppId !== "") ? "More Applications" : (root.selectedCategory === "All" ? "All Applications" : root.selectedCategory)
                         font.pixelSize: 15
                         font.bold: true
                         color: theme.text
@@ -712,311 +1074,8 @@ Item {
 
                     Repeater {
                         model: root.visibleCatalogApps
-
-                        delegate: Rectangle {
-                            id: appCard
-                            Layout.fillWidth: true
-                            height: 154
-                            radius: theme.radiusMd
-                            color: cardMouse.containsMouse ? theme.surfaceHover : theme.surface
-                            border.color: cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
-                            border.width: 1
-                            clip: true
-
-                            readonly property bool hasScreenshot: Boolean(modelData.banner_url && modelData.banner_url !== "")
-
-                            MouseArea {
-                                id: cardMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.setSelectedApp(modelData)
-                                    root.appSelected(modelData)
-                                }
-                            }
-
-                            // ── CARD VARIANT 1: GENUINE SCREENSHOT HERO (For apps with real screenshots) ──
-                            ColumnLayout {
-                                anchors.fill: parent
-                                spacing: 0
-                                visible: appCard.hasScreenshot
-
-                                // Top Landscape Screenshot (94px)
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 94
-                                    color: theme.resolvedTheme === "light" ? "#F1F3F6" : "#13161C"
-                                    clip: true
-
-                                    Image {
-                                        id: cardBannerImg
-                                        anchors.fill: parent
-                                        source: modelData.banner_url || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                        cache: true
-                                        sourceSize.width: 480
-                                        sourceSize.height: 270
-                                        smooth: true
-                                    }
-
-                                    // Subtle bottom divider
-                                    Rectangle {
-                                        anchors.bottom: parent.bottom
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        height: 1
-                                        color: theme.borderSubtle
-                                    }
-                                }
-
-                                // Bottom Row (60px)
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    Layout.leftMargin: 12
-                                    Layout.rightMargin: 12
-                                    spacing: 10
-
-                                    // Real App Icon
-                                    Rectangle {
-                                        width: 34
-                                        height: 34
-                                        radius: 8
-                                        color: theme.surfaceElevated
-                                        border.color: theme.borderSubtle
-                                        border.width: 1
-
-                                        Image {
-                                            anchors.centerIn: parent
-                                            width: 26
-                                            height: 26
-                                            source: modelData.icon_url || ""
-                                            fillMode: Image.PreserveAspectFit
-                                            smooth: true
-                                            visible: status === Image.Ready
-                                        }
-
-                                        RyzoraIcon {
-                                            anchors.centerIn: parent
-                                            visible: !modelData.icon_url || modelData.icon_url === ""
-                                            name: root.getCategoryIcon(modelData.category)
-                                            size: 18
-                                            color: theme.textMuted
-                                        }
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 1
-
-                                        Text {
-                                            text: modelData.display_name || modelData.name || ""
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            color: theme.text
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-
-                                        Text {
-                                            text: (modelData.publisher || "Native") + " · " + (modelData.category || "App")
-                                            font.pixelSize: 10
-                                            color: theme.textMuted
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-
-                                    // Action Pill: Open (if installed) or Get (if uninstalled)
-                                    Rectangle {
-                                        height: 26
-                                        implicitWidth: 64
-                                        radius: theme.radiusSm
-                                        color: modelData.is_installed
-                                            ? (cardActionMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                            : (cardActionMouse.containsMouse ? theme.accentHover : theme.accent)
-                                        border.color: modelData.is_installed ? theme.borderStrong : theme.accent
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 4
-
-                                            RyzoraIcon {
-                                                name: modelData.is_installed ? "play" : "download"
-                                                size: 9
-                                                color: modelData.is_installed ? "#10b981" : "#ffffff"
-                                            }
-
-                                            Text {
-                                                text: modelData.is_installed ? "Open" : "Get"
-                                                font.pixelSize: 10
-                                                font.bold: true
-                                                color: modelData.is_installed ? theme.text : "#ffffff"
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: cardActionMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (modelData.is_installed) {
-                                                    root.launchRequested(modelData.id)
-                                                } else {
-                                                    root.installRequested(modelData.id)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // ── CARD VARIANT 2: PROMINENT SQUARE APP ICON (For apps with no screenshots) ──
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 14
-                                spacing: 8
-                                visible: !appCard.hasScreenshot
-
-                                // Top Row: Prominent 48x48 Real Icon + Name/Category + Action Button
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 12
-
-                                    Rectangle {
-                                        width: 48
-                                        height: 48
-                                        radius: 10
-                                        color: theme.surfaceElevated
-                                        border.color: theme.borderSubtle
-                                        border.width: 1
-
-                                        Image {
-                                            anchors.centerIn: parent
-                                            width: 38
-                                            height: 38
-                                            source: modelData.icon_url || ""
-                                            fillMode: Image.PreserveAspectFit
-                                            smooth: true
-                                            visible: status === Image.Ready
-                                        }
-
-                                        RyzoraIcon {
-                                            anchors.centerIn: parent
-                                            visible: !modelData.icon_url || modelData.icon_url === ""
-                                            name: root.getCategoryIcon(modelData.category)
-                                            size: 24
-                                            color: theme.textMuted
-                                        }
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Text {
-                                            text: modelData.display_name || modelData.name || ""
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            color: theme.text
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-
-                                        Text {
-                                            text: (modelData.publisher || "Arch Native") + " · " + (modelData.category || "App")
-                                            font.pixelSize: 10
-                                            color: theme.textMuted
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-
-                                    // Action Pill
-                                    Rectangle {
-                                        height: 26
-                                        implicitWidth: 64
-                                        radius: theme.radiusSm
-                                        color: modelData.is_installed
-                                            ? (iconCardActionMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                                            : (iconCardActionMouse.containsMouse ? theme.accentHover : theme.accent)
-                                        border.color: modelData.is_installed ? theme.borderStrong : theme.accent
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 4
-
-                                            RyzoraIcon {
-                                                name: modelData.is_installed ? "play" : "download"
-                                                size: 9
-                                                color: modelData.is_installed ? "#10b981" : "#ffffff"
-                                            }
-
-                                            Text {
-                                                text: modelData.is_installed ? "Open" : "Get"
-                                                font.pixelSize: 10
-                                                font.bold: true
-                                                color: modelData.is_installed ? theme.text : "#ffffff"
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: iconCardActionMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (modelData.is_installed) {
-                                                    root.launchRequested(modelData.id)
-                                                } else {
-                                                    root.installRequested(modelData.id)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Middle: 2-line concise summary / description
-                                Text {
-                                    text: modelData.summary || modelData.description || ""
-                                    font.pixelSize: 11
-                                    color: theme.textSecondary
-                                    maximumLineCount: 2
-                                    wrapMode: Text.WordWrap
-                                    elide: Text.ElideRight
-                                    Layout.fillWidth: true
-                                }
-
-                                Item { Layout.fillHeight: true }
-
-                                // Bottom Metadata Row: Repository / Installed state
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Text {
-                                        text: modelData.is_installed
-                                            ? ("● Installed · v" + (modelData.installed_version || modelData.version))
-                                            : ((modelData.repository || "extra") + " repository")
-                                        font.pixelSize: 10
-                                        font.weight: modelData.is_installed ? Font.Medium : Font.Normal
-                                        color: modelData.is_installed ? "#10b981" : theme.textMuted
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Text {
-                                        text: modelData.license ? modelData.license : "Native"
-                                        font.pixelSize: 10
-                                        color: theme.textMuted
-                                    }
-                                }
-                            }
+                        delegate: AppCard {
+                            appData: modelData
                         }
                     }
                 }
