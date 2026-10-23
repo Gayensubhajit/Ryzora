@@ -1958,9 +1958,36 @@ impl BackendState {
                 "Clean declarative configuration for fonts, colors, and key bindings".into(),
             ],
             "cursor" => vec![
-                "AI-native pair programmer with intelligent whole-codebase indexing".into(),
-                "Inline multi-line code generation, editing, and terminal command execution".into(),
-                "Seamless VS Code extension, keybinding, and theme compatibility".into(),
+                "Intelligent codebase indexing and semantic search across all project files".into(),
+                "Multi-line code completion and predictive cursor edit suggestions".into(),
+                "Integrated AI chat with codebase context, file references, and web search".into(),
+                "Interactive terminal command generation, diagnosis, and automated execution".into(),
+                "Full VS Code extension ecosystem, theme, and keybinding compatibility".into(),
+            ],
+            "kitty" => vec![
+                "GPU-accelerated rendering with Kitty terminal graphics protocol".into(),
+                "Native window splitting, tabbed layouts, and session management".into(),
+                "Scriptable kitten extensions and interactive Unicode glyph input".into(),
+            ],
+            "neovim" => vec![
+                "First-class built-in Language Server Protocol (LSP) client".into(),
+                "Rich Lua scripting engine for plugins and custom configurations".into(),
+                "Tree-sitter native syntax highlighting and code parsing".into(),
+            ],
+            "fastfetch" => vec![
+                "Ultra-fast C-native system information detection and reporting".into(),
+                "Extensible JSON/JSONC configuration with logo and module customization".into(),
+                "Instant display of GPU, CPU, memory, kernel, and desktop session details".into(),
+            ],
+            "btop" => vec![
+                "Interactive terminal resource monitor for CPU, memory, disks, and network".into(),
+                "Clean graphical process tree with filtering, sorting, and signal sending".into(),
+                "Responsive real-time graphs with customizable themes and layouts".into(),
+            ],
+            "git" => vec![
+                "Fast, scalable distributed version control system".into(),
+                "Advanced branching, merging, rebasing, and history inspection".into(),
+                "Cryptographically secure history tracking with SHA-1/SHA-256 commits".into(),
             ],
             "telegram-desktop" => vec![
                 "Fast, cloud-synchronized chat history accessible on all devices".into(),
@@ -2283,7 +2310,7 @@ impl BackendState {
                 "0.40.4",
                 "system",
                 "AI-first code editor designed for pair-programming and accelerated coding",
-                "Built to make you extraordinarily productive, Cursor is the best way to code with AI.",
+                "Cursor is an AI-first code editor built on top of Visual Studio Code. It empowers developers with intelligent whole-codebase indexing, multi-file code editing, inline error diagnosis, and interactive AI pair-programming in a familiar, extensible desktop environment.",
                 "cursor/icon.svg",
                 "",
                 vec![],

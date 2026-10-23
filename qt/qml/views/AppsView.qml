@@ -1778,247 +1778,276 @@ Item {
                     }
                 }
 
-                // ── 4. About this application Section ──
-                ColumnLayout {
+                // ── 4. Content Area: Main & Information Split (Microsoft Store Architecture) ──
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    columns: root.width < 960 ? 1 : 2
+                    columnSpacing: 24
+                    rowSpacing: 24
 
-                    Text {
-                        text: "About this application"
-                        font.pixelSize: 18
-                        font.bold: true
-                        color: theme.text
-                    }
-
-                    Rectangle {
+                    // ── Left / Main Column: About & Key Features ──
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        implicitHeight: aboutDescCol.implicitHeight + 40
-                        radius: theme.radiusMd
-                        color: theme.surface
-                        border.color: theme.borderSubtle
-                        border.width: 1
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 12
 
-                        ColumnLayout {
-                            id: aboutDescCol
-                            anchors.fill: parent
-                            anchors.margins: 24
-                            spacing: 18
+                        Text {
+                            text: "About this application"
+                            font.pixelSize: 18
+                            font.bold: true
+                            color: theme.text
+                        }
 
-                            // Main Description Text
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.selectedApp ? (root.selectedApp.description || root.selectedApp.summary || "") : ""
-                                font.pixelSize: 14
-                                lineHeight: 1.6
-                                color: theme.text
-                                wrapMode: Text.WordWrap
-                            }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: aboutDescCol.implicitHeight + 40
+                            radius: theme.radiusMd
+                            color: theme.surface
+                            border.color: theme.borderSubtle
+                            border.width: 1
 
-                            // Key Features Subsection
                             ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 14
-                                visible: Boolean(root.selectedApp && root.selectedApp.features && root.selectedApp.features.length > 0)
+                                id: aboutDescCol
+                                anchors.fill: parent
+                                anchors.margins: 24
+                                spacing: 18
 
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 1
-                                    color: theme.borderSubtle
-                                }
-
+                                // Main Description Text
                                 Text {
-                                    text: "Key features"
-                                    font.pixelSize: 15
-                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    text: root.selectedApp ? (root.selectedApp.description || root.selectedApp.summary || "") : ""
+                                    font.pixelSize: 14
+                                    lineHeight: 1.6
                                     color: theme.text
+                                    wrapMode: Text.WordWrap
                                 }
 
-                                GridLayout {
+                                // Key Features Subsection (Shown only when reliable features exist)
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    columns: root.width < 760 ? 1 : 2
-                                    columnSpacing: 24
-                                    rowSpacing: 12
+                                    spacing: 14
+                                    visible: Boolean(root.selectedApp && root.selectedApp.features && root.selectedApp.features.length > 0)
 
-                                    Repeater {
-                                        model: (root.selectedApp && root.selectedApp.features) ? root.selectedApp.features : []
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 1
+                                        color: theme.borderSubtle
+                                    }
 
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            Layout.alignment: Qt.AlignTop
-                                            spacing: 10
+                                    Text {
+                                        text: "Key features"
+                                        font.pixelSize: 15
+                                        font.bold: true
+                                        color: theme.text
+                                    }
 
-                                            Rectangle {
-                                                width: 20
-                                                height: 20
-                                                radius: 10
-                                                color: theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E293B"
-                                                border.color: theme.accent
-                                                border.width: 1
-                                                Layout.alignment: Qt.AlignTop
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
 
-                                                RyzoraIcon {
-                                                    anchors.centerIn: parent
-                                                    name: "check"
-                                                    size: 11
-                                                    color: theme.accent
-                                                }
-                                            }
+                                        Repeater {
+                                            model: (root.selectedApp && root.selectedApp.features) ? root.selectedApp.features : []
 
-                                            Text {
+                                            RowLayout {
                                                 Layout.fillWidth: true
-                                                text: modelData
-                                                font.pixelSize: 13
-                                                color: theme.textSecondary
-                                                wrapMode: Text.WordWrap
-                                                lineHeight: 1.35
+                                                Layout.alignment: Qt.AlignTop
+                                                spacing: 10
+
+                                                Rectangle {
+                                                    width: 20
+                                                    height: 20
+                                                    radius: 10
+                                                    color: theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E293B"
+                                                    border.color: theme.accent
+                                                    border.width: 1
+                                                    Layout.alignment: Qt.AlignTop
+
+                                                    RyzoraIcon {
+                                                        anchors.centerIn: parent
+                                                        name: "check"
+                                                        size: 11
+                                                        color: theme.accent
+                                                    }
+                                                }
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData
+                                                    font.pixelSize: 13
+                                                    color: theme.textSecondary
+                                                    wrapMode: Text.WordWrap
+                                                    lineHeight: 1.35
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            // If summary differs from description and no features list, show clean highlight
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 10
-                                visible: Boolean(root.selectedApp && (!root.selectedApp.features || root.selectedApp.features.length === 0) && root.selectedApp.summary && root.selectedApp.description && root.selectedApp.summary !== root.selectedApp.description)
-
-                                RyzoraIcon {
-                                    name: "check"
-                                    size: 14
-                                    color: theme.accent
-                                }
-
-                                Text {
+                                // If summary differs from description and no features list, show clean highlight
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    text: root.selectedApp ? root.selectedApp.summary : ""
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: theme.textSecondary
-                                    wrapMode: Text.WordWrap
+                                    spacing: 10
+                                    visible: Boolean(root.selectedApp && (!root.selectedApp.features || root.selectedApp.features.length === 0) && root.selectedApp.summary && root.selectedApp.description && root.selectedApp.summary !== root.selectedApp.description)
+
+                                    RyzoraIcon {
+                                        name: "check"
+                                        size: 14
+                                        color: theme.accent
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.selectedApp ? root.selectedApp.summary : ""
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: theme.textSecondary
+                                        wrapMode: Text.WordWrap
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                // ── 5. Additional Information Section (Responsive Multi-Column Grid) ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
+                    // ── Right / Information Column: Compact Metadata Specs ──
+                    ColumnLayout {
+                        Layout.preferredWidth: root.width < 960 ? -1 : 330
+                        Layout.fillWidth: root.width < 960
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 12
 
-                    Text {
-                        text: "Additional information"
-                        font.pixelSize: 18
-                        font.bold: true
-                        color: theme.text
-                    }
+                        Text {
+                            text: "Additional information"
+                            font.pixelSize: 18
+                            font.bold: true
+                            color: theme.text
+                        }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: infoGrid.implicitHeight + 36
-                        radius: theme.radiusMd
-                        color: theme.surface
-                        border.color: theme.borderSubtle
-                        border.width: 1
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: infoRowsCol.implicitHeight + 28
+                            radius: theme.radiusMd
+                            color: theme.surface
+                            border.color: theme.borderSubtle
+                            border.width: 1
 
-                        GridLayout {
-                            id: infoGrid
-                            anchors.fill: parent
-                            anchors.margins: 22
-                            columns: root.width < 680 ? 2 : (root.width < 1000 ? 3 : 4)
-                            columnSpacing: 24
-                            rowSpacing: 20
-
-                            // 1. Published by
                             ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "Published by"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text { text: root.selectedApp ? (root.selectedApp.publisher || "Community") : ""; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
+                                id: infoRowsCol
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.margins: 18
+                                spacing: 10
 
-                            // 2. Category
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "Category"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text { text: root.selectedApp ? (root.selectedApp.category || "General") : ""; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
-
-                            // 3. Version
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "Version"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text { text: root.selectedApp ? root.selectedApp.version : ""; font.pixelSize: 13; font.family: "monospace"; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
-
-                            // 4. Software Source / Repository
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "Software source"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text { text: root.selectedApp ? (root.selectedApp.repository ? (root.selectedApp.repository + " (Official Arch)") : "Arch Linux Native") : ""; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
-
-                            // 5. License
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "License"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text { text: root.selectedApp && root.selectedApp.license ? root.selectedApp.license : "Open Source"; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
-
-                            // 6. Architecture
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "Architecture"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text { text: "x86_64 (Linux 64-bit)"; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
-
-                            // 7. Installation status
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text { text: "Installation status"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                Text {
-                                    text: root.selectedApp && root.selectedApp.is_installed ? "Installed on this system" : "Ready to install"
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: root.selectedApp && root.selectedApp.is_installed ? (theme.resolvedTheme === "light" ? "#059669" : "#34D399") : theme.text
-                                    elide: Text.ElideRight
+                                // 1. Published by
+                                ColumnLayout {
                                     Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "PUBLISHED BY"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    Text { text: root.selectedApp ? (root.selectedApp.publisher || "Community") : ""; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
                                 }
-                            }
 
-                            // 8. Official Website
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                visible: Boolean(root.selectedApp && root.selectedApp.website)
-                                Text { text: "Official website"; font.pixelSize: 11; font.bold: true; color: theme.textMuted }
-                                RowLayout {
-                                    spacing: 6
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // 2. Category
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "CATEGORY"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    Text { text: root.selectedApp ? (root.selectedApp.category || "General") : ""; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // 3. Version
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "VERSION"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    Text { text: root.selectedApp ? root.selectedApp.version : ""; font.pixelSize: 13; font.family: "monospace"; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // 4. Software Source / Repository
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "SOFTWARE SOURCE"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    Text { text: root.selectedApp ? (root.selectedApp.repository ? (root.selectedApp.repository + " (Official Arch)") : "Arch Linux Native") : ""; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // 5. License
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "LICENSE"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    Text { text: root.selectedApp && root.selectedApp.license ? root.selectedApp.license : "Open Source"; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // 6. Architecture
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "ARCHITECTURE"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    Text { text: "x86_64 (Linux 64-bit)"; font.pixelSize: 13; font.bold: true; color: theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                                // 7. Installation status
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "INSTALLATION STATUS"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
                                     Text {
-                                        text: root.selectedApp && root.selectedApp.website ? root.selectedApp.website : ""
+                                        text: root.selectedApp && root.selectedApp.is_installed ? "Installed on this system" : "Ready to install"
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: theme.accent
+                                        color: root.selectedApp && root.selectedApp.is_installed ? (theme.resolvedTheme === "light" ? "#059669" : "#34D399") : theme.text
                                         elide: Text.ElideRight
                                         Layout.fillWidth: true
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (root.selectedApp && root.selectedApp.website) {
-                                                    Qt.openUrlExternally(root.selectedApp.website)
+                                    }
+                                }
+
+                                // 8. Official Website
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: theme.borderSubtle
+                                    visible: Boolean(root.selectedApp && root.selectedApp.website)
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    visible: Boolean(root.selectedApp && root.selectedApp.website)
+                                    Text { text: "OFFICIAL WEBSITE"; font.pixelSize: 10; font.bold: true; color: theme.textMuted; font.letterSpacing: 0.5 }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Text {
+                                            text: root.selectedApp && root.selectedApp.website ? root.selectedApp.website : ""
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: theme.accent
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (root.selectedApp && root.selectedApp.website) {
+                                                        Qt.openUrlExternally(root.selectedApp.website)
+                                                    }
                                                 }
                                             }
                                         }
+                                        RyzoraIcon { name: "arrow-right"; size: 11; color: theme.accent }
                                     }
-                                    RyzoraIcon { name: "arrow-right"; size: 11; color: theme.accent }
                                 }
                             }
                         }
