@@ -40,6 +40,21 @@ Item {
         root.selectedApp = pkg
     }
 
+    Connections {
+        target: backend
+        function onAppsChanged() {
+            if (root.selectedApp) {
+                var list = backend.appsList || []
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i] && list[i].id === root.selectedApp.id) {
+                        root.selectedApp = list[i]
+                        break
+                    }
+                }
+            }
+        }
+    }
+
     // Helper: Map application category to vector icon
     function getCategoryIcon(cat) {
         var c = (cat || "").toLowerCase()
@@ -822,6 +837,8 @@ Item {
                             sourceSize.height: 600
                             smooth: true
                             visible: status === Image.Ready
+                            opacity: status === Image.Ready ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
                         }
 
                         // Left-edge gradient overlay for seamless blending into left card background

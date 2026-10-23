@@ -168,6 +168,8 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
 
 void RyzoraBackend::filterApps(const QString &category, const QString &query) {
     if (m_isShutdown.load()) return;
+    m_currentAppsCategory = category;
+    m_currentAppsQuery = query;
     uint64_t reqId = ryzora_allocate_request_id();
     updateMonotonicReqId(m_currentAppsReqId, reqId);
     m_isAppsLoading = true;
@@ -226,7 +228,7 @@ void RyzoraBackend::installApp(const QString &appId) {
                 self->postNotification(success ? "success" : "error",
                                         success ? "Application Installed" : "Installation Failed",
                                         message);
-                self->filterApps("all", "");
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery);
             }
         });
     });
@@ -256,7 +258,7 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
                 self->postNotification(success ? "info" : "error",
                                         success ? "Application Removed" : "Removal Failed",
                                         message);
-                self->filterApps("all", "");
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery);
             }
         });
     });

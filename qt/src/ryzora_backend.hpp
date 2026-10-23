@@ -221,6 +221,8 @@ private:
     QVariantList m_appsList;
     bool m_isAppsLoading{false};
     std::atomic<uint64_t> m_currentAppsReqId{0};
+    QString m_currentAppsCategory{"all"};
+    QString m_currentAppsQuery{""};
     QVariantList m_libraryList;
     bool m_isCatalogLoading{false};
     bool m_isLibraryLoading{false};
