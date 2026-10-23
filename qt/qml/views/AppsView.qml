@@ -518,35 +518,74 @@ Item {
                 }
             }
 
-            // ── 2. FEATURED APPLICATION EDITORIAL HERO CAROUSEL (Mac & Windows 11 Store Design) ──
+            // ── 2. FEATURED APPLICATION SUPER HERO CAROUSEL (Authentic Windows 11 Microsoft Store Layout) ──
             Rectangle {
                 id: heroPanel
                 visible: root.activeFeaturedApp !== null
                 Layout.fillWidth: true
-                height: root.width < 760 ? 360 : 365
+                height: root.width < 760 ? 330 : 375
                 radius: theme.radiusLg
-                border.color: theme.borderSubtle
+                border.color: Qt.rgba(255, 255, 255, 0.12)
                 border.width: 1
                 clip: true
 
                 readonly property var currentItem: root.activeFeaturedApp
 
-                // Clean, theme-native editorial background gradient
+                // 1. Full-Bleed 16:9 Promotional Artwork
+                Image {
+                    id: heroImg
+                    anchors.fill: parent
+                    source: heroPanel.currentItem ? (heroPanel.currentItem.banner_url || "") : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: true
+                    sourceSize.width: 1920
+                    sourceSize.height: 1080
+                    smooth: true
+                    visible: status === Image.Ready
+                    opacity: status === Image.Ready ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 250 } }
+                }
+
+                // Fallback rich dark gradient if image is loading
                 Rectangle {
                     anchors.fill: parent
+                    z: 0
+                    visible: heroImg.status !== Image.Ready
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: theme.resolvedTheme === "light" ? "#F5F8FC" : "#111726" }
-                        GradientStop { position: 0.5; color: theme.resolvedTheme === "light" ? "#EDF3FA" : "#141D30" }
-                        GradientStop { position: 1.0; color: theme.resolvedTheme === "light" ? "#E4EEF9" : "#0D1422" }
+                        GradientStop { position: 0.0; color: "#0B0F19" }
+                        GradientStop { position: 1.0; color: "#161F33" }
                     }
                 }
 
-                // Subtle ambient brand aura
+                // 2. Microsoft Store Left Gradient Scrim (Guarantees 100% Text Readability)
                 Rectangle {
                     anchors.fill: parent
-                    color: theme.accent
-                    opacity: theme.resolvedTheme === "light" ? 0.03 : 0.06
+                    z: 1
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "#070A12F0" }
+                        GradientStop { position: 0.38; color: "#070A12D0" }
+                        GradientStop { position: 0.60; color: "#070A1270" }
+                        GradientStop { position: 0.85; color: "#070A1215" }
+                        GradientStop { position: 1.0; color: "transparent" }
+                    }
+                }
+
+                // 3. Microsoft Store Bottom Vignette (Behind Floating Thumbnail Bar)
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 120
+                    z: 1
+                    gradient: Gradient {
+                        orientation: Gradient.Vertical
+                        GradientStop { position: 0.0; color: "transparent" }
+                        GradientStop { position: 0.50; color: "#05081060" }
+                        GradientStop { position: 1.0; color: "#04060DE6" }
+                    }
                 }
 
                 // Auto-rotation timer (pauses when user hovers or interacts)
@@ -569,321 +608,170 @@ Item {
                     z: 0
                 }
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: 0
-                    z: 1
+                // 4. Hero Content: Typography, Branding & CTAs
+                Item {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: bottomStrip.top
+                    anchors.bottomMargin: 8
+                    z: 2
 
-                    // ── Upper Showcase Section: Info (Left) + Elevated Window Mockup (Right) ──
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 0
-
-                        // Left Column: Editorial Information & Actions (~48-52% width)
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Layout.leftMargin: root.width < 760 ? 18 : 28
-                            Layout.rightMargin: root.width < 760 ? 12 : 20
-                            Layout.topMargin: root.width < 760 ? 18 : 24
-                            Layout.bottomMargin: 12
-                            spacing: root.width < 760 ? 8 : 12
-
-                            // Kicker / Category Tag Row
-                            RowLayout {
-                                spacing: 10
-
-                                Rectangle {
-                                    height: 22
-                                    radius: 4
-                                    implicitWidth: featBadgeTxt.implicitWidth + 14
-                                    color: theme.surfaceElevated
-                                    border.color: theme.accent
-                                    border.width: 1
-
-                                    Text {
-                                        id: featBadgeTxt
-                                        anchors.centerIn: parent
-                                        text: "FEATURED SPOTLIGHT"
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        font.letterSpacing: 0.8
-                                        color: theme.accent
-                                    }
-                                }
-
-                                Text {
-                                    text: heroPanel.currentItem ? (String(heroPanel.currentItem.category || "Application").toUpperCase() + " · " + (heroPanel.currentItem.publisher || "Arch Linux Native")) : ""
-                                    font.pixelSize: 11
-                                    font.letterSpacing: 0.5
-                                    color: theme.textMuted
-                                    elide: Text.ElideRight
-                                    Layout.fillWidth: true
-                                }
+                    // Clicking main hero body navigates to app details
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (heroPanel.currentItem) {
+                                root.setSelectedApp(heroPanel.currentItem)
+                                root.appSelected(heroPanel.currentItem)
                             }
+                        }
+                    }
 
-                            // App Brand: Prominent Squircle Icon + Display Title
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 14
+                    ColumnLayout {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        width: Math.min(parent.width * (root.width < 760 ? 0.92 : 0.56), 620)
+                        anchors.leftMargin: root.width < 760 ? 20 : 32
+                        anchors.topMargin: root.width < 760 ? 18 : 26
+                        anchors.bottomMargin: 8
+                        spacing: root.width < 760 ? 8 : 12
 
-                                Rectangle {
-                                    width: root.width < 760 ? 46 : 54
-                                    height: root.width < 760 ? 46 : 54
-                                    radius: 12
-                                    color: theme.surfaceElevated
-                                    border.color: theme.borderSubtle
-                                    border.width: 1
+                        // Category & Spotlight Tag Row
+                        RowLayout {
+                            spacing: 10
 
-                                    Image {
-                                        anchors.centerIn: parent
-                                        width: root.width < 760 ? 36 : 42
-                                        height: root.width < 760 ? 36 : 42
-                                        source: heroPanel.currentItem ? (heroPanel.currentItem.icon_url || "") : ""
-                                        fillMode: Image.PreserveAspectFit
-                                        smooth: true
-                                        visible: status === Image.Ready
-                                    }
-
-                                    RyzoraIcon {
-                                        anchors.centerIn: parent
-                                        visible: !heroPanel.currentItem || !heroPanel.currentItem.icon_url || heroPanel.currentItem.icon_url === ""
-                                        name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
-                                        size: root.width < 760 ? 26 : 30
-                                        color: theme.textMuted
-                                    }
-                                }
+                            Rectangle {
+                                height: 22
+                                radius: 4
+                                implicitWidth: featBadgeTxt.implicitWidth + 14
+                                color: Qt.rgba(255, 255, 255, 0.12)
+                                border.color: theme.accent
+                                border.width: 1
 
                                 Text {
-                                    Layout.fillWidth: true
-                                    text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
-                                    font.pixelSize: root.width < 760 ? 22 : 28
+                                    id: featBadgeTxt
+                                    anchors.centerIn: parent
+                                    text: "FEATURED SPOTLIGHT"
+                                    font.pixelSize: 9
                                     font.bold: true
-                                    color: theme.text
-                                    elide: Text.ElideRight
+                                    font.letterSpacing: 0.8
+                                    color: theme.accent
                                 }
                             }
 
-                            // Editorial Pitch / Description: 14px, high-contrast, clean typography
                             Text {
-                                Layout.fillWidth: true
-                                text: heroPanel.currentItem ? (heroPanel.currentItem.summary || heroPanel.currentItem.description || "") : ""
-                                font.pixelSize: 14
-                                lineHeight: 1.35
-                                color: theme.textSecondary
-                                maximumLineCount: root.width < 760 ? 2 : 3
-                                wrapMode: Text.WordWrap
+                                text: heroPanel.currentItem ? (String(heroPanel.currentItem.category || "Application").toUpperCase() + " · " + (heroPanel.currentItem.publisher || "Arch Linux Native")) : ""
+                                font.pixelSize: 11
+                                font.letterSpacing: 0.5
+                                color: Qt.rgba(255, 255, 255, 0.75)
                                 elide: Text.ElideRight
-                            }
-
-                            Item { Layout.fillHeight: true }
-
-                            // Action Buttons Row
-                            RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 12
-
-                                // Primary Action Button: Get / Open
-                                Rectangle {
-                                    height: 38
-                                    implicitWidth: heroBtnRow.implicitWidth + 26
-                                    radius: theme.radiusSm
-                                    color: heroBtnMouse.containsMouse ? theme.accentHover : theme.accent
-
-                                    RowLayout {
-                                        id: heroBtnRow
-                                        anchors.centerIn: parent
-                                        spacing: 8
-                                        RyzoraIcon {
-                                            name: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "play" : "download"
-                                            size: 13
-                                            color: "#ffffff"
-                                        }
-                                        Text {
-                                            text: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "Open Application" : "Get Application"
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            color: "#ffffff"
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: heroBtnMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (heroPanel.currentItem) {
-                                                if (heroPanel.currentItem.is_installed) {
-                                                    root.launchRequested(heroPanel.currentItem.id)
-                                                } else {
-                                                    root.installRequested(heroPanel.currentItem.id)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Secondary Action Button: View Details
-                                Rectangle {
-                                    height: 38
-                                    implicitWidth: heroDetailsRow.implicitWidth + 24
-                                    radius: theme.radiusSm
-                                    color: heroDetailsMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                                    border.color: heroDetailsMouse.containsMouse ? theme.accent : theme.borderSubtle
-                                    border.width: 1
-
-                                    RowLayout {
-                                        id: heroDetailsRow
-                                        anchors.centerIn: parent
-                                        spacing: 6
-                                        RyzoraIcon {
-                                            name: "info"
-                                            size: 13
-                                            color: theme.textSecondary
-                                        }
-                                        Text {
-                                            text: "View Details"
-                                            font.pixelSize: 13
-                                            font.bold: false
-                                            color: theme.text
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: heroDetailsMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (heroPanel.currentItem) {
-                                                root.setSelectedApp(heroPanel.currentItem)
-                                                root.appSelected(heroPanel.currentItem)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Item { Layout.fillWidth: true }
                             }
                         }
 
-                        // Right Column: Elevated Application Showcase Window (~48-52% width)
-                        Item {
-                            Layout.fillHeight: true
-                            Layout.preferredWidth: Math.max(300, Math.round(heroPanel.width * (root.width < 760 ? 0.42 : 0.50)))
-                            clip: false
+                        // App Display Title
+                        Text {
+                            Layout.fillWidth: true
+                            text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
+                            font.pixelSize: root.width < 760 ? 24 : 30
+                            font.bold: true
+                            color: "#FFFFFF"
+                            elide: Text.ElideRight
+                        }
 
-                            // Mockup Window Ambient Drop Shadow
+                        // Editorial Summary Description: 14px, readable white text
+                        Text {
+                            Layout.fillWidth: true
+                            text: heroPanel.currentItem ? (heroPanel.currentItem.summary || heroPanel.currentItem.description || "") : ""
+                            font.pixelSize: 14
+                            lineHeight: 1.35
+                            color: "#E2E8F0"
+                            maximumLineCount: root.width < 760 ? 2 : 3
+                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
+                        }
+
+                        Item { Layout.fillHeight: true }
+
+                        // Action Buttons Row
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            // Primary Action Button: Get / Open
                             Rectangle {
-                                anchors.centerIn: showcaseFrame
-                                width: showcaseFrame.width + 10
-                                height: showcaseFrame.height + 10
-                                radius: 14
-                                color: "#000000"
-                                opacity: theme.resolvedTheme === "light" ? 0.08 : 0.28
-                                z: 0
-                            }
+                                height: 38
+                                implicitWidth: heroBtnRow.implicitWidth + 28
+                                radius: theme.radiusSm
+                                color: heroBtnMouse.containsMouse ? theme.accentHover : theme.accent
 
-                            // The Showcase Window Mockup Frame
-                            Rectangle {
-                                id: showcaseFrame
-                                anchors.centerIn: parent
-                                width: Math.min(parent.width - 20, 480)
-                                height: Math.min(parent.height - 24, 230)
-                                radius: 10
-                                color: theme.resolvedTheme === "light" ? "#FFFFFF" : "#1A2234"
-                                border.color: theme.borderSubtle
-                                border.width: 1
-                                clip: true
-                                z: 1
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    spacing: 0
-
-                                    // Mockup Window Header Bar (macOS / Windows hybrid titlebar)
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        height: 26
-                                        color: theme.resolvedTheme === "light" ? "#F1F5F9" : "#141D2D"
-                                        border.color: theme.borderSubtle
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 10
-                                            anchors.rightMargin: 10
-                                            spacing: 6
-
-                                            // 3 Window Dots
-                                            Row {
-                                                spacing: 5
-                                                Rectangle { width: 8; height: 8; radius: 4; color: "#FF5F56" }
-                                                Rectangle { width: 8; height: 8; radius: 4; color: "#FFBD2E" }
-                                                Rectangle { width: 8; height: 8; radius: 4; color: "#27C93F" }
-                                            }
-
-                                            Item { Layout.preferredWidth: 6 }
-
-                                            // Window Header Title
-                                            Text {
-                                                text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name || "") : ""
-                                                font.pixelSize: 10
-                                                font.bold: true
-                                                color: theme.textMuted
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-                                        }
+                                RowLayout {
+                                    id: heroBtnRow
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    RyzoraIcon {
+                                        name: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "play" : "download"
+                                        size: 13
+                                        color: "#ffffff"
                                     }
-
-                                    // Window Content: The high-res screenshot
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        color: theme.surfaceElevated
-                                        clip: true
-
-                                        Image {
-                                            anchors.fill: parent
-                                            source: heroPanel.currentItem ? (heroPanel.currentItem.banner_url || (heroPanel.currentItem.screenshots && heroPanel.currentItem.screenshots.length > 0 ? heroPanel.currentItem.screenshots[0] : "")) : ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
-                                            cache: true
-                                            sourceSize.width: 1080
-                                            sourceSize.height: 600
-                                            smooth: true
-                                            visible: status === Image.Ready
-                                            opacity: status === Image.Ready ? 1.0 : 0.0
-                                            Behavior on opacity { NumberAnimation { duration: 180 } }
-                                        }
-
-                                        // Fallback if screenshot is missing or loading
-                                        ColumnLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 8
-                                            visible: !heroPanel.currentItem || !heroPanel.currentItem.screenshots || heroPanel.currentItem.screenshots.length === 0
-
-                                            RyzoraIcon {
-                                                Layout.alignment: Qt.AlignHCenter
-                                                name: heroPanel.currentItem ? root.getCategoryIcon(heroPanel.currentItem.category) : "layout-grid"
-                                                size: 36
-                                                color: theme.textMuted
-                                            }
-                                            Text {
-                                                Layout.alignment: Qt.AlignHCenter
-                                                text: heroPanel.currentItem ? (heroPanel.currentItem.display_name || heroPanel.currentItem.name) : ""
-                                                font.pixelSize: 12
-                                                color: theme.textMuted
-                                            }
-                                        }
+                                    Text {
+                                        text: heroPanel.currentItem && heroPanel.currentItem.is_installed ? "Open Application" : "Get Application"
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: "#ffffff"
                                     }
                                 }
 
                                 MouseArea {
+                                    id: heroBtnMouse
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (heroPanel.currentItem) {
+                                            if (heroPanel.currentItem.is_installed) {
+                                                root.launchRequested(heroPanel.currentItem.id)
+                                            } else {
+                                                root.installRequested(heroPanel.currentItem.id)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Secondary Action Button: View Details
+                            Rectangle {
+                                height: 38
+                                implicitWidth: heroDetailsRow.implicitWidth + 24
+                                radius: theme.radiusSm
+                                color: heroDetailsMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.22) : Qt.rgba(255, 255, 255, 0.12)
+                                border.color: heroDetailsMouse.containsMouse ? theme.accent : Qt.rgba(255, 255, 255, 0.28)
+                                border.width: 1
+
+                                RowLayout {
+                                    id: heroDetailsRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    RyzoraIcon {
+                                        name: "info"
+                                        size: 13
+                                        color: "#FFFFFF"
+                                    }
+                                    Text {
+                                        text: "View Details"
+                                        font.pixelSize: 13
+                                        font.bold: false
+                                        color: "#FFFFFF"
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: heroDetailsMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (heroPanel.currentItem) {
@@ -893,32 +781,50 @@ Item {
                                     }
                                 }
                             }
+
+                            Item { Layout.fillWidth: true }
                         }
                     }
+                }
 
-                    // ── Lower Carousel Pill Navigation Bar (38px high) ──
+                // 5. Microsoft Store Floating Thumbnail Carousel Strip (52px high)
+                Rectangle {
+                    id: bottomStrip
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    anchors.bottomMargin: 12
+                    height: 52
+                    radius: 10
+                    color: Qt.rgba(15, 23, 42, 0.65)
+                    border.color: Qt.rgba(255, 255, 255, 0.14)
+                    border.width: 1
+                    z: 2
+                    clip: true
+
                     RowLayout {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: root.width < 760 ? 16 : 28
-                        Layout.rightMargin: root.width < 760 ? 16 : 28
-                        Layout.bottomMargin: 12
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
                         spacing: 8
 
-                        // Previous Chevron
+                        // Previous Slide Arrow
                         Rectangle {
-                            width: 28
-                            height: 28
-                            radius: 14
-                            color: prevThumbMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                            border.color: prevThumbMouse.containsMouse ? theme.accent : theme.borderSubtle
+                            width: 32
+                            height: 32
+                            radius: 16
+                            color: prevThumbMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.25) : Qt.rgba(255, 255, 255, 0.12)
+                            border.color: prevThumbMouse.containsMouse ? theme.accent : Qt.rgba(255, 255, 255, 0.20)
                             border.width: 1
 
                             Text {
                                 anchors.centerIn: parent
                                 text: "‹"
-                                font.pixelSize: 18
+                                font.pixelSize: 20
                                 font.bold: true
-                                color: theme.text
+                                color: "#FFFFFF"
                             }
 
                             MouseArea {
@@ -928,15 +834,18 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     var n = root.featuredItems.length
-                                    if (n > 0) root.featuredIndex = (root.featuredIndex - 1 + n) % n
+                                    if (n > 0) {
+                                        root.featuredIndex = (root.featuredIndex - 1 + n) % n
+                                    }
                                 }
                             }
                         }
 
-                        // Carousel Pills Row
+                        // Thumbnail Preview Cards Row
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            Layout.fillHeight: true
+                            spacing: 6
 
                             Repeater {
                                 model: root.featuredItems
@@ -947,45 +856,86 @@ Item {
                                     readonly property var thumbItem: modelData
 
                                     Layout.fillWidth: true
-                                    height: 32
-                                    radius: 6
+                                    Layout.fillHeight: true
+                                    Layout.topMargin: 4
+                                    Layout.bottomMargin: 4
+                                    radius: 7
                                     color: thumbCard.isSelected
-                                        ? (theme.resolvedTheme === "light" ? "#FFFFFF" : theme.surfaceElevated)
-                                        : (thumbCardMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#E8EFF8" : "#1A2338") : "transparent")
-                                    border.color: thumbCard.isSelected ? theme.accent : (thumbCardMouse.containsMouse ? theme.borderSubtle : "transparent")
+                                        ? Qt.rgba(255, 255, 255, 0.22)
+                                        : (thumbCardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
+                                    border.color: thumbCard.isSelected
+                                        ? Qt.rgba(255, 255, 255, 0.35)
+                                        : (thumbCardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.18) : "transparent")
                                     border.width: 1
                                     clip: true
 
                                     RowLayout {
-                                        anchors.centerIn: parent
-                                        width: parent.width - 16
-                                        spacing: 6
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        anchors.topMargin: 3
+                                        anchors.bottomMargin: 6
+                                        spacing: 8
 
-                                        Image {
-                                            width: 16
-                                            height: 16
-                                            source: thumbCard.thumbItem ? (thumbCard.thumbItem.icon_url || "") : ""
-                                            fillMode: Image.PreserveAspectFit
-                                            smooth: true
-                                            visible: status === Image.Ready
+                                        Rectangle {
+                                            width: 24
+                                            height: 24
+                                            radius: 6
+                                            color: Qt.rgba(255, 255, 255, 0.15)
+                                            border.color: Qt.rgba(255, 255, 255, 0.20)
+                                            border.width: 1
+
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 18
+                                                height: 18
+                                                source: thumbCard.thumbItem ? (thumbCard.thumbItem.icon_url || "") : ""
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                                visible: status === Image.Ready
+                                            }
+
+                                            RyzoraIcon {
+                                                anchors.centerIn: parent
+                                                visible: !thumbCard.thumbItem || !thumbCard.thumbItem.icon_url
+                                                name: thumbCard.thumbItem ? root.getCategoryIcon(thumbCard.thumbItem.category) : "layout-grid"
+                                                size: 14
+                                                color: "#FFFFFF"
+                                            }
                                         }
 
-                                        Text {
+                                        ColumnLayout {
                                             Layout.fillWidth: true
-                                            text: thumbCard.thumbItem ? (thumbCard.thumbItem.display_name || thumbCard.thumbItem.name || "") : ""
-                                            font.pixelSize: 11
-                                            font.bold: thumbCard.isSelected
-                                            color: thumbCard.isSelected ? theme.text : theme.textSecondary
-                                            elide: Text.ElideRight
+                                            spacing: 0
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: thumbCard.thumbItem ? (thumbCard.thumbItem.display_name || thumbCard.thumbItem.name || "") : ""
+                                                font.pixelSize: 11
+                                                font.bold: thumbCard.isSelected
+                                                color: "#FFFFFF"
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: thumbCard.thumbItem ? (thumbCard.thumbItem.category || "App") : ""
+                                                font.pixelSize: 9
+                                                color: Qt.rgba(255, 255, 255, 0.70)
+                                                elide: Text.ElideRight
+                                            }
                                         }
                                     }
 
-                                    // Active bottom indicator bar
+                                    // Microsoft Store Active Underline Indicator Bar
                                     Rectangle {
                                         anchors.bottom: parent.bottom
                                         anchors.left: parent.left
                                         anchors.right: parent.right
-                                        height: 2.5
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        height: 3
+                                        radius: 1.5
                                         color: theme.accent
                                         visible: thumbCard.isSelected
                                     }
@@ -1001,21 +951,21 @@ Item {
                             }
                         }
 
-                        // Next Chevron
+                        // Next Slide Arrow
                         Rectangle {
-                            width: 28
-                            height: 28
-                            radius: 14
-                            color: nextThumbMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                            border.color: nextThumbMouse.containsMouse ? theme.accent : theme.borderSubtle
+                            width: 32
+                            height: 32
+                            radius: 16
+                            color: nextThumbMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.25) : Qt.rgba(255, 255, 255, 0.12)
+                            border.color: nextThumbMouse.containsMouse ? theme.accent : Qt.rgba(255, 255, 255, 0.20)
                             border.width: 1
 
                             Text {
                                 anchors.centerIn: parent
                                 text: "›"
-                                font.pixelSize: 18
+                                font.pixelSize: 20
                                 font.bold: true
-                                color: theme.text
+                                color: "#FFFFFF"
                             }
 
                             MouseArea {
@@ -1025,7 +975,9 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     var n = root.featuredItems.length
-                                    if (n > 0) root.featuredIndex = (root.featuredIndex + 1) % n
+                                    if (n > 0) {
+                                        root.featuredIndex = (root.featuredIndex + 1) % n
+                                    }
                                 }
                             }
                         }
