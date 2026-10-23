@@ -220,6 +220,24 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     navigate("apps");
     saveShot("03b_apps_page.png");
 
+    // Apps: Discord details page (dark and light modes)
+    if (QObject *appsViewObj = rootObj ? rootObj->findChild<QObject*>("appsView") : nullptr) {
+        QVariantList appsList = backend->appsList();
+        for (const QVariant &v : appsList) {
+            if (v.toMap().value("id").toString() == "discord") {
+                QMetaObject::invokeMethod(appsViewObj, "setSelectedApp", Q_ARG(QVariant, v));
+                pumpEvents(25, 20000);
+                saveShot("03c_apps_discord_detail_dark.png");
+                setThemeMode("light");
+                saveShot("03d_apps_discord_detail_light.png");
+                setThemeMode("dark");
+                QMetaObject::invokeMethod(appsViewObj, "setSelectedApp", Q_ARG(QVariant, QVariant()));
+                pumpEvents(15, 20000);
+                break;
+            }
+        }
+    }
+
     // 4. Discover: Fastfetch category filter
     setDiscoverCategory("fastfetch");
     saveShot("04_discover_category_fastfetch.png");

@@ -17,6 +17,7 @@ Item {
     property int lightboxIndex: 0
     property string pendingAppId: ""
     property string pendingAction: ""
+    property string actionErrorMessage: ""
 
     // Dynamic responsive column count (cards stay between 220px and 270px wide)
     readonly property int responsiveColumns: {
@@ -41,6 +42,7 @@ Item {
         root.selectedScreenshotIndex = 0
         root.lightboxOpen = false
         root.lightboxIndex = 0
+        root.actionErrorMessage = ""
         root.selectedApp = app
     }
 
@@ -48,16 +50,19 @@ Item {
         root.selectedScreenshotIndex = 0
         root.lightboxOpen = false
         root.lightboxIndex = 0
+        root.actionErrorMessage = ""
         root.selectedApp = pkg
     }
 
     function requestInstall(appId) {
+        root.actionErrorMessage = ""
         root.pendingAppId = appId
         root.pendingAction = "install"
         root.installRequested(appId)
     }
 
     function requestUninstall(appId) {
+        root.actionErrorMessage = ""
         root.pendingAppId = appId
         root.pendingAction = "uninstall"
         root.uninstallRequested(appId)
@@ -80,12 +85,22 @@ Item {
             if (root.pendingAppId === appId) {
                 root.pendingAppId = ""
                 root.pendingAction = ""
+                if (!success) {
+                    root.actionErrorMessage = message || "Installation failed. Please try again."
+                } else {
+                    root.actionErrorMessage = ""
+                }
             }
         }
         function onAppUninstalled(appId, success, message) {
             if (root.pendingAppId === appId) {
                 root.pendingAppId = ""
                 root.pendingAction = ""
+                if (!success) {
+                    root.actionErrorMessage = message || "Removal failed. Please try again."
+                } else {
+                    root.actionErrorMessage = ""
+                }
             }
         }
     }
@@ -1250,7 +1265,7 @@ Item {
         id: appDetailOverlay
         anchors.fill: parent
         visible: root.selectedApp !== null
-        color: theme.background
+        color: theme.bg
         z: 10
 
         Flickable {
@@ -1317,10 +1332,52 @@ Item {
                     Item { Layout.fillWidth: true }
                 }
 
-                // ── 2. Product Header Area (Compact, Neutral, Integrated Action) ──
+                // ── Action Error Notification Banner (Visible on failure) ──
                 Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: headerContent.implicitHeight + 36
+                    implicitHeight: errRow.implicitHeight + 20
+                    radius: theme.radiusSm
+                    visible: root.actionErrorMessage !== ""
+                    color: theme.resolvedTheme === "light" ? "#FEF2F2" : "#450A0A"
+                    border.color: "#EF4444"
+                    border.width: 1
+
+                    RowLayout {
+                        id: errRow
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 12
+
+                        RyzoraIcon { name: "alert-circle"; size: 16; color: "#EF4444" }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.actionErrorMessage
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: theme.resolvedTheme === "light" ? "#B91C1C" : "#FCA5A5"
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Rectangle {
+                            width: 24; height: 24; radius: 12
+                            color: errCloseMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#FEE2E2" : "#7F1D1D") : "transparent"
+                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: theme.textSecondary }
+                            MouseArea {
+                                id: errCloseMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.actionErrorMessage = ""
+                            }
+                        }
+                    }
+                }
+
+                // ── 2. Product Header Area (Prominent Icon, Identity & Primary Actions) ──
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: headerContent.implicitHeight + 40
                     radius: theme.radiusMd
                     color: theme.surface
                     border.color: theme.borderSubtle
@@ -1329,23 +1386,23 @@ Item {
                     RowLayout {
                         id: headerContent
                         anchors.fill: parent
-                        anchors.margins: root.width < 760 ? 16 : 22
-                        spacing: 20
+                        anchors.margins: root.width < 760 ? 18 : 26
+                        spacing: 24
 
-                        // App Icon (80x80)
+                        // App Icon (88x88 squircle)
                         Rectangle {
                             Layout.alignment: Qt.AlignVCenter
-                            width: 80
-                            height: 80
-                            radius: 16
+                            width: 88
+                            height: 88
+                            radius: 18
                             color: theme.surfaceElevated
                             border.color: theme.borderSubtle
                             border.width: 1
 
                             Image {
                                 anchors.centerIn: parent
-                                width: 56
-                                height: 56
+                                width: 62
+                                height: 62
                                 source: root.selectedApp ? (root.selectedApp.icon_url || "") : ""
                                 fillMode: Image.PreserveAspectFit
                                 smooth: true
@@ -1356,7 +1413,7 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !root.selectedApp || !root.selectedApp.icon_url || root.selectedApp.icon_url === ""
                                 name: root.selectedApp ? root.getCategoryIcon(root.selectedApp.category) : "layout-grid"
-                                size: 38
+                                size: 42
                                 color: theme.textMuted
                             }
                         }
@@ -1370,11 +1427,11 @@ Item {
                             // Title & Installed Status
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 10
+                                spacing: 12
 
                                 Text {
                                     text: root.selectedApp ? (root.selectedApp.display_name || root.selectedApp.name || "") : ""
-                                    font.pixelSize: 24
+                                    font.pixelSize: 26
                                     font.bold: true
                                     color: theme.text
                                     elide: Text.ElideRight
@@ -1383,9 +1440,9 @@ Item {
 
                                 // Status Badge
                                 Rectangle {
-                                    height: 22
-                                    radius: 11
-                                    implicitWidth: badgeText.implicitWidth + 16
+                                    height: 24
+                                    radius: 12
+                                    implicitWidth: badgeText.implicitWidth + 18
                                     color: root.selectedApp && root.selectedApp.is_installed
                                         ? (theme.resolvedTheme === "light" ? "#ECFDF5" : "#064E3B")
                                         : theme.surfaceElevated
@@ -1396,7 +1453,7 @@ Item {
 
                                     RowLayout {
                                         anchors.centerIn: parent
-                                        spacing: 5
+                                        spacing: 6
                                         Rectangle {
                                             width: 6; height: 6; radius: 3
                                             color: root.selectedApp && root.selectedApp.is_installed ? "#10B981" : theme.accent
@@ -1418,7 +1475,7 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 text: root.selectedApp ? (root.selectedApp.publisher + " · " + root.selectedApp.category + " · " + (root.selectedApp.repository ? (root.selectedApp.repository + " (Official Arch)") : "Arch Linux Native")) : ""
-                                font.pixelSize: 12
+                                font.pixelSize: 13
                                 color: theme.textMuted
                                 elide: Text.ElideRight
                             }
@@ -1428,7 +1485,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: root.selectedApp ? (root.selectedApp.summary || root.selectedApp.description || "") : ""
                                 font.pixelSize: 13
-                                lineHeight: 1.3
+                                lineHeight: 1.35
                                 color: theme.textSecondary
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 2
@@ -1444,8 +1501,8 @@ Item {
                             // Primary Action: Open Application (if installed)
                             Rectangle {
                                 visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
-                                height: 38
-                                implicitWidth: Math.max(150, openBtnRow.implicitWidth + 28)
+                                height: 40
+                                implicitWidth: Math.max(160, openBtnRow.implicitWidth + 32)
                                 radius: theme.radiusSm
                                 color: openBtnMouse.containsMouse ? theme.accentHover : theme.accent
 
@@ -1453,7 +1510,7 @@ Item {
                                     id: openBtnRow
                                     anchors.centerIn: parent
                                     spacing: 8
-                                    RyzoraIcon { name: "play"; size: 12; color: "#ffffff" }
+                                    RyzoraIcon { name: "play"; size: 13; color: "#ffffff" }
                                     Text {
                                         text: "Open Application"
                                         font.pixelSize: 13
@@ -1478,8 +1535,8 @@ Item {
                             // Primary Action: Get / Install (if not installed)
                             Rectangle {
                                 visible: Boolean(root.selectedApp && !root.selectedApp.is_installed)
-                                height: 38
-                                implicitWidth: Math.max(150, installBtnRow.implicitWidth + 28)
+                                height: 40
+                                implicitWidth: Math.max(160, installBtnRow.implicitWidth + 32)
                                 radius: theme.radiusSm
                                 color: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "")
                                     ? theme.borderStrong
@@ -1490,9 +1547,18 @@ Item {
                                     anchors.centerIn: parent
                                     spacing: 8
                                     RyzoraIcon {
+                                        id: installSpinIcon
                                         name: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "") ? "refresh-cw" : "download"
-                                        size: 12
+                                        size: 13
                                         color: "#ffffff"
+                                        RotationAnimator {
+                                            target: installSpinIcon
+                                            from: 0
+                                            to: 360
+                                            duration: 1000
+                                            loops: Animation.Infinite
+                                            running: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "")
+                                        }
                                     }
                                     Text {
                                         text: root.pendingAppId === (root.selectedApp ? root.selectedApp.id : "") ? "Installing..." : "Get Application"
@@ -1519,8 +1585,8 @@ Item {
                             // Secondary Action: Uninstall (if installed)
                             Rectangle {
                                 visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
-                                height: 32
-                                implicitWidth: Math.max(150, uninstBtnRow.implicitWidth + 20)
+                                height: 34
+                                implicitWidth: Math.max(160, uninstBtnRow.implicitWidth + 24)
                                 radius: theme.radiusSm
                                 color: uninstBtnMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#FEE2E2" : "#451A1A") : theme.surfaceElevated
                                 border.color: uninstBtnMouse.containsMouse ? "#EF4444" : theme.borderSubtle
@@ -1568,7 +1634,7 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 10
 
                         Text {
                             text: "Screenshots"
@@ -1577,13 +1643,19 @@ Item {
                             color: theme.text
                         }
 
+                        Text {
+                            text: (root.selectedApp && root.selectedApp.screenshots) ? ("(" + root.selectedApp.screenshots.length + ")") : ""
+                            font.pixelSize: 14
+                            color: theme.textMuted
+                        }
+
                         Item { Layout.fillWidth: true }
 
                         // Gallery Prev Button
                         Rectangle {
-                            width: 28
-                            height: 28
-                            radius: 14
+                            width: 30
+                            height: 30
+                            radius: 15
                             color: prevGalMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                             border.color: theme.borderSubtle
                             border.width: 1
@@ -1592,7 +1664,7 @@ Item {
                             Text {
                                 anchors.centerIn: parent
                                 text: "‹"
-                                font.pixelSize: 16
+                                font.pixelSize: 18
                                 font.bold: true
                                 color: theme.text
                             }
@@ -1602,15 +1674,15 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: galFlick.contentX = Math.max(0, galFlick.contentX - 400)
+                                onClicked: galFlick.contentX = Math.max(0, galFlick.contentX - 440)
                             }
                         }
 
                         // Gallery Next Button
                         Rectangle {
-                            width: 28
-                            height: 28
-                            radius: 14
+                            width: 30
+                            height: 30
+                            radius: 15
                             color: nextGalMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                             border.color: theme.borderSubtle
                             border.width: 1
@@ -1619,7 +1691,7 @@ Item {
                             Text {
                                 anchors.centerIn: parent
                                 text: "›"
-                                font.pixelSize: 16
+                                font.pixelSize: 18
                                 font.bold: true
                                 color: theme.text
                             }
@@ -1629,34 +1701,34 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: galFlick.contentX = Math.min(galFlick.contentWidth - galFlick.width, galFlick.contentX + 400)
+                                onClicked: galFlick.contentX = Math.min(galFlick.contentWidth - galFlick.width, galFlick.contentX + 440)
                             }
                         }
                     }
 
-                    // Horizontal Scrolling Gallery
+                    // Horizontal Scrolling Gallery (16:9 widescreen cards)
                     Flickable {
                         id: galFlick
                         Layout.fillWidth: true
-                        height: 230
+                        height: root.width < 760 ? 200 : 258
                         contentWidth: galRow.implicitWidth
-                        contentHeight: 230
+                        contentHeight: height
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
 
-                        Behavior on contentX { NumberAnimation { duration: 200 } }
+                        Behavior on contentX { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
                         RowLayout {
                             id: galRow
-                            height: 230
+                            height: galFlick.height
                             spacing: 16
 
                             Repeater {
                                 model: (root.selectedApp && root.selectedApp.screenshots) ? root.selectedApp.screenshots : []
 
                                 Rectangle {
-                                    width: 380
-                                    height: 220
+                                    width: root.width < 760 ? 320 : 440
+                                    height: root.width < 760 ? 180 : 248
                                     radius: theme.radiusMd
                                     color: theme.surfaceElevated
                                     border.color: scrMouse.containsMouse ? theme.accent : theme.borderSubtle
@@ -1676,16 +1748,16 @@ Item {
                                         anchors.top: parent.top
                                         anchors.right: parent.right
                                         anchors.margins: 10
-                                        width: 28
-                                        height: 28
-                                        radius: 14
-                                        color: Qt.rgba(0, 0, 0, 0.6)
+                                        width: 32
+                                        height: 32
+                                        radius: 16
+                                        color: Qt.rgba(0, 0, 0, 0.65)
                                         visible: scrMouse.containsMouse
 
                                         RyzoraIcon {
                                             anchors.centerIn: parent
                                             name: "maximize-2"
-                                            size: 13
+                                            size: 14
                                             color: "#FFFFFF"
                                         }
                                     }
@@ -1720,7 +1792,7 @@ Item {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: aboutDescCol.implicitHeight + 36
+                        implicitHeight: aboutDescCol.implicitHeight + 40
                         radius: theme.radiusMd
                         color: theme.surface
                         border.color: theme.borderSubtle
@@ -1729,30 +1801,87 @@ Item {
                         ColumnLayout {
                             id: aboutDescCol
                             anchors.fill: parent
-                            anchors.margins: 22
-                            spacing: 16
+                            anchors.margins: 24
+                            spacing: 18
 
+                            // Main Description Text
                             Text {
                                 Layout.fillWidth: true
                                 text: root.selectedApp ? (root.selectedApp.description || root.selectedApp.summary || "") : ""
                                 font.pixelSize: 14
-                                lineHeight: 1.55
+                                lineHeight: 1.6
                                 color: theme.text
                                 wrapMode: Text.WordWrap
                             }
 
-                            // If summary differs from description, show clean highlight
-                            Rectangle {
+                            // Key Features Subsection
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                height: 1
-                                color: theme.borderSubtle
-                                visible: Boolean(root.selectedApp && root.selectedApp.summary && root.selectedApp.description && root.selectedApp.summary !== root.selectedApp.description)
+                                spacing: 14
+                                visible: Boolean(root.selectedApp && root.selectedApp.features && root.selectedApp.features.length > 0)
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: theme.borderSubtle
+                                }
+
+                                Text {
+                                    text: "Key features"
+                                    font.pixelSize: 15
+                                    font.bold: true
+                                    color: theme.text
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.width < 760 ? 1 : 2
+                                    columnSpacing: 24
+                                    rowSpacing: 12
+
+                                    Repeater {
+                                        model: (root.selectedApp && root.selectedApp.features) ? root.selectedApp.features : []
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Layout.alignment: Qt.AlignTop
+                                            spacing: 10
+
+                                            Rectangle {
+                                                width: 20
+                                                height: 20
+                                                radius: 10
+                                                color: theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E293B"
+                                                border.color: theme.accent
+                                                border.width: 1
+                                                Layout.alignment: Qt.AlignTop
+
+                                                RyzoraIcon {
+                                                    anchors.centerIn: parent
+                                                    name: "check"
+                                                    size: 11
+                                                    color: theme.accent
+                                                }
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData
+                                                font.pixelSize: 13
+                                                color: theme.textSecondary
+                                                wrapMode: Text.WordWrap
+                                                lineHeight: 1.35
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
+                            // If summary differs from description and no features list, show clean highlight
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 10
-                                visible: Boolean(root.selectedApp && root.selectedApp.summary && root.selectedApp.description && root.selectedApp.summary !== root.selectedApp.description)
+                                visible: Boolean(root.selectedApp && (!root.selectedApp.features || root.selectedApp.features.length === 0) && root.selectedApp.summary && root.selectedApp.description && root.selectedApp.summary !== root.selectedApp.description)
 
                                 RyzoraIcon {
                                     name: "check"

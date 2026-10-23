@@ -438,6 +438,7 @@ ApplicationWindow {
 
                 AppsView {
                     id: appsView
+                    objectName: "appsView"
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "apps"
                     onAppSelected: function(app) {

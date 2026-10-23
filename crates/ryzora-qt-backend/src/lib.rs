@@ -87,6 +87,8 @@ pub struct ApplicationItem {
     pub icon_url: String,
     pub banner_url: String,
     pub screenshots: Vec<String>,
+    #[serde(default)]
+    pub features: Vec<String>,
     pub is_installed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installed_version: Option<String>,
@@ -1879,6 +1881,96 @@ impl BackendState {
         None
     }
 
+    pub fn get_curated_app_features(id: &str) -> Vec<String> {
+        match id {
+            "discord" => vec![
+                "Low-latency voice channels and high-definition video calls".into(),
+                "Custom server channels, roles, and community moderation tools".into(),
+                "Screen sharing and live streaming up to 1080p 60fps".into(),
+                "Direct messaging, group conversations, and rich file sharing".into(),
+                "Rich presence game integration and desktop notifications".into(),
+            ],
+            "firefox" => vec![
+                "Enhanced Tracking Protection blocking third-party tracking cookies".into(),
+                "Fast SpiderMonkey JavaScript engine with multi-process sandboxing".into(),
+                "Extensive add-on and customizable browser theme ecosystem".into(),
+                "Cross-device sync for tabs, bookmarks, logins, and history".into(),
+                "Built-in PDF editor, screenshot utility, and Picture-in-Picture video".into(),
+            ],
+            "chromium" => vec![
+                "Open-source Chromium foundation with Google V8 JavaScript engine".into(),
+                "Strict multi-process site isolation architecture for security".into(),
+                "Full support for modern web standards, WebAssembly, and WebGPU".into(),
+                "Chrome Web Store extension compatibility".into(),
+            ],
+            "code" | "visual-studio-code-bin" => vec![
+                "IntelliSense code completion, parameter hints, and peek definition".into(),
+                "Integrated interactive terminal and Git version control workflows".into(),
+                "Extensible extension marketplace supporting Rust, Python, Go, and C++".into(),
+                "Interactive debugger with breakpoints, variable inspection, and call stacks".into(),
+            ],
+            "vlc" => vec![
+                "Universal codec support: MPEG-4, H.264, H.265, VP9, AV1, MKV, and FLAC".into(),
+                "Hardware-accelerated video decoding via VA-API and VDPAU on Linux".into(),
+                "Network stream playback for HTTP, RTSP, RTMP, and IPTV channels".into(),
+                "Advanced audio/video equalizer, subtitle synchronization, and visualizer".into(),
+            ],
+            "obs-studio" => vec![
+                "Real-time video/audio capturing and high-performance scene composition".into(),
+                "Hardware-accelerated encoding via NVENC, VA-API, and QuickSync".into(),
+                "Intuitive audio mixer with per-source noise suppression and gain filters".into(),
+                "Direct live streaming to Twitch, YouTube, Kick, and custom RTMP endpoints".into(),
+            ],
+            "blender" => vec![
+                "Comprehensive 3D pipeline: modeling, sculpting, UV unwrapping, and rigging".into(),
+                "Photorealistic Cycles raytracer and real-time EEVEE Next viewport renderers".into(),
+                "Grease Pencil 2D animation and storyboarding integrated directly in 3D".into(),
+                "Python API for procedural generation, automation, and custom tooling".into(),
+            ],
+            "steam" => vec![
+                "Instant access to thousands of native and Proton-enabled Linux games".into(),
+                "Steam Cloud save synchronisation across all your desktop devices".into(),
+                "Steam Community Workshop, user discussions, and mod support".into(),
+                "Steam Remote Play streaming to TV, handheld, and secondary devices".into(),
+            ],
+            "spotify" => vec![
+                "Streaming catalogue of over 100 million songs and podcasts".into(),
+                "Spotify Connect device handoff between desktop, phone, and speakers".into(),
+                "Personalized Discover Weekly and Daily Mix algorithmic playlists".into(),
+                "High quality audio streaming with crossfade and gapless playback".into(),
+            ],
+            "gimp" => vec![
+                "Advanced photo retouching, color grading, and digital composition tools".into(),
+                "Comprehensive layer management with alpha channels, masks, and blend modes".into(),
+                "Extensible GEGL engine providing non-destructive image processing".into(),
+                "Native support for PSD, TIFF, PNG, JPEG, SVG, and modern WebP formats".into(),
+            ],
+            "inkscape" => vec![
+                "Native W3C SVG vector illustration, typography, and diagram authoring".into(),
+                "Precision Bezier curves, spiro splines, node editing, and path boolean ops".into(),
+                "Live path effects including pattern along path, envelope deformation, and fillets".into(),
+                "Export to SVG, PDF, EPS, PNG, and CAD DXF standards".into(),
+            ],
+            "alacritty" => vec![
+                "GPU-accelerated OpenGL terminal rendering delivering ultra-low input latency".into(),
+                "Lightweight, memory-efficient architecture implemented in Rust".into(),
+                "Vi-mode keyboard navigation, text search, and regex URL detection".into(),
+                "Clean declarative configuration for fonts, colors, and key bindings".into(),
+            ],
+            "cursor" => vec![
+                "AI-native pair programmer with intelligent whole-codebase indexing".into(),
+                "Inline multi-line code generation, editing, and terminal command execution".into(),
+                "Seamless VS Code extension, keybinding, and theme compatibility".into(),
+            ],
+            "telegram-desktop" => vec![
+                "Fast, cloud-synchronized chat history accessible on all devices".into(),
+                "Large group channels supporting up to 200,000 members and live voice rooms".into(),
+                "High capacity file sharing up to 2 GB per file with instant media preview".into(),
+            ],
+            _ => vec![],
+        }
+    }
+
     pub fn query_applications(&self, repo_root_hint: Option<&Path>, category: &str, search: &str) -> Vec<ApplicationItem> {
         let repo_root = Self::resolve_repo_root(repo_root_hint);
         let apps_dir = repo_root.join("public/assets/apps");
@@ -1951,10 +2043,10 @@ impl BackendState {
                 "0.0.64",
                 "extra",
                 "Voice, video, and text communication platform for communities",
-                "All-in-one voice and text chat for communities and gamers that is free, secure, and works on desktop.",
+                "Discord is the easiest way to talk over voice, video, and text. Talk, chat, hang out, and stay close with your friends and communities. Create invite-only spaces where you can organize channels by topic, collaborate on projects, share gaming moments, or just catch up over group calls with screen sharing.",
                 "discord/icon.png",
                 "",
-                vec![],
+                vec!["discord/screen1.jpg", "discord/screen2.jpg"],
                 "https://discord.com",
                 "Proprietary",
             ),
@@ -1969,7 +2061,7 @@ impl BackendState {
                 "Valve's digital gaming distribution platform, Proton compatibility runtime, and community launcher.",
                 "steam/icon.png",
                 "",
-                vec![],
+                vec!["steam/screen1.jpg", "steam/screen2.jpg"],
                 "https://store.steampowered.com/",
                 "Proprietary",
             ),
@@ -1984,7 +2076,7 @@ impl BackendState {
                 "High-performance, multi-platform media player and streaming server capable of playing virtually any media codec.",
                 "vlc/icon.svg",
                 "",
-                vec![],
+                vec!["vlc/screen1.jpg", "vlc/screen2.jpg"],
                 "https://www.videolan.org/vlc/",
                 "GPL-2.0-or-later",
             ),
@@ -2014,7 +2106,7 @@ impl BackendState {
                 "Free and open source software for video recording and live streaming equipped with real-time video/audio capturing and mixing.",
                 "obs-studio/icon.svg",
                 "",
-                vec![],
+                vec!["obs-studio/screen1.jpg"],
                 "https://obsproject.com/",
                 "GPL-2.0-or-later",
             ),
@@ -2044,7 +2136,7 @@ impl BackendState {
                 "Professional vector graphics editor for Linux, Windows, and macOS with comprehensive vector illustration tools.",
                 "inkscape/icon.svg",
                 "",
-                vec![],
+                vec!["inkscape/screen1.jpg", "inkscape/screen2.jpg"],
                 "https://inkscape.org/",
                 "GPL-3.0-or-later",
             ),
@@ -2104,7 +2196,7 @@ impl BackendState {
                 "Official desktop client for the Spotify music and podcast streaming service.",
                 "spotify/icon.png",
                 "",
-                vec![],
+                vec!["spotify/screen1.jpg", "spotify/screen2.jpg"],
                 "https://spotify.com",
                 "Proprietary",
             ),
@@ -2278,6 +2370,7 @@ impl BackendState {
                 icon_url,
                 banner_url,
                 screenshots,
+                features: Self::get_curated_app_features(id),
                 is_installed,
                 installed_version,
                 launchable: Some(id.to_string()),

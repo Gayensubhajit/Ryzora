@@ -57,6 +57,7 @@ QtObject {
 
     // Surfaces & Canvas (Monochrome Deep Black Hierarchy matching --rz-* tokens)
     readonly property color bg: resolvedTheme === "light" ? "#F5F6F9" : "#14161A"
+    readonly property alias background: root.bg
     readonly property color sidebarBg: resolvedTheme === "light" ? "#EBECEF" : "#101215"
     readonly property color surface: resolvedTheme === "light" ? "#FFFFFF" : "#1C1F24"
     readonly property color surfaceElevated: resolvedTheme === "light" ? "#FFFFFF" : "#242830"
