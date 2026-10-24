@@ -3027,12 +3027,16 @@ dependencies = [
 name = "ryzora-core"
 version = "0.1.0"
 dependencies = [
+ "flate2",
+ "hex",
  "percent-encoding",
  "semver",
  "serde",
  "serde_json",
  "sha2",
+ "tar",
  "tempfile",
+ "ureq",
  "url",
 ]
 

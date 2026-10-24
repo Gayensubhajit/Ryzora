@@ -112,12 +112,24 @@ Item {
             border.color: theme.border
             border.width: 1
 
+            // Empty State
+            EmptyState {
+                anchors.centerIn: parent
+                visible: backend.snapshotsCount === 0 && !backend.isSnapshotsLoading
+                iconName: "package"
+                title: "No Snapshots Created"
+                message: "Create a system snapshot to preserve your active configuration, integration drop-ins, and installed packages."
+                actionLabel: "Create First Snapshot"
+                onActionClicked: backend.createSnapshot("Initial manual snapshot")
+            }
+
             ListView {
                 id: snapshotList
                 anchors.fill: parent
                 anchors.margins: 12
                 spacing: 10
                 clip: true
+                visible: backend.snapshotsCount > 0
                 model: backend.snapshotsList
 
                 delegate: Rectangle {

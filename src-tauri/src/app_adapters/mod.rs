@@ -1,25 +1,28 @@
 //! Ryzora Application Adapters — Phase 23
 //!
-//! Orchestrates native and universal package managers across Linux distributions.
-//! Phase 23A implements the Pacman adapter for Arch Linux.
+//! Re-exports the shared `ryzora_core::app_adapters` implementation and wraps it
+//! with Tauri IPC commands and event streaming.
 
-pub mod fastfetch_runner;
-pub mod pacman;
-pub mod transaction;
-pub mod catalog;
-pub mod aur;
-pub mod flatpak;
-pub mod cleanup;
+pub use ryzora_core::app_adapters::{
+    aur, catalog, cleanup, desktop_icons, fastfetch_runner, flatpak, pacman, transaction,
+    check_app_installed_across_providers, detect_host_app_ecosystem_in, install_app_with_provider,
+    invalidate_app_provider_cache, is_valid_package_name, launch_app_with_provider,
+    launch_desktop_app_core, pacman_install_package_core, pacman_uninstall_package_core,
+    resolve_app_providers_sync, resolve_local_app_providers, uninstall_app_with_provider,
+    AppProviderSource, HostAppEcosystem,
+};
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use crate::package_helper::PACKAGE_HELPER_SYSTEM_PATH;
-use crate::app_adapters::transaction::{parse_flatpak_line, parse_pacman_line, split_output_lines, FlatpakTransactionParserState, TransactionParserState, TransactionProgressEvent};
+use crate::app_adapters::transaction::{
+    parse_flatpak_line, parse_pacman_line, split_output_lines, FlatpakTransactionParserState,
+    TransactionParserState, TransactionProgressEvent,
+};
 
 static ACTIVE_TRANSACTION: AtomicBool = AtomicBool::new(false);
 
@@ -27,111 +30,6 @@ struct TransactionGuard;
 impl Drop for TransactionGuard {
     fn drop(&mut self) {
         ACTIVE_TRANSACTION.store(false, Ordering::SeqCst);
-    }
-}
-
-/// Information about the host application ecosystem and available package managers.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct HostAppEcosystem {
-    pub distro_id: String,
-    pub distro_name: String,
-    pub distro_family: String,
-    pub available_managers: Vec<String>,
-    pub primary_manager: String,
-    pub has_pacman: bool,
-    pub has_aur_helper: bool,
-    pub aur_helper: Option<String>,
-    pub has_flatpak: bool,
-}
-
-/// Detects available package managers on the host system using zero-subprocess file checks.
-pub fn detect_host_app_ecosystem_in(home: &Path) -> HostAppEcosystem {
-    let host_caps = crate::host::detect_host_capabilities_in(home);
-
-    let distro_id = host_caps.distro_id.to_lowercase();
-    let distro_family = if distro_id == "arch"
-        || distro_id == "garuda"
-        || distro_id == "endeavouros"
-        || distro_id == "manjaro"
-    {
-        "arch".to_string()
-    } else if distro_id == "debian"
-        || distro_id == "ubuntu"
-        || distro_id == "pop"
-        || distro_id == "linuxmint"
-    {
-        "debian".to_string()
-    } else if distro_id == "fedora" || distro_id == "rhel" || distro_id == "nobara" {
-        "fedora".to_string()
-    } else if distro_id == "opensuse" || distro_id.contains("suse") {
-        "opensuse".to_string()
-    } else if distro_id == "nixos" {
-        "nixos".to_string()
-    } else {
-        "generic".to_string()
-    };
-
-    let mut available = Vec::new();
-
-    let (has_pacman, _) = crate::system::check_binary("pacman");
-    if has_pacman {
-        available.push("pacman".to_string());
-    }
-
-    let (has_paru, _) = crate::system::check_binary("paru");
-    let (has_yay, _) = crate::system::check_binary("yay");
-    let aur_helper = if has_paru {
-        available.push("paru".to_string());
-        Some("paru".to_string())
-    } else if has_yay {
-        available.push("yay".to_string());
-        Some("yay".to_string())
-    } else {
-        None
-    };
-
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
-    if has_flatpak {
-        available.push("flatpak".to_string());
-    }
-
-    let (has_apt, _) = crate::system::check_binary("apt");
-    if has_apt {
-        available.push("apt".to_string());
-    }
-
-    let (has_dnf, _) = crate::system::check_binary("dnf");
-    if has_dnf {
-        available.push("dnf".to_string());
-    }
-
-    let (has_zypper, _) = crate::system::check_binary("zypper");
-    if has_zypper {
-        available.push("zypper".to_string());
-    }
-
-    let primary = if has_pacman {
-        "pacman".to_string()
-    } else if has_flatpak {
-        "flatpak".to_string()
-    } else if has_apt {
-        "apt".to_string()
-    } else if has_dnf {
-        "dnf".to_string()
-    } else {
-        "none".to_string()
-    };
-
-    HostAppEcosystem {
-        distro_id: host_caps.distro_id,
-        distro_name: host_caps.distro_name,
-        distro_family,
-        available_managers: available,
-        primary_manager: primary,
-        has_pacman,
-        has_aur_helper: aur_helper.is_some(),
-        aur_helper,
-        has_flatpak,
     }
 }
 
@@ -146,14 +44,19 @@ pub fn get_host_app_ecosystem() -> Result<HostAppEcosystem, String> {
 }
 
 #[tauri::command]
-pub fn pacman_search_packages(query: String, limit: Option<usize>) -> Result<Vec<pacman::PacmanPackageInfo>, String> {
+pub fn pacman_search_packages(
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<pacman::PacmanPackageInfo>, String> {
     let sync_dir = pacman::resolve_sync_dir(None);
     let local_dir = pacman::resolve_local_dir(None);
     pacman::search_pacman_packages_in(&query, &sync_dir, &local_dir, limit.unwrap_or(50))
 }
 
 #[tauri::command]
-pub fn pacman_get_package_details(package_name: String) -> Result<Option<pacman::PacmanPackageInfo>, String> {
+pub fn pacman_get_package_details(
+    package_name: String,
+) -> Result<Option<pacman::PacmanPackageInfo>, String> {
     let sync_dir = pacman::resolve_sync_dir(None);
     let local_dir = pacman::resolve_local_dir(None);
     pacman::get_pacman_package_details_in(&package_name, &sync_dir, &local_dir)
@@ -165,160 +68,15 @@ pub fn pacman_list_installed_packages() -> Result<Vec<pacman::PacmanPackageInfo>
     pacman::list_installed_pacman_packages_in(&local_dir)
 }
 
-fn is_valid_package_name(name: &str) -> bool {
-    !name.is_empty()
-        && !name.starts_with('-')
-        && !name.starts_with('.')
-        && !name.starts_with('+')
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '+' || c == '@')
-}
-
 #[tauri::command]
 pub fn pacman_install_package(package_name: String) -> Result<serde_json::Value, String> {
-    if !is_valid_package_name(&package_name) {
-        return Err(format!("Invalid package name '{}'", package_name));
-    }
-
-    let sync_dir = pacman::resolve_sync_dir(None);
-    let local_dir = pacman::resolve_local_dir(None);
-
-    let pkg_opt = pacman::get_pacman_package_details_in(&package_name, &sync_dir, &local_dir)?;
-
-    // In test environment or test mode (RYZORA_SYSTEM_ROOT set), simulate install into sandbox local db
-    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
-        let pkg = pkg_opt.ok_or_else(|| format!("Package '{}' not found in pacman repositories", package_name))?;
-
-        let pkg_dir = local_dir.join(format!("{}-{}", pkg.name, pkg.version));
-        fs::create_dir_all(&pkg_dir)
-            .map_err(|e| format!("Failed to create mock package dir: {}", e))?;
-        let desc_content = format!(
-            "%NAME%\n{}\n\n%VERSION%\n{}\n\n%DESC%\n{}\n\n%URL%\n{}\n\n%LICENSE%\n{}\n",
-            pkg.name,
-            pkg.version,
-            pkg.description,
-            pkg.url.as_deref().unwrap_or(""),
-            pkg.license.as_deref().unwrap_or("")
-        );
-        fs::write(pkg_dir.join("desc"), desc_content)
-            .map_err(|e| format!("Failed to write mock desc file: {}", e))?;
-
-        return Ok(serde_json::json!({
-            "success": true,
-            "message": format!("Installed '{}' successfully (test mode)", package_name),
-            "package_name": package_name,
-            "version": pkg.version
-        }));
-    }
-
-    // Live mode: invoke pkexec pacman -S --noconfirm <package_name>
-    let output = std::process::Command::new("pkexec")
-        .arg("pacman")
-        .arg("-S")
-        .arg("--noconfirm")
-        .arg(&package_name)
-        .output()
-        .map_err(|e| format!("Failed to invoke pkexec: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let detail = if !stderr.trim().is_empty() {
-            stderr.trim().to_string()
-        } else if !stdout.trim().is_empty() {
-            stdout.trim().to_string()
-        } else {
-            format!("pacman exited with status code {:?}", output.status.code())
-        };
-        return Err(format!("Installation failed: {}", detail));
-    }
-
-    // Determine installed version from local db
-    let (_, installed_version) = pacman::check_installed_status_in(&package_name, &local_dir);
-
-    Ok(serde_json::json!({
-        "success": true,
-        "message": format!("Installed '{}' successfully", package_name),
-        "package_name": package_name,
-        "version": installed_version.unwrap_or_else(|| pkg_opt.map(|p| p.version).unwrap_or_else(|| "latest".to_string()))
-    }))
+    pacman_install_package_core(&package_name)
 }
 
 #[tauri::command]
 pub fn pacman_uninstall_package(package_name: String) -> Result<serde_json::Value, String> {
-    if !is_valid_package_name(&package_name) {
-        return Err(format!("Invalid package name '{}'", package_name));
-    }
-
-    let local_dir = pacman::resolve_local_dir(None);
-    let (is_installed, ver) = pacman::check_installed_status_in(&package_name, &local_dir);
-
-    // In test environment or test mode (RYZORA_SYSTEM_ROOT set), simulate uninstall by removing mock package dir
-    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
-        if !is_installed {
-            return Err(format!("Package '{}' is not installed", package_name));
-        }
-        if let Some(v) = ver {
-            let pkg_dir = local_dir.join(format!("{}-{}", package_name, v));
-            if pkg_dir.exists() {
-                let _ = fs::remove_dir_all(&pkg_dir);
-            }
-        }
-        return Ok(serde_json::json!({
-            "success": true,
-            "message": format!("Uninstalled '{}' successfully (test mode)", package_name),
-            "package_name": package_name
-        }));
-    }
-
-    if !is_installed {
-        return Err(format!("Package '{}' is not installed", package_name));
-    }
-
-    // Live mode: invoke pkexec pacman -R --noconfirm <package_name>
-    let output = std::process::Command::new("pkexec")
-        .arg("pacman")
-        .arg("-R")
-        .arg("--noconfirm")
-        .arg(&package_name)
-        .output()
-        .map_err(|e| format!("Failed to invoke pkexec: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let detail = if !stderr.trim().is_empty() {
-            stderr.trim().to_string()
-        } else if !stdout.trim().is_empty() {
-            stdout.trim().to_string()
-        } else {
-            format!("pacman exited with status code {:?}", output.status.code())
-        };
-
-        // Handle "target not found" race: if Pacman reports target not found,
-        // perform authoritative ALPM check. If package is actually absent, treat as success.
-        let detail_lower = detail.to_ascii_lowercase();
-        if detail_lower.contains("target not found") || detail_lower.contains("was not found") {
-            let (still_installed, _) = pacman::check_installed_status_in(&package_name, &local_dir);
-            if !still_installed {
-                return Ok(serde_json::json!({
-                    "success": true,
-                    "message": format!("Package '{}' is already absent (no-op)", package_name),
-                    "package_name": package_name,
-                    "already_absent": true
-                }));
-            }
-        }
-
-        return Err(format!("Uninstallation failed: {}", detail));
-    }
-
-    Ok(serde_json::json!({
-        "success": true,
-        "message": format!("Uninstalled '{}' successfully", package_name),
-        "package_name": package_name
-    }))
+    pacman_uninstall_package_core(&package_name)
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartTransactionResponse {
@@ -340,17 +98,27 @@ pub fn pacman_start_transaction(
 
     let op = operation.to_lowercase();
     if op != "install" && op != "uninstall" && op != "reinstall" && op != "uninstall-deps" {
-        return Err(format!("Unsupported transaction operation '{}'. Must be install, uninstall, or reinstall", op));
+        return Err(format!(
+            "Unsupported transaction operation '{}'. Must be install, uninstall, or reinstall",
+            op
+        ));
     }
 
-    // 1. Single active transaction enforcement
-    if ACTIVE_TRANSACTION.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if ACTIVE_TRANSACTION
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         return Err("Another package transaction is currently running in Ryzora. Please wait until it finishes.".to_string());
     }
 
-    let txn_id = format!("txn-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let txn_id = format!(
+        "txn-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
 
-    // 2. Database lock pre-flight check
     let db_lock_path = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
         PathBuf::from(sys_root).join("var/lib/pacman/db.lck")
     } else {
@@ -381,10 +149,12 @@ pub fn pacman_start_transaction(
             is_cached: false,
         };
         let _ = app.emit("ryzora:transaction_progress", &lock_event);
-        return Err("Another package manager is currently using the database. Please wait until it finishes.".to_string());
+        return Err(
+            "Another package manager is currently using the database. Please wait until it finishes."
+                .to_string(),
+        );
     }
 
-    // 3. Privileged helper check
     let helper_path = PathBuf::from(PACKAGE_HELPER_SYSTEM_PATH);
     let helper_installed = helper_path.exists();
     let dev_fallback = std::env::var("RYZORA_DEV_PACMAN_FALLBACK")
@@ -418,7 +188,6 @@ pub fn pacman_start_transaction(
         return Err("Ryzora's package service is not installed.".to_string());
     }
 
-    // 4. Initial preparing event
     let init_event = TransactionProgressEvent {
         transaction_id: txn_id.clone(),
         operation: op.clone(),
@@ -438,7 +207,7 @@ pub fn pacman_start_transaction(
         error: None,
         is_db_locked: false,
         is_auth_cancelled: false,
-            is_cached: false,
+        is_cached: false,
     };
     let _ = app.emit("ryzora:transaction_progress", &init_event);
 
@@ -447,10 +216,15 @@ pub fn pacman_start_transaction(
     let op_worker = op.clone();
     let pkg_name_worker = package_name.clone();
 
-    // 5. Spawn background transaction worker
     std::thread::spawn(move || {
         let _guard = TransactionGuard;
-        run_transaction_worker(app_worker, txn_id_worker, op_worker, pkg_name_worker, helper_installed);
+        run_transaction_worker(
+            app_worker,
+            txn_id_worker,
+            op_worker,
+            pkg_name_worker,
+            helper_installed,
+        );
     });
 
     Ok(StartTransactionResponse {
@@ -512,7 +286,9 @@ fn run_transaction_worker(
         if op == "install" || op == "reinstall" {
             let sync_dir = pacman::resolve_sync_dir(None);
             let local_dir = pacman::resolve_local_dir(None);
-            if let Ok(Some(pkg)) = pacman::get_pacman_package_details_in(&package_name, &sync_dir, &local_dir) {
+            if let Ok(Some(pkg)) =
+                pacman::get_pacman_package_details_in(&package_name, &sync_dir, &local_dir)
+            {
                 let pkg_dir = local_dir.join(format!("{}-{}", pkg.name, pkg.version));
                 let _ = fs::create_dir_all(&pkg_dir);
                 let desc_content = format!(
@@ -563,13 +339,13 @@ fn run_transaction_worker(
         c.arg("pacman");
         match op.as_str() {
             "install" | "reinstall" => {
-                c.arg("-S").arg("--noconfirm").arg(&package_name);
+                c.arg("-S").arg("--noconfirm").arg("--").arg(&package_name);
             }
             "uninstall" => {
-                c.arg("-R").arg("--noconfirm").arg(&package_name);
+                c.arg("-R").arg("--noconfirm").arg("--").arg(&package_name);
             }
             "uninstall-deps" => {
-                c.arg("-Rs").arg("--noconfirm").arg(&package_name);
+                c.arg("-Rs").arg("--noconfirm").arg("--").arg(&package_name);
             }
             _ => unreachable!(),
         }
@@ -601,7 +377,7 @@ fn run_transaction_worker(
                 error: Some(e.to_string()),
                 is_db_locked: false,
                 is_auth_cancelled: false,
-            is_cached: false,
+                is_cached: false,
             };
             let _ = app.emit("ryzora:transaction_progress", &fail_event);
             return;
@@ -688,7 +464,8 @@ fn run_transaction_worker(
     let local_dir = pacman::resolve_local_dir(None);
     match status {
         Ok(exit_status) if exit_status.success() => {
-            let (_, _installed_version) = pacman::check_installed_status_in(&package_name, &local_dir);
+            let (_, _installed_version) =
+                pacman::check_installed_status_in(&package_name, &local_dir);
             let comp_event = TransactionProgressEvent {
                 transaction_id: txn_id.clone(),
                 operation: op.clone(),
@@ -708,22 +485,23 @@ fn run_transaction_worker(
                 error: None,
                 is_db_locked: false,
                 is_auth_cancelled: false,
-            is_cached: false,
+                is_cached: false,
             };
             let _ = app.emit("ryzora:transaction_progress", &comp_event);
         }
         Ok(exit_status) => {
             let err_msg = stderr_lines.join("\n");
             let is_db_lock = err_msg.to_lowercase().contains("lock");
-            let is_auth_cancel = err_msg.contains("Request dismissed") || err_msg.to_lowercase().contains("cancelled");
+            let is_auth_cancel =
+                err_msg.contains("Request dismissed") || err_msg.to_lowercase().contains("cancelled");
 
-            // Handle "target not found" race for uninstall/uninstall-deps operations
             let err_lower = err_msg.to_ascii_lowercase();
             if (op == "uninstall" || op == "uninstall-deps")
                 && (err_lower.contains("target not found") || err_lower.contains("was not found"))
             {
                 let local_dir = pacman::resolve_local_dir(None);
-                let (still_installed, _) = pacman::check_installed_status_in(&package_name, &local_dir);
+                let (still_installed, _) =
+                    pacman::check_installed_status_in(&package_name, &local_dir);
                 if !still_installed {
                     let comp_event = TransactionProgressEvent {
                         transaction_id: txn_id.clone(),
@@ -802,23 +580,18 @@ fn run_transaction_worker(
                 error: Some(e.to_string()),
                 is_db_locked: false,
                 is_auth_cancelled: false,
-            is_cached: false,
+                is_cached: false,
             };
             let _ = app.emit("ryzora:transaction_progress", &fail_event);
         }
     }
 }
 
-pub mod desktop_icons;
-
 #[tauri::command]
 pub fn resolve_desktop_app_icon(package_id: String) -> Option<desktop_icons::DesktopAppIconInfo> {
     desktop_icons::resolve_desktop_icon_for_app(&package_id)
 }
 
-/// Batch-resolve icons for multiple package IDs in a single IPC call.
-/// Returns a map of package_id -> DesktopAppIconInfo for all IDs that resolved successfully.
-/// IDs that fail resolution are omitted from the map (frontend treats absent keys as no icon).
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(untagged)]
 pub enum IconBatchQuery {
@@ -830,7 +603,6 @@ pub enum IconBatchQuery {
     },
 }
 
-/// Batch-resolve icons for multiple packages with optional hints in a single IPC call.
 #[tauri::command]
 pub fn resolve_desktop_icon_batch(
     package_ids: Option<Vec<String>>,
@@ -846,7 +618,11 @@ pub fn resolve_desktop_icon_batch(
                         result.insert(id, info);
                     }
                 }
-                IconBatchQuery::WithHints { id, icon_name, icon_path } => {
+                IconBatchQuery::WithHints {
+                    id,
+                    icon_name,
+                    icon_path,
+                } => {
                     if let Some(info) = desktop_icons::resolve_desktop_icon_with_hints(
                         &id,
                         icon_name.as_deref(),
@@ -912,52 +688,8 @@ pub fn get_installed_package_files(package_name: String) -> Result<Vec<String>, 
 
 #[tauri::command]
 pub fn launch_desktop_app(package_id: String) -> Result<bool, String> {
-    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
-        return Ok(true);
-    }
-
-    if let Some(info) = desktop_icons::resolve_desktop_icon_for_app(&package_id) {
-        let desktop_file_name = std::path::Path::new(&info.desktop_file)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&info.desktop_file);
-
-        // 1. Try launching with gtk-launch using desktop file name
-        if let Ok(_child) = std::process::Command::new("gtk-launch")
-            .arg(desktop_file_name)
-            .spawn()
-        {
-            return Ok(true);
-        }
-
-        // 2. Parse exec command from desktop entry, stripping Freedesktop field codes (%u, %F, etc.)
-        if let Some(exec_cmd) = &info.exec {
-            let tokens: Vec<&str> = exec_cmd
-                .split_whitespace()
-                .filter(|tok| !tok.starts_with('%'))
-                .collect();
-
-            if let Some((binary, args)) = tokens.split_first() {
-                if !binary.is_empty() {
-                    if let Ok(_child) = std::process::Command::new(binary).args(args).spawn() {
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-    }
-
-    // 3. Fallback: try spawning binary by package_id directly
-    if let Ok(_child) = std::process::Command::new(&package_id).spawn() {
-        return Ok(true);
-    }
-
-    Err(format!(
-        "Could not launch application '{}'. Desktop entry or executable was not found on system.",
-        package_id
-    ))
+    launch_desktop_app_core(&package_id)
 }
-
 
 #[tauri::command]
 pub fn pacman_get_catalog_status() -> Result<catalog::CatalogStatus, String> {
@@ -968,13 +700,17 @@ pub fn pacman_get_catalog_status() -> Result<catalog::CatalogStatus, String> {
 }
 
 #[tauri::command]
-pub fn pacman_get_catalog_items(filter: catalog::CatalogQueryFilter) -> Result<catalog::CatalogPageResponse, String> {
+pub fn pacman_get_catalog_items(
+    filter: catalog::CatalogQueryFilter,
+) -> Result<catalog::CatalogPageResponse, String> {
     catalog::ensure_catalog_initialized();
     Ok(catalog::query_catalog(filter))
 }
 
 #[tauri::command]
-pub fn pacman_get_catalog_item_details(package_id: String) -> Result<Option<catalog::CatalogItem>, String> {
+pub fn pacman_get_catalog_item_details(
+    package_id: String,
+) -> Result<Option<catalog::CatalogItem>, String> {
     catalog::ensure_catalog_initialized();
     Ok(catalog::get_catalog_item_by_id(&package_id))
 }
@@ -988,7 +724,6 @@ pub fn pacman_refresh_catalog() -> Result<catalog::CatalogStatus, String> {
 pub fn pacman_refresh_catalog_installed_state() -> Result<catalog::CatalogStatus, String> {
     catalog::refresh_installed_state_internal()
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Flatpak & Flathub Commands — Phase 25
@@ -1006,20 +741,16 @@ pub fn flatpak_list_installed() -> Result<Vec<flatpak::FlatpakAppInfo>, String> 
 
 #[tauri::command]
 pub async fn flatpak_search(query: String) -> Result<Vec<flatpak::FlatpakAppInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        flatpak::search_flathub_apps(&query)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || flatpak::search_flathub_apps(&query))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn flatpak_get_info(app_id: String) -> Result<Option<flatpak::FlatpakAppInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        flatpak::get_flatpak_app_info(&app_id)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || flatpak::get_flatpak_app_info(&app_id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1037,9 +768,6 @@ pub async fn flatpak_install(app_id: String) -> Result<String, String> {
     Ok(result)
 }
 
-/// Starts a Flatpak operation in the same provider-neutral event stream as
-/// Pacman. The Flatpak-specific worker consumes its CLI's live stdout/stderr;
-/// it does not reuse or emulate ALPM progress.
 #[tauri::command]
 pub fn flatpak_start_transaction(
     app: tauri::AppHandle,
@@ -1050,15 +778,21 @@ pub fn flatpak_start_transaction(
     if operation != "install" && operation != "uninstall" && operation != "reinstall" {
         return Err("Unsupported Flatpak transaction operation.".to_string());
     }
-    // Validate before reserving the global transaction slot, but preserve the
-    // existing remote/scope selection exactly.
     flatpak::flatpak_transaction_args(&package_name, &operation)?;
-    if ACTIVE_TRANSACTION.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if ACTIVE_TRANSACTION
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         return Err("Another package transaction is currently running in Ryzora. Please wait until it finishes.".to_string());
     }
 
-    let transaction_id = format!("flatpak-txn-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let transaction_id = format!(
+        "flatpak-txn-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
     let initial = TransactionProgressEvent {
         transaction_id: transaction_id.clone(),
         operation: operation.clone(),
@@ -1091,24 +825,53 @@ pub fn flatpak_start_transaction(
         run_flatpak_transaction_worker(worker_app, worker_id, worker_op, worker_package);
     });
 
-    Ok(StartTransactionResponse { success: true, transaction_id, operation, package_name })
+    Ok(StartTransactionResponse {
+        success: true,
+        transaction_id,
+        operation,
+        package_name,
+    })
 }
 
-fn run_flatpak_transaction_worker(app: tauri::AppHandle, transaction_id: String, operation: String, package_name: String) {
+fn run_flatpak_transaction_worker(
+    app: tauri::AppHandle,
+    transaction_id: String,
+    operation: String,
+    package_name: String,
+) {
     let args = match flatpak::flatpak_transaction_args(&package_name, &operation) {
         Ok(args) => args,
         Err(error) => {
-            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", error.clone(), Some(error));
+            emit_flatpak_terminal(
+                &app,
+                &transaction_id,
+                &operation,
+                &package_name,
+                "failed",
+                error.clone(),
+                Some(error),
+            );
             return;
         }
     };
     let mut command = std::process::Command::new("flatpak");
-    command.args(args).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    command
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
             let message = format!("Failed to start Flatpak: {}", error);
-            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", message.clone(), Some(message));
+            emit_flatpak_terminal(
+                &app,
+                &transaction_id,
+                &operation,
+                &package_name,
+                "failed",
+                message.clone(),
+                Some(message),
+            );
             return;
         }
     };
@@ -1116,47 +879,95 @@ fn run_flatpak_transaction_worker(app: tauri::AppHandle, transaction_id: String,
     let stderr = child.stderr.take();
     let (Some(stdout), Some(stderr)) = (stdout, stderr) else {
         let _ = child.kill();
-        emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", "Flatpak output stream was unavailable.".to_string(), Some("Flatpak output stream was unavailable.".to_string()));
+        emit_flatpak_terminal(
+            &app,
+            &transaction_id,
+            &operation,
+            &package_name,
+            "failed",
+            "Flatpak output stream was unavailable.".to_string(),
+            Some("Flatpak output stream was unavailable.".to_string()),
+        );
         return;
     };
 
-    let read_stream = |mut reader: std::process::ChildStdout, app: tauri::AppHandle, transaction_id: String, operation: String, package_name: String| {
+    let read_stream = |mut reader: std::process::ChildStdout,
+                       app: tauri::AppHandle,
+                       transaction_id: String,
+                       operation: String,
+                       package_name: String| {
         let mut buffer = Vec::new();
         let mut chunk = [0u8; 2048];
-        let mut parser = FlatpakTransactionParserState::new(transaction_id, operation, package_name);
+        let mut parser =
+            FlatpakTransactionParserState::new(transaction_id, operation, package_name);
         let mut throttler = crate::app_adapters::transaction::TransactionThrottler::new(100);
         let mut logs = Vec::new();
         while let Ok(read) = reader.read(&mut chunk) {
-            if read == 0 { break; }
+            if read == 0 {
+                break;
+            }
             buffer.extend_from_slice(&chunk[..read]);
             for line in split_output_lines(&mut buffer) {
                 logs.push(line.clone());
                 if let Some(event) = parse_flatpak_line(&line, &mut parser) {
-                    if throttler.should_emit(&event) { let _ = app.emit("ryzora:transaction_progress", &event); }
+                    if throttler.should_emit(&event) {
+                        let _ = app.emit("ryzora:transaction_progress", &event);
+                    }
                 }
             }
         }
-        // Flatpak occasionally terminates a non-newline final status.
         if !buffer.is_empty() {
             let line = String::from_utf8_lossy(&buffer).trim().to_string();
             if !line.is_empty() {
                 logs.push(line.clone());
-                if let Some(event) = parse_flatpak_line(&line, &mut parser) { let _ = app.emit("ryzora:transaction_progress", &event); }
+                if let Some(event) = parse_flatpak_line(&line, &mut parser) {
+                    let _ = app.emit("ryzora:transaction_progress", &event);
+                }
             }
         }
         logs
     };
-    // stderr is also a progress/status channel for Flatpak. Convert it to the
-    // same concrete reader type through a tiny dedicated thread.
-    let out_app = app.clone(); let out_id = transaction_id.clone(); let out_op = operation.clone(); let out_pkg = package_name.clone();
-    let stdout_thread = std::thread::spawn(move || read_stream(stdout, out_app, out_id, out_op, out_pkg));
-    let err_app = app.clone(); let err_id = transaction_id.clone(); let err_op = operation.clone(); let err_pkg = package_name.clone();
+
+    let out_app = app.clone();
+    let out_id = transaction_id.clone();
+    let out_op = operation.clone();
+    let out_pkg = package_name.clone();
+    let stdout_thread =
+        std::thread::spawn(move || read_stream(stdout, out_app, out_id, out_op, out_pkg));
+    let err_app = app.clone();
+    let err_id = transaction_id.clone();
+    let err_op = operation.clone();
+    let err_pkg = package_name.clone();
     let stderr_thread = std::thread::spawn(move || {
-        let mut reader = stderr; let mut buffer = Vec::new(); let mut chunk = [0u8; 2048];
+        let mut reader = stderr;
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 2048];
         let mut parser = FlatpakTransactionParserState::new(err_id, err_op, err_pkg);
-        let mut throttler = crate::app_adapters::transaction::TransactionThrottler::new(100); let mut logs = Vec::new();
-        while let Ok(read) = reader.read(&mut chunk) { if read == 0 { break; } buffer.extend_from_slice(&chunk[..read]); for line in split_output_lines(&mut buffer) { logs.push(line.clone()); if let Some(event) = parse_flatpak_line(&line, &mut parser) { if throttler.should_emit(&event) { let _ = err_app.emit("ryzora:transaction_progress", &event); } } } }
-        if !buffer.is_empty() { let line = String::from_utf8_lossy(&buffer).trim().to_string(); if !line.is_empty() { logs.push(line.clone()); if let Some(event) = parse_flatpak_line(&line, &mut parser) { let _ = err_app.emit("ryzora:transaction_progress", &event); } } }
+        let mut throttler = crate::app_adapters::transaction::TransactionThrottler::new(100);
+        let mut logs = Vec::new();
+        while let Ok(read) = reader.read(&mut chunk) {
+            if read == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&chunk[..read]);
+            for line in split_output_lines(&mut buffer) {
+                logs.push(line.clone());
+                if let Some(event) = parse_flatpak_line(&line, &mut parser) {
+                    if throttler.should_emit(&event) {
+                        let _ = err_app.emit("ryzora:transaction_progress", &event);
+                    }
+                }
+            }
+        }
+        if !buffer.is_empty() {
+            let line = String::from_utf8_lossy(&buffer).trim().to_string();
+            if !line.is_empty() {
+                logs.push(line.clone());
+                if let Some(event) = parse_flatpak_line(&line, &mut parser) {
+                    let _ = err_app.emit("ryzora:transaction_progress", &event);
+                }
+            }
+        }
         logs
     });
     let stdout_logs = stdout_thread.join().unwrap_or_default();
@@ -1164,23 +975,83 @@ fn run_flatpak_transaction_worker(app: tauri::AppHandle, transaction_id: String,
     match child.wait() {
         Ok(status) if status.success() => {
             flatpak::invalidate_flatpak_cache();
-            // Refresh the authoritative Flatpak list before signaling success;
-            // this prevents stale provider cache from winning the UI race.
             let _ = flatpak::get_installed_flatpak_ids();
             invalidate_app_provider_cache(&package_name);
-            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "completed", format!("Successfully completed Flatpak {}.", operation), None);
+            emit_flatpak_terminal(
+                &app,
+                &transaction_id,
+                &operation,
+                &package_name,
+                "completed",
+                format!("Successfully completed Flatpak {}.", operation),
+                None,
+            );
         }
         Ok(status) => {
-            let logs = if stderr_logs.is_empty() { stdout_logs } else { stderr_logs };
-            let detail = logs.last().cloned().unwrap_or_else(|| format!("Flatpak exited with code {:?}", status.code()));
-            emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", detail.clone(), Some(detail));
+            let logs = if stderr_logs.is_empty() {
+                stdout_logs
+            } else {
+                stderr_logs
+            };
+            let detail = logs
+                .last()
+                .cloned()
+                .unwrap_or_else(|| format!("Flatpak exited with code {:?}", status.code()));
+            emit_flatpak_terminal(
+                &app,
+                &transaction_id,
+                &operation,
+                &package_name,
+                "failed",
+                detail.clone(),
+                Some(detail),
+            );
         }
-        Err(error) => { let detail = format!("Flatpak process wait error: {}", error); emit_flatpak_terminal(&app, &transaction_id, &operation, &package_name, "failed", detail.clone(), Some(detail)); }
+        Err(error) => {
+            let detail = format!("Flatpak process wait error: {}", error);
+            emit_flatpak_terminal(
+                &app,
+                &transaction_id,
+                &operation,
+                &package_name,
+                "failed",
+                detail.clone(),
+                Some(detail),
+            );
+        }
     }
 }
 
-fn emit_flatpak_terminal(app: &tauri::AppHandle, transaction_id: &str, operation: &str, package_name: &str, stage: &str, message: String, error: Option<String>) {
-    let event = TransactionProgressEvent { transaction_id: transaction_id.into(), operation: operation.into(), target_package: package_name.into(), stage: stage.into(), percentage: if stage == "completed" { Some(100) } else { None }, download_percentage: None, install_percentage: None, current_package: Some(package_name.into()), current_package_index: None, total_packages: None, bytes_downloaded_str: None, bytes_total_str: None, download_speed: None, raw_line: Some(message.clone()), message, error, is_db_locked: false, is_auth_cancelled: false, is_cached: false };
+fn emit_flatpak_terminal(
+    app: &tauri::AppHandle,
+    transaction_id: &str,
+    operation: &str,
+    package_name: &str,
+    stage: &str,
+    message: String,
+    error: Option<String>,
+) {
+    let event = TransactionProgressEvent {
+        transaction_id: transaction_id.into(),
+        operation: operation.into(),
+        target_package: package_name.into(),
+        stage: stage.into(),
+        percentage: if stage == "completed" { Some(100) } else { None },
+        download_percentage: None,
+        install_percentage: None,
+        current_package: Some(package_name.into()),
+        current_package_index: None,
+        total_packages: None,
+        bytes_downloaded_str: None,
+        bytes_total_str: None,
+        download_speed: None,
+        raw_line: Some(message.clone()),
+        message,
+        error,
+        is_db_locked: false,
+        is_auth_cancelled: false,
+        is_cached: false,
+    };
     let _ = app.emit("ryzora:transaction_progress", &event);
 }
 
@@ -1210,29 +1081,23 @@ pub fn aur_get_status() -> Result<aur::AurStatus, String> {
 
 #[tauri::command]
 pub async fn aur_search(query: String) -> Result<Vec<aur::AurPackageInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        aur::aur_search_rpc(&query)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || aur::aur_search_rpc(&query))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn aur_get_info(package_name: String) -> Result<Option<aur::AurPackageInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        aur::aur_get_info_rpc(&package_name)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || aur::aur_get_info_rpc(&package_name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn aur_get_pkgbuild(package_name: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        aur::aur_get_pkgbuild(&package_name)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || aur::aur_get_pkgbuild(&package_name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1242,11 +1107,9 @@ pub fn aur_list_installed() -> Result<Vec<aur::AurPackageInfo>, String> {
 
 #[tauri::command]
 pub async fn aur_install(package_name: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        aur::aur_build_and_install_package(&package_name)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || aur::aur_build_and_install_package(&package_name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1259,11 +1122,9 @@ pub async fn pacman_inspect_cleanup(
     package_id: String,
     provider: String,
 ) -> Result<cleanup::AppCleanupPreview, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        cleanup::inspect_app_cleanup(&package_id, &provider)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || cleanup::inspect_app_cleanup(&package_id, &provider))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1271,15 +1132,10 @@ pub async fn pacman_execute_cleanup(
     request: cleanup::AppCleanupExecutionRequest,
 ) -> Result<cleanup::AppCleanupExecutionResult, String> {
     let package_id = request.package_id.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        cleanup::execute_app_cleanup(request)
-    })
-    .await
-    .map_err(|e| e.to_string())??;
+    let result = tauri::async_runtime::spawn_blocking(move || cleanup::execute_app_cleanup(request))
+        .await
+        .map_err(|e| e.to_string())??;
 
-    // Provider resolution is memoized because it can involve network-backed
-    // sources. A completed uninstall changes its `is_installed` result, so do
-    // not let a stale entry resurrect the removed app in the UI.
     if result.package_removed {
         invalidate_app_provider_cache(&package_id);
     }
@@ -1287,159 +1143,16 @@ pub async fn pacman_execute_cleanup(
     Ok(result)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AppProviderSource {
-    pub provider_id: String, // "pacman" | "aur" | "flatpak"
-    pub name: String,        // "Pacman" | "AUR" | "Flathub"
-    pub short_name: String,  // "Pacman · extra" | "AUR · User contributed" | "Flathub · Flatpak"
-    pub repository: String,  // "extra" | "aur" | "flathub"
-    pub description: String,
-    pub target_id: String,   // actual ID to install/query
-    pub version: Option<String>,
-    pub is_installed: bool,
-}
-
-static RESOLVE_PROVIDERS_CACHE: std::sync::LazyLock<std::sync::RwLock<std::collections::HashMap<String, Vec<AppProviderSource>>>> =
-    std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
-
-fn invalidate_app_provider_cache(package_id: &str) {
-    if let Ok(mut cache) = RESOLVE_PROVIDERS_CACHE.write() {
-        cache.remove(&package_id.trim().to_lowercase());
-    }
-}
-
-/// Dynamically discovers authentic installation sources for an application.
-/// Cross-queries Pacman ALPM, AUR RPC v5, and Flathub metadata.
-/// Never fabricates or hardcodes IDs. If no reliable match exists, provider = absent.
-pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) -> Vec<AppProviderSource> {
-    let pkg_trimmed = package_id.trim();
-    if pkg_trimmed.is_empty() {
-        return Vec::new();
-    }
-
-    let cache_key = pkg_trimmed.to_lowercase();
-    if let Ok(cache) = RESOLVE_PROVIDERS_CACHE.read() {
-        if let Some(cached) = cache.get(&cache_key) {
-            return cached.clone();
-        }
-    }
-
-    // Parallel resolution across Pacman, AUR, and Flatpak
-    let (pacman_match, aur_match, flatpak_match) = std::thread::scope(|s| {
-        // 1. Pacman resolution
-        let pacman_handle = s.spawn(|| {
-            let candidates = if pkg_trimmed.contains('.') {
-                let tail = pkg_trimmed.split('.').last().unwrap_or(pkg_trimmed);
-                vec![pkg_trimmed, tail]
-            } else {
-                vec![pkg_trimmed]
-            };
-
-            for candidate in candidates {
-                if let Some(item) = catalog::get_catalog_item_by_id(candidate) {
-                    let repo = item.repository.to_lowercase();
-                    if !repo.is_empty() && repo != "installed" && repo != "local" && repo != "aur" {
-                        let short_name = format!("Pacman · {}", item.repository);
-                        return Some(AppProviderSource {
-                            provider_id: "pacman".to_string(),
-                            name: "Pacman".to_string(),
-                            short_name,
-                            repository: item.repository,
-                            description: "Official Arch Linux repository".to_string(),
-                            target_id: item.id,
-                            version: Some(item.version),
-                            is_installed: item.is_installed,
-                        });
-                    }
-                }
-
-                let sync_dir = pacman::resolve_sync_dir(None);
-                let local_dir = pacman::resolve_local_dir(None);
-                if let Ok(Some(pkg)) = pacman::get_pacman_package_details_in(candidate, &sync_dir, &local_dir) {
-                    let repo = pkg.repository.to_lowercase();
-                    if repo != "installed" && repo != "local" && repo != "aur" {
-                        let short_name = format!("Pacman · {}", pkg.repository);
-                        return Some(AppProviderSource {
-                            provider_id: "pacman".to_string(),
-                            name: "Pacman".to_string(),
-                            short_name,
-                            repository: pkg.repository,
-                            description: "Official Arch Linux repository".to_string(),
-                            target_id: pkg.name,
-                            version: Some(pkg.version),
-                            is_installed: pkg.is_installed,
-                        });
-                    }
-                }
-            }
-            None
-        });
-
-        // 2. AUR resolution (strict: must return real record from official AUR RPC)
-        let aur_handle = s.spawn(|| {
-            let aur_candidate = if pkg_trimmed.contains('.') {
-                pkg_trimmed.split('.').last().unwrap_or(pkg_trimmed)
-            } else {
-                pkg_trimmed
-            };
-
-            if let Ok(Some(info)) = aur::aur_get_info_rpc(aur_candidate) {
-                return Some(AppProviderSource {
-                    provider_id: "aur".to_string(),
-                    name: "AUR".to_string(),
-                    short_name: "AUR · User contributed".to_string(),
-                    repository: "aur".to_string(),
-                    description: "Arch User Repository (unprivileged build)".to_string(),
-                    target_id: info.name,
-                    version: Some(info.version),
-                    is_installed: info.is_installed,
-                });
-            }
-            None
-        });
-
-        // 3. Flatpak / Flathub resolution (strict: valid reverse-DNS ID verified on Flathub)
-        let flatpak_handle = s.spawn(|| {
-            if let Some(app) = flatpak::find_flathub_match(pkg_trimmed, display_name) {
-                return Some(AppProviderSource {
-                    provider_id: "flatpak".to_string(),
-                    name: "Flatpak".to_string(),
-                    short_name: "Flathub · Flatpak".to_string(),
-                    repository: "flathub".to_string(),
-                    description: "Universal Flatpak container".to_string(),
-                    target_id: app.id,
-                    version: Some(app.version),
-                    is_installed: app.is_installed,
-                });
-            }
-            None
-        });
-
-        (pacman_handle.join().unwrap_or(None), aur_handle.join().unwrap_or(None), flatpak_handle.join().unwrap_or(None))
-    });
-
-    let mut results = Vec::new();
-    if let Some(p) = pacman_match {
-        results.push(p);
-    }
-    if let Some(a) = aur_match {
-        results.push(a);
-    }
-    if let Some(f) = flatpak_match {
-        results.push(f);
-    }
-
-    if let Ok(mut cache) = RESOLVE_PROVIDERS_CACHE.write() {
-        cache.insert(cache_key, results.clone());
-    }
-
-    results
-}
-
 #[tauri::command]
-pub async fn resolve_app_providers(package_id: String, display_name: Option<String>) -> Result<Vec<AppProviderSource>, String> {
+pub async fn resolve_app_providers(
+    package_id: String,
+    display_name: Option<String>,
+) -> Result<Vec<AppProviderSource>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        Ok(resolve_app_providers_sync(&package_id, display_name.as_deref()))
+        Ok(resolve_app_providers_sync(
+            &package_id,
+            display_name.as_deref(),
+        ))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1449,12 +1162,17 @@ pub async fn resolve_app_providers(package_id: String, display_name: Option<Stri
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_spotify_resolves_aur_and_flathub_without_pacman() {
         let providers = resolve_app_providers_sync("spotify", Some("Spotify"));
-        assert!(!providers.iter().any(|p| p.provider_id == "pacman"), "spotify must NOT have official Pacman provider");
-        assert!(providers.iter().any(|p| p.provider_id == "aur"), "spotify must have AUR provider");
+        assert!(
+            !providers.iter().any(|p| p.provider_id == "pacman"),
+            "spotify must NOT have official Pacman provider"
+        );
+        assert!(
+            providers.iter().any(|p| p.provider_id == "aur"),
+            "spotify must have AUR provider"
+        );
         let flathub = providers.iter().find(|p| p.provider_id == "flatpak");
         assert!(flathub.is_some(), "spotify must have Flatpak provider");
         assert_eq!(flathub.unwrap().target_id, "com.spotify.Client");
@@ -1463,12 +1181,18 @@ mod tests {
     #[test]
     fn test_gnome_2048_has_no_aur_and_no_flathub() {
         let providers = resolve_app_providers_sync("gnome-2048", Some("2048"));
-        // Must contain Pacman
-        assert!(providers.iter().any(|p| p.provider_id == "pacman"), "gnome-2048 must have Pacman provider");
-        // Must NOT contain AUR
-        assert!(!providers.iter().any(|p| p.provider_id == "aur"), "gnome-2048 must NOT have AUR provider");
-        // Must NOT contain Flatpak
-        assert!(!providers.iter().any(|p| p.provider_id == "flatpak"), "gnome-2048 must NOT have Flatpak provider");
+        assert!(
+            providers.iter().any(|p| p.provider_id == "pacman"),
+            "gnome-2048 must have Pacman provider"
+        );
+        assert!(
+            !providers.iter().any(|p| p.provider_id == "aur"),
+            "gnome-2048 must NOT have AUR provider"
+        );
+        assert!(
+            !providers.iter().any(|p| p.provider_id == "flatpak"),
+            "gnome-2048 must NOT have Flatpak provider"
+        );
     }
 
     #[test]
@@ -1478,7 +1202,9 @@ mod tests {
             assert_eq!(flatpak_prov.target_id, "org.kde.amarok");
             assert!(flatpak::is_valid_flatpak_id(&flatpak_prov.target_id));
         }
-        // AUR should not be present for amarok
-        assert!(!providers.iter().any(|p| p.provider_id == "aur"), "amarok must NOT have AUR provider");
+        assert!(
+            !providers.iter().any(|p| p.provider_id == "aur"),
+            "amarok must NOT have AUR provider"
+        );
     }
 }

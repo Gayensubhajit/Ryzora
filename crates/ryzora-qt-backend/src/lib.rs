@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::fs;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Condvar, Mutex, OnceLock};
@@ -84,6 +84,14 @@ pub struct ApplicationItem {
     pub version: String,
     pub publisher: String,
     pub repository: String,
+    #[serde(default)]
+    pub provider_id: String,
+    #[serde(default)]
+    pub target_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_provider: Option<String>,
+    #[serde(default)]
+    pub available_providers: Vec<ryzora_core::app_adapters::AppProviderSource>,
     pub icon_url: String,
     pub banner_url: String,
     pub screenshots: Vec<String>,
@@ -596,6 +604,7 @@ pub fn detect_system_appearance() -> String {
 
 pub struct BackendState {
     pub coordinator: ProcessCoordinator,
+    pub app_coordinator: ProcessCoordinator,
     req_counter: std::sync::atomic::AtomicU64,
     catalog_cache: Mutex<Option<(Vec<CatalogItem>, Instant)>>,
     library_cache: Mutex<Option<(Vec<InstalledItem>, Instant)>>,
@@ -1428,6 +1437,7 @@ impl BackendState {
         }
         Self {
             coordinator: ProcessCoordinator::new(),
+            app_coordinator: ProcessCoordinator::new(),
             req_counter: std::sync::atomic::AtomicU64::new(1),
             catalog_cache: Mutex::new(None),
             library_cache: Mutex::new(None),
@@ -1444,6 +1454,7 @@ impl BackendState {
     pub fn with_home_dir(home: PathBuf) -> Self {
         Self {
             coordinator: ProcessCoordinator::new(),
+            app_coordinator: ProcessCoordinator::new(),
             req_counter: std::sync::atomic::AtomicU64::new(1),
             catalog_cache: Mutex::new(None),
             library_cache: Mutex::new(None),
@@ -1821,41 +1832,94 @@ impl BackendState {
             .collect()
     }
 
-    pub fn check_app_installed(&self, id: &str) -> (bool, Option<String>) {
-        if self.test_installed_apps.lock().unwrap().contains(id) {
-            return (true, Some("1.0.0-test".to_string()));
+    pub fn canonical_app_id(raw_id: &str) -> String {
+        let (_, clean) = ryzora_core::app_adapters::parse_provider_prefixed_id(raw_id);
+        match clean.as_str() {
+            "cursor-bin" => "cursor".to_string(),
+            "com.spotify.Client" => "spotify".to_string(),
+            "org.mozilla.firefox" => "firefox".to_string(),
+            "org.chromium.Chromium" => "chromium".to_string(),
+            "com.visualstudio.code" => "code".to_string(),
+            "com.discordapp.Discord" => "discord".to_string(),
+            "com.valvesoftware.Steam" => "steam".to_string(),
+            "org.videolan.VLC" => "vlc".to_string(),
+            "org.gimp.GIMP" => "gimp".to_string(),
+            "com.obsproject.Studio" => "obs-studio".to_string(),
+            "org.blender.Blender" => "blender".to_string(),
+            "org.inkscape.Inkscape" => "inkscape".to_string(),
+            "org.telegram.desktop" => "telegram-desktop".to_string(),
+            "org.mozilla.Thunderbird" => "thunderbird".to_string(),
+            "io.mpv.Mpv" => "mpv".to_string(),
+            "org.kde.amarok" => "amarok".to_string(),
+            other => other.to_string(),
+        }
+    }
+
+    pub fn check_app_installed_with_provider(
+        &self,
+        id: &str,
+    ) -> (bool, Option<String>, Option<String>, Option<String>) {
+        let canonical = Self::canonical_app_id(id);
+        {
+            let test_set = self.test_installed_apps.lock().unwrap();
+            if test_set.contains(id) || test_set.contains(&canonical) {
+                let (pref_prov, pref_target) = ryzora_core::app_adapters::parse_provider_prefixed_id(id);
+                let (prov, target) = if let Some(p) = pref_prov {
+                    (p, pref_target)
+                } else if let Some(aur_id) = ryzora_core::app_adapters::known_aur_id_for_app(&canonical) {
+                    ("aur".to_string(), aur_id.to_string())
+                } else {
+                    ("pacman".to_string(), pref_target)
+                };
+                return (
+                    true,
+                    Some("1.0.0-test".to_string()),
+                    Some(prov),
+                    Some(target),
+                );
+            }
         }
 
-        let local_dir = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
-            PathBuf::from(sys_root).join("var/lib/pacman/local")
-        } else {
-            PathBuf::from("/var/lib/pacman/local")
-        };
+        let (inst, ver, prov, target) =
+            ryzora_core::app_adapters::check_app_installed_across_providers(id);
+        if inst {
+            return (true, ver, prov, target);
+        }
 
-        if local_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&local_dir) {
-                let prefix = format!("{}-", id);
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with(&prefix) {
-                        let version = name.trim_start_matches(&prefix).to_string();
-                        return (true, Some(version));
-                    }
-                }
+        if canonical != id {
+            let (c_inst, c_ver, c_prov, c_target) =
+                ryzora_core::app_adapters::check_app_installed_across_providers(&canonical);
+            if c_inst {
+                return (true, c_ver, c_prov, c_target);
             }
         }
 
         if std::env::var("RYZORA_SYSTEM_ROOT").is_err() && self.home_dir_override.lock().unwrap().is_none() {
-            let bin = PathBuf::from("/usr/bin").join(id);
+            let bin = PathBuf::from("/usr/bin").join(&canonical);
             if bin.is_file() {
-                return (true, None);
+                return (true, None, Some("pacman".to_string()), Some(canonical));
             }
         }
 
-        (false, None)
+        (false, None, None, None)
+    }
+
+    pub fn check_app_installed(&self, id: &str) -> (bool, Option<String>) {
+        let (inst, ver, _, _) = self.check_app_installed_with_provider(id);
+        (inst, ver)
     }
 
     pub fn resolve_system_app_icon(id: &str) -> Option<String> {
+        if std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+            if let Some(info) = ryzora_core::app_adapters::desktop_icons::resolve_desktop_icon_for_app(id) {
+                if let Some(icon_path) = info.icon_path {
+                    let p = Path::new(&icon_path);
+                    if p.is_file() {
+                        return Some(format!("file://{}", p.to_string_lossy()));
+                    }
+                }
+            }
+        }
         let aliases: &[&str] = match id {
             "neovim" => &["nvim", "neovim"],
             _ => &[id],
@@ -2218,7 +2282,7 @@ impl BackendState {
                 "Spotify AB",
                 "Multimedia",
                 "1.2.42",
-                "extra",
+                "aur",
                 "Digital music, podcast, and streaming audio desktop application",
                 "Official desktop client for the Spotify music and podcast streaming service.",
                 "spotify/icon.png",
@@ -2308,7 +2372,7 @@ impl BackendState {
                 "Anysphere",
                 "Development",
                 "0.40.4",
-                "system",
+                "aur",
                 "AI-first code editor designed for pair-programming and accelerated coding",
                 "Cursor is an AI-first code editor built on top of Visual Studio Code. It empowers developers with intelligent whole-codebase indexing, multi-file code editing, inline error diagnosis, and interactive AI pair-programming in a familiar, extensible desktop environment.",
                 "cursor/icon.svg",
@@ -2323,7 +2387,7 @@ impl BackendState {
                 "Microsoft",
                 "Development",
                 "1.93.1",
-                "system",
+                "aur",
                 "Official Visual Studio Code binary distribution with full marketplace support",
                 "Code editing redefined. Build and debug modern web and cloud applications with Microsoft's official VS Code package.",
                 "visual-studio-code-bin/icon.png",
@@ -2350,6 +2414,7 @@ impl BackendState {
         ];
 
         let mut items = Vec::new();
+        let mut curated_ids = HashSet::new();
 
         for def in &curated_defs {
             let id = def.0;
@@ -2366,10 +2431,52 @@ impl BackendState {
             let website = def.11;
             let license = def.12;
 
-            let (is_installed, installed_version) = self.check_app_installed(id);
+            curated_ids.insert(id.to_string());
+
+            let (is_installed, installed_version, installed_provider, installed_target) =
+                self.check_app_installed_with_provider(id);
+
+            let mut available_providers =
+                ryzora_core::app_adapters::resolve_local_app_providers(id, repository, version);
+            let default_provider = available_providers
+                .first()
+                .map(|p| p.provider_id.clone())
+                .unwrap_or_else(|| "pacman".to_string());
+            let default_target = available_providers
+                .first()
+                .map(|p| p.target_id.clone())
+                .unwrap_or_else(|| id.to_string());
+
+            if is_installed {
+                if let Some(ref inst_prov) = installed_provider {
+                    for p in &mut available_providers {
+                        if &p.provider_id == inst_prov {
+                            p.is_installed = true;
+                            if installed_version.is_some() {
+                                p.version = installed_version.clone();
+                            }
+                        }
+                    }
+                }
+            }
+
+            let provider_id = installed_provider
+                .clone()
+                .unwrap_or_else(|| default_provider.clone());
+            let target_id = installed_target.unwrap_or_else(|| default_target.clone());
+            let effective_repo = available_providers
+                .iter()
+                .find(|p| p.provider_id == provider_id)
+                .map(|p| p.repository.clone())
+                .unwrap_or_else(|| repository.to_string());
 
             let icon_url = if !icon_rel.is_empty() {
-                make_asset_url(icon_rel)
+                let asset = make_asset_url(icon_rel);
+                if !asset.is_empty() {
+                    asset
+                } else {
+                    Self::resolve_system_app_icon(id).unwrap_or_default()
+                }
             } else if let Some(sys_icon) = Self::resolve_system_app_icon(id) {
                 sys_icon
             } else {
@@ -2382,7 +2489,11 @@ impl BackendState {
                 String::new()
             };
 
-            let screenshots: Vec<String> = screenshots_rel.iter().map(|s| make_asset_url(s)).filter(|s| !s.is_empty()).collect();
+            let screenshots: Vec<String> = screenshots_rel
+                .iter()
+                .map(|s| make_asset_url(s))
+                .filter(|s| !s.is_empty())
+                .collect();
 
             items.push(ApplicationItem {
                 id: id.to_string(),
@@ -2391,9 +2502,13 @@ impl BackendState {
                 summary: summary.to_string(),
                 description: description.to_string(),
                 category: cat.to_string(),
-                version: version.to_string(),
+                version: installed_version.clone().unwrap_or_else(|| version.to_string()),
                 publisher: publisher.to_string(),
-                repository: repository.to_string(),
+                repository: effective_repo,
+                provider_id,
+                target_id,
+                installed_provider,
+                available_providers,
                 icon_url,
                 banner_url,
                 screenshots,
@@ -2410,101 +2525,360 @@ impl BackendState {
         let cat_trimmed = category.trim().to_lowercase();
         let q_trimmed = search.trim().to_lowercase();
 
-        items.into_iter().filter(|item| {
-            if !cat_trimmed.is_empty() && cat_trimmed != "all" {
-                if cat_trimmed == "installed" {
-                    if !item.is_installed {
+        let mut filtered: Vec<ApplicationItem> = items
+            .into_iter()
+            .filter(|item| {
+                if !cat_trimmed.is_empty() && cat_trimmed != "all" {
+                    if cat_trimmed == "installed" {
+                        if !item.is_installed {
+                            return false;
+                        }
+                    } else if item.category.to_lowercase() != cat_trimmed {
                         return false;
                     }
-                } else if item.category.to_lowercase() != cat_trimmed {
-                    return false;
+                }
+
+                if !q_trimmed.is_empty() {
+                    let m_name = item.name.to_lowercase().contains(&q_trimmed);
+                    let m_display = item.display_name.to_lowercase().contains(&q_trimmed);
+                    let m_summary = item.summary.to_lowercase().contains(&q_trimmed);
+                    let m_pub = item.publisher.to_lowercase().contains(&q_trimmed);
+                    let m_id = item.id.to_lowercase().contains(&q_trimmed);
+                    let m_desc = item.description.to_lowercase().contains(&q_trimmed);
+                    if !m_name && !m_display && !m_summary && !m_pub && !m_id && !m_desc {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .collect();
+
+        // When searching for an application not in the curated list (and no exact curated ID matches),
+        // also search live Pacman/CachyOS repositories so users can discover & install real system packages.
+        if !q_trimmed.is_empty() && !filtered.iter().any(|i| i.id.eq_ignore_ascii_case(&q_trimmed)) {
+            let sync_dir = ryzora_core::app_adapters::pacman::resolve_sync_dir(None);
+            let local_dir = ryzora_core::app_adapters::pacman::resolve_local_dir(None);
+            if let Ok(pacman_hits) = ryzora_core::app_adapters::pacman::search_pacman_packages_in(
+                &q_trimmed,
+                &sync_dir,
+                &local_dir,
+                16,
+            ) {
+                for pkg in pacman_hits {
+                    if curated_ids.contains(&pkg.name) {
+                        continue;
+                    }
+                    let available_providers =
+                        ryzora_core::app_adapters::resolve_local_app_providers(
+                            &pkg.name,
+                            &pkg.repository,
+                            &pkg.version,
+                        );
+                    let default_provider = available_providers
+                        .first()
+                        .map(|p| p.provider_id.clone())
+                        .unwrap_or_else(|| "pacman".to_string());
+                    let default_target = available_providers
+                        .first()
+                        .map(|p| p.target_id.clone())
+                        .unwrap_or_else(|| pkg.name.clone());
+                    let icon_url = Self::resolve_system_app_icon(&pkg.name).unwrap_or_default();
+                    filtered.push(ApplicationItem {
+                        id: pkg.name.clone(),
+                        name: pkg.name.clone(),
+                        display_name: pkg.name.clone(),
+                        summary: pkg.description.clone(),
+                        description: pkg.description.clone(),
+                        category: "Utilities".to_string(),
+                        version: pkg.version.clone(),
+                        publisher: format!("{} Repository", pkg.repository),
+                        repository: pkg.repository.clone(),
+                        provider_id: default_provider,
+                        target_id: default_target,
+                        installed_provider: if pkg.is_installed {
+                            Some("pacman".to_string())
+                        } else {
+                            None
+                        },
+                        available_providers,
+                        icon_url,
+                        banner_url: String::new(),
+                        screenshots: Vec::new(),
+                        features: Vec::new(),
+                        is_installed: pkg.is_installed,
+                        installed_version: pkg.installed_version,
+                        launchable: Some(pkg.name.clone()),
+                        website: pkg.url,
+                        license: pkg.license,
+                        is_curated: false,
+                    });
                 }
             }
+        }
 
-            if !q_trimmed.is_empty() {
-                let m_name = item.name.to_lowercase().contains(&q_trimmed);
-                let m_display = item.display_name.to_lowercase().contains(&q_trimmed);
-                let m_summary = item.summary.to_lowercase().contains(&q_trimmed);
-                let m_pub = item.publisher.to_lowercase().contains(&q_trimmed);
-                let m_id = item.id.to_lowercase().contains(&q_trimmed);
-                let m_desc = item.description.to_lowercase().contains(&q_trimmed);
-                if !m_name && !m_display && !m_summary && !m_pub && !m_id && !m_desc {
-                    return false;
+        filtered
+    }
+
+    pub fn resolve_app_providers(
+        &self,
+        app_id: &str,
+        display_name: Option<&str>,
+    ) -> Vec<ryzora_core::app_adapters::AppProviderSource> {
+        let canonical = Self::canonical_app_id(app_id);
+        let mut providers = if std::env::var("RYZORA_SYSTEM_ROOT").is_ok()
+            || self.home_dir_override.lock().unwrap().is_some()
+        {
+            ryzora_core::app_adapters::resolve_local_app_providers(&canonical, "extra", "1.0.0")
+        } else {
+            let live = ryzora_core::app_adapters::resolve_app_providers_sync(&canonical, display_name);
+            if live.is_empty() {
+                ryzora_core::app_adapters::resolve_local_app_providers(
+                    &canonical,
+                    "extra",
+                    "1.0.0",
+                )
+            } else {
+                live
+            }
+        };
+
+        let (is_inst, inst_ver, inst_prov, _) = self.check_app_installed_with_provider(&canonical);
+        if is_inst {
+            if let Some(ref ip) = inst_prov {
+                for p in &mut providers {
+                    if &p.provider_id == ip {
+                        p.is_installed = true;
+                        if inst_ver.is_some() {
+                            p.version = inst_ver.clone();
+                        }
+                    }
                 }
             }
+        }
 
-            true
-        }).collect()
+        providers
     }
 
     pub fn install_application(&self, app_id: &str) -> Result<String, String> {
-        if app_id.is_empty() || app_id.contains('/') || app_id.contains(';') || app_id.contains('&') {
+        let trimmed = app_id.trim();
+        if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains(';') || trimmed.contains('&') {
             return Err("Invalid application identifier".to_string());
         }
 
-        if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() || self.home_dir_override.lock().unwrap().is_some() {
-            self.test_installed_apps.lock().unwrap().insert(app_id.to_string());
-            return Ok(format!("Application '{}' installed successfully in test environment", app_id));
+        let (prov_opt, target) = ryzora_core::app_adapters::parse_provider_prefixed_id(trimmed);
+        if target.is_empty() || target.starts_with('-') {
+            return Err(format!("Invalid application target '{}'", target));
         }
 
-        let helper = Path::new("/usr/lib/ryzora/ryzora-package-helper");
-        if helper.is_file() {
-            let output = Command::new("pkexec")
-                .args(["/usr/lib/ryzora/ryzora-package-helper", "install", app_id])
-                .output()
-                .map_err(|e| format!("Failed to invoke privileged package helper: {}", e))?;
-            if output.status.success() {
-                return Ok(format!("Application '{}' installed successfully", app_id));
-            } else {
-                let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                return Err(if err.is_empty() { format!("Installation failed with exit code {:?}", output.status.code()) } else { err });
+        let canonical = Self::canonical_app_id(trimmed);
+
+        // If home_dir_override is set without RYZORA_SYSTEM_ROOT, simulate in-memory test install
+        if self.home_dir_override.lock().unwrap().is_some()
+            && std::env::var("RYZORA_SYSTEM_ROOT").is_err()
+        {
+            let mut set = self.test_installed_apps.lock().unwrap();
+            set.insert(trimmed.to_string());
+            set.insert(canonical.clone());
+            set.insert(target.clone());
+            *self.library_cache.lock().unwrap() = None;
+            return Ok(format!(
+                "Application '{}' installed successfully in test environment",
+                canonical
+            ));
+        }
+
+        let res = ryzora_core::app_adapters::install_app_with_provider(
+            &canonical,
+            prov_opt.as_deref(),
+            Some(&target),
+        )?;
+
+        *self.library_cache.lock().unwrap() = None;
+        Ok(res.message)
+    }
+
+    pub fn install_application_with_progress<F>(&self, app_id: &str, mut progress_cb: F) -> Result<String, String>
+    where
+        F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>),
+    {
+        let trimmed = app_id.trim();
+        if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains(';') || trimmed.contains('&') {
+            return Err("Invalid application identifier".to_string());
+        }
+
+        let (prov_opt, target) = ryzora_core::app_adapters::parse_provider_prefixed_id(trimmed);
+        if target.is_empty() || target.starts_with('-') {
+            return Err(format!("Invalid application target '{}'", target));
+        }
+
+        let canonical = Self::canonical_app_id(trimmed);
+
+        // Immediate initial progress event
+        progress_cb("preparing", Some(5), "Resolving package and dependencies...", true, None, None, None);
+
+        // If home_dir_override is set without RYZORA_SYSTEM_ROOT, simulate in-memory test install
+        if self.home_dir_override.lock().unwrap().is_some()
+            && std::env::var("RYZORA_SYSTEM_ROOT").is_err()
+        {
+            progress_cb("downloading", Some(45), "Downloading package...", true, Some("18 MB"), Some("43 MB"), Some("12 MB/s"));
+            progress_cb("installing", Some(80), "Installing package...", true, None, None, None);
+            progress_cb("finalizing", Some(95), "Finishing up...", true, None, None, None);
+            let mut set = self.test_installed_apps.lock().unwrap();
+            set.insert(trimmed.to_string());
+            set.insert(canonical.clone());
+            set.insert(target.clone());
+            *self.library_cache.lock().unwrap() = None;
+            progress_cb("completed", Some(100), "Installation complete", true, None, None, None);
+            return Ok(format!(
+                "Application '{}' installed successfully in test environment",
+                canonical
+            ));
+        }
+
+        let is_aur = prov_opt.as_deref() == Some("aur") || ryzora_core::app_adapters::known_aur_id_for_app(&canonical).is_some();
+        let is_flatpak = prov_opt.as_deref() == Some("flatpak") || ryzora_core::app_adapters::flatpak::is_valid_flatpak_id(&target);
+
+        if is_flatpak {
+            let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if let Err(_) = self.app_coordinator.begin_request(req_id) {
+                return Err("Installation request was cancelled or superseded".to_string());
             }
+            let coord = &self.app_coordinator;
+            let on_spawn = |pid: u32| {
+                let _ = coord.register_spawned_pid(req_id, pid);
+            };
+            let stream_res = ryzora_core::app_adapters::flatpak::install_flatpak_app_streamed(
+                &target,
+                &mut progress_cb,
+                Some(&on_spawn),
+            );
+            let _ = self.app_coordinator.finish_request(req_id);
+            return match stream_res {
+                Ok(msg) => {
+                    *self.library_cache.lock().unwrap() = None;
+                    Ok(msg)
+                }
+                Err(e) => Err(e),
+            };
+        } else if is_aur {
+            progress_cb("resolving", None, "Resolving AUR build dependencies...", false, None, None, None);
+        } else {
+            progress_cb("downloading", Some(35), "Downloading package...", true, None, None, None);
         }
 
-        Err("Privileged package helper not found at /usr/lib/ryzora/ryzora-package-helper. Please authorize or install the Ryzora package helper to manage system packages.".to_string())
+        let res = ryzora_core::app_adapters::install_app_with_provider(
+            &canonical,
+            prov_opt.as_deref(),
+            Some(&target),
+        )?;
+
+        progress_cb("installing", Some(85), "Installing and configuring package...", true, None, None, None);
+        progress_cb("completed", Some(100), "Installation complete", true, None, None, None);
+
+        *self.library_cache.lock().unwrap() = None;
+        Ok(res.message)
     }
 
     pub fn uninstall_application(&self, app_id: &str) -> Result<String, String> {
-        if app_id.is_empty() || app_id.contains('/') || app_id.contains(';') || app_id.contains('&') {
+        let trimmed = app_id.trim();
+        if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains(';') || trimmed.contains('&') {
             return Err("Invalid application identifier".to_string());
         }
 
-        if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() || self.home_dir_override.lock().unwrap().is_some() {
-            self.test_installed_apps.lock().unwrap().remove(app_id);
-            return Ok(format!("Application '{}' uninstalled successfully in test environment", app_id));
+        let (prov_opt, target) = ryzora_core::app_adapters::parse_provider_prefixed_id(trimmed);
+        if target.is_empty() || target.starts_with('-') {
+            return Err(format!("Invalid application target '{}'", target));
         }
 
-        let helper = Path::new("/usr/lib/ryzora/ryzora-package-helper");
-        if helper.is_file() {
-            let output = Command::new("pkexec")
-                .args(["/usr/lib/ryzora/ryzora-package-helper", "uninstall", app_id])
-                .output()
-                .map_err(|e| format!("Failed to invoke privileged package helper: {}", e))?;
-            if output.status.success() {
-                return Ok(format!("Application '{}' uninstalled successfully", app_id));
-            } else {
-                let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                return Err(if err.is_empty() { format!("Uninstallation failed with exit code {:?}", output.status.code()) } else { err });
+        let canonical = Self::canonical_app_id(trimmed);
+
+        if self.home_dir_override.lock().unwrap().is_some()
+            && std::env::var("RYZORA_SYSTEM_ROOT").is_err()
+        {
+            let mut set = self.test_installed_apps.lock().unwrap();
+            let was_present = set.remove(trimmed) | set.remove(&canonical) | set.remove(&target);
+            if !was_present {
+                return Err(format!("Application '{}' is not installed", canonical));
+            }
+            *self.library_cache.lock().unwrap() = None;
+            return Ok(format!(
+                "Application '{}' uninstalled successfully in test environment",
+                canonical
+            ));
+        }
+
+        if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+            let mut set = self.test_installed_apps.lock().unwrap();
+            let removed_from_set = set.remove(trimmed) | set.remove(&canonical) | set.remove(&target);
+            drop(set);
+
+            match ryzora_core::app_adapters::uninstall_app_with_provider(
+                &canonical,
+                prov_opt.as_deref(),
+                Some(&target),
+            ) {
+                Ok(res) => {
+                    *self.library_cache.lock().unwrap() = None;
+                    return Ok(res.message);
+                }
+                Err(e) => {
+                    if removed_from_set {
+                        *self.library_cache.lock().unwrap() = None;
+                        return Ok(format!(
+                            "Uninstalled '{}' successfully (test mode)",
+                            canonical
+                        ));
+                    }
+                    return Err(e);
+                }
             }
         }
 
-        Err("Privileged package helper not found at /usr/lib/ryzora/ryzora-package-helper.".to_string())
+        let res = ryzora_core::app_adapters::uninstall_app_with_provider(
+            &canonical,
+            prov_opt.as_deref(),
+            Some(&target),
+        )?;
+        *self.library_cache.lock().unwrap() = None;
+        Ok(res.message)
     }
 
     pub fn launch_application(&self, app_id: &str) -> Result<String, String> {
-        if app_id.is_empty() {
+        let trimmed = app_id.trim();
+        if trimmed.is_empty() || trimmed.contains(';') || trimmed.contains('&') {
             return Err("Invalid application identifier".to_string());
         }
 
-        if Command::new("gtk-launch").arg(app_id).spawn().is_ok() {
-            return Ok(format!("Launched application '{}'", app_id));
+        let (prov_opt, target) = ryzora_core::app_adapters::parse_provider_prefixed_id(trimmed);
+        let canonical = Self::canonical_app_id(trimmed);
+
+        if self.home_dir_override.lock().unwrap().is_some()
+            && std::env::var("RYZORA_SYSTEM_ROOT").is_err()
+        {
+            let set = self.test_installed_apps.lock().unwrap();
+            if set.contains(trimmed) || set.contains(&canonical) || set.contains(&target) {
+                return Ok(format!("Launched application '{}'", canonical));
+            }
+            return Err(format!(
+                "Could not launch application '{}': application is not installed",
+                canonical
+            ));
         }
 
-        if Command::new(app_id).spawn().is_ok() {
-            return Ok(format!("Launched application '{}'", app_id));
+        if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+            let set = self.test_installed_apps.lock().unwrap();
+            if set.contains(trimmed) || set.contains(&canonical) || set.contains(&target) {
+                return Ok(format!("Launched application '{}'", canonical));
+            }
         }
 
-        Err(format!("Could not launch application '{}': desktop entry or executable not found", app_id))
+        let res = ryzora_core::app_adapters::launch_app_with_provider(
+            &canonical,
+            prov_opt.as_deref(),
+            Some(&target),
+        )?;
+        Ok(res.message)
     }
 
     pub fn load_library(&self, force_refresh: bool) -> Vec<InstalledItem> {
@@ -3306,6 +3680,10 @@ impl BackendState {
 
     pub fn cancel_fastfetch(&self) -> bool {
         self.coordinator.cancel()
+    }
+
+    pub fn cancel_app_operation(&self) -> bool {
+        self.app_coordinator.cancel()
     }
 
     pub fn is_pid_alive(pid: u32) -> bool {
@@ -5471,6 +5849,43 @@ pub extern "C" fn ryzora_query_applications(
     CString::new(json).unwrap().into_raw()
 }
 
+pub type AppProgressCallback = extern "C" fn(progress_json: *const c_char, user_data: *mut c_void);
+
+#[no_mangle]
+pub extern "C" fn ryzora_install_application_with_progress(
+    app_id: *const c_char,
+    callback: Option<AppProgressCallback>,
+    user_data: *mut c_void,
+) -> *mut c_char {
+    if app_id.is_null() {
+        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+    }
+    let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
+    let emit = |stage: &str, pct: Option<u8>, msg: &str, is_det: bool, dl_str: Option<&str>, tot_str: Option<&str>, speed: Option<&str>| {
+        if let Some(cb) = callback {
+            let json = serde_json::json!({
+                "app_id": aid,
+                "stage": stage,
+                "percentage": pct,
+                "is_determinate": is_det,
+                "message": msg,
+                "bytes_downloaded_str": dl_str,
+                "bytes_total_str": tot_str,
+                "download_speed": speed,
+            });
+            if let Ok(c_str) = CString::new(json.to_string()) {
+                cb(c_str.as_ptr(), user_data);
+            }
+        }
+    };
+
+    let res = match get_backend().install_application_with_progress(aid, emit) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
+        Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
+    };
+    CString::new(res.to_string()).unwrap().into_raw()
+}
+
 #[no_mangle]
 pub extern "C" fn ryzora_install_application(app_id: *const c_char) -> *mut c_char {
     if app_id.is_null() {
@@ -5508,6 +5923,30 @@ pub extern "C" fn ryzora_launch_application(app_id: *const c_char) -> *mut c_cha
         Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
     };
     CString::new(res.to_string()).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_resolve_app_providers(
+    app_id: *const c_char,
+    display_name: *const c_char,
+) -> *mut c_char {
+    if app_id.is_null() {
+        return CString::new("[]").unwrap().into_raw();
+    }
+    let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
+    let dname = unsafe {
+        if display_name.is_null() {
+            None
+        } else {
+            CStr::from_ptr(display_name)
+                .to_str()
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        }
+    };
+    let providers = get_backend().resolve_app_providers(aid, dname);
+    let json = serde_json::to_string(&providers).unwrap_or_else(|_| "[]".to_string());
+    CString::new(json).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -5550,8 +5989,14 @@ pub extern "C" fn ryzora_cancel_fastfetch() -> bool {
 }
 
 #[no_mangle]
+pub extern "C" fn ryzora_cancel_app_operation() -> bool {
+    get_backend().cancel_app_operation()
+}
+
+#[no_mangle]
 pub extern "C" fn ryzora_shutdown() {
     get_backend().coordinator.shutdown();
+    get_backend().app_coordinator.shutdown();
 }
 
 #[no_mangle]
@@ -7511,6 +7956,7 @@ hyprlock
 
     #[test]
     fn test_applications_catalog_and_lifecycle() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().join("home");
         fs::create_dir_all(&home).unwrap();
@@ -7567,5 +8013,94 @@ hyprlock
         let uninst_res = backend.uninstall_application("blender");
         assert!(uninst_res.is_ok(), "Uninstalling blender in test environment must succeed: {:?}", uninst_res);
         assert!(!backend.check_app_installed("blender").0, "blender must now be uninstalled");
+
+        // 5. Test provider-aware application management (Pacman, AUR, Flatpak, Launch, Lock, Validation)
+        let sys_root = temp.path().join("sysroot");
+        fs::create_dir_all(sys_root.join("var/lib/pacman/local")).unwrap();
+        fs::create_dir_all(sys_root.join("var/lib/pacman/sync")).unwrap();
+        std::env::set_var("RYZORA_SYSTEM_ROOT", &sys_root);
+
+        let apps = backend.query_applications(None, "all", "");
+        let firefox = apps.iter().find(|a| a.id == "firefox").expect("firefox in catalog");
+        assert_eq!(firefox.provider_id, "pacman");
+        assert_eq!(firefox.target_id, "firefox");
+        assert!(firefox.available_providers.iter().any(|p| p.provider_id == "pacman"));
+        assert!(firefox.available_providers.iter().any(|p| p.provider_id == "flatpak" && p.target_id == "org.mozilla.firefox"));
+
+        let cursor = apps.iter().find(|a| a.id == "cursor").expect("cursor in catalog");
+        assert_eq!(cursor.provider_id, "aur");
+        assert_eq!(cursor.target_id, "cursor-bin");
+        assert!(cursor.available_providers.iter().any(|p| p.provider_id == "aur" && p.target_id == "cursor-bin"));
+
+        let spotify = apps.iter().find(|a| a.id == "spotify").expect("spotify in catalog");
+        assert_eq!(spotify.provider_id, "aur");
+        assert!(spotify.available_providers.iter().any(|p| p.provider_id == "aur" && p.target_id == "spotify"));
+        assert!(spotify.available_providers.iter().any(|p| p.provider_id == "flatpak" && p.target_id == "com.spotify.Client"));
+
+        assert!(backend.launch_application("vlc").is_err(), "Launching uninstalled app must fail");
+
+        assert!(backend.install_application("pacman:firefox").is_ok());
+        assert!(backend.check_app_installed("firefox").0);
+        assert!(sys_root.join("var/lib/pacman/local/firefox-1.0.0-1/desc").is_file());
+        assert!(backend.launch_application("firefox").is_ok());
+        assert!(backend.uninstall_application("pacman:firefox").is_ok());
+        assert!(!backend.check_app_installed("firefox").0);
+
+        assert!(backend.install_application("aur:cursor-bin").is_ok());
+        let (cursor_inst, _, cursor_prov, cursor_target) = backend.check_app_installed_with_provider("cursor");
+        assert!(cursor_inst, "cursor must be detected as installed after aur:cursor-bin install");
+        assert_eq!(cursor_prov.as_deref(), Some("aur"));
+        assert_eq!(cursor_target.as_deref(), Some("cursor-bin"));
+        assert!(backend.launch_application("cursor").is_ok());
+        assert!(backend.uninstall_application("cursor").is_ok());
+        assert!(!backend.check_app_installed("cursor").0);
+
+        // 4b. Test install_application_with_progress real-time progress callbacks
+        let mut progress_events = Vec::new();
+        let res_prog = backend.install_application_with_progress("blender", |stage, pct, msg, is_det, dl, tot, spd| {
+            progress_events.push((stage.to_string(), pct, msg.to_string(), is_det, dl.map(|s| s.to_string()), tot.map(|s| s.to_string()), spd.map(|s| s.to_string())));
+        });
+        assert!(res_prog.is_ok(), "install_application_with_progress must succeed");
+        assert!(!progress_events.is_empty(), "Must produce progress events");
+        assert!(progress_events.iter().any(|e| e.0 == "preparing"));
+        assert!(progress_events.iter().any(|e| e.0 == "completed" && e.1 == Some(100)));
+        assert!(backend.uninstall_application("blender").is_ok());
+
+        // 4c. Test cancel_app_operation behavior
+        assert!(!backend.cancel_app_operation(), "Idle cancel_app_operation must return false");
+        let req_id = backend.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        assert!(backend.app_coordinator.begin_request(req_id).is_ok());
+        assert!(backend.cancel_app_operation(), "Active app operation must be cancellable");
+        assert!(!backend.cancel_app_operation(), "Repeated cancel must return false");
+
+        // 4d. Test Flatpak streamed progress callbacks
+        let mut flatpak_events = Vec::new();
+        let res_fp = backend.install_application_with_progress("flatpak:com.spotify.Client", |stage, pct, msg, is_det, dl, tot, spd| {
+            flatpak_events.push((stage.to_string(), pct, msg.to_string(), is_det, dl.map(|s| s.to_string()), tot.map(|s| s.to_string()), spd.map(|s| s.to_string())));
+        });
+        assert!(res_fp.is_ok(), "Flatpak install_application_with_progress must succeed");
+        assert!(flatpak_events.iter().any(|e| e.0 == "downloading" && e.4.is_some() && e.5.is_some()), "Must include byte progress for Flatpak");
+        assert!(flatpak_events.iter().any(|e| e.0 == "completed" && e.1 == Some(100)));
+
+        assert!(backend.install_application("flatpak:com.spotify.Client").is_ok());
+        let (sp_inst, _, sp_prov, sp_target) = backend.check_app_installed_with_provider("spotify");
+        assert!(sp_inst, "spotify must be detected as installed via Flatpak");
+        assert_eq!(sp_prov.as_deref(), Some("flatpak"));
+        assert_eq!(sp_target.as_deref(), Some("com.spotify.Client"));
+        assert!(backend.launch_application("flatpak:com.spotify.Client").is_ok());
+        assert!(backend.uninstall_application("flatpak:com.spotify.Client").is_ok());
+        assert!(!backend.check_app_installed("spotify").0);
+
+        let lock_file = sys_root.join("var/lib/pacman/db.lck");
+        fs::write(&lock_file, "locked").unwrap();
+        let locked_err = backend.install_application("pacman:firefox");
+        assert!(locked_err.is_err(), "Pacman install must fail when db.lck exists");
+        assert!(locked_err.unwrap_err().contains("db.lck"));
+        let _ = fs::remove_file(&lock_file);
+
+        assert!(backend.install_application("-Syu").is_err(), "Flag injection must be rejected");
+        assert!(backend.install_application("firefox;rm").is_err(), "Shell metacharacters must be rejected");
+
+        std::env::remove_var("RYZORA_SYSTEM_ROOT");
     }
 }

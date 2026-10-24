@@ -201,6 +201,9 @@ pub struct FlatpakTransactionParserState {
     pub target_package: String,
     pub current_stage: String,
     pub current_package: Option<String>,
+    pub bytes_downloaded_str: Option<String>,
+    pub bytes_total_str: Option<String>,
+    pub download_speed: Option<String>,
 }
 
 impl FlatpakTransactionParserState {
@@ -211,6 +214,9 @@ impl FlatpakTransactionParserState {
             target_package,
             current_stage: "preparing".to_string(),
             current_package: None,
+            bytes_downloaded_str: None,
+            bytes_total_str: None,
+            download_speed: None,
         }
     }
 
@@ -229,9 +235,9 @@ impl FlatpakTransactionParserState {
             current_package: self.current_package.clone(),
             current_package_index: None,
             total_packages: None,
-            bytes_downloaded_str: None,
-            bytes_total_str: None,
-            download_speed: None,
+            bytes_downloaded_str: self.bytes_downloaded_str.clone(),
+            bytes_total_str: self.bytes_total_str.clone(),
+            download_speed: self.download_speed.clone(),
             message,
             raw_line: Some(raw_line),
             error: None,
@@ -251,7 +257,7 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
         return None;
     }
     let lower = clean.to_ascii_lowercase();
-    let stage = if lower.contains("download") || lower.contains("pulling") {
+    let stage = if lower.contains("download") || lower.contains("pulling") || (lower.contains('/') && (lower.contains("mb") || lower.contains("kb") || lower.contains("gb")) && lower.contains("/s")) {
         "downloading"
     } else if lower.contains("install") || lower.contains("deploy") || lower.contains("remove") || lower.contains("uninstall") {
         "installing"
@@ -282,7 +288,165 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
             .filter(|number| *number <= 100)
     });
 
+    // Detect actual downloaded and total byte counts: "34.2 MB / 85.0 MB" or "10.5 kB / 1.2 MB"
+    let words: Vec<&str> = clean.split_whitespace().collect();
+    for i in 0..words.len() {
+        if words[i] == "/" && i >= 2 && i + 2 < words.len() {
+            let dl_num = words[i - 2].trim_matches(|c: char| !c.is_ascii_digit() && c != '.');
+            let dl_unit = words[i - 1];
+            let tot_num = words[i + 1].trim_matches(|c: char| !c.is_ascii_digit() && c != '.');
+            let tot_unit = words[i + 2].trim_matches(|c: char| !c.is_ascii_alphabetic());
+            if !dl_num.is_empty() && !tot_num.is_empty() && (dl_unit.eq_ignore_ascii_case("mb") || dl_unit.eq_ignore_ascii_case("mib") || dl_unit.eq_ignore_ascii_case("kb") || dl_unit.eq_ignore_ascii_case("kib") || dl_unit.eq_ignore_ascii_case("gb") || dl_unit.eq_ignore_ascii_case("gib") || dl_unit.eq_ignore_ascii_case("bytes")) {
+                state.bytes_downloaded_str = Some(format!("{} {}", dl_num, dl_unit));
+                state.bytes_total_str = Some(format!("{} {}", tot_num, tot_unit));
+            }
+        }
+    }
+
+    // Detect speed: "(2.4 MB/s)" or "2.4 MB/s"
+    for i in 0..words.len() {
+        if words[i].contains("/s") {
+            let s_unit = words[i].trim_matches(|c: char| c == '(' || c == ')');
+            if i > 0 && words[i - 1].chars().any(|c| c.is_ascii_digit()) {
+                let s_num = words[i - 1].trim_matches(|c: char| c == '(' || c == ')');
+                state.download_speed = Some(format!("{} {}", s_num, s_unit));
+            } else {
+                state.download_speed = Some(s_unit.to_string());
+            }
+            break;
+        }
+    }
+
     Some(state.event(&stage_owned, percentage, clean.to_string(), clean.to_string()))
+}
+
+/// State for the AUR helper (paru/yay/makepkg) progress adapter.
+#[derive(Debug, Clone)]
+pub struct AurTransactionParserState {
+    pub transaction_id: String,
+    pub operation: String,
+    pub target_package: String,
+    pub current_stage: String,
+    pub current_package: Option<String>,
+}
+
+impl AurTransactionParserState {
+    pub fn new(transaction_id: String, operation: String, target_package: String) -> Self {
+        Self {
+            transaction_id,
+            operation,
+            target_package,
+            current_stage: "preparing".to_string(),
+            current_package: None,
+        }
+    }
+}
+
+/// Parses AUR helper (paru/yay/makepkg) output lines.
+/// Avoids synthetic percentages during compilation/build phases;
+/// reports genuine stages: preparing, resolving, downloading, building, installing, finalizing, failed.
+pub fn parse_aur_line(line: &str, state: &mut AurTransactionParserState) -> Option<TransactionProgressEvent> {
+    let clean = line.trim();
+    if clean.is_empty() {
+        return None;
+    }
+    let lower = clean.to_ascii_lowercase();
+
+    if lower.contains("unable to lock database") || lower.contains("db.lck") {
+        state.current_stage = "failed".to_string();
+        return Some(TransactionProgressEvent {
+            transaction_id: state.transaction_id.clone(),
+            operation: state.operation.clone(),
+            target_package: state.target_package.clone(),
+            stage: "failed".to_string(),
+            percentage: None,
+            download_percentage: None,
+            install_percentage: None,
+            current_package: state.current_package.clone(),
+            current_package_index: None,
+            total_packages: None,
+            bytes_downloaded_str: None,
+            bytes_total_str: None,
+            download_speed: None,
+            message: "Package database is locked by another process.".to_string(),
+            raw_line: Some(line.to_string()),
+            error: Some(line.to_string()),
+            is_db_locked: true,
+            is_auth_cancelled: false,
+            is_cached: false,
+        });
+    }
+
+    if lower.contains("request dismissed") || lower.contains("authorization cancelled") {
+        state.current_stage = "failed".to_string();
+        return Some(TransactionProgressEvent {
+            transaction_id: state.transaction_id.clone(),
+            operation: state.operation.clone(),
+            target_package: state.target_package.clone(),
+            stage: "failed".to_string(),
+            percentage: None,
+            download_percentage: None,
+            install_percentage: None,
+            current_package: state.current_package.clone(),
+            current_package_index: None,
+            total_packages: None,
+            bytes_downloaded_str: None,
+            bytes_total_str: None,
+            download_speed: None,
+            message: "Administrator authorization was cancelled.".to_string(),
+            raw_line: Some(line.to_string()),
+            error: Some(line.to_string()),
+            is_db_locked: false,
+            is_auth_cancelled: true,
+            is_cached: false,
+        });
+    }
+
+    let stage = if lower.contains("cloning") || lower.contains("fetching") || lower.contains("downloading") {
+        "downloading".to_string()
+    } else if lower.contains("resolving") || lower.contains("finding dependencies") || lower.contains("calculating") {
+        "resolving".to_string()
+    } else if lower.contains("building") || lower.contains("compiling") || lower.contains("makepkg") || lower.contains("starting build") {
+        "building".to_string()
+    } else if lower.contains("installing") || lower.contains("upgrading") || lower.contains("proceed with installation") {
+        "installing".to_string()
+    } else if lower.contains("cleaning") || lower.contains("finalizing") {
+        "finalizing".to_string()
+    } else {
+        state.current_stage.clone()
+    };
+
+    state.current_stage = stage.clone();
+
+    // Only extract percentage if directly reported as N%
+    let percentage = clean.split_whitespace().find_map(|word| {
+        word.trim_matches(|c: char| c != '%' && !c.is_ascii_digit())
+            .strip_suffix('%')
+            .and_then(|number| number.parse::<u8>().ok())
+            .filter(|number| *number <= 100)
+    });
+
+    Some(TransactionProgressEvent {
+        transaction_id: state.transaction_id.clone(),
+        operation: state.operation.clone(),
+        target_package: state.target_package.clone(),
+        stage: stage.clone(),
+        percentage,
+        download_percentage: if stage == "downloading" { percentage } else { None },
+        install_percentage: if stage == "installing" { percentage } else { None },
+        current_package: state.current_package.clone(),
+        current_package_index: None,
+        total_packages: None,
+        bytes_downloaded_str: None,
+        bytes_total_str: None,
+        download_speed: None,
+        message: clean.to_string(),
+        raw_line: Some(line.to_string()),
+        error: if lower.starts_with("error:") { Some(clean.to_string()) } else { None },
+        is_db_locked: false,
+        is_auth_cancelled: false,
+        is_cached: false,
+    })
 }
 
 /// Parses genuine Pacman output lines into structured transaction events.
@@ -789,5 +953,32 @@ mod tests {
         assert_eq!(ev.current_package_index, Some(2));
         assert_eq!(ev.total_packages, Some(4));
         assert_eq!(ev.install_percentage, Some(50));
+    }
+
+    #[test]
+    fn test_parse_flatpak_progress_and_byte_counts() {
+        let mut state = FlatpakTransactionParserState::new("txn-fp".into(), "install".into(), "org.mozilla.firefox".into());
+        let line = "1. [####################] 42% 34.2 MB / 85.0 MB (2.4 MB/s)";
+        let ev = parse_flatpak_line(line, &mut state).unwrap();
+        assert_eq!(ev.stage, "downloading");
+        assert_eq!(ev.percentage, Some(42));
+        assert_eq!(ev.bytes_downloaded_str, Some("34.2 MB".to_string()));
+        assert_eq!(ev.bytes_total_str, Some("85.0 MB".to_string()));
+        assert_eq!(ev.download_speed, Some("2.4 MB/s".to_string()));
+    }
+
+    #[test]
+    fn test_parse_aur_stages_indeterminate() {
+        let mut state = AurTransactionParserState::new("txn-aur".into(), "install".into(), "cursor-bin".into());
+        let ev1 = parse_aur_line("==> Cloning cursor-bin git repo...", &mut state).unwrap();
+        assert_eq!(ev1.stage, "downloading");
+        assert_eq!(ev1.percentage, None);
+
+        let ev2 = parse_aur_line("==> Starting build()...", &mut state).unwrap();
+        assert_eq!(ev2.stage, "building");
+        assert_eq!(ev2.percentage, None);
+
+        let ev3 = parse_aur_line("==> Proceed with installation? [Y/n]", &mut state).unwrap();
+        assert_eq!(ev3.stage, "installing");
     }
 }

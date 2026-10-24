@@ -32,23 +32,23 @@ pub fn launch_fastfetch_terminal(temp_config_path: &Path) -> Result<bool, String
     let temp_str = temp_config_path.to_string_lossy().to_string();
     let run_cmd = format!("fastfetch -c \"{}\"; rm -f \"{}\"", temp_str, temp_str);
 
-    let spawned = if crate::system::check_binary("kitty").0 {
+    let spawned = if crate::app_adapters::check_binary("kitty").0 {
         Command::new("kitty")
             .args(&["--hold", "-e", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("foot").0 {
+    } else if crate::app_adapters::check_binary("foot").0 {
         Command::new("foot")
             .args(&["-H", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("konsole").0 {
+    } else if crate::app_adapters::check_binary("konsole").0 {
         Command::new("konsole")
             .args(&["--noclose", "-e", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("alacritty").0 {
+    } else if crate::app_adapters::check_binary("alacritty").0 {
         Command::new("alacritty")
             .args(&["-e", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("xterm").0 {
+    } else if crate::app_adapters::check_binary("xterm").0 {
         Command::new("xterm")
             .args(&["-hold", "-e", "sh", "-c", &run_cmd])
             .spawn()
@@ -73,23 +73,23 @@ pub fn launch_fastfetch_terminal_file(config_path: &Path) -> Result<bool, String
     let path_str = config_path.to_string_lossy().to_string();
     let run_cmd = format!("fastfetch -c \"{}\"", path_str);
 
-    let spawned = if crate::system::check_binary("kitty").0 {
+    let spawned = if crate::app_adapters::check_binary("kitty").0 {
         Command::new("kitty")
             .args(&["--hold", "-e", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("foot").0 {
+    } else if crate::app_adapters::check_binary("foot").0 {
         Command::new("foot")
             .args(&["-H", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("konsole").0 {
+    } else if crate::app_adapters::check_binary("konsole").0 {
         Command::new("konsole")
             .args(&["--noclose", "-e", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("alacritty").0 {
+    } else if crate::app_adapters::check_binary("alacritty").0 {
         Command::new("alacritty")
             .args(&["-e", "sh", "-c", &run_cmd])
             .spawn()
-    } else if crate::system::check_binary("xterm").0 {
+    } else if crate::app_adapters::check_binary("xterm").0 {
         Command::new("xterm")
             .args(&["-hold", "-e", "sh", "-c", &run_cmd])
             .spawn()

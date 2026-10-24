@@ -44,3 +44,5 @@ pub use installer::{
 };
 
 pub mod sddm_helper;
+pub mod package_helper;
+pub mod app_adapters;

@@ -106,8 +106,10 @@ public:
     Q_INVOKABLE void filterCatalog(const QString &category, const QString &query);
     Q_INVOKABLE void filterApps(const QString &category, const QString &query);
     Q_INVOKABLE void installApp(const QString &appId);
+    Q_INVOKABLE void cancelAppOperation(const QString &appId);
     Q_INVOKABLE void uninstallApp(const QString &appId);
     Q_INVOKABLE void launchApp(const QString &appId);
+    Q_INVOKABLE QVariantList resolveAppProviders(const QString &appId, const QString &displayName = QString());
     Q_INVOKABLE void loadLibrary(bool forceRefresh = false);
     Q_INVOKABLE void loadPresets();
     Q_INVOKABLE void requestFastfetchPreview(const QString &presetName);
@@ -175,7 +177,9 @@ signals:
     void appsChanged();
     void appsLoadingChanged();
     void appInstalled(const QString &appId, bool success, const QString &message);
+    void appInstallProgress(const QString &appId, const QString &stage, int percentage, bool isDeterminate, const QString &message, const QString &bytesDownloaded, const QString &bytesTotal, const QString &downloadSpeed);
     void appUninstalled(const QString &appId, bool success, const QString &message);
+    void appLaunched(const QString &appId, bool success, const QString &message);
     void libraryChanged();
     void activeConfigurationChanged();
     void decoderSlotAvailable();

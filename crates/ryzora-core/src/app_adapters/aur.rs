@@ -74,9 +74,9 @@ struct AurRpcRecord {
 
 /// Detects AUR support and counts installed foreign packages.
 pub fn detect_aur_status() -> AurStatus {
-    let (has_yay, _) = crate::system::check_binary("yay");
-    let (has_paru, _) = crate::system::check_binary("paru");
-    let (has_makepkg, _) = crate::system::check_binary("makepkg");
+    let (has_yay, _) = crate::app_adapters::check_binary("yay");
+    let (has_paru, _) = crate::app_adapters::check_binary("paru");
+    let (has_makepkg, _) = crate::app_adapters::check_binary("makepkg");
 
     let helper = if has_paru {
         Some("paru".to_string())
@@ -358,42 +358,111 @@ pub fn list_installed_foreign_packages() -> Result<Vec<AurPackageInfo>, String> 
     Ok(foreign)
 }
 
+/// Validates an AUR package name strictly against command/path injection.
+pub fn is_valid_aur_package_name(pkg_name: &str) -> bool {
+    let trimmed = pkg_name.trim();
+    !trimmed.is_empty()
+        && trimmed.len() <= 64
+        && !trimmed.starts_with('-')
+        && !trimmed.starts_with('.')
+        && !trimmed.starts_with('+')
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '+' || c == '@')
+}
+
+/// Builds the exact CLI arguments used to invoke an AUR helper (`paru` or `yay`) unprivileged.
+pub fn aur_helper_install_args(helper: &str, pkg_name: &str) -> Result<Vec<String>, String> {
+    let trimmed = pkg_name.trim();
+    if !is_valid_aur_package_name(trimmed) {
+        return Err(format!("Invalid AUR package name '{}'", trimmed));
+    }
+    match helper {
+        "paru" | "yay" => Ok(vec![
+            "-S".to_string(),
+            "--noconfirm".to_string(),
+            "--sudo".to_string(),
+            "pkexec".to_string(),
+            "--".to_string(),
+            trimmed.to_string(),
+        ]),
+        _ => Err(format!("Unsupported AUR helper '{}'", helper)),
+    }
+}
+
 /// Builds and installs an AUR package unprivileged.
 /// Never executes PKGBUILD or makepkg as root.
 pub fn aur_build_and_install_package(pkg_name: &str) -> Result<String, String> {
     let trimmed = pkg_name.trim();
-    if !trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '+') {
+    if !is_valid_aur_package_name(trimmed) {
         return Err(format!("Invalid AUR package name '{}'", trimmed));
     }
 
-    let (has_yay, _) = crate::system::check_binary("yay");
-    let (has_paru, _) = crate::system::check_binary("paru");
+    if std::env::var("RYZORA_TEST_NO_AUR_HELPER").as_deref() == Ok("1") {
+        return Err("No AUR helper (paru, yay, or makepkg) is installed on this system.".to_string());
+    }
 
-    // If yay or paru is available, invoke it unprivileged.
-    if has_yay {
-        let output = Command::new("yay")
-            .args(["-S", "--noconfirm", "--sudo", "pkexec", trimmed])
-            .stdin(std::process::Stdio::null())
-            .output()
-            .map_err(|e| format!("Failed to run yay: {}", e))?;
+    // In test sandbox environment (RYZORA_SYSTEM_ROOT set), record foreign package in sandbox local db
+    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        let local_dir = resolve_local_dir(None);
+        let ver = "1.0.0-1";
+        let pkg_dir = local_dir.join(format!("{}-{}", trimmed, ver));
+        fs::create_dir_all(&pkg_dir)
+            .map_err(|e| format!("Failed to create sandbox AUR package dir: {}", e))?;
+        let desc_content = format!(
+            "%NAME%\n{}\n\n%VERSION%\n{}\n\n%DESC%\nAUR package {}\n\n%URL%\nhttps://aur.archlinux.org/packages/{}\n\n%LICENSE%\nCustom\n",
+            trimmed, ver, trimmed, trimmed
+        );
+        fs::write(pkg_dir.join("desc"), desc_content)
+            .map_err(|e| format!("Failed to write sandbox AUR desc file: {}", e))?;
+        return Ok(format!("Successfully built and installed AUR package '{}' (test mode)", trimmed));
+    }
 
-        if !output.status.success() {
-            let err = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("AUR installation with yay failed: {}", err.trim()));
-        }
-        return Ok(format!("Successfully built and installed AUR package '{}' via yay", trimmed));
-    } else if has_paru {
+    let (has_paru, _) = crate::app_adapters::check_binary("paru");
+    let (has_yay, _) = crate::app_adapters::check_binary("yay");
+
+    // If paru or yay is available, invoke it unprivileged (preferring paru on CachyOS/Arch).
+    if has_paru {
+        let args = aur_helper_install_args("paru", trimmed)?;
         let output = Command::new("paru")
-            .args(["-S", "--noconfirm", "--sudo", "pkexec", trimmed])
+            .args(&args)
             .stdin(std::process::Stdio::null())
             .output()
             .map_err(|e| format!("Failed to run paru: {}", e))?;
 
         if !output.status.success() {
             let err = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("AUR installation with paru failed: {}", err.trim()));
+            let out = String::from_utf8_lossy(&output.stdout);
+            let detail = if !err.trim().is_empty() { err.trim() } else { out.trim() };
+            if detail.contains("Request dismissed") || detail.to_lowercase().contains("cancelled") {
+                return Err("Administrator authorization was cancelled during AUR installation.".to_string());
+            }
+            return Err(format!("AUR installation with paru failed: {}", detail));
         }
         return Ok(format!("Successfully built and installed AUR package '{}' via paru", trimmed));
+    } else if has_yay {
+        let args = aur_helper_install_args("yay", trimmed)?;
+        let output = Command::new("yay")
+            .args(&args)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to run yay: {}", e))?;
+
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            let out = String::from_utf8_lossy(&output.stdout);
+            let detail = if !err.trim().is_empty() { err.trim() } else { out.trim() };
+            if detail.contains("Request dismissed") || detail.to_lowercase().contains("cancelled") {
+                return Err("Administrator authorization was cancelled during AUR installation.".to_string());
+            }
+            return Err(format!("AUR installation with yay failed: {}", detail));
+        }
+        return Ok(format!("Successfully built and installed AUR package '{}' via yay", trimmed));
+    }
+
+    let (has_makepkg, _) = crate::app_adapters::check_binary("makepkg");
+    if !has_makepkg {
+        return Err("No AUR helper (paru, yay, or makepkg) is installed on this system.".to_string());
     }
 
     // Fallback: dedicated unprivileged makepkg workflow

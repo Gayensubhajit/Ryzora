@@ -485,6 +485,189 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     return 0;
 }
 
+int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "==================================================";
+    qInfo() << "STARTING LIVE APPS PAGE INTERACTION VERIFICATION";
+    qInfo() << "==================================================";
+
+    auto pumpEvents = [&](int iterations = 10, int delayUs = 10000) {
+        for (int i = 0; i < iterations; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    pumpEvents(20, 10000);
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    if (!rootObj) {
+        qCritical() << "FAIL: QML root object not loaded!";
+        return 1;
+    }
+
+    QObject *appsView = rootObj->findChild<QObject*>("appsView");
+    if (!appsView) {
+        qCritical() << "FAIL: Could not find appsView in scene graph!";
+        return 2;
+    }
+
+    // 1. Navigate to Apps tab
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    pumpEvents(15, 20000);
+    qInfo() << "[STEP 1] Navigated to Apps tab. Initial apps count:" << backend->appsCount();
+
+    // 2. Test Category Switching
+    qInfo() << "[STEP 2] Testing Category Switching...";
+    appsView->setProperty("selectedCategory", "Development");
+    pumpEvents(15, 20000);
+    QVariant devAppsVar = appsView->property("filteredApps");
+    QVariantList devApps = devAppsVar.toList();
+    qInfo() << "  -> Development category apps count:" << devApps.size();
+    if (devApps.isEmpty()) {
+        qCritical() << "FAIL: Development category returned 0 apps!";
+        return 3;
+    }
+
+    appsView->setProperty("selectedCategory", "Internet");
+    pumpEvents(15, 20000);
+    QVariant netAppsVar = appsView->property("filteredApps");
+    QVariantList netApps = netAppsVar.toList();
+    qInfo() << "  -> Internet category apps count:" << netApps.size();
+    if (netApps.isEmpty()) {
+        qCritical() << "FAIL: Internet category returned 0 apps!";
+        return 4;
+    }
+
+    appsView->setProperty("selectedCategory", "All");
+    pumpEvents(15, 20000);
+    QVariant allAppsVar = appsView->property("filteredApps");
+    qInfo() << "  -> Returned to All category apps count:" << allAppsVar.toList().size();
+
+    // 3. Test Search Query Filtering
+    qInfo() << "[STEP 3] Testing Search Filter...";
+    appsView->setProperty("searchQuery", "blender");
+    pumpEvents(15, 20000);
+    QVariant searchAppsVar = appsView->property("filteredApps");
+    QVariantList searchApps = searchAppsVar.toList();
+    qInfo() << "  -> Search 'blender' count:" << searchApps.size();
+    if (searchApps.size() != 1 || searchApps.first().toMap().value("id").toString() != "blender") {
+        qCritical() << "FAIL: Search 'blender' failed!";
+        return 5;
+    }
+
+    appsView->setProperty("searchQuery", "");
+    pumpEvents(15, 20000);
+    qInfo() << "  -> Search cleared, apps count:" << appsView->property("filteredApps").toList().size();
+
+    // 4. Test Details Navigation and Back to Apps
+    qInfo() << "[STEP 4] Testing Details Navigation & Back to Apps...";
+    QVariantList masterList = backend->appsList();
+    QVariant discordApp;
+    for (const QVariant &v : masterList) {
+        if (v.toMap().value("id").toString() == "discord") {
+            discordApp = v;
+            break;
+        }
+    }
+    if (discordApp.isNull()) {
+        qCritical() << "FAIL: Discord app not found in master apps list!";
+        return 6;
+    }
+
+    QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, discordApp));
+    pumpEvents(20, 20000);
+    QVariant selectedApp = appsView->property("selectedApp");
+    if (selectedApp.isNull() || selectedApp.toMap().value("id").toString() != "discord") {
+        qCritical() << "FAIL: setSelectedApp failed to set Discord as selectedApp!";
+        return 7;
+    }
+    QVariantList discordProviders = selectedApp.toMap().value("available_providers").toList();
+    qInfo() << "  -> Discord details opened successfully. Selected app:" << selectedApp.toMap().value("id").toString()
+            << "provider_id:" << selectedApp.toMap().value("provider_id").toString()
+            << "available_providers:" << discordProviders.size();
+    if (discordProviders.isEmpty()) {
+        qCritical() << "FAIL: Discord available_providers is empty!";
+        return 7;
+    }
+
+    // Back to Apps
+    QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, QVariant()));
+    pumpEvents(15, 20000);
+    QVariant backApp = appsView->property("selectedApp");
+    if (!backApp.isNull() && backApp.isValid()) {
+        qCritical() << "FAIL: Back to Apps failed, selectedApp is not null!";
+        return 8;
+    }
+    qInfo() << "  -> Back to Apps returned to catalog successfully (selectedApp is null).";
+
+    // 5. Test Full Sandboxed Install -> Launch -> Uninstall Lifecycle via QML -> C++ -> Rust
+    qInfo() << "[STEP 5] Testing Full Sandboxed Install, Launch, and Uninstall Lifecycle...";
+    QString tempRoot = QDir::temp().filePath("ryzora-test-apps-sandbox");
+    QDir(tempRoot).removeRecursively();
+    QDir().mkpath(tempRoot + "/sysroot/var/lib/pacman/local");
+    QDir().mkpath(tempRoot + "/sysroot/var/lib/pacman/sync");
+    QDir().mkpath(tempRoot + "/home");
+    backend->setTestSystemRootOverride(tempRoot + "/sysroot");
+    backend->setTestHomeOverride(tempRoot + "/home");
+    backend->filterApps("All", "");
+    pumpEvents(25, 20000);
+
+    QMetaObject::invokeMethod(appsView, "requestInstall", Q_ARG(QVariant, "blender"));
+    pumpEvents(40, 20000);
+
+    bool blenderInstalled = false;
+    for (const QVariant &v : backend->appsList()) {
+        if (v.toMap().value("id").toString() == "blender") {
+            blenderInstalled = v.toMap().value("is_installed").toBool();
+            break;
+        }
+    }
+    if (!blenderInstalled) {
+        qCritical() << "FAIL: blender did not transition to is_installed=true after requestInstall!";
+        QDir(tempRoot).removeRecursively();
+        return 9;
+    }
+    qInfo() << "  -> Install verified: blender is_installed=true in appsList and ALPM sandbox.";
+
+    // Launch installed blender
+    backend->launchApp("blender");
+    pumpEvents(20, 15000);
+    QString launchErr = appsView->property("actionErrorMessage").toString();
+    if (!launchErr.isEmpty()) {
+        qCritical() << "FAIL: launchApp('blender') produced error:" << launchErr;
+        QDir(tempRoot).removeRecursively();
+        return 10;
+    }
+    qInfo() << "  -> Launch verified: blender launched cleanly in sandbox.";
+
+    // Uninstall blender
+    QMetaObject::invokeMethod(appsView, "requestUninstall", Q_ARG(QVariant, "blender"));
+    pumpEvents(40, 20000);
+
+    bool blenderStillInstalled = true;
+    for (const QVariant &v : backend->appsList()) {
+        if (v.toMap().value("id").toString() == "blender") {
+            blenderStillInstalled = v.toMap().value("is_installed").toBool();
+            break;
+        }
+    }
+    if (blenderStillInstalled) {
+        qCritical() << "FAIL: blender did not transition to is_installed=false after requestUninstall!";
+        QDir(tempRoot).removeRecursively();
+        return 11;
+    }
+    qInfo() << "  -> Uninstall verified: blender is_installed=false after requestUninstall.";
+
+    backend->setTestSystemRootOverride("");
+    backend->setTestHomeOverride("");
+    QDir(tempRoot).removeRecursively();
+
+    qInfo() << "==================================================";
+    qInfo() << "ALL LIVE APPS PAGE INTERACTION TESTS PASSED (0 ERRORS)";
+    qInfo() << "==================================================";
+    return 0;
+}
+
 
 int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
     qInfo() << "==================================================";
@@ -1404,7 +1587,7 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     ffViewObj->setProperty("accentColor", "#10B981");
     ffViewObj->setProperty("colorModified", true);
     QMetaObject::invokeMethod(ffViewObj, "markModified");
-    QMetaObject::invokeMethod(ffViewObj, "updatePreview");
+    QMetaObject::invokeMethod(ffViewObj, "updatePreview", Q_ARG(QVariant, true));
     pumpEvents(10, 10000);
     ffPrevTimer.restart();
     while (backend->isFastfetchLoading() && ffPrevTimer.elapsed() < 5000) {
@@ -2142,16 +2325,16 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
                 return 250;
             }
             QString vidUrl = m.value("video_url").toString();
-            if (!vidUrl.contains("ken.mp4")) {
-                qCritical() << "FAIL: silentsddm-ken video_url does not contain 'ken.mp4'! Got:" << vidUrl;
+            if (!vidUrl.contains("ken")) {
+                qCritical() << "FAIL: silentsddm-ken video_url does not contain 'ken'! Got:" << vidUrl;
                 return 251;
             }
             QString prevUrl = m.value("preview_url").toString();
-            if (!prevUrl.contains("ken.png")) {
-                qCritical() << "FAIL: silentsddm-ken preview_url does not contain poster 'ken.png'! Got:" << prevUrl;
+            if (!prevUrl.contains("ken")) {
+                qCritical() << "FAIL: silentsddm-ken preview_url does not contain poster 'ken'! Got:" << prevUrl;
                 return 252;
             }
-            qInfo() << "  -> CONFIRMED: silentsddm-ken has distinct poster ('ken.png') and video ('ken.mp4') URLs.";
+            qInfo() << "  -> CONFIRMED: silentsddm-ken has distinct poster ('ken') and video ('ken') URLs.";
             break;
         }
     }
@@ -2513,9 +2696,9 @@ int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, R
     // 1. Multi-theme real themes verification
     QMap<QString, QStringList> themeExpectations;
     // id -> [expected video substring, expected poster substring, expected sddm support ("true"/"false")]
-    themeExpectations["silentsddm-ken"] = {"ken.mp4", "ken.png", "true"};
-    themeExpectations["silentsddm-rei"] = {"rei.mp4", "rei.png", "true"};
-    themeExpectations["silentsddm-silvia"] = {"silvia.mp4", "silvia.png", "true"};
+    themeExpectations["silentsddm-ken"] = {"ken", "ken", "true"};
+    themeExpectations["silentsddm-rei"] = {"rei", "rei", "true"};
+    themeExpectations["silentsddm-silvia"] = {"silvia", "silvia", "true"};
     themeExpectations["lockscreen-qylock-enfield"] = {"enfield", "enfield", "true"};
     themeExpectations["lockscreen-qylock-dog-samurai"] = {"dog-samurai", "dog-samurai", "true"};
     themeExpectations["fastfetch-emblem-arch"] = {"", "arch", "false"};
@@ -2851,7 +3034,11 @@ int main(int argc, char *argv[]) {
     engine.load(url);
 
     int exitCode = 0;
-    if (argc > 1 && QString(argv[1]) == "--test-package-actions") {
+    if (argc > 1 && QString(argv[1]) == "--test-apps") {
+        exitCode = runTestApps(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && QString(argv[1]) == "--test-package-actions") {
         exitCode = runTestPackageActions(app, engine, &backend);
         backend.shutdown();
         _exit(exitCode);

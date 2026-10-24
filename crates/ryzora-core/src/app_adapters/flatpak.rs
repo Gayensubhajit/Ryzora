@@ -72,7 +72,7 @@ pub struct FlatpakCleanupInfo {
 
 /// Detects the host Flatpak installation and remote configurations.
 pub fn detect_flatpak_status() -> FlatpakStatus {
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
     if !has_flatpak {
         return FlatpakStatus {
             has_flatpak: false,
@@ -111,7 +111,41 @@ pub fn detect_flatpak_status() -> FlatpakStatus {
 
 /// Lists all installed Flatpak applications with metadata.
 pub fn list_installed_flatpak_apps() -> Result<Vec<FlatpakAppInfo>, String> {
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        let app_dir = PathBuf::from(&sys_root).join("var/lib/flatpak/app");
+        let mut apps = Vec::new();
+        if app_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&app_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        let id = entry.file_name().to_string_lossy().to_string();
+                        if is_valid_flatpak_id(&id) {
+                            let ver_file = entry.path().join("version");
+                            let version = std::fs::read_to_string(&ver_file)
+                                .map(|s| s.trim().to_string())
+                                .unwrap_or_else(|_| "1.0.0".to_string());
+                            let name = id.split('.').last().unwrap_or(&id).to_string();
+                            apps.push(FlatpakAppInfo {
+                                id,
+                                name,
+                                version,
+                                branch: "stable".to_string(),
+                                origin: "flathub".to_string(),
+                                description: "Flatpak application".to_string(),
+                                is_installed: true,
+                                runtime: None,
+                                sdk: None,
+                                installed_size: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(apps);
+    }
+
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
     if !has_flatpak {
         return Ok(Vec::new());
     }
@@ -163,7 +197,7 @@ pub fn list_installed_flatpak_apps() -> Result<Vec<FlatpakAppInfo>, String> {
 
 /// Searches Flathub applications matching the query.
 pub fn search_flathub_apps(query: &str) -> Result<Vec<FlatpakAppInfo>, String> {
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
     if !has_flatpak {
         return Ok(Vec::new());
     }
@@ -226,7 +260,7 @@ pub fn search_flathub_apps(query: &str) -> Result<Vec<FlatpakAppInfo>, String> {
 
 /// Retrieves detailed information about a specific Flatpak app.
 pub fn get_flatpak_app_info(app_id: &str) -> Result<Option<FlatpakAppInfo>, String> {
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
     if !has_flatpak {
         return Ok(None);
     }
@@ -244,8 +278,21 @@ pub fn get_flatpak_app_info(app_id: &str) -> Result<Option<FlatpakAppInfo>, Stri
 
 /// Launches a Flatpak application unprivileged.
 pub fn run_flatpak_app(app_id: &str) -> Result<(), String> {
-    if !app_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+    if !is_valid_flatpak_id(app_id) {
         return Err("Invalid flatpak application ID".to_string());
+    }
+
+    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        let app_dir = PathBuf::from(&sys_root).join("var/lib/flatpak/app").join(app_id);
+        if !app_dir.is_dir() {
+            return Err(format!("Flatpak application '{}' is not installed", app_id));
+        }
+        return Ok(());
+    }
+
+    let installed = get_installed_flatpak_ids();
+    if !installed.contains(&app_id.to_lowercase()) {
+        return Err(format!("Flatpak application '{}' is not installed", app_id));
     }
 
     Command::new("flatpak")
@@ -258,23 +305,146 @@ pub fn run_flatpak_app(app_id: &str) -> Result<(), String> {
 }
 
 /// Installs a Flatpak application from Flathub.
-pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
-    let output = Command::new("flatpak")
-        .args(flatpak_transaction_args(app_id, "install")?)
-        .output()
-        .map_err(|e| format!("Failed to invoke flatpak install: {}", e))?;
+pub fn install_flatpak_app_streamed<F>(
+    app_id: &str,
+    mut progress_cb: F,
+    on_spawn: Option<&dyn Fn(u32)>,
+) -> Result<String, String>
+where
+    F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>),
+{
+    if !is_valid_flatpak_id(app_id) {
+        return Err("Invalid Flatpak application ID. Select a verified Flathub source before continuing.".to_string());
+    }
 
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("flatpak install failed: {}", err.trim()));
+    if std::env::var("RYZORA_TEST_NO_FLATPAK").as_deref() == Ok("1") {
+        return Err("Flatpak is not installed on this system.".to_string());
+    }
+
+    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        progress_cb("downloading", Some(45), "Downloading Flatpak sandbox archive...", true, Some("15.2 MB"), Some("34.0 MB"), Some("10 MB/s"));
+        progress_cb("installing", Some(85), "Installing Flatpak application...", true, None, None, None);
+        let app_dir = PathBuf::from(&sys_root).join("var/lib/flatpak/app").join(app_id);
+        std::fs::create_dir_all(&app_dir)
+            .map_err(|e| format!("Failed to create sandbox flatpak dir: {}", e))?;
+        let _ = std::fs::write(app_dir.join("version"), "1.0.0\n");
+        invalidate_flatpak_cache();
+        progress_cb("completed", Some(100), "Flatpak application installed successfully", true, None, None, None);
+        return Ok(format!("Successfully installed Flatpak application '{}' (test mode)", app_id));
+    }
+
+    let args = flatpak_transaction_args(app_id, "install")?;
+    progress_cb("resolving", None, "Resolving Flathub remotes and runtime dependencies...", false, None, None, None);
+
+    let mut cmd = Command::new("flatpak");
+    cmd.args(&args);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to invoke flatpak install: {}", e))?;
+    let pid = child.id();
+    if let Some(register) = on_spawn {
+        register(pid);
+    }
+
+    let stdout = child.stdout.take().ok_or_else(|| "Failed to capture stdout of flatpak".to_string())?;
+    let stderr = child.stderr.take().ok_or_else(|| "Failed to capture stderr of flatpak".to_string())?;
+
+    let mut state = crate::app_adapters::transaction::FlatpakTransactionParserState::new(
+        format!("flatpak-{}", pid),
+        "install".to_string(),
+        app_id.to_string(),
+    );
+
+    let mut stdout_reader = std::io::BufReader::new(stdout);
+    let mut buffer = Vec::new();
+    let mut byte_buf = [0u8; 1024];
+
+    loop {
+        use std::io::Read;
+        match stdout_reader.read(&mut byte_buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                buffer.extend_from_slice(&byte_buf[..n]);
+                let lines = crate::app_adapters::transaction::split_output_lines(&mut buffer);
+                for line in lines {
+                    if let Some(ev) = crate::app_adapters::transaction::parse_flatpak_line(&line, &mut state) {
+                        let is_det = ev.percentage.is_some() || (ev.bytes_downloaded_str.is_some() && ev.bytes_total_str.is_some());
+                        progress_cb(
+                            &ev.stage,
+                            ev.percentage,
+                            &ev.message,
+                            is_det,
+                            ev.bytes_downloaded_str.as_deref(),
+                            ev.bytes_total_str.as_deref(),
+                            ev.download_speed.as_deref(),
+                        );
+                    }
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                let _ = child.kill();
+                return Err(format!("Error reading Flatpak progress: {}", e));
+            }
+        }
+    }
+
+    let status = child.wait().map_err(|e| format!("Failed to wait on flatpak process: {}", e))?;
+    if !status.success() {
+        let mut err_msg = String::new();
+        use std::io::Read;
+        let mut r = std::io::BufReader::new(stderr);
+        let _ = r.read_to_string(&mut err_msg);
+        let trimmed_err = err_msg.trim();
+        #[cfg(unix)]
+        let killed_by_sig = {
+            use std::os::unix::process::ExitStatusExt;
+            matches!(status.signal(), Some(2) | Some(9) | Some(15))
+        };
+        #[cfg(not(unix))]
+        let killed_by_sig = false;
+
+        if trimmed_err.contains("cancelled") || status.code() == Some(130) || status.code() == Some(137) || status.code() == Some(143) || killed_by_sig {
+            return Err("Installation cancelled by user.".to_string());
+        }
+        return Err(if !trimmed_err.is_empty() {
+            format!("flatpak install failed: {}", trimmed_err)
+        } else {
+            format!("flatpak install failed with exit code {:?}", status.code())
+        });
     }
 
     invalidate_flatpak_cache();
+    progress_cb("completed", Some(100), "Flatpak application installed successfully", true, None, None, None);
     Ok(format!("Successfully installed Flatpak application '{}'", app_id))
+}
+
+pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
+    install_flatpak_app_streamed(app_id, |_stage, _pct, _msg, _is_det, _dl, _tot, _spd| {}, None)
 }
 
 /// Uninstalls a Flatpak application.
 pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
+    if !is_valid_flatpak_id(app_id) {
+        return Err("Invalid Flatpak application ID.".to_string());
+    }
+
+    if std::env::var("RYZORA_TEST_NO_FLATPAK").as_deref() == Ok("1") {
+        return Err("Flatpak is not installed on this system.".to_string());
+    }
+
+    if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        let app_dir = PathBuf::from(&sys_root).join("var/lib/flatpak/app").join(app_id);
+        if !app_dir.is_dir() {
+            return Err(format!("Flatpak application '{}' is not installed", app_id));
+        }
+        std::fs::remove_dir_all(&app_dir)
+            .map_err(|e| format!("Failed to remove sandbox flatpak dir: {}", e))?;
+        invalidate_flatpak_cache();
+        return Ok(format!("Successfully uninstalled Flatpak application '{}' (test mode)", app_id));
+    }
+
     let output = Command::new("flatpak")
         .args(flatpak_transaction_args(app_id, "uninstall")?)
         .output()
@@ -282,7 +452,9 @@ pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("flatpak uninstall failed: {}", err.trim()));
+        let out = String::from_utf8_lossy(&output.stdout);
+        let detail = if !err.trim().is_empty() { err.trim() } else { out.trim() };
+        return Err(format!("flatpak uninstall failed: {}", detail));
     }
 
     invalidate_flatpak_cache();
@@ -297,7 +469,7 @@ pub fn flatpak_transaction_args(app_id: &str, operation: &str) -> Result<Vec<Str
     if !is_valid_flatpak_id(app_id) {
         return Err("Invalid Flatpak application ID. Select a verified Flathub source before continuing.".to_string());
     }
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
     if !has_flatpak {
         return Err("Flatpak is not installed on this system.".to_string());
     }
@@ -418,7 +590,7 @@ pub fn is_valid_flatpak_id(id: &str) -> bool {
 /// Dynamically discovers an authentic Flathub match for a given package name or query.
 /// Never guesses or fabricates Flatpak IDs.
 pub fn find_flathub_match(query: &str, _display_name: Option<&str>) -> Option<FlatpakAppInfo> {
-    let (has_flatpak, _) = crate::system::check_binary("flatpak");
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
     if !has_flatpak {
         return None;
     }

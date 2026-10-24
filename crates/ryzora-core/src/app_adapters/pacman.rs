@@ -191,8 +191,9 @@ pub fn search_pacman_packages_in(
     db_files.sort_by_key(|p| {
         let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
         match stem {
-            "core" => 0,
-            "extra" => 1,
+            "cachyos" | "cachyos-v3" | "cachyos-v4" | "cachyos-core-v3" | "cachyos-extra-v3" => 0,
+            "core" => 1,
+            "extra" => 2,
             "multilib" => 2,
             "garuda" => 3,
             _ => 10,

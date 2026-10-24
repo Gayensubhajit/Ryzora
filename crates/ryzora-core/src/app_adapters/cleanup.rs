@@ -388,7 +388,7 @@ pub fn inspect_app_cleanup(package_id: &str, provider: &str) -> Result<AppCleanu
         };
 
         // Check if Flatpak app is installed
-        let (has_flatpak, _) = crate::system::check_binary("flatpak");
+        let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
         if has_flatpak {
             if let Ok(info) = crate::app_adapters::flatpak::get_flatpak_app_info(trimmed) {
                 if let Some(app_meta) = info {

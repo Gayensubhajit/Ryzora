@@ -29,11 +29,14 @@ extern "C" {
     char* ryzora_query_catalog(const char* repo_root, const char* category, const char* search);
     char* ryzora_query_applications(const char* repo_root, const char* category, const char* search);
     char* ryzora_install_application(const char* app_id);
+    char* ryzora_install_application_with_progress(const char* app_id, void (*callback)(const char*, void*), void* user_data);
     char* ryzora_uninstall_application(const char* app_id);
     char* ryzora_launch_application(const char* app_id);
+    char* ryzora_resolve_app_providers(const char* app_id, const char* display_name);
     char* ryzora_load_library(bool force_refresh);
     char* ryzora_run_fastfetch(const char* preset, uint64_t req_id);
     bool ryzora_cancel_fastfetch();
+    bool ryzora_cancel_app_operation();
     void ryzora_shutdown();
     void ryzora_free_string(char* s);
 
@@ -204,12 +207,51 @@ void RyzoraBackend::filterApps(const QString &category, const QString &query) {
     });
 }
 
+struct AppProgressBridgeContext {
+    QPointer<RyzoraBackend> backend;
+    QString appId;
+};
+
+static void appProgressTrampoline(const char *progressJson, void *userData) {
+    if (!progressJson || !userData) return;
+    auto *ctx = static_cast<AppProgressBridgeContext*>(userData);
+    if (!ctx || !ctx->backend) return;
+
+    QString jsonStr = QString::fromUtf8(progressJson);
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    if (!doc.isObject()) return;
+    QJsonObject obj = doc.object();
+
+    QString appId = ctx->appId;
+    QString stage = obj["stage"].toString();
+    int pct = obj["percentage"].isNull() ? -1 : obj["percentage"].toInt(-1);
+    bool isDet = obj["is_determinate"].toBool(false);
+    QString msg = obj["message"].toString();
+    QString dl = obj["bytes_downloaded_str"].toString();
+    QString tot = obj["bytes_total_str"].toString();
+    QString spd = obj["download_speed"].toString();
+
+    QPointer<RyzoraBackend> backend = ctx->backend;
+    QMetaObject::invokeMethod(qApp, [backend, appId, stage, pct, isDet, msg, dl, tot, spd]() {
+        if (backend) {
+            emit backend->appInstallProgress(appId, stage, pct, isDet, msg, dl, tot, spd);
+        }
+    });
+}
+
+void RyzoraBackend::cancelAppOperation(const QString &appId) {
+    Q_UNUSED(appId);
+    ryzora_cancel_app_operation();
+}
+
 void RyzoraBackend::installApp(const QString &appId) {
     if (m_isShutdown.load()) return;
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, appId]() {
         QByteArray bId = appId.toUtf8();
-        char* raw = ryzora_install_application(bId.constData());
+        AppProgressBridgeContext ctx{self, appId};
+
+        char* raw = ryzora_install_application_with_progress(bId.constData(), appProgressTrampoline, &ctx);
         QString jsonStr = QString::fromUtf8(raw);
         ryzora_free_string(raw);
 
@@ -229,6 +271,8 @@ void RyzoraBackend::installApp(const QString &appId) {
                                         success ? "Application Installed" : "Installation Failed",
                                         message);
                 self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery);
+                self->loadLibrary(true);
+                self->loadUpdates();
             }
         });
     });
@@ -259,6 +303,8 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
                                         success ? "Application Removed" : "Removal Failed",
                                         message);
                 self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery);
+                self->loadLibrary(true);
+                self->loadUpdates();
             }
         });
     });
@@ -283,11 +329,33 @@ void RyzoraBackend::launchApp(const QString &appId) {
         }
 
         QMetaObject::invokeMethod(qApp, [self, appId, success, message]() {
-            if (self && !success) {
-                self->postNotification("error", "Launch Failed", message);
+            if (self) {
+                emit self->appLaunched(appId, success, message);
+                if (!success) {
+                    self->postNotification("error", "Launch Failed", message);
+                }
             }
         });
     });
+}
+
+QVariantList RyzoraBackend::resolveAppProviders(const QString &appId, const QString &displayName) {
+    if (m_isShutdown.load() || appId.trimmed().isEmpty()) return QVariantList();
+    QByteArray bId = appId.toUtf8();
+    QByteArray bName = displayName.toUtf8();
+    char* raw = ryzora_resolve_app_providers(
+        bId.constData(),
+        displayName.trimmed().isEmpty() ? nullptr : bName.constData()
+    );
+    if (!raw) return QVariantList();
+    QString jsonStr = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    if (doc.isArray()) {
+        return doc.array().toVariantList();
+    }
+    return QVariantList();
 }
 
 void RyzoraBackend::loadLibrary(bool forceRefresh) {
@@ -2819,7 +2887,7 @@ void RyzoraBackend::uninstallSilentEngine() {
 
 bool RyzoraBackend::acquireDecoderSlot() {
     int current = m_activeDecoderCount.load();
-    while (current < 10) {
+    while (current < 6) {
         if (m_activeDecoderCount.compare_exchange_weak(current, current + 1)) {
             return true;
         }

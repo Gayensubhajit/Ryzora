@@ -467,10 +467,18 @@ ApplicationWindow {
 
                 LibraryView {
                     id: libraryView
+                    objectName: "libraryView"
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "library"
                     onPackageSelected: function(pkg) {
-                        window.showPackageDetail(pkg)
+                        if (pkg && (pkg.package_type === "desktop_app" || pkg.appData)) {
+                            window.navigateTo("apps")
+                            if (appsView) {
+                                appsView.setSelectedApp(pkg.appData || pkg)
+                            }
+                        } else {
+                            window.showPackageDetail(pkg)
+                        }
                     }
                     onCustomizeRequested: function(subpage, pkg) {
                         window.openStudio(subpage, pkg)

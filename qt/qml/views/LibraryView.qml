@@ -15,6 +15,35 @@ Item {
     property string selectedStatusFilter: "all" // "all" | "active"
     property var pendingUninstallPackage: null
 
+    function getCombinedList() {
+        var combined = []
+        var libList = backend.libraryList || []
+        for (var i = 0; i < libList.length; ++i) {
+            if (libList[i]) combined.push(libList[i])
+        }
+        var apps = backend.appsList || []
+        for (var j = 0; j < apps.length; ++j) {
+            var a = apps[j]
+            if (a && a.is_installed) {
+                combined.push({
+                    id: a.id,
+                    name: a.display_name || a.name || a.id,
+                    version: a.installed_version || a.version || "1.0.0",
+                    package_type: "desktop_app",
+                    category: "apps",
+                    description: a.summary || a.description || "",
+                    preview_url: a.icon_url || a.banner_url || "",
+                    author: a.publisher || "Community",
+                    is_installed: true,
+                    is_active: false,
+                    supports_sddm: false,
+                    appData: a
+                })
+            }
+        }
+        return combined
+    }
+
     function getPackageCategory(item) {
         if (!item) return "other"
         var id = String(item.id || "").toLowerCase()
@@ -22,6 +51,9 @@ Item {
         var ptype = String(item.package_type || "").toLowerCase()
         var sub = String(item.subfilter || "").toLowerCase()
 
+        if (ptype === "desktop_app" || cat === "apps") {
+            return "apps"
+        }
         if (id.indexOf("fastfetch-emblem-") === 0 || sub === "emblem" || (cat === "fastfetch" && ptype === "emblem")) {
             return "emblems"
         }
@@ -38,6 +70,7 @@ Item {
     }
 
     function getCategoryLabel(catKey) {
+        if (catKey === "apps") return "Application"
         if (catKey === "lockscreens") return "Lockscreen"
         if (catKey === "fastfetch") return "Fastfetch"
         if (catKey === "emblems") return "Emblem"
@@ -46,7 +79,7 @@ Item {
     }
 
     function getCategoryCount(catKey) {
-        var list = backend.libraryList || []
+        var list = root.getCombinedList()
         if (catKey === "all") return list.length
         var count = 0
         for (var i = 0; i < list.length; ++i) {
@@ -65,7 +98,7 @@ Item {
     }
 
     function getFilteredList() {
-        var list = backend.libraryList || []
+        var list = root.getCombinedList()
         var q = root.searchQuery.trim().toLowerCase()
         var cat = root.selectedCategory
         var status = root.selectedStatusFilter
@@ -137,7 +170,7 @@ Item {
                     }
 
                     Text {
-                        text: "Manage your installed packages · " + backend.libraryCount + " installed · " + root.getActiveCount() + " active"
+                        text: "Manage your installed packages · " + root.getCategoryCount("all") + " installed · " + root.getActiveCount() + " active"
                         font.pixelSize: 12
                         color: theme.textMuted
                     }
@@ -253,6 +286,7 @@ Item {
                 Repeater {
                     model: [
                         { id: "all", label: "All", count: root.getCategoryCount("all") },
+                        { id: "apps", label: "Apps", count: root.getCategoryCount("apps") },
                         { id: "lockscreens", label: "Lockscreen", count: root.getCategoryCount("lockscreens") },
                         { id: "fastfetch", label: "Fastfetch", count: root.getCategoryCount("fastfetch") },
                         { id: "emblems", label: "Emblems", count: root.getCategoryCount("emblems") },
@@ -520,11 +554,12 @@ Item {
                                 Image {
                                     id: cardImg
                                     anchors.fill: parent
-                                    source: modelData.preview_url || ""
+                                    source: (modelData && modelData.preview_url && String(modelData.preview_url).indexOf("://") !== -1) ? modelData.preview_url : ""
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
                                     mipmap: true
                                     asynchronous: true
+                                    visible: status === Image.Ready
                                 }
 
                                 // Fallback Icon if Image Missing
@@ -654,8 +689,8 @@ Item {
 
                                     // View Details Button
                                     Rectangle {
-                                        Layout.fillWidth: !root.canOpenInStudio(modelData)
-                                        width: root.canOpenInStudio(modelData) ? (detTxt.implicitWidth + 14) : undefined
+                                        Layout.fillWidth: !root.canOpenInStudio(modelData) && modelData.package_type !== "desktop_app"
+                                        width: (root.canOpenInStudio(modelData) || modelData.package_type === "desktop_app") ? (detTxt.implicitWidth + 14) : undefined
                                         height: 26
                                         radius: theme.radiusSm
                                         color: detM.containsMouse ? theme.surfaceHover : theme.surfaceElevated
@@ -677,6 +712,43 @@ Item {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: root.packageSelected(modelData)
+                                        }
+                                    }
+
+                                    // Open Application Button (for desktop applications)
+                                    Rectangle {
+                                        visible: modelData && modelData.package_type === "desktop_app"
+                                        Layout.fillWidth: true
+                                        height: 26
+                                        radius: theme.radiusSm
+                                        color: openAppM.containsMouse ? theme.accent : theme.accentFaint
+                                        border.color: theme.accent
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 4
+
+                                            RyzoraIcon {
+                                                name: "play"
+                                                size: 10
+                                                color: openAppM.containsMouse ? "#FFFFFF" : theme.accent
+                                            }
+
+                                            Text {
+                                                text: "Open"
+                                                font.pixelSize: 11
+                                                font.weight: Font.DemiBold
+                                                color: openAppM.containsMouse ? "#FFFFFF" : theme.accent
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: openAppM
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.launchApp(modelData.id)
                                         }
                                     }
 
@@ -874,7 +946,11 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (root.pendingUninstallPackage && root.pendingUninstallPackage.id) {
-                                    backend.uninstallPackage(root.pendingUninstallPackage.id)
+                                    if (root.pendingUninstallPackage.package_type === "desktop_app") {
+                                        backend.uninstallApp(root.pendingUninstallPackage.id)
+                                    } else {
+                                        backend.uninstallPackage(root.pendingUninstallPackage.id)
+                                    }
                                 }
                                 root.pendingUninstallPackage = null
                             }
