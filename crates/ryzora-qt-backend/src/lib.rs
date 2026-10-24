@@ -2767,11 +2767,19 @@ impl BackendState {
             progress_cb("downloading", Some(35), "Downloading package...", true, None, None, None);
         }
 
+        let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Err(_) = self.app_coordinator.begin_request(req_id) {
+            return Err("Installation request was cancelled or superseded".to_string());
+        }
+
         let res = ryzora_core::app_adapters::install_app_with_provider(
             &canonical,
             prov_opt.as_deref(),
             Some(&target),
-        )?;
+        );
+
+        let _ = self.app_coordinator.finish_request(req_id);
+        let res = res?;
 
         progress_cb("installing", Some(85), "Installing and configuring package...", true, None, None, None);
         progress_cb("completed", Some(100), "Installation complete", true, None, None, None);
@@ -2793,9 +2801,15 @@ impl BackendState {
 
         let canonical = Self::canonical_app_id(trimmed);
 
+        let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Err(_) = self.app_coordinator.begin_request(req_id) {
+            return Err("Uninstall request was cancelled or superseded".to_string());
+        }
+
         if self.home_dir_override.lock().unwrap().is_some()
             && std::env::var("RYZORA_SYSTEM_ROOT").is_err()
         {
+            let _ = self.app_coordinator.finish_request(req_id);
             let mut set = self.test_installed_apps.lock().unwrap();
             let was_present = set.remove(trimmed) | set.remove(&canonical) | set.remove(&target);
             if !was_present {
@@ -2813,11 +2827,13 @@ impl BackendState {
             let removed_from_set = set.remove(trimmed) | set.remove(&canonical) | set.remove(&target);
             drop(set);
 
-            match ryzora_core::app_adapters::uninstall_app_with_provider(
+            let res = ryzora_core::app_adapters::uninstall_app_with_provider(
                 &canonical,
                 prov_opt.as_deref(),
                 Some(&target),
-            ) {
+            );
+            let _ = self.app_coordinator.finish_request(req_id);
+            match res {
                 Ok(res) => {
                     *self.library_cache.lock().unwrap() = None;
                     return Ok(res.message);
@@ -2839,7 +2855,9 @@ impl BackendState {
             &canonical,
             prov_opt.as_deref(),
             Some(&target),
-        )?;
+        );
+        let _ = self.app_coordinator.finish_request(req_id);
+        let res = res?;
         *self.library_cache.lock().unwrap() = None;
         Ok(res.message)
     }

@@ -107,6 +107,8 @@ public:
     Q_INVOKABLE void filterApps(const QString &category, const QString &query);
     Q_INVOKABLE void installApp(const QString &appId);
     Q_INVOKABLE void cancelAppOperation(const QString &appId);
+    Q_INVOKABLE bool isAppOperating(const QString &appId) const;
+    Q_INVOKABLE QString getAppActiveOperation(const QString &appId) const;
     Q_INVOKABLE void uninstallApp(const QString &appId);
     Q_INVOKABLE void launchApp(const QString &appId);
     Q_INVOKABLE QVariantList resolveAppProviders(const QString &appId, const QString &displayName = QString());
@@ -270,6 +272,9 @@ private:
     QThreadPool m_threadPool;
     std::atomic<int> m_activeDecoderCount{0};
     std::atomic<bool> m_isShutdown{false};
+    mutable QMutex m_appOpMutex;
+    QHash<QString, QString> m_activeAppOperations;
+    bool isAppOperatingLocked(const QString &clean) const;
     QString m_testHomeOverride;
     QString m_testSystemRootOverride;
     mutable PreviewConfig *m_previewConfig = nullptr;

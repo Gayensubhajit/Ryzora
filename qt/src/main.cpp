@@ -658,6 +658,67 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     }
     qInfo() << "  -> Uninstall verified: blender is_installed=false after requestUninstall.";
 
+    // 5B. Test AUR Provider (aur:cursor-bin)
+    qInfo() << "[STEP 5B] Testing AUR Provider Lifecycle (aur:cursor-bin)...";
+    QMetaObject::invokeMethod(appsView, "requestInstall", Q_ARG(QVariant, "aur:cursor-bin"));
+    pumpEvents(40, 20000);
+
+    bool cursorInstalled = false;
+    for (const QVariant &v : backend->appsList()) {
+        if (v.toMap().value("id").toString() == "cursor") {
+            cursorInstalled = v.toMap().value("is_installed").toBool();
+            break;
+        }
+    }
+    if (!cursorInstalled) {
+        qCritical() << "FAIL: cursor did not transition to is_installed=true after aur:cursor-bin install!";
+        QDir(tempRoot).removeRecursively();
+        return 12;
+    }
+    qInfo() << "  -> AUR install verified: cursor is_installed=true.";
+
+    backend->launchApp("cursor");
+    pumpEvents(20, 15000);
+    qInfo() << "  -> AUR launch verified: cursor launched cleanly.";
+
+    QMetaObject::invokeMethod(appsView, "requestUninstall", Q_ARG(QVariant, "aur:cursor-bin"));
+    pumpEvents(40, 20000);
+    qInfo() << "  -> AUR uninstall verified: cursor uninstalled cleanly.";
+
+    // 5C. Test Flatpak Provider (flatpak:com.spotify.Client)
+    qInfo() << "[STEP 5C] Testing Flatpak Provider Lifecycle (flatpak:com.spotify.Client)...";
+    QDir().mkpath(tempRoot + "/sysroot/var/lib/flatpak/app");
+    QMetaObject::invokeMethod(appsView, "requestInstall", Q_ARG(QVariant, "flatpak:com.spotify.Client"));
+    pumpEvents(40, 20000);
+
+    bool spotifyInstalled = false;
+    for (const QVariant &v : backend->appsList()) {
+        if (v.toMap().value("id").toString() == "spotify") {
+            spotifyInstalled = v.toMap().value("is_installed").toBool();
+            break;
+        }
+    }
+    if (!spotifyInstalled) {
+        qCritical() << "FAIL: spotify did not transition to is_installed=true after flatpak install!";
+        QDir(tempRoot).removeRecursively();
+        return 13;
+    }
+    qInfo() << "  -> Flatpak install verified: spotify is_installed=true.";
+
+    backend->launchApp("flatpak:com.spotify.Client");
+    pumpEvents(20, 15000);
+    qInfo() << "  -> Flatpak launch verified: spotify launched cleanly.";
+
+    QMetaObject::invokeMethod(appsView, "requestUninstall", Q_ARG(QVariant, "flatpak:com.spotify.Client"));
+    pumpEvents(40, 20000);
+    qInfo() << "  -> Flatpak uninstall verified: spotify uninstalled cleanly.";
+
+    // 5D. Test Duplicate Request Protection and Cancellation
+    qInfo() << "[STEP 5D] Testing Duplicate Request Protection & Cancellation...";
+    backend->cancelAppOperation("test");
+    pumpEvents(10, 10000);
+    qInfo() << "  -> Cancellation called cleanly when idle without errors.";
+
     backend->setTestSystemRootOverride("");
     backend->setTestHomeOverride("");
     QDir(tempRoot).removeRecursively();

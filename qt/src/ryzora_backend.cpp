@@ -244,12 +244,51 @@ void RyzoraBackend::cancelAppOperation(const QString &appId) {
     ryzora_cancel_app_operation();
 }
 
+bool RyzoraBackend::isAppOperatingLocked(const QString &clean) const {
+    if (m_activeAppOperations.contains(clean)) return true;
+    for (auto it = m_activeAppOperations.constBegin(); it != m_activeAppOperations.constEnd(); ++it) {
+        if (it.key().endsWith(":" + clean) || clean.endsWith(":" + it.key())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool RyzoraBackend::isAppOperating(const QString &appId) const {
+    QMutexLocker locker(&m_appOpMutex);
+    return isAppOperatingLocked(appId.trimmed());
+}
+
+QString RyzoraBackend::getAppActiveOperation(const QString &appId) const {
+    QMutexLocker locker(&m_appOpMutex);
+    QString clean = appId.trimmed();
+    if (m_activeAppOperations.contains(clean)) return m_activeAppOperations.value(clean);
+    for (auto it = m_activeAppOperations.constBegin(); it != m_activeAppOperations.constEnd(); ++it) {
+        if (it.key().endsWith(":" + clean) || clean.endsWith(":" + it.key())) {
+            return it.value();
+        }
+    }
+    return QString();
+}
+
 void RyzoraBackend::installApp(const QString &appId) {
     if (m_isShutdown.load()) return;
+    QString cleanId = appId.trimmed();
+    if (cleanId.isEmpty()) return;
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        if (isAppOperatingLocked(cleanId)) {
+            emit appInstalled(cleanId, false, "An operation is already in progress for this application.");
+            return;
+        }
+        m_activeAppOperations.insert(cleanId, "install");
+    }
+
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, appId]() {
-        QByteArray bId = appId.toUtf8();
-        AppProgressBridgeContext ctx{self, appId};
+    m_threadPool.start([self, cleanId]() {
+        QByteArray bId = cleanId.toUtf8();
+        AppProgressBridgeContext ctx{self, cleanId};
 
         char* raw = ryzora_install_application_with_progress(bId.constData(), appProgressTrampoline, &ctx);
         QString jsonStr = QString::fromUtf8(raw);
@@ -264,9 +303,13 @@ void RyzoraBackend::installApp(const QString &appId) {
             message = obj["message"].toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, appId, success, message]() {
+        QMetaObject::invokeMethod(qApp, [self, cleanId, success, message]() {
             if (self) {
-                emit self->appInstalled(appId, success, message);
+                {
+                    QMutexLocker locker(&self->m_appOpMutex);
+                    self->m_activeAppOperations.remove(cleanId);
+                }
+                emit self->appInstalled(cleanId, success, message);
                 self->postNotification(success ? "success" : "error",
                                         success ? "Application Installed" : "Installation Failed",
                                         message);
@@ -280,9 +323,21 @@ void RyzoraBackend::installApp(const QString &appId) {
 
 void RyzoraBackend::uninstallApp(const QString &appId) {
     if (m_isShutdown.load()) return;
+    QString cleanId = appId.trimmed();
+    if (cleanId.isEmpty()) return;
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        if (isAppOperatingLocked(cleanId)) {
+            emit appUninstalled(cleanId, false, "An operation is already in progress for this application.");
+            return;
+        }
+        m_activeAppOperations.insert(cleanId, "uninstall");
+    }
+
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, appId]() {
-        QByteArray bId = appId.toUtf8();
+    m_threadPool.start([self, cleanId]() {
+        QByteArray bId = cleanId.toUtf8();
         char* raw = ryzora_uninstall_application(bId.constData());
         QString jsonStr = QString::fromUtf8(raw);
         ryzora_free_string(raw);
@@ -296,9 +351,13 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
             message = obj["message"].toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, appId, success, message]() {
+        QMetaObject::invokeMethod(qApp, [self, cleanId, success, message]() {
             if (self) {
-                emit self->appUninstalled(appId, success, message);
+                {
+                    QMutexLocker locker(&self->m_appOpMutex);
+                    self->m_activeAppOperations.remove(cleanId);
+                }
+                emit self->appUninstalled(cleanId, success, message);
                 self->postNotification(success ? "info" : "error",
                                         success ? "Application Removed" : "Removal Failed",
                                         message);

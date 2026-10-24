@@ -105,19 +105,24 @@ Item {
 
     function currentActionAppId() {
         if (!root.selectedApp) return ""
-        var defProv = root.selectedApp.installed_provider || root.selectedApp.provider_id || "pacman"
-        var defTarget = root.selectedApp.target_id || root.selectedApp.id || ""
-        if (root.selectedProviderId && root.selectedTargetId && (root.selectedProviderId !== defProv || root.selectedTargetId !== defTarget)) {
+        if (root.selectedProviderId && root.selectedTargetId) {
             return root.selectedProviderId + ":" + root.selectedTargetId
         }
-        return root.selectedApp.id
+        var defProv = root.selectedApp.installed_provider || root.selectedApp.provider_id || "pacman"
+        var defTarget = root.selectedApp.target_id || root.selectedApp.id || ""
+        return defProv + ":" + defTarget
     }
 
     function isSelectedAppPending() {
-        if (!root.selectedApp || root.pendingAppId === "") return false
+        if (!root.selectedApp) return false
+        var current = currentActionAppId()
+        var backendOperating = Boolean(backend && (backend.isAppOperating(root.selectedApp.id) || backend.isAppOperating(current)))
+        if (backendOperating) return true
+        if (root.pendingAppId === "") return false
         return root.pendingAppId === root.selectedApp.id
-            || root.pendingAppId === (root.selectedProviderId + ":" + root.selectedTargetId)
-            || root.pendingAppId.indexOf(":" + root.selectedApp.id) !== -1
+            || root.pendingAppId === current
+            || root.pendingAppId.endsWith(":" + root.selectedApp.id)
+            || (root.selectedTargetId && root.pendingAppId.endsWith(":" + root.selectedTargetId))
     }
 
     function setSelectedPackage(pkg) {
@@ -125,6 +130,10 @@ Item {
     }
 
     function requestInstall(appId) {
+        if (root.pendingAppId !== "" || (backend && backend.isAppOperating(appId))) {
+            root.actionErrorMessage = "Another package operation is currently in progress. Please wait for it to finish."
+            return
+        }
         root.actionErrorMessage = ""
         root.pendingAppId = appId
         root.pendingAction = "install"
@@ -132,6 +141,10 @@ Item {
     }
 
     function requestUninstall(appId) {
+        if (root.pendingAppId !== "" || (backend && backend.isAppOperating(appId))) {
+            root.actionErrorMessage = "Another package operation is currently in progress. Please wait for it to finish."
+            return
+        }
         root.actionErrorMessage = ""
         root.pendingAppId = appId
         root.pendingAction = "uninstall"
