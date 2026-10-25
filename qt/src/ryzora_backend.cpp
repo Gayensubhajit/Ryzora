@@ -230,18 +230,155 @@ static void appProgressTrampoline(const char *progressJson, void *userData) {
     QString dl = obj["bytes_downloaded_str"].toString();
     QString tot = obj["bytes_total_str"].toString();
     QString spd = obj["download_speed"].toString();
+    int curStep = obj["current_step"].isNull() ? 0 : obj["current_step"].toInt(0);
+    int totSteps = obj["total_steps"].isNull() ? 0 : obj["total_steps"].toInt(0);
+    QString curItem = obj["current_item"].toString();
+    QString eta = obj["eta_str"].toString();
+    QString diag = obj["diagnostic_details"].toString();
 
     QPointer<RyzoraBackend> backend = ctx->backend;
-    QMetaObject::invokeMethod(qApp, [backend, appId, stage, pct, isDet, msg, dl, tot, spd]() {
+    QMetaObject::invokeMethod(qApp, [backend, appId, stage, pct, isDet, msg, dl, tot, spd, curStep, totSteps, curItem, eta, diag]() {
         if (backend) {
-            emit backend->appInstallProgress(appId, stage, pct, isDet, msg, dl, tot, spd);
+            backend->updateTransactionProgress(appId, stage, pct, isDet, msg, dl, tot, spd, curStep, totSteps, curItem, eta, diag);
         }
     });
 }
 
+void RyzoraBackend::updateTransactionProgress(const QString &appId, const QString &stage, int pct, bool isDet, const QString &msg, const QString &dl, const QString &tot, const QString &spd, int curStep, int totSteps, const QString &curItem, const QString &eta, const QString &diag) {
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        auto updateRec = [&](AppTransactionRecord &rec) {
+            rec.stage = stage;
+            rec.percentage = pct;
+            rec.isDeterminate = isDet;
+            rec.message = msg;
+            if (!dl.isEmpty()) rec.bytesDownloaded = dl;
+            if (!tot.isEmpty()) rec.bytesTotal = tot;
+            if (!spd.isEmpty()) rec.downloadSpeed = spd;
+            if (curStep > 0) rec.currentStep = curStep;
+            if (totSteps > 0) rec.totalSteps = totSteps;
+            if (!curItem.isEmpty()) rec.currentItem = curItem;
+            if (!eta.isEmpty()) rec.etaStr = eta;
+            if (!diag.isEmpty()) rec.diagnosticDetails = diag;
+        };
+
+        if (!m_appTransactions.contains(appId)) {
+            AppTransactionRecord newRec;
+            newRec.opId = QString("op_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(appId);
+            newRec.appId = appId;
+            newRec.targetPackage = appId.contains(':') ? appId.section(':', 1) : appId;
+            newRec.appName = newRec.targetPackage;
+            newRec.provider = appId.contains(':') ? appId.section(':', 0, 0) : "pacman";
+            newRec.operation = "install";
+            newRec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+            newRec.isFinished = false;
+            m_appTransactions.insert(appId, newRec);
+            if (!m_activeAppOperations.contains(appId)) {
+                m_activeAppOperations.insert(appId, "install");
+            }
+        }
+
+        if (m_appTransactions.contains(appId)) {
+            updateRec(m_appTransactions[appId]);
+        }
+        if (appId.contains(':')) {
+            QString base = appId.section(':', 1);
+            if (m_appTransactions.contains(base)) {
+                updateRec(m_appTransactions[base]);
+            }
+        }
+
+        if (stage == "succeeded" || stage == "cancelled" || stage == "failed") {
+            AppTransactionRecord termRec = m_appTransactions.take(appId);
+            m_activeAppOperations.remove(appId);
+            if (appId.contains(':')) {
+                QString base = appId.section(':', 1);
+                m_appTransactions.remove(base);
+                m_activeAppOperations.remove(base);
+            }
+            termRec.isFinished = true;
+            termRec.stage = stage;
+            termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+            m_recentTransactions.prepend(termRec);
+            if (m_recentTransactions.size() > 10) m_recentTransactions.removeLast();
+        }
+    }
+    emit activeAppOperationsChanged();
+    emit appInstallProgress(appId, stage, pct, isDet, msg, dl, tot, spd, curStep, totSteps, curItem, eta, diag);
+}
+
 void RyzoraBackend::cancelAppOperation(const QString &appId) {
-    Q_UNUSED(appId);
+    QString cleanId = appId.trimmed();
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        auto markCancel = [](AppTransactionRecord &rec) {
+            rec.stage = "cancelling";
+            rec.message = "Cancelling installation...";
+        };
+        if (!cleanId.isEmpty()) {
+            if (m_appTransactions.contains(cleanId)) markCancel(m_appTransactions[cleanId]);
+            if (cleanId.contains(':')) {
+                QString base = cleanId.section(':', 1);
+                if (m_appTransactions.contains(base)) markCancel(m_appTransactions[base]);
+            }
+        }
+    }
+    emit activeAppOperationsChanged();
     ryzora_cancel_app_operation();
+}
+
+int RyzoraBackend::activeAppOperationsCount() const {
+    QMutexLocker locker(&m_appOpMutex);
+    QSet<QString> activeOps;
+    for (auto it = m_appTransactions.constBegin(); it != m_appTransactions.constEnd(); ++it) {
+        if (!it.value().isFinished && !it.value().opId.isEmpty()) {
+            activeOps.insert(it.value().opId);
+        }
+    }
+    return qMax(activeOps.size(), m_activeAppOperations.size());
+}
+
+QVariantList RyzoraBackend::getActiveTransactions() const {
+    QMutexLocker locker(&m_appOpMutex);
+    QVariantList list;
+    QSet<QString> seenOps;
+    for (auto it = m_appTransactions.constBegin(); it != m_appTransactions.constEnd(); ++it) {
+        if (!it.value().isFinished && !it.value().opId.isEmpty() && !seenOps.contains(it.value().opId)) {
+            seenOps.insert(it.value().opId);
+            list.append(it.value().toVariantMap());
+        }
+    }
+    return list;
+}
+
+QVariantList RyzoraBackend::getRecentTransactions() const {
+    QMutexLocker locker(&m_appOpMutex);
+    QVariantList list;
+    for (const auto &rec : m_recentTransactions) {
+        list.append(rec.toVariantMap());
+    }
+    return list;
+}
+
+QVariantMap RyzoraBackend::getTransactionForApp(const QString &appId) const {
+    QMutexLocker locker(&m_appOpMutex);
+    QString clean = appId.trimmed();
+    if (clean.isEmpty()) return QVariantMap();
+
+    if (m_appTransactions.contains(clean)) {
+        return m_appTransactions.value(clean).toVariantMap();
+    }
+    for (auto it = m_appTransactions.constBegin(); it != m_appTransactions.constEnd(); ++it) {
+        if (it.key().endsWith(":" + clean) || clean.endsWith(":" + it.key()) || it.value().targetPackage == clean) {
+            return it.value().toVariantMap();
+        }
+    }
+    for (const auto &rec : m_recentTransactions) {
+        if (rec.appId == clean || rec.appId.endsWith(":" + clean) || clean.endsWith(":" + rec.appId) || rec.targetPackage == clean) {
+            return rec.toVariantMap();
+        }
+    }
+    return QVariantMap();
 }
 
 bool RyzoraBackend::isAppOperatingLocked(const QString &clean) const {
@@ -276,6 +413,28 @@ void RyzoraBackend::installApp(const QString &appId) {
     QString cleanId = appId.trimmed();
     if (cleanId.isEmpty()) return;
 
+    QString baseAppId = cleanId;
+    QString provId = "pacman";
+    QString targetId = cleanId;
+    if (cleanId.contains(':')) {
+        provId = cleanId.section(':', 0, 0);
+        targetId = cleanId.section(':', 1);
+        baseAppId = targetId;
+    }
+
+    QString appName = baseAppId;
+    QString iconUrl = "";
+    for (const QVariant &v : m_appsList) {
+        QVariantMap m = v.toMap();
+        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId) {
+            appName = m.value("name").toString();
+            iconUrl = m.value("icon_url").toString();
+            break;
+        }
+    }
+
+    QString opId = QString("op_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(cleanId);
+
     {
         QMutexLocker locker(&m_appOpMutex);
         if (isAppOperatingLocked(cleanId)) {
@@ -283,10 +442,26 @@ void RyzoraBackend::installApp(const QString &appId) {
             return;
         }
         m_activeAppOperations.insert(cleanId, "install");
+
+        AppTransactionRecord rec;
+        rec.opId = opId;
+        rec.appId = cleanId;
+        rec.targetPackage = targetId;
+        rec.appName = appName;
+        rec.iconUrl = iconUrl;
+        rec.provider = provId;
+        rec.operation = "install";
+        rec.stage = "preparing";
+        rec.message = "Preparing installation...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+        m_appTransactions.insert(baseAppId, rec);
     }
+    emit activeAppOperationsChanged();
 
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, cleanId]() {
+    m_threadPool.start([self, cleanId, baseAppId]() {
         QByteArray bId = cleanId.toUtf8();
         AppProgressBridgeContext ctx{self, cleanId};
 
@@ -303,12 +478,44 @@ void RyzoraBackend::installApp(const QString &appId) {
             message = obj["message"].toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, cleanId, success, message]() {
+        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, success, message]() {
             if (self) {
                 {
                     QMutexLocker locker(&self->m_appOpMutex);
                     self->m_activeAppOperations.remove(cleanId);
+                    self->m_activeAppOperations.remove(baseAppId);
+
+                    AppTransactionRecord termRec;
+                    if (self->m_appTransactions.contains(cleanId)) {
+                        termRec = self->m_appTransactions.take(cleanId);
+                    } else if (self->m_appTransactions.contains(baseAppId)) {
+                        termRec = self->m_appTransactions.take(baseAppId);
+                    }
+                    self->m_appTransactions.remove(baseAppId);
+
+                    termRec.isFinished = true;
+                    termRec.success = success;
+                    termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                    if (success) {
+                        termRec.stage = "succeeded";
+                        termRec.percentage = 100;
+                        termRec.message = "Installation completed successfully";
+                    } else if (message.contains("cancel", Qt::CaseInsensitive)) {
+                        termRec.stage = "cancelled";
+                        termRec.message = "Installation cancelled";
+                    } else {
+                        termRec.stage = "failed";
+                        termRec.error = message;
+                        termRec.message = message;
+                    }
+                    if (!termRec.opId.isEmpty()) {
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) {
+                            self->m_recentTransactions.removeLast();
+                        }
+                    }
                 }
+                emit self->activeAppOperationsChanged();
                 emit self->appInstalled(cleanId, success, message);
                 self->postNotification(success ? "success" : "error",
                                         success ? "Application Installed" : "Installation Failed",
@@ -326,6 +533,28 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
     QString cleanId = appId.trimmed();
     if (cleanId.isEmpty()) return;
 
+    QString baseAppId = cleanId;
+    QString provId = "pacman";
+    QString targetId = cleanId;
+    if (cleanId.contains(':')) {
+        provId = cleanId.section(':', 0, 0);
+        targetId = cleanId.section(':', 1);
+        baseAppId = targetId;
+    }
+
+    QString appName = baseAppId;
+    QString iconUrl = "";
+    for (const QVariant &v : m_appsList) {
+        QVariantMap m = v.toMap();
+        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId) {
+            appName = m.value("name").toString();
+            iconUrl = m.value("icon_url").toString();
+            break;
+        }
+    }
+
+    QString opId = QString("op_un_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(cleanId);
+
     {
         QMutexLocker locker(&m_appOpMutex);
         if (isAppOperatingLocked(cleanId)) {
@@ -333,10 +562,26 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
             return;
         }
         m_activeAppOperations.insert(cleanId, "uninstall");
+
+        AppTransactionRecord rec;
+        rec.opId = opId;
+        rec.appId = cleanId;
+        rec.targetPackage = targetId;
+        rec.appName = appName;
+        rec.iconUrl = iconUrl;
+        rec.provider = provId;
+        rec.operation = "uninstall";
+        rec.stage = "preparing";
+        rec.message = "Removing application...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+        m_appTransactions.insert(baseAppId, rec);
     }
+    emit activeAppOperationsChanged();
 
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, cleanId]() {
+    m_threadPool.start([self, cleanId, baseAppId]() {
         QByteArray bId = cleanId.toUtf8();
         char* raw = ryzora_uninstall_application(bId.constData());
         QString jsonStr = QString::fromUtf8(raw);
@@ -351,12 +596,34 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
             message = obj["message"].toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, cleanId, success, message]() {
+        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, success, message]() {
             if (self) {
                 {
                     QMutexLocker locker(&self->m_appOpMutex);
                     self->m_activeAppOperations.remove(cleanId);
+                    self->m_activeAppOperations.remove(baseAppId);
+
+                    AppTransactionRecord termRec;
+                    if (self->m_appTransactions.contains(cleanId)) {
+                        termRec = self->m_appTransactions.take(cleanId);
+                    } else if (self->m_appTransactions.contains(baseAppId)) {
+                        termRec = self->m_appTransactions.take(baseAppId);
+                    }
+                    self->m_appTransactions.remove(baseAppId);
+
+                    termRec.isFinished = true;
+                    termRec.success = success;
+                    termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                    termRec.stage = success ? "succeeded" : "failed";
+                    termRec.message = message;
+                    if (!termRec.opId.isEmpty()) {
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) {
+                            self->m_recentTransactions.removeLast();
+                        }
+                    }
                 }
+                emit self->activeAppOperationsChanged();
                 emit self->appUninstalled(cleanId, success, message);
                 self->postNotification(success ? "info" : "error",
                                         success ? "Application Removed" : "Removal Failed",

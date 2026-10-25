@@ -201,9 +201,14 @@ pub struct FlatpakTransactionParserState {
     pub target_package: String,
     pub current_stage: String,
     pub current_package: Option<String>,
+    pub current_package_index: Option<usize>,
+    pub total_packages: Option<usize>,
     pub bytes_downloaded_str: Option<String>,
     pub bytes_total_str: Option<String>,
     pub download_speed: Option<String>,
+    pub eta_str: Option<String>,
+    pub diagnostic_details: Option<String>,
+    pub start_time: Option<Instant>,
 }
 
 impl FlatpakTransactionParserState {
@@ -214,9 +219,14 @@ impl FlatpakTransactionParserState {
             target_package,
             current_stage: "preparing".to_string(),
             current_package: None,
+            current_package_index: None,
+            total_packages: None,
             bytes_downloaded_str: None,
             bytes_total_str: None,
             download_speed: None,
+            eta_str: None,
+            diagnostic_details: None,
+            start_time: Some(Instant::now()),
         }
     }
 
@@ -233,8 +243,8 @@ impl FlatpakTransactionParserState {
             download_percentage: if stage == "downloading" { percentage } else { None },
             install_percentage: None,
             current_package: self.current_package.clone(),
-            current_package_index: None,
-            total_packages: None,
+            current_package_index: self.current_package_index,
+            total_packages: self.total_packages,
             bytes_downloaded_str: self.bytes_downloaded_str.clone(),
             bytes_total_str: self.bytes_total_str.clone(),
             download_speed: self.download_speed.clone(),
@@ -245,6 +255,71 @@ impl FlatpakTransactionParserState {
             is_auth_cancelled: false,
             is_cached: false,
         }
+    }
+}
+
+/// Computes a human-readable smoothed ETA string such as "~1 min 20 sec" or "~21 sec".
+pub fn calculate_eta_string(bytes_dl_str: Option<&str>, bytes_tot_str: Option<&str>, speed_str: Option<&str>) -> Option<String> {
+    fn parse_bytes(s: &str) -> Option<f64> {
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.is_empty() { return None; }
+        let num: f64 = parts[0].parse().ok()?;
+        let unit = parts.get(1).map(|u| u.to_ascii_lowercase()).unwrap_or_default();
+        let multiplier = if unit.starts_with("gb") || unit.starts_with("gib") {
+            1024.0 * 1024.0 * 1024.0
+        } else if unit.starts_with("mb") || unit.starts_with("mib") {
+            1024.0 * 1024.0
+        } else if unit.starts_with("kb") || unit.starts_with("kib") {
+            1024.0
+        } else {
+            1.0
+        };
+        Some(num * multiplier)
+    }
+
+    fn parse_speed(s: &str) -> Option<f64> {
+        let clean = s.trim_matches(|c| c == '(' || c == ')');
+        let parts: Vec<&str> = clean.split_whitespace().collect();
+        if parts.is_empty() { return None; }
+        let num: f64 = parts[0].parse().ok()?;
+        let unit = parts.get(1).map(|u| u.to_ascii_lowercase()).unwrap_or_default();
+        let multiplier = if unit.contains("gb") {
+            1024.0 * 1024.0 * 1024.0
+        } else if unit.contains("mb") {
+            1024.0 * 1024.0
+        } else if unit.contains("kb") {
+            1024.0
+        } else {
+            1.0
+        };
+        Some(num * multiplier)
+    }
+
+    let dl = parse_bytes(bytes_dl_str?)?;
+    let tot = parse_bytes(bytes_tot_str?)?;
+    let spd = parse_speed(speed_str?)?;
+
+    if spd <= 10.0 || tot <= dl {
+        return None;
+    }
+
+    let remaining_bytes = tot - dl;
+    let secs = (remaining_bytes / spd).round() as u64;
+
+    if secs < 60 {
+        Some(format!("~{} sec", secs.max(1)))
+    } else if secs < 3600 {
+        let mins = secs / 60;
+        let rem_s = secs % 60;
+        if rem_s == 0 {
+            Some(format!("~{} min", mins))
+        } else {
+            Some(format!("~{} min {} sec", mins, rem_s))
+        }
+    } else {
+        let hrs = secs / 3600;
+        let mins = (secs % 3600) / 60;
+        Some(format!("~{} hr {} min", hrs, mins))
     }
 }
 
@@ -271,13 +346,63 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
     let stage_owned = stage.to_string();
     state.current_stage = stage_owned.clone();
 
+    let words: Vec<&str> = clean.split_whitespace().collect();
+
+    // Parse step counters e.g. "Installing 2/4 org.freedesktop.Platform 24.08"
+    for word in &words {
+        let trimmed = word.trim_matches(|c: char| !c.is_ascii_digit() && c != '/');
+        if let Some((cur_s, tot_s)) = trimmed.split_once('/') {
+            if let (Ok(cur), Ok(tot)) = (cur_s.parse::<usize>(), tot_s.parse::<usize>()) {
+                if tot > 0 && cur <= tot && tot <= 25 {
+                    state.current_package_index = Some(cur);
+                    state.total_packages = Some(tot);
+                }
+            }
+        }
+    }
+
+    if state.current_package_index.is_none() {
+        if let Some(first_word) = words.first() {
+            if let Some(num_str) = first_word.strip_suffix('.') {
+                if let Ok(idx) = num_str.parse::<usize>() {
+                    if idx > 0 && idx <= 25 {
+                        state.current_package_index = Some(idx);
+                    }
+                }
+            }
+        }
+    }
+
+    let prev_pkg = state.current_package.clone();
+
     // A reverse-DNS ref in Flatpak output is provider supplied item identity.
     // Do not substitute the requested app ID for dependency/runtime lines.
     if let Some(token) = clean.split_whitespace().find(|token| {
         let candidate = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_' && c != '-');
         candidate.matches('.').count() >= 2
     }) {
-        state.current_package = Some(token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_' && c != '-').to_string());
+        let clean_token = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_' && c != '-');
+        if let Some(pos) = words.iter().position(|w| w.contains(clean_token)) {
+            if pos + 1 < words.len() {
+                let next_w = words[pos + 1].trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.');
+                if next_w.chars().any(|c| c.is_ascii_digit()) || next_w == "stable" || next_w == "master" {
+                    state.current_package = Some(format!("{} {}", clean_token, next_w));
+                } else {
+                    state.current_package = Some(clean_token.to_string());
+                }
+            } else {
+                state.current_package = Some(clean_token.to_string());
+            }
+        } else {
+            state.current_package = Some(clean_token.to_string());
+        }
+    }
+
+    if state.current_package != prev_pkg && state.current_package.is_some() {
+        state.bytes_downloaded_str = None;
+        state.bytes_total_str = None;
+        state.download_speed = None;
+        state.eta_str = None;
     }
 
     // Only a literal `NN%` written by Flatpak is published as a percentage.
@@ -289,7 +414,6 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
     });
 
     // Detect actual downloaded and total byte counts: "34.2 MB / 85.0 MB" or "10.5 kB / 1.2 MB"
-    let words: Vec<&str> = clean.split_whitespace().collect();
     for i in 0..words.len() {
         if words[i] == "/" && i >= 2 && i + 2 < words.len() {
             let dl_num = words[i - 2].trim_matches(|c: char| !c.is_ascii_digit() && c != '.');
@@ -304,18 +428,64 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
     }
 
     // Detect speed: "(2.4 MB/s)" or "2.4 MB/s"
-    for i in 0..words.len() {
-        if words[i].contains("/s") {
-            let s_unit = words[i].trim_matches(|c: char| c == '(' || c == ')');
-            if i > 0 && words[i - 1].chars().any(|c| c.is_ascii_digit()) {
-                let s_num = words[i - 1].trim_matches(|c: char| c == '(' || c == ')');
-                state.download_speed = Some(format!("{} {}", s_num, s_unit));
-            } else {
-                state.download_speed = Some(s_unit.to_string());
+    if stage_owned == "downloading" {
+        for i in 0..words.len() {
+            if words[i].contains("/s") {
+                let s_unit = words[i].trim_matches(|c: char| c == '(' || c == ')');
+                if i > 0 && words[i - 1].chars().any(|c| c.is_ascii_digit()) {
+                    let s_num = words[i - 1].trim_matches(|c: char| c == '(' || c == ')');
+                    state.download_speed = Some(format!("{} {}", s_num, s_unit));
+                } else {
+                    state.download_speed = Some(s_unit.to_string());
+                }
+                break;
             }
-            break;
         }
+    } else {
+        state.download_speed = None;
+        state.eta_str = None;
     }
+
+    // Calculate ETA
+    if let Some(eta) = calculate_eta_string(
+        state.bytes_downloaded_str.as_deref(),
+        state.bytes_total_str.as_deref(),
+        state.download_speed.as_deref(),
+    ) {
+        state.eta_str = Some(eta);
+    }
+
+    // Diagnostic details & elapsed time
+    let elapsed_sec = match state.start_time {
+        Some(st) => st.elapsed().as_secs(),
+        None => {
+            state.start_time = Some(Instant::now());
+            0
+        }
+    };
+    let elapsed_str = if elapsed_sec < 60 {
+        format!("{}s", elapsed_sec)
+    } else {
+        format!("{}m {:02}s", elapsed_sec / 60, elapsed_sec % 60)
+    };
+
+    let cur_pkg = state.current_package.as_deref().unwrap_or(&state.target_package);
+    let bottleneck = if cur_pkg.contains("Platform") || cur_pkg.contains("Sdk") || cur_pkg.contains("Locale") || cur_pkg.contains("GL") || (cur_pkg != state.target_package && !cur_pkg.starts_with(&state.target_package)) {
+        format!(
+            "Downloading shared Flatpak runtime dependency ({}). Runtimes provide isolated base OS libraries and are shared across all Flatpak applications.",
+            cur_pkg
+        )
+    } else if stage_owned == "downloading" {
+        format!("Downloading application payload for {}.", cur_pkg)
+    } else if stage_owned == "installing" {
+        format!("Deploying files and verifying ostree commits for {}.", cur_pkg)
+    } else if stage_owned == "resolving" {
+        "Resolving remote Flatpak metadata, architecture compatibility, and dependency tree.".to_string()
+    } else {
+        format!("Processing Flatpak operation for {}.", cur_pkg)
+    };
+
+    state.diagnostic_details = Some(format!("Elapsed: {} | {}", elapsed_str, bottleneck));
 
     Some(state.event(&stage_owned, percentage, clean.to_string(), clean.to_string()))
 }
@@ -958,13 +1128,51 @@ mod tests {
     #[test]
     fn test_parse_flatpak_progress_and_byte_counts() {
         let mut state = FlatpakTransactionParserState::new("txn-fp".into(), "install".into(), "org.mozilla.firefox".into());
-        let line = "1. [####################] 42% 34.2 MB / 85.0 MB (2.4 MB/s)";
+        let step_line = "Installing 2/4 org.freedesktop.Platform 24.08";
+        let ev_step = parse_flatpak_line(step_line, &mut state).unwrap();
+        assert_eq!(ev_step.stage, "installing");
+        assert_eq!(ev_step.current_package, Some("org.freedesktop.Platform 24.08".to_string()));
+        assert_eq!(ev_step.current_package_index, Some(2));
+        assert_eq!(ev_step.total_packages, Some(4));
+        assert!(state.diagnostic_details.as_ref().unwrap().contains("runtime dependency"));
+
+        let line = "2. [####################] 42% 34.2 MB / 85.0 MB (2.4 MB/s)";
         let ev = parse_flatpak_line(line, &mut state).unwrap();
         assert_eq!(ev.stage, "downloading");
         assert_eq!(ev.percentage, Some(42));
         assert_eq!(ev.bytes_downloaded_str, Some("34.2 MB".to_string()));
         assert_eq!(ev.bytes_total_str, Some("85.0 MB".to_string()));
         assert_eq!(ev.download_speed, Some("2.4 MB/s".to_string()));
+        assert_eq!(state.eta_str, Some("~21 sec".to_string()));
+    }
+
+    #[test]
+    fn test_flatpak_metric_isolation_between_packages() {
+        let mut state = FlatpakTransactionParserState::new("txn-fp".into(), "install".into(), "org.mozilla.firefox".into());
+        // Package 1: Runtime
+        let line1 = "Installing 1/2 org.freedesktop.Platform 24.08";
+        parse_flatpak_line(line1, &mut state);
+        let dl1 = "1. [##########] 50% 120.0 MB / 240.0 MB (4.0 MB/s)";
+        parse_flatpak_line(dl1, &mut state);
+        assert_eq!(state.bytes_downloaded_str, Some("120.0 MB".to_string()));
+        assert_eq!(state.download_speed, Some("4.0 MB/s".to_string()));
+
+        // Package 2 starts: Ref changed to firefox
+        let line2 = "Installing 2/2 org.mozilla.firefox stable";
+        parse_flatpak_line(line2, &mut state);
+        // Stale download stats from package 1 must be reset
+        assert_eq!(state.bytes_downloaded_str, None, "Must reset bytes downloaded on package transition");
+        assert_eq!(state.bytes_total_str, None, "Must reset bytes total on package transition");
+        assert_eq!(state.download_speed, None, "Must reset speed on package transition");
+        assert_eq!(state.eta_str, None, "Must reset ETA on package transition");
+    }
+
+    #[test]
+    fn test_calculate_eta_string() {
+        assert_eq!(calculate_eta_string(Some("34.2 MB"), Some("85.0 MB"), Some("2.4 MB/s")), Some("~21 sec".to_string()));
+        assert_eq!(calculate_eta_string(Some("10.0 MB"), Some("269.0 MB"), Some("3.2 MB/s")), Some("~1 min 21 sec".to_string()));
+        assert_eq!(calculate_eta_string(Some("100 MB"), Some("100 MB"), Some("2.0 MB/s")), None);
+        assert_eq!(calculate_eta_string(None, Some("100 MB"), Some("2.0 MB/s")), None);
     }
 
     #[test]

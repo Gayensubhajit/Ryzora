@@ -36,6 +36,95 @@ pub fn invalidate_flatpak_cache() {
     if let Ok(mut write) = INSTALLED_FLATPAK_CACHE.write() {
         *write = None;
     }
+    if let Ok(mut scope_cache) = SCOPE_CACHE.lock() {
+        *scope_cache = None;
+    }
+}
+
+static SCOPE_CACHE: std::sync::Mutex<Option<(std::time::Instant, bool, bool)>> = std::sync::Mutex::new(None);
+static REMOTE_ADD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn get_cached_flathub_scopes() -> (bool, bool) {
+    if let Ok(mut cache) = SCOPE_CACHE.lock() {
+        if let Some((instant, user, system)) = *cache {
+            if instant.elapsed() < std::time::Duration::from_secs(30) {
+                return (user, system);
+            }
+        }
+        let user = list_flatpak_remote_names_for_scope("--user")
+            .iter()
+            .any(|n| n.eq_ignore_ascii_case("flathub"));
+        let system = list_flatpak_remote_names_for_scope("--system")
+            .iter()
+            .any(|n| n.eq_ignore_ascii_case("flathub"));
+        *cache = Some((std::time::Instant::now(), user, system));
+        (user, system)
+    } else {
+        (false, false)
+    }
+}
+
+pub fn ensure_flathub_remote_for_scope<F>(scope: &str, mut progress_cb: Option<&mut F>) -> Result<(), String>
+where
+    F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
+{
+    if scope != "--user" && scope != "--system" {
+        return Err(format!("Invalid Flatpak scope '{}'. Must be '--user' or '--system'.", scope));
+    }
+
+    let (user, system) = get_cached_flathub_scopes();
+    let is_configured = match scope {
+        "--user" => user,
+        "--system" => system,
+        _ => false,
+    };
+    if is_configured {
+        return Ok(());
+    }
+
+    let _guard = REMOTE_ADD_LOCK.lock().map_err(|e| format!("Remote lock poisoned: {}", e))?;
+    let (user_now, system_now) = get_cached_flathub_scopes();
+    if (scope == "--user" && user_now) || (scope == "--system" && system_now) {
+        return Ok(());
+    }
+
+    if let Some(ref mut cb) = progress_cb {
+        cb("resolving", None, "Configuring Flathub remote repository...", false, None, None, None, None, None, None, None, Some(&format!("Setting up Flathub remote for {}", scope)));
+    }
+
+    let status = Command::new("flatpak")
+        .args(["remote-add", scope, "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"])
+        .status()
+        .map_err(|e| format!("Failed to configure Flathub remote for {}: {}", scope, e))?;
+
+    invalidate_flatpak_cache();
+
+    if !status.success() {
+        return Err(format!("Failed to register Flathub remote for {}", scope));
+    }
+    Ok(())
+}
+
+pub fn detect_installed_flatpak_scope(app_id: &str) -> Option<&'static str> {
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
+    if !has_flatpak { return None; }
+    if Command::new("flatpak")
+        .args(["info", "--user", app_id])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Some("--user");
+    }
+    if Command::new("flatpak")
+        .args(["info", "--system", app_id])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Some("--system");
+    }
+    None
 }
 
 
@@ -311,7 +400,7 @@ pub fn install_flatpak_app_streamed<F>(
     on_spawn: Option<&dyn Fn(u32)>,
 ) -> Result<String, String>
 where
-    F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>),
+    F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
 {
     if !is_valid_flatpak_id(app_id) {
         return Err("Invalid Flatpak application ID. Select a verified Flathub source before continuing.".to_string());
@@ -322,19 +411,98 @@ where
     }
 
     if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
-        progress_cb("downloading", Some(45), "Downloading Flatpak sandbox archive...", true, Some("15.2 MB"), Some("34.0 MB"), Some("10 MB/s"));
-        progress_cb("installing", Some(85), "Installing Flatpak application...", true, None, None, None);
+        progress_cb(
+            "resolving",
+            Some(10),
+            "Resolving Flathub remotes and runtime dependencies...",
+            true,
+            None,
+            None,
+            None,
+            Some(1),
+            Some(3),
+            Some("org.freedesktop.Platform"),
+            Some("~45 sec"),
+            Some("Elapsed: 1s | Resolving remote dependencies"),
+        );
+        progress_cb(
+            "downloading",
+            Some(45),
+            "Downloading runtime archive...",
+            true,
+            Some("120.5 MB"),
+            Some("269.0 MB"),
+            Some("3.4 MB/s"),
+            Some(2),
+            Some(3),
+            Some("org.freedesktop.Platform 24.08"),
+            Some("~44 sec"),
+            Some("Elapsed: 15s | Downloading shared Flatpak runtime dependency (org.freedesktop.Platform 24.08). Runtimes provide isolated base OS libraries and are shared across all Flatpak applications."),
+        );
+        progress_cb(
+            "installing",
+            Some(85),
+            "Deploying sandbox files...",
+            true,
+            None,
+            None,
+            None,
+            Some(3),
+            Some(3),
+            Some(app_id),
+            Some("~5 sec"),
+            Some("Elapsed: 35s | Deploying sandbox files"),
+        );
         let app_dir = PathBuf::from(&sys_root).join("var/lib/flatpak/app").join(app_id);
         std::fs::create_dir_all(&app_dir)
             .map_err(|e| format!("Failed to create sandbox flatpak dir: {}", e))?;
         let _ = std::fs::write(app_dir.join("version"), "1.0.0\n");
         invalidate_flatpak_cache();
-        progress_cb("completed", Some(100), "Flatpak application installed successfully", true, None, None, None);
+        progress_cb(
+            "completed",
+            Some(100),
+            "Flatpak application installed successfully",
+            true,
+            None,
+            None,
+            None,
+            Some(3),
+            Some(3),
+            Some(app_id),
+            None,
+            Some("Elapsed: 40s | Completed"),
+        );
         return Ok(format!("Successfully installed Flatpak application '{}' (test mode)", app_id));
     }
 
-    let args = flatpak_transaction_args(app_id, "install")?;
-    progress_cb("resolving", None, "Resolving Flathub remotes and runtime dependencies...", false, None, None, None);
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
+    if !has_flatpak {
+        return Err("Flatpak is not installed on this system.".to_string());
+    }
+
+    let scope = match resolve_flathub_install_scope() {
+        Some(s) => s,
+        None => {
+            ensure_flathub_remote_for_scope("--user", Some(&mut progress_cb))?;
+            "--user"
+        }
+    };
+
+    let args = vec!["install".to_string(), scope.to_string(), "-y".to_string(), "flathub".to_string(), app_id.to_string()];
+    progress_cb(
+        "resolving",
+        None,
+        "Resolving Flathub remotes and runtime dependencies...",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(&format!("Scope: {} | Remote: flathub | Target: {}", scope, app_id)),
+    );
 
     let mut cmd = Command::new("flatpak");
     cmd.args(&args);
@@ -349,6 +517,15 @@ where
 
     let stdout = child.stdout.take().ok_or_else(|| "Failed to capture stdout of flatpak".to_string())?;
     let stderr = child.stderr.take().ok_or_else(|| "Failed to capture stderr of flatpak".to_string())?;
+
+    // Drain stderr concurrently to prevent pipe buffer deadlocks
+    let stderr_handle = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut err_msg = String::new();
+        let mut r = std::io::BufReader::new(stderr);
+        let _ = r.read_to_string(&mut err_msg);
+        err_msg
+    });
 
     let mut state = crate::app_adapters::transaction::FlatpakTransactionParserState::new(
         format!("flatpak-{}", pid),
@@ -378,6 +555,11 @@ where
                             ev.bytes_downloaded_str.as_deref(),
                             ev.bytes_total_str.as_deref(),
                             ev.download_speed.as_deref(),
+                            ev.current_package_index,
+                            ev.total_packages,
+                            ev.current_package.as_deref(),
+                            state.eta_str.as_deref(),
+                            state.diagnostic_details.as_deref(),
                         );
                     }
                 }
@@ -385,17 +567,15 @@ where
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => {
                 let _ = child.kill();
+                let _ = stderr_handle.join();
                 return Err(format!("Error reading Flatpak progress: {}", e));
             }
         }
     }
 
     let status = child.wait().map_err(|e| format!("Failed to wait on flatpak process: {}", e))?;
+    let err_msg = stderr_handle.join().unwrap_or_default();
     if !status.success() {
-        let mut err_msg = String::new();
-        use std::io::Read;
-        let mut r = std::io::BufReader::new(stderr);
-        let _ = r.read_to_string(&mut err_msg);
         let trimmed_err = err_msg.trim();
         #[cfg(unix)]
         let killed_by_sig = {
@@ -416,12 +596,12 @@ where
     }
 
     invalidate_flatpak_cache();
-    progress_cb("completed", Some(100), "Flatpak application installed successfully", true, None, None, None);
+    progress_cb("completed", Some(100), "Flatpak application installed successfully", true, None, None, None, state.total_packages, state.total_packages, state.current_package.as_deref(), None, Some("Elapsed: done | Completed successfully"));
     Ok(format!("Successfully installed Flatpak application '{}'", app_id))
 }
 
 pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
-    install_flatpak_app_streamed(app_id, |_stage, _pct, _msg, _is_det, _dl, _tot, _spd| {}, None)
+    install_flatpak_app_streamed(app_id, |_stage, _pct, _msg, _is_det, _dl, _tot, _spd, _cur_step, _tot_steps, _item, _eta, _diag| {}, None)
 }
 
 /// Uninstalls a Flatpak application.
@@ -477,10 +657,16 @@ pub fn flatpak_transaction_args(app_id: &str, operation: &str) -> Result<Vec<Str
     match operation {
         "install" | "reinstall" => {
             let scope = resolve_flathub_install_scope()
-                .ok_or_else(|| "The Flathub remote is not configured for Flatpak.".to_string())?;
+                .unwrap_or("--user");
             Ok(vec!["install".into(), scope.into(), "-y".into(), "flathub".into(), app_id.into()])
         }
-        "uninstall" => Ok(vec!["uninstall".into(), "-y".into(), app_id.into()]),
+        "uninstall" => {
+            if let Some(scope) = detect_installed_flatpak_scope(app_id) {
+                Ok(vec!["uninstall".into(), scope.into(), "-y".into(), app_id.into()])
+            } else {
+                Ok(vec!["uninstall".into(), "-y".into(), app_id.into()])
+            }
+        }
         _ => Err(format!("Unsupported Flatpak transaction operation '{}'.", operation)),
     }
 }
@@ -560,14 +746,10 @@ fn list_flatpak_remote_names() -> Vec<String> {
 /// Prefer the user Flathub remote so install does not need root. Fall back to
 /// the system remote when that is the only configured Flathub source.
 pub(crate) fn resolve_flathub_install_scope() -> Option<&'static str> {
-    let has_flathub = |scope: &str| {
-        list_flatpak_remote_names_for_scope(scope)
-            .iter()
-            .any(|name| name.eq_ignore_ascii_case("flathub"))
-    };
-    if has_flathub("--user") {
+    let (has_user, has_system) = get_cached_flathub_scopes();
+    if has_user {
         Some("--user")
-    } else if has_flathub("--system") {
+    } else if has_system {
         Some("--system")
     } else {
         None
@@ -667,5 +849,51 @@ mod tests {
         assert!(!is_valid_flatpak_id("com."));
         assert!(!is_valid_flatpak_id(".."));
         assert!(!is_valid_flatpak_id("org..amarok"));
+    }
+
+    #[test]
+    fn test_flatpak_transaction_args_explicit_scopes() {
+        let args = flatpak_transaction_args("org.videolan.VLC", "install").expect("Must generate args");
+        assert_eq!(args[0], "install");
+        assert!(args[1] == "--user" || args[1] == "--system", "Scope must be explicit");
+        assert_eq!(args[2], "-y");
+        assert_eq!(args[3], "flathub");
+        assert_eq!(args[4], "org.videolan.VLC");
+
+        let uninst = flatpak_transaction_args("org.videolan.VLC", "uninstall").expect("Must generate uninst args");
+        assert_eq!(uninst[0], "uninstall");
+        assert!(uninst.contains(&"-y".to_string()));
+        assert!(uninst.contains(&"org.videolan.VLC".to_string()));
+    }
+
+    #[test]
+    fn test_scope_cache_invalidation() {
+        {
+            let mut cache = SCOPE_CACHE.lock().unwrap();
+            *cache = Some((std::time::Instant::now(), true, true));
+        }
+        assert!(SCOPE_CACHE.lock().unwrap().is_some());
+        invalidate_flatpak_cache();
+        assert!(SCOPE_CACHE.lock().unwrap().is_none(), "Must invalidate scope cache");
+    }
+
+    #[test]
+    fn test_ensure_flathub_remote_avoid_redundant_work() {
+        // Pre-seed cache to simulate already configured remote
+        {
+            let mut cache = SCOPE_CACHE.lock().unwrap();
+            *cache = Some((std::time::Instant::now(), true, true));
+        }
+        let mut called = false;
+        let mut dummy_cb = |_st: &str, _p: Option<u8>, _m: &str, _d: bool, _dl: Option<&str>, _tot: Option<&str>, _spd: Option<&str>, _c: Option<usize>, _t: Option<usize>, _item: Option<&str>, _eta: Option<&str>, _diag: Option<&str>| {
+            called = true;
+        };
+        let res = ensure_flathub_remote_for_scope("--user", Some(&mut dummy_cb));
+        assert!(res.is_ok());
+        drop(dummy_cb);
+        assert!(!called, "Configured remote must not invoke setup or emit progress events");
+
+        let err_res = ensure_flathub_remote_for_scope::<fn(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>)>("--invalid", None);
+        assert!(err_res.is_err(), "Must reject invalid scope");
     }
 }

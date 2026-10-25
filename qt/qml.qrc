@@ -13,6 +13,10 @@
         <file>qml/components/PackageDetailDrawer.qml</file>
         <file>qml/components/AboutModal.qml</file>
         <file>qml/components/RyzoraIcon.qml</file>
+        <file>qml/components/InstallMetricsRow.qml</file>
+        <file>qml/components/InstallActivityView.qml</file>
+        <file>qml/components/InstallProgressView.qml</file>
+        <file>qml/components/InstallManagerPopover.qml</file>
         <file>qml/views/HubView.qml</file>
         <file>qml/views/DiscoverView.qml</file>
         <file>qml/views/AppsView.qml</file>

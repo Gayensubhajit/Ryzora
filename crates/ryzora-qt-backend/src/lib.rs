@@ -2700,7 +2700,7 @@ impl BackendState {
 
     pub fn install_application_with_progress<F>(&self, app_id: &str, mut progress_cb: F) -> Result<String, String>
     where
-        F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>),
+        F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
     {
         let trimmed = app_id.trim();
         if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains(';') || trimmed.contains('&') {
@@ -2715,21 +2715,21 @@ impl BackendState {
         let canonical = Self::canonical_app_id(trimmed);
 
         // Immediate initial progress event
-        progress_cb("preparing", Some(5), "Resolving package and dependencies...", true, None, None, None);
+        progress_cb("preparing", Some(5), "Resolving package and dependencies...", true, None, None, None, None, None, None, None, None);
 
         // If home_dir_override is set without RYZORA_SYSTEM_ROOT, simulate in-memory test install
         if self.home_dir_override.lock().unwrap().is_some()
             && std::env::var("RYZORA_SYSTEM_ROOT").is_err()
         {
-            progress_cb("downloading", Some(45), "Downloading package...", true, Some("18 MB"), Some("43 MB"), Some("12 MB/s"));
-            progress_cb("installing", Some(80), "Installing package...", true, None, None, None);
-            progress_cb("finalizing", Some(95), "Finishing up...", true, None, None, None);
+            progress_cb("downloading", Some(45), "Downloading package...", true, Some("18 MB"), Some("43 MB"), Some("12 MB/s"), Some(1), Some(2), Some(&canonical), Some("~2 sec"), Some("Elapsed: 1s | Downloading package archive"));
+            progress_cb("installing", Some(80), "Installing package...", true, None, None, None, Some(2), Some(2), Some(&canonical), None, Some("Elapsed: 2s | Deploying application"));
+            progress_cb("finalizing", Some(95), "Finishing up...", true, None, None, None, Some(2), Some(2), Some(&canonical), None, Some("Elapsed: 3s | Running hooks"));
             let mut set = self.test_installed_apps.lock().unwrap();
             set.insert(trimmed.to_string());
             set.insert(canonical.clone());
             set.insert(target.clone());
             *self.library_cache.lock().unwrap() = None;
-            progress_cb("completed", Some(100), "Installation complete", true, None, None, None);
+            progress_cb("completed", Some(100), "Installation complete", true, None, None, None, Some(2), Some(2), Some(&canonical), None, None);
             return Ok(format!(
                 "Application '{}' installed successfully in test environment",
                 canonical
@@ -2762,9 +2762,9 @@ impl BackendState {
                 Err(e) => Err(e),
             };
         } else if is_aur {
-            progress_cb("resolving", None, "Resolving AUR build dependencies...", false, None, None, None);
+            progress_cb("resolving", None, "Resolving AUR build dependencies...", false, None, None, None, None, None, None, None, None);
         } else {
-            progress_cb("downloading", Some(35), "Downloading package...", true, None, None, None);
+            progress_cb("downloading", Some(35), "Downloading package...", true, None, None, None, None, None, None, None, None);
         }
 
         let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -2781,8 +2781,8 @@ impl BackendState {
         let _ = self.app_coordinator.finish_request(req_id);
         let res = res?;
 
-        progress_cb("installing", Some(85), "Installing and configuring package...", true, None, None, None);
-        progress_cb("completed", Some(100), "Installation complete", true, None, None, None);
+        progress_cb("installing", Some(85), "Installing and configuring package...", true, None, None, None, None, None, None, None, None);
+        progress_cb("completed", Some(100), "Installation complete", true, None, None, None, None, None, None, None, None);
 
         *self.library_cache.lock().unwrap() = None;
         Ok(res.message)
@@ -5879,7 +5879,7 @@ pub extern "C" fn ryzora_install_application_with_progress(
         return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
     }
     let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
-    let emit = |stage: &str, pct: Option<u8>, msg: &str, is_det: bool, dl_str: Option<&str>, tot_str: Option<&str>, speed: Option<&str>| {
+    let emit = |stage: &str, pct: Option<u8>, msg: &str, is_det: bool, dl_str: Option<&str>, tot_str: Option<&str>, speed: Option<&str>, cur_step: Option<usize>, tot_steps: Option<usize>, cur_item: Option<&str>, eta: Option<&str>, diag: Option<&str>| {
         if let Some(cb) = callback {
             let json = serde_json::json!({
                 "app_id": aid,
@@ -5890,6 +5890,11 @@ pub extern "C" fn ryzora_install_application_with_progress(
                 "bytes_downloaded_str": dl_str,
                 "bytes_total_str": tot_str,
                 "download_speed": speed,
+                "current_step": cur_step,
+                "total_steps": tot_steps,
+                "current_item": cur_item,
+                "eta_str": eta,
+                "diagnostic_details": diag,
             });
             if let Ok(c_str) = CString::new(json.to_string()) {
                 cb(c_str.as_ptr(), user_data);
@@ -8075,8 +8080,8 @@ hyprlock
 
         // 4b. Test install_application_with_progress real-time progress callbacks
         let mut progress_events = Vec::new();
-        let res_prog = backend.install_application_with_progress("blender", |stage, pct, msg, is_det, dl, tot, spd| {
-            progress_events.push((stage.to_string(), pct, msg.to_string(), is_det, dl.map(|s| s.to_string()), tot.map(|s| s.to_string()), spd.map(|s| s.to_string())));
+        let res_prog = backend.install_application_with_progress("blender", |stage, pct, msg, is_det, dl, tot, spd, cur_step, tot_steps, item, eta, diag| {
+            progress_events.push((stage.to_string(), pct, msg.to_string(), is_det, dl.map(|s| s.to_string()), tot.map(|s| s.to_string()), spd.map(|s| s.to_string()), cur_step, tot_steps, item.map(|s| s.to_string()), eta.map(|s| s.to_string()), diag.map(|s| s.to_string())));
         });
         assert!(res_prog.is_ok(), "install_application_with_progress must succeed");
         assert!(!progress_events.is_empty(), "Must produce progress events");
@@ -8093,11 +8098,13 @@ hyprlock
 
         // 4d. Test Flatpak streamed progress callbacks
         let mut flatpak_events = Vec::new();
-        let res_fp = backend.install_application_with_progress("flatpak:com.spotify.Client", |stage, pct, msg, is_det, dl, tot, spd| {
-            flatpak_events.push((stage.to_string(), pct, msg.to_string(), is_det, dl.map(|s| s.to_string()), tot.map(|s| s.to_string()), spd.map(|s| s.to_string())));
+        let res_fp = backend.install_application_with_progress("flatpak:com.spotify.Client", |stage, pct, msg, is_det, dl, tot, spd, cur_step, tot_steps, item, eta, diag| {
+            flatpak_events.push((stage.to_string(), pct, msg.to_string(), is_det, dl.map(|s| s.to_string()), tot.map(|s| s.to_string()), spd.map(|s| s.to_string()), cur_step, tot_steps, item.map(|s| s.to_string()), eta.map(|s| s.to_string()), diag.map(|s| s.to_string())));
         });
         assert!(res_fp.is_ok(), "Flatpak install_application_with_progress must succeed");
         assert!(flatpak_events.iter().any(|e| e.0 == "downloading" && e.4.is_some() && e.5.is_some()), "Must include byte progress for Flatpak");
+        assert!(flatpak_events.iter().any(|e| e.7 == Some(2) && e.8 == Some(3)), "Must track step operations for Flatpak");
+        assert!(flatpak_events.iter().any(|e| e.10.is_some()), "Must include ETA calculation");
         assert!(flatpak_events.iter().any(|e| e.0 == "completed" && e.1 == Some(100)));
 
         assert!(backend.install_application("flatpak:com.spotify.Client").is_ok());

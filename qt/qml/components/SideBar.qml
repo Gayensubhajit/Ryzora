@@ -151,6 +151,7 @@ Rectangle {
                     label: "Apps"
                     iconName: "layout-grid"
                     tabId: "apps"
+                    badgeCount: backend ? backend.activeAppOperationsCount : 0
                     isActive: root.currentTab === "apps"
                     collapsed: root.isCollapsed
                     onClicked: root.tabSelected("apps")

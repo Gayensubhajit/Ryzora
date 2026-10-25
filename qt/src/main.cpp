@@ -485,6 +485,160 @@ int runCaptureScreenshots(QGuiApplication &app, QQmlApplicationEngine &engine, R
     return 0;
 }
 
+int runQAWorkspaceShots(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend, const QString &outDir) {
+    QDir dir(outDir);
+    if (!dir.exists()) dir.mkpath(".");
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "Failed to find root QQuickWindow";
+        return 1;
+    }
+
+    QObject *stack = rootObj->findChild<QObject*>("stackLayout");
+    QObject *appsView = rootObj->findChild<QObject*>("appsView");
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    auto setWindowSize = [&](int w, int h) {
+        window->setWidth(w);
+        window->setHeight(h);
+        window->resize(w, h);
+        pumpEvents(12, 15000);
+    };
+
+    auto navigate = [&](const QString &tab) {
+        if (rootObj) {
+            QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, tab));
+        }
+        if (stack) {
+            stack->setProperty("currentTab", tab);
+        }
+        pumpEvents(15, 20000);
+    };
+
+    auto saveShot = [&](const QString &name) {
+        pumpEvents(10, 20000);
+        QImage img = window->grabWindow();
+        QString dest = dir.filePath(name);
+        img.save(dest);
+        qInfo() << "Saved screenshot:" << dest << "(" << img.width() << "x" << img.height() << ")";
+    };
+
+    // Wait for apps catalog to load
+    QElapsedTimer t;
+    t.start();
+    while ((backend->isCatalogLoading() || backend->appsList().isEmpty()) && t.elapsed() < 3000) {
+        app.processEvents();
+        usleep(10000);
+    }
+    pumpEvents(15, 20000);
+
+    setWindowSize(1920, 1080);
+    navigate("apps");
+
+    // State 1: App not installed (Discord)
+    QVariant discordApp;
+    for (const QVariant &v : backend->appsList()) {
+        if (v.toMap().value("id").toString() == "discord") {
+            discordApp = v;
+            break;
+        }
+    }
+    if (appsView && !discordApp.isNull()) {
+        QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, discordApp));
+        pumpEvents(20, 20000);
+        saveShot("qa_01_app_not_installed_1920x1080.png");
+
+        // State 2: Real operation in progress with rich live metrics
+        backend->updateTransactionProgress(
+            "pacman:discord",
+            "downloading",
+            42,
+            true,
+            "Downloading Discord package and dependencies...",
+            "45.2 MB",
+            "108.3 MB",
+            "3.8 MB/s",
+            2,
+            4,
+            "discord-0.0.98.tar.zst",
+            "~16 sec",
+            "Elapsed: 14s | Downloading package payload for discord."
+        );
+        appsView->setProperty("pendingAppId", "pacman:discord");
+        appsView->setProperty("pendingAction", "install");
+        appsView->setProperty("installStage", "downloading");
+        appsView->setProperty("installPercentage", 42);
+        appsView->setProperty("installIsDeterminate", true);
+        appsView->setProperty("installMessage", "Downloading Discord package and dependencies...");
+        appsView->setProperty("installBytesDownloaded", "45.2 MB");
+        appsView->setProperty("installBytesTotal", "108.3 MB");
+        appsView->setProperty("installDownloadSpeed", "3.8 MB/s");
+        appsView->setProperty("installCurrentStep", 2);
+        appsView->setProperty("installTotalSteps", 4);
+        appsView->setProperty("installCurrentItem", "discord-0.0.98.tar.zst");
+        appsView->setProperty("installEtaStr", "~16 sec");
+        appsView->setProperty("installDiagnosticDetails", "Elapsed: 14s | Downloading package payload for discord.");
+        appsView->setProperty("showInstallDetails", true);
+        pumpEvents(20, 20000);
+        saveShot("qa_02_app_installing_workspace_1920x1080.png");
+
+        // State 2b: Narrower window size (1080x720) to verify responsive wrapping
+        setWindowSize(1080, 720);
+        pumpEvents(20, 20000);
+        saveShot("qa_02b_app_installing_workspace_narrow_1080x720.png");
+
+        // Restore 1920x1080
+        setWindowSize(1920, 1080);
+        pumpEvents(15, 20000);
+
+        // State 3: Installation Manager open while operation is active
+        QObject *installPopover = rootObj->findChild<QObject*>("installPopover");
+        if (installPopover) {
+            QMetaObject::invokeMethod(installPopover, "open");
+            pumpEvents(25, 20000);
+            saveShot("qa_03_installation_manager_open_1920x1080.png");
+            QMetaObject::invokeMethod(installPopover, "close");
+            pumpEvents(10, 15000);
+        }
+
+        // State 4: Completed or cancelled operation
+        backend->updateTransactionProgress(
+            "pacman:discord",
+            "succeeded",
+            100,
+            true,
+            "Installation completed successfully",
+            "108.3 MB",
+            "108.3 MB",
+            "",
+            4,
+            4,
+            "discord",
+            "",
+            "Elapsed: 28s | Package configured and sandboxed"
+        );
+        appsView->setProperty("pendingAppId", "");
+        appsView->setProperty("pendingAction", "");
+        appsView->setProperty("installStage", "");
+        QVariantMap updatedDiscord = discordApp.toMap();
+        updatedDiscord["is_installed"] = true;
+        QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, updatedDiscord));
+        pumpEvents(20, 20000);
+        saveShot("qa_04_app_cancelled_or_completed_1920x1080.png");
+    }
+
+    qInfo() << "All QA workspace screenshots captured successfully.";
+    return 0;
+}
+
 int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
     qInfo() << "==================================================";
     qInfo() << "STARTING LIVE APPS PAGE INTERACTION VERIFICATION";
@@ -688,8 +842,22 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     // 5C. Test Flatpak Provider (flatpak:com.spotify.Client)
     qInfo() << "[STEP 5C] Testing Flatpak Provider Lifecycle (flatpak:com.spotify.Client)...";
     QDir().mkpath(tempRoot + "/sysroot/var/lib/flatpak/app");
+    bool receivedMetrics = false;
+    QMetaObject::Connection progressConn = QObject::connect(backend, &RyzoraBackend::appInstallProgress, [&receivedMetrics](const QString &, const QString &, int, bool, const QString &, const QString &, const QString &, const QString &, int curStep, int totSteps, const QString &, const QString &eta, const QString &diag) {
+        if (curStep > 0 && totSteps > 0 && !eta.isEmpty() && !diag.isEmpty()) {
+            receivedMetrics = true;
+        }
+    });
     QMetaObject::invokeMethod(appsView, "requestInstall", Q_ARG(QVariant, "flatpak:com.spotify.Client"));
     pumpEvents(40, 20000);
+    QObject::disconnect(progressConn);
+
+    if (!receivedMetrics) {
+        qCritical() << "FAIL: Flatpak did not emit rich step, ETA, and diagnostic metrics!";
+        QDir(tempRoot).removeRecursively();
+        return 14;
+    }
+    qInfo() << "  -> Flatpak progress verified: rich metrics (steps, ETA, diagnostics) received.";
 
     bool spotifyInstalled = false;
     for (const QVariant &v : backend->appsList()) {
@@ -718,6 +886,27 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     backend->cancelAppOperation("test");
     pumpEvents(10, 10000);
     qInfo() << "  -> Cancellation called cleanly when idle without errors.";
+
+    // 5E. Test Global Transaction Manager & Persistent State Recovery
+    qInfo() << "[STEP 5E] Testing Global Transaction Manager & Persistent State...";
+    QVariantMap spotifyTxn = backend->getTransactionForApp("flatpak:com.spotify.Client");
+    if (spotifyTxn.isEmpty()) {
+        qCritical() << "FAIL: getTransactionForApp('flatpak:com.spotify.Client') returned empty record!";
+        QDir(tempRoot).removeRecursively();
+        return 15;
+    }
+    if (!spotifyTxn.value("is_finished").toBool()) {
+        qCritical() << "FAIL: spotify transaction is_finished is false after completion!";
+        QDir(tempRoot).removeRecursively();
+        return 16;
+    }
+    QVariantList recentTxns = backend->getRecentTransactions();
+    if (recentTxns.isEmpty()) {
+        qCritical() << "FAIL: getRecentTransactions() is empty after completed operations!";
+        QDir(tempRoot).removeRecursively();
+        return 17;
+    }
+    qInfo() << "  -> Global transaction persistence verified: recent transactions recorded with terminal state.";
 
     backend->setTestSystemRootOverride("");
     backend->setTestHomeOverride("");
@@ -3111,6 +3300,10 @@ int main(int argc, char *argv[]) {
         _exit(exitCode);
     } else if (argc > 2 && QString(argv[1]) == "--capture-screenshots") {
         exitCode = runCaptureScreenshots(app, engine, &backend, QString(argv[2]));
+    } else if (argc > 2 && QString(argv[1]) == "--qa-workspace-shots") {
+        exitCode = runQAWorkspaceShots(app, engine, &backend, QString(argv[2]));
+        backend.shutdown();
+        _exit(exitCode);
     } else {
         exitCode = app.exec();
     }

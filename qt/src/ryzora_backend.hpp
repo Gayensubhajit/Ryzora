@@ -9,9 +9,66 @@
 #include <QHash>
 #include <QMutex>
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <atomic>
 
 class PreviewConfig;
+
+struct AppTransactionRecord {
+    QString opId;
+    QString appId;
+    QString targetPackage;
+    QString appName;
+    QString iconUrl;
+    QString provider;
+    QString operation; // "install", "uninstall"
+    QString stage;     // "queued", "resolving", "preparing", "downloading", "verifying", "deploying", "finalizing", "cancelling", "succeeded", "cancelled", "failed"
+    int percentage = -1;
+    bool isDeterminate = false;
+    QString message;
+    QString bytesDownloaded;
+    QString bytesTotal;
+    QString downloadSpeed;
+    int currentStep = 0;
+    int totalSteps = 0;
+    QString currentItem;
+    QString etaStr;
+    QString diagnosticDetails;
+    qint64 startTimeMs = 0;
+    qint64 finishTimeMs = 0;
+    bool isFinished = false;
+    bool success = false;
+    QString error;
+
+    QVariantMap toVariantMap() const {
+        QVariantMap map;
+        map["op_id"] = opId;
+        map["app_id"] = appId;
+        map["target_package"] = targetPackage;
+        map["app_name"] = appName;
+        map["icon_url"] = iconUrl;
+        map["provider"] = provider;
+        map["operation"] = operation;
+        map["stage"] = stage;
+        map["percentage"] = percentage;
+        map["is_determinate"] = isDeterminate;
+        map["message"] = message;
+        map["bytes_downloaded"] = bytesDownloaded;
+        map["bytes_total"] = bytesTotal;
+        map["download_speed"] = downloadSpeed;
+        map["current_step"] = currentStep;
+        map["total_steps"] = totalSteps;
+        map["current_item"] = currentItem;
+        map["eta_str"] = etaStr;
+        map["diagnostic_details"] = diagnosticDetails;
+        map["start_time_ms"] = startTimeMs;
+        map["finish_time_ms"] = finishTimeMs;
+        map["is_finished"] = isFinished;
+        map["success"] = success;
+        map["error"] = error;
+        return map;
+    }
+};
 
 class RyzoraBackend : public QObject {
     Q_OBJECT
@@ -31,6 +88,11 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(QVariantList appsList READ appsList NOTIFY appsChanged)
     Q_PROPERTY(int appsCount READ appsCount NOTIFY appsChanged)
     Q_PROPERTY(bool isAppsLoading READ isAppsLoading NOTIFY appsLoadingChanged)
+
+    // Global App Transactions / Installation Manager
+    Q_PROPERTY(int activeAppOperationsCount READ activeAppOperationsCount NOTIFY activeAppOperationsChanged)
+    Q_PROPERTY(QVariantList activeTransactions READ getActiveTransactions NOTIFY activeAppOperationsChanged)
+    Q_PROPERTY(QVariantList recentTransactions READ getRecentTransactions NOTIFY activeAppOperationsChanged)
 
     // Fastfetch
     Q_PROPERTY(QString fastfetchHtml READ fastfetchHtml NOTIFY fastfetchChanged)
@@ -109,6 +171,11 @@ public:
     Q_INVOKABLE void cancelAppOperation(const QString &appId);
     Q_INVOKABLE bool isAppOperating(const QString &appId) const;
     Q_INVOKABLE QString getAppActiveOperation(const QString &appId) const;
+    Q_INVOKABLE int activeAppOperationsCount() const;
+    Q_INVOKABLE QVariantList getActiveTransactions() const;
+    Q_INVOKABLE QVariantList getRecentTransactions() const;
+    Q_INVOKABLE QVariantMap getTransactionForApp(const QString &appId) const;
+    void updateTransactionProgress(const QString &appId, const QString &stage, int pct, bool isDet, const QString &msg, const QString &dl, const QString &tot, const QString &spd, int curStep, int totSteps, const QString &curItem, const QString &eta, const QString &diag);
     Q_INVOKABLE void uninstallApp(const QString &appId);
     Q_INVOKABLE void launchApp(const QString &appId);
     Q_INVOKABLE QVariantList resolveAppProviders(const QString &appId, const QString &displayName = QString());
@@ -178,8 +245,9 @@ signals:
     void catalogChanged();
     void appsChanged();
     void appsLoadingChanged();
+    void activeAppOperationsChanged();
     void appInstalled(const QString &appId, bool success, const QString &message);
-    void appInstallProgress(const QString &appId, const QString &stage, int percentage, bool isDeterminate, const QString &message, const QString &bytesDownloaded, const QString &bytesTotal, const QString &downloadSpeed);
+    void appInstallProgress(const QString &appId, const QString &stage, int percentage, bool isDeterminate, const QString &message, const QString &bytesDownloaded, const QString &bytesTotal, const QString &downloadSpeed, int currentStep = 0, int totalSteps = 0, const QString &currentItem = QString(), const QString &etaStr = QString(), const QString &diagnosticDetails = QString());
     void appUninstalled(const QString &appId, bool success, const QString &message);
     void appLaunched(const QString &appId, bool success, const QString &message);
     void libraryChanged();
@@ -274,6 +342,8 @@ private:
     std::atomic<bool> m_isShutdown{false};
     mutable QMutex m_appOpMutex;
     QHash<QString, QString> m_activeAppOperations;
+    QHash<QString, AppTransactionRecord> m_appTransactions;
+    QList<AppTransactionRecord> m_recentTransactions;
     bool isAppOperatingLocked(const QString &clean) const;
     QString m_testHomeOverride;
     QString m_testSystemRootOverride;

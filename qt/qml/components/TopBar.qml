@@ -226,6 +226,64 @@ Rectangle {
             }
         }
 
+        // ── 4B. Active Installations Indicator & Popover ──
+        Rectangle {
+            id: installIndicatorBtn
+            visible: Boolean(backend && backend.activeAppOperationsCount > 0)
+            implicitWidth: installIndRow.implicitWidth + 18
+            height: 32
+            radius: theme.radiusMd
+            color: installIndMouse.containsMouse || installPopover.visible
+                ? (theme.resolvedTheme === "light" ? "#DBEAFE" : "#1E3A8A")
+                : theme.surfaceElevated
+            border.color: theme.accent
+            border.width: 1
+
+            RowLayout {
+                id: installIndRow
+                anchors.centerIn: parent
+                spacing: 6
+
+                RyzoraIcon {
+                    name: "spinner"
+                    size: 13
+                    color: theme.accent
+                    RotationAnimation on rotation {
+                        from: 0
+                        to: 360
+                        duration: 1200
+                        loops: Animation.Infinite
+                        running: installIndicatorBtn.visible
+                    }
+                }
+
+                Text {
+                    text: (backend ? backend.activeAppOperationsCount : 0) + " installing"
+                    font.pixelSize: theme.fontNav
+                    font.bold: true
+                    color: theme.accent
+                }
+            }
+
+            MouseArea {
+                id: installIndMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (installPopover.visible) installPopover.close()
+                    else installPopover.open()
+                }
+            }
+
+            InstallManagerPopover {
+                id: installPopover
+                objectName: "installPopover"
+                x: installIndicatorBtn.width - width
+                y: installIndicatorBtn.height + 6
+            }
+        }
+
         // ── 5. Appearance Popover Quick Switch ──
         Rectangle {
             id: appBtn

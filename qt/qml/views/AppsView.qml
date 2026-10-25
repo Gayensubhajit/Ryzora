@@ -25,6 +25,12 @@ Item {
     property string installBytesDownloaded: ""
     property string installBytesTotal: ""
     property string installDownloadSpeed: ""
+    property int installCurrentStep: 0
+    property int installTotalSteps: 0
+    property string installCurrentItem: ""
+    property string installEtaStr: ""
+    property string installDiagnosticDetails: ""
+    property bool showInstallDetails: false
     property string selectedProviderId: ""
     property string selectedTargetId: ""
     property real savedBrowseScrollY: 0
@@ -73,9 +79,35 @@ Item {
             if (typeof galFlick !== "undefined" && galFlick) {
                 galFlick.contentX = 0
             }
+            if (backend) {
+                var txn = backend.getTransactionForApp(root.currentActionAppId())
+                if (txn && txn.op_id && !txn.is_finished) {
+                    root.pendingAppId = root.currentActionAppId()
+                    root.pendingAction = txn.operation || "install"
+                    root.installStage = txn.stage || ""
+                    root.installPercentage = (txn.percentage !== undefined && txn.percentage !== null) ? txn.percentage : -1
+                    root.installIsDeterminate = Boolean(txn.is_determinate)
+                    root.installMessage = txn.message || ""
+                    root.installBytesDownloaded = txn.bytes_downloaded || ""
+                    root.installBytesTotal = txn.bytes_total || ""
+                    root.installDownloadSpeed = txn.download_speed || ""
+                    root.installCurrentStep = txn.current_step || 0
+                    root.installTotalSteps = txn.total_steps || 0
+                    root.installCurrentItem = txn.current_item || ""
+                    root.installEtaStr = txn.eta_str || ""
+                    root.installDiagnosticDetails = txn.diagnostic_details || ""
+                } else if (!backend.isAppOperating(root.pendingAppId)) {
+                    root.pendingAppId = ""
+                    root.pendingAction = ""
+                }
+            }
         } else {
             root.selectedProviderId = ""
             root.selectedTargetId = ""
+            if (backend && !backend.isAppOperating(root.pendingAppId)) {
+                root.pendingAppId = ""
+                root.pendingAction = ""
+            }
             Qt.callLater(function() {
                 if (mainScroll) {
                     mainScroll.contentY = root.savedBrowseScrollY
@@ -130,7 +162,11 @@ Item {
     }
 
     function requestInstall(appId) {
-        if (root.pendingAppId !== "" || (backend && backend.isAppOperating(appId))) {
+        if (backend && root.pendingAppId !== "" && !backend.isAppOperating(root.pendingAppId)) {
+            root.pendingAppId = ""
+            root.pendingAction = ""
+        }
+        if ((backend && backend.isAppOperating(appId)) || (root.pendingAppId !== "" && root.pendingAppId !== appId)) {
             root.actionErrorMessage = "Another package operation is currently in progress. Please wait for it to finish."
             return
         }
@@ -141,7 +177,11 @@ Item {
     }
 
     function requestUninstall(appId) {
-        if (root.pendingAppId !== "" || (backend && backend.isAppOperating(appId))) {
+        if (backend && root.pendingAppId !== "" && !backend.isAppOperating(root.pendingAppId)) {
+            root.pendingAppId = ""
+            root.pendingAction = ""
+        }
+        if ((backend && backend.isAppOperating(appId)) || (root.pendingAppId !== "" && root.pendingAppId !== appId)) {
             root.actionErrorMessage = "Another package operation is currently in progress. Please wait for it to finish."
             return
         }
@@ -193,7 +233,7 @@ Item {
                 }
             }
         }
-        function onAppInstallProgress(appId, stage, percentage, isDeterminate, message, bytesDownloaded, bytesTotal, downloadSpeed) {
+        function onAppInstallProgress(appId, stage, percentage, isDeterminate, message, bytesDownloaded, bytesTotal, downloadSpeed, currentStep, totalSteps, currentItem, etaStr, diagnosticDetails) {
             if (root.pendingAppId === appId || root.isSelectedAppPending() || (root.selectedApp && appId.indexOf(root.selectedApp.id) !== -1)) {
                 root.installStage = stage
                 root.installPercentage = percentage
@@ -202,6 +242,11 @@ Item {
                 root.installBytesDownloaded = bytesDownloaded
                 root.installBytesTotal = bytesTotal
                 root.installDownloadSpeed = downloadSpeed
+                root.installCurrentStep = (currentStep !== undefined && currentStep !== null) ? currentStep : 0
+                root.installTotalSteps = (totalSteps !== undefined && totalSteps !== null) ? totalSteps : 0
+                root.installCurrentItem = (currentItem !== undefined && currentItem !== null) ? currentItem : ""
+                root.installEtaStr = (etaStr !== undefined && etaStr !== null) ? etaStr : ""
+                root.installDiagnosticDetails = (diagnosticDetails !== undefined && diagnosticDetails !== null) ? diagnosticDetails : ""
             }
         }
         function onAppInstalled(appId, success, message) {
@@ -215,6 +260,12 @@ Item {
                 root.installBytesDownloaded = ""
                 root.installBytesTotal = ""
                 root.installDownloadSpeed = ""
+                root.installCurrentStep = 0
+                root.installTotalSteps = 0
+                root.installCurrentItem = ""
+                root.installEtaStr = ""
+                root.installDiagnosticDetails = ""
+                root.showInstallDetails = false
                 if (!success) {
                     root.actionErrorMessage = message || "Installation failed. Please try again."
                 } else {
@@ -1522,10 +1573,10 @@ Item {
         clip: true
 
         readonly property string uiFont: "Segoe UI Variable, Segoe UI, -apple-system, BlinkMacSystemFont, 'Inter', sans-serif"
-        readonly property bool isWideDetail: root.width >= 920
+        readonly property bool isWideDetail: root.width >= 760
         readonly property int outerPad: root.width < 760 ? 12 : 16
         readonly property int paneGap: 14
-        readonly property int leftPaneWidth: 320
+        readonly property int leftPaneWidth: root.width < 920 ? 280 : 320
 
         // ══════════════════════════════════════════════════════════════════════
         // A. LEFT PRODUCT PANE (Fixed-Width Fluent Product Identity & Primary Action)
@@ -1746,163 +1797,38 @@ Item {
                         }
                     }
 
-                    // ── Active Installation Progress Component (Microsoft Store Style) ──
+                    // ── Active Installation Placeholder (Directs attention to Wide Install Section) ──
                     Rectangle {
-                        id: progressBox
+                        id: activeInstallPlaceholder
                         visible: Boolean(root.selectedApp && !root.selectedApp.is_installed && root.isSelectedAppPending() && root.pendingAction === "install")
                         width: 228
-                        implicitHeight: progCol.implicitHeight + 16
+                        height: 40
                         radius: 8
                         color: theme.surfaceElevated
                         border.color: theme.borderSubtle
                         border.width: 1
 
-                        ColumnLayout {
-                            id: progCol
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 6
-
-                            // Row 1: Phase and optional percentage
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 4
-
-                                Text {
-                                    id: phaseText
-                                    Layout.fillWidth: true
-                                    text: {
-                                        if (root.installStage === "cancelling") return "Cancelling installation..."
-                                        if (root.installMessage !== "") return root.installMessage
-                                        var p = root.selectedProviderId || "pacman"
-                                        var provName = p === "flatpak" ? "Flatpak" : (p === "aur" ? "AUR" : "Pacman")
-                                        if (root.installStage === "resolving") return "Resolving dependencies..."
-                                        if (root.installStage === "downloading") return "Downloading via " + provName + "..."
-                                        if (root.installStage === "building") return "Compiling AUR package..."
-                                        if (root.installStage === "installing") return "Installing package..."
-                                        if (root.installStage === "finalizing") return "Running post-install hooks..."
-                                        return "Installing via " + provName + "..."
-                                    }
-                                    font.family: appDetailOverlay.uiFont
-                                    font.pixelSize: 12
-                                    font.weight: Font.Medium
-                                    color: theme.text
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    visible: root.installIsDeterminate && root.installPercentage >= 0
-                                    text: root.installPercentage + "%"
-                                    font.family: appDetailOverlay.uiFont
-                                    font.pixelSize: 12
-                                    font.weight: Font.DemiBold
-                                    font.bold: true
-                                    color: theme.accent
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            RyzoraIcon {
+                                name: "spinner"
+                                size: 15
+                                color: theme.accent
+                                RotationAnimation on rotation {
+                                    from: 0
+                                    to: 360
+                                    duration: 1000
+                                    loops: Animation.Infinite
+                                    running: activeInstallPlaceholder.visible
                                 }
                             }
-
-                            // Row 2: Microsoft Store Style Progress Bar (determinate or animated indeterminate)
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 5
-                                radius: 2.5
-                                color: theme.surfaceHover
-                                clip: true
-
-                                // Determinate progress fill
-                                Rectangle {
-                                    visible: root.installIsDeterminate && root.installPercentage >= 0
-                                    height: parent.height
-                                    width: parent.width * Math.max(0, Math.min(100, root.installPercentage)) / 100
-                                    radius: 2.5
-                                    color: theme.accent
-
-                                    Behavior on width {
-                                        NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
-                                    }
-                                }
-
-                                // Indeterminate glowing sliding indicator
-                                Rectangle {
-                                    id: indeterminateBar
-                                    visible: !root.installIsDeterminate || root.installPercentage < 0
-                                    height: parent.height
-                                    width: Math.max(36, parent.width * 0.32)
-                                    radius: 2.5
-                                    color: theme.accent
-
-                                    SequentialAnimation on x {
-                                        loops: Animation.Infinite
-                                        running: progressBox.visible && (!root.installIsDeterminate || root.installPercentage < 0)
-                                        PropertyAnimation {
-                                            from: -indeterminateBar.width
-                                            to: progressBox.width
-                                            duration: 1200
-                                            easing.type: Easing.InOutQuad
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Row 3: Downloaded size / total size / speed & Cancel action
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 4
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: {
-                                        if (root.installBytesDownloaded !== "" && root.installBytesTotal !== "") {
-                                            var sz = root.installBytesDownloaded + " / " + root.installBytesTotal
-                                            if (root.installDownloadSpeed !== "") {
-                                                sz += " (" + root.installDownloadSpeed + ")"
-                                            }
-                                            return sz
-                                        }
-                                        if (root.installStage !== "") {
-                                            return root.installStage.toUpperCase()
-                                        }
-                                        return "In progress"
-                                    }
-                                    font.family: appDetailOverlay.uiFont
-                                    font.pixelSize: 11
-                                    color: theme.textMuted
-                                    elide: Text.ElideRight
-                                }
-
-                                Rectangle {
-                                    width: 62
-                                    height: 20
-                                    radius: 4
-                                    enabled: root.installStage !== "cancelling"
-                                    opacity: enabled ? 1.0 : 0.65
-                                    color: cancelBtnMouse.containsMouse && enabled ? theme.surfaceHover : "transparent"
-                                    border.color: cancelBtnMouse.containsMouse && enabled ? theme.borderStrong : "transparent"
-                                    border.width: 1
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: root.installStage === "cancelling" ? "Cancelling..." : "Cancel"
-                                        font.family: appDetailOverlay.uiFont
-                                        font.pixelSize: 11
-                                        font.weight: Font.Medium
-                                        color: cancelBtnMouse.containsMouse && enabled ? "#EF4444" : theme.textMuted
-                                    }
-
-                                    MouseArea {
-                                        id: cancelBtnMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: parent.enabled
-                                        cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        onClicked: {
-                                            if (root.installStage !== "cancelling") {
-                                                root.installStage = "cancelling"
-                                                root.installMessage = "Cancelling installation..."
-                                                backend.cancelAppOperation(root.currentActionAppId())
-                                            }
-                                        }
-                                    }
-                                }
+                            Text {
+                                text: root.installStage === "cancelling" ? "Cancelling..." : "Installing..."
+                                font.family: appDetailOverlay.uiFont
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                color: theme.textSecondary
                             }
                         }
                     }
@@ -2056,11 +1982,14 @@ Item {
                                 width: 7
                                 height: 7
                                 radius: 4
-                                color: root.selectedApp && root.selectedApp.is_installed ? "#10B981" : theme.accent
+                                color: (root.selectedApp && root.selectedApp.is_installed) ? "#10B981" : theme.accent
                             }
                             Text {
                                 text: {
                                     if (!root.selectedApp) return ""
+                                    if (root.isSelectedAppPending() && root.pendingAction === "install") {
+                                        return root.installStage === "cancelling" ? "Cancelling" : "Installing"
+                                    }
                                     if (root.selectedApp.is_installed) return "Installed"
                                     var src = root.currentSelectedProviderSource()
                                     if (src) {
@@ -2074,14 +2003,17 @@ Item {
                                 font.pixelSize: 15
                                 font.weight: Font.DemiBold
                                 font.bold: true
-                                color: root.selectedApp && root.selectedApp.is_installed
-                                    ? (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
-                                    : theme.text
+                                color: {
+                                    if (root.selectedApp && root.selectedApp.is_installed) return (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
+                                    if (root.isSelectedAppPending() && root.pendingAction === "install") return theme.accent
+                                    return theme.text
+                                }
                             }
                         }
                         Text {
                             Layout.alignment: Qt.AlignHCenter
                             text: {
+                                if (root.isSelectedAppPending() && root.pendingAction === "install") return "In progress"
                                 if (root.selectedApp && root.selectedApp.is_installed) return "System state"
                                 var src = root.currentSelectedProviderSource()
                                 if (src && src.provider_id === "flatpak") return "Sandboxed Flatpak"
@@ -2323,6 +2255,35 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.actionErrorMessage = ""
                             }
+                        }
+                    }
+                }
+
+                // ── REUSABLE INSTALLATION WORKSPACE ──
+                InstallProgressView {
+                    id: installWorkspace
+                    Layout.fillWidth: true
+                    visible: Boolean(root.selectedApp && !root.selectedApp.is_installed && root.isSelectedAppPending() && root.pendingAction === "install")
+                    appName: root.selectedApp ? root.selectedApp.name : "Application"
+                    iconUrl: (root.selectedApp && root.selectedApp.icon_url) ? root.selectedApp.icon_url : ""
+                    stage: root.installStage
+                    percentage: root.installPercentage
+                    isDeterminate: root.installIsDeterminate
+                    message: root.installMessage
+                    bytesDownloaded: root.installBytesDownloaded
+                    bytesTotal: root.installBytesTotal
+                    downloadSpeed: root.installDownloadSpeed
+                    currentStep: root.installCurrentStep
+                    totalSteps: root.installTotalSteps
+                    currentItem: root.installCurrentItem
+                    etaStr: root.installEtaStr
+                    diagnosticDetails: root.installDiagnosticDetails
+                    showActivity: root.showInstallDetails
+                    onCancelRequested: {
+                        if (root.installStage !== "cancelling") {
+                            root.installStage = "cancelling"
+                            root.installMessage = "Cancelling installation..."
+                            backend.cancelAppOperation(root.currentActionAppId())
                         }
                     }
                 }
@@ -2779,19 +2740,40 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignTop
                                 spacing: 10
-                                RyzoraIcon { name: "check"; size: 15; color: theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 2 }
+                                RyzoraIcon {
+                                    name: (root.isSelectedAppPending() ? (root.pendingAction === "uninstall" ? "trash" : "download") : (root.selectedApp && root.selectedApp.is_installed ? "check" : "download"))
+                                    size: 15
+                                    color: (root.isSelectedAppPending() ? theme.accent : (root.selectedApp && root.selectedApp.is_installed ? "#10B981" : theme.textMuted))
+                                    Layout.alignment: Qt.AlignTop
+                                    Layout.topMargin: 2
+                                }
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     Text { text: "Installation status"; font.family: appDetailOverlay.uiFont; font.pixelSize: 12; color: theme.textMuted }
                                     Text {
-                                        text: root.selectedApp && root.selectedApp.is_installed ? "Installed on this system" : "Ready to install"
+                                        text: {
+                                            if (!root.selectedApp) return ""
+                                            if (root.selectedApp.is_installed) return "Installed on this system"
+                                            if (root.isSelectedAppPending() && root.pendingAction === "install") {
+                                                if (root.installStage === "cancelling") return "Cancelling installation..."
+                                                if (root.installStage === "downloading") return "Downloading (" + (root.installPercentage >= 0 ? root.installPercentage + "%" : "in progress") + ")"
+                                                if (root.installStage === "installing") return "Deploying package..."
+                                                if (root.installStage === "resolving") return "Resolving dependencies..."
+                                                if (root.installStage === "finalizing") return "Finalizing installation..."
+                                                return "Installing..."
+                                            }
+                                            if (root.isSelectedAppPending() && root.pendingAction === "uninstall") return "Removing application..."
+                                            return "Ready to install"
+                                        }
                                         font.family: appDetailOverlay.uiFont
                                         font.pixelSize: 14
                                         font.weight: Font.Medium
-                                        color: root.selectedApp && root.selectedApp.is_installed
-                                            ? (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
-                                            : theme.textSecondary
+                                        color: {
+                                            if (root.selectedApp && root.selectedApp.is_installed) return (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
+                                            if (root.isSelectedAppPending()) return theme.accent
+                                            return theme.textSecondary
+                                        }
                                         elide: Text.ElideRight
                                         Layout.fillWidth: true
                                     }
