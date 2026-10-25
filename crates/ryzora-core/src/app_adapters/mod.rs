@@ -11,6 +11,7 @@ pub mod aur;
 pub mod flatpak;
 pub mod cleanup;
 pub mod desktop_icons;
+pub mod updates;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -69,7 +69,10 @@ extern "C" {
     char* ryzora_restore_snapshot(const char* id);
     char* ryzora_delete_snapshot(const char* id);
     char* ryzora_apply_update(const char* package_id);
+    char* ryzora_apply_update_with_progress(const char* package_id, void (*callback)(const char*, void*), void* user_data);
     char* ryzora_apply_all_updates();
+    char* ryzora_apply_all_updates_with_progress(void (*callback)(const char*, void*), void* user_data);
+    void ryzora_invalidate_updates_cache();
     char* ryzora_load_active_configuration();
     bool ryzora_is_silentsddm_engine_installed();
     char* ryzora_install_silentsddm_engine();
@@ -298,6 +301,7 @@ void RyzoraBackend::updateTransactionProgress(const QString &appId, const QStrin
             }
             termRec.isFinished = true;
             termRec.stage = stage;
+            termRec.success = (stage == "succeeded");
             termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
             m_recentTransactions.prepend(termRec);
             if (m_recentTransactions.size() > 10) m_recentTransactions.removeLast();
@@ -1228,19 +1232,31 @@ void RyzoraBackend::loadUpdates() {
 
         QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
         QVariantList list;
+        QString errStr;
         if (doc.isArray()) {
             list = doc.array().toVariantList();
+        } else if (doc.isObject() && !doc.object().value("success").toBool(true)) {
+            errStr = doc.object().value("message").toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, list]() {
+        QMetaObject::invokeMethod(qApp, [self, list, errStr]() {
             if (self) {
                 self->m_updatesList = list;
                 self->m_isUpdatesLoading = false;
+                self->m_updatesError = errStr;
+                self->m_lastUpdatesCheckedTime = QDateTime::currentDateTime().toString("h:mm AP");
                 emit self->updatesChanged();
                 emit self->updatesLoadingChanged();
+                emit self->updatesCheckedTimeChanged();
             }
         });
     });
+}
+
+void RyzoraBackend::checkForUpdates() {
+    if (m_isShutdown.load()) return;
+    ryzora_invalidate_updates_cache();
+    loadUpdates();
 }
 
 void RyzoraBackend::loadSettings() {
@@ -1776,22 +1792,128 @@ void RyzoraBackend::deleteSnapshot(const QString &id) {
 
 void RyzoraBackend::applyUpdate(const QString &packageId) {
     if (m_isShutdown.load()) return;
-    QPointer<RyzoraBackend> self(this);
-    m_threadPool.start([self, packageId]() {
-        QByteArray idBa = packageId.toUtf8();
-        char *rawRes = ryzora_apply_update(idBa.constData());
-        if (!rawRes) return;
-        QString resStr = QString::fromUtf8(rawRes);
-        ryzora_free_string(rawRes);
-        QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
-        bool success = doc.object().value("success").toBool();
-        QString msg = doc.object().value("message").toString();
+    QString cleanId = packageId.trimmed();
+    if (cleanId.isEmpty()) return;
 
-        QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+    QString baseAppId = cleanId;
+    QString provId = "pacman";
+    QString targetId = cleanId;
+    if (cleanId.contains(':')) {
+        provId = cleanId.section(':', 0, 0);
+        targetId = cleanId.section(':', 1);
+        baseAppId = targetId;
+    }
+
+    QString appName = baseAppId;
+    QString iconUrl = "";
+    for (const QVariant &v : m_updatesList) {
+        QVariantMap m = v.toMap();
+        if (m.value("package_id").toString() == cleanId || m.value("name").toString() == baseAppId) {
+            appName = m.value("name").toString();
+            iconUrl = m.value("icon_url").toString();
+            provId = m.value("provider").toString();
+            break;
+        }
+    }
+
+    QString opId = QString("op_up_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(cleanId);
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        if (isAppOperatingLocked(cleanId) || isAppOperatingLocked(baseAppId)) {
+            postNotification("info", "Operation in Progress",
+                             QString("An operation is already in progress for %1.").arg(appName));
+            return;
+        }
+        m_activeAppOperations.insert(cleanId, "update");
+        if (cleanId != baseAppId) {
+            m_activeAppOperations.insert(baseAppId, "update");
+        }
+
+        AppTransactionRecord rec;
+        rec.opId = opId;
+        rec.appId = cleanId;
+        rec.targetPackage = targetId;
+        rec.appName = appName;
+        rec.iconUrl = iconUrl;
+        rec.provider = provId;
+        rec.operation = "update";
+        rec.stage = "preparing";
+        rec.percentage = -1;
+        rec.isDeterminate = false;
+        rec.message = QString("Preparing update for %1...").arg(appName);
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+        if (cleanId != baseAppId) {
+            m_appTransactions.insert(baseAppId, rec);
+        }
+    }
+    emit activeAppOperationsChanged();
+
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, cleanId, baseAppId, appName, opId]() {
+        struct ProgressCtx {
+            QPointer<RyzoraBackend> backend;
+            QString appId;
+        };
+        auto ctx = new ProgressCtx{self, cleanId};
+
+        QByteArray idBa = cleanId.toUtf8();
+        char *rawRes = ryzora_apply_update_with_progress(idBa.constData(), appProgressTrampoline, ctx);
+        delete ctx;
+
+        bool success = false;
+        QString message = "No response from backend";
+        if (rawRes) {
+            QString resStr = QString::fromUtf8(rawRes);
+            ryzora_free_string(rawRes);
+            QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
+            success = doc.object().value("success").toBool();
+            message = doc.object().value("message").toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, success, message, opId]() {
             if (self) {
+                {
+                    QMutexLocker locker(&self->m_appOpMutex);
+                    self->m_activeAppOperations.remove(cleanId);
+                    self->m_activeAppOperations.remove(baseAppId);
+
+                    AppTransactionRecord termRec;
+                    if (self->m_appTransactions.contains(cleanId)) {
+                        termRec = self->m_appTransactions.take(cleanId);
+                    } else if (self->m_appTransactions.contains(baseAppId)) {
+                        termRec = self->m_appTransactions.take(baseAppId);
+                    }
+                    self->m_appTransactions.remove(baseAppId);
+
+                    termRec.isFinished = true;
+                    termRec.success = success;
+                    termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                    if (success) {
+                        termRec.stage = "succeeded";
+                        termRec.percentage = 100;
+                        termRec.message = "Update completed successfully";
+                    } else if (message.contains("cancel", Qt::CaseInsensitive)) {
+                        termRec.stage = "cancelled";
+                        termRec.message = "Update cancelled";
+                    } else {
+                        termRec.stage = "failed";
+                        termRec.error = message;
+                        termRec.message = message;
+                    }
+                    if (!termRec.opId.isEmpty()) {
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) {
+                            self->m_recentTransactions.removeLast();
+                        }
+                    }
+                }
+                emit self->activeAppOperationsChanged();
                 self->postNotification(success ? "success" : "error",
                                        success ? "Package Updated" : "Update Failed",
-                                       msg);
+                                       message);
                 self->loadUpdates();
                 self->loadLibrary(true);
             }
@@ -1801,21 +1923,91 @@ void RyzoraBackend::applyUpdate(const QString &packageId) {
 
 void RyzoraBackend::applyAllUpdates() {
     if (m_isShutdown.load()) return;
-    QPointer<RyzoraBackend> self(this);
-    m_threadPool.start([self]() {
-        char *rawRes = ryzora_apply_all_updates();
-        if (!rawRes) return;
-        QString resStr = QString::fromUtf8(rawRes);
-        ryzora_free_string(rawRes);
-        QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
-        bool success = doc.object().value("success").toBool();
-        QString msg = doc.object().value("message").toString();
 
-        QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+    QString cleanId = "all";
+    QString opId = QString("op_upall_%1").arg(QDateTime::currentMSecsSinceEpoch());
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        if (isAppOperatingLocked(cleanId)) {
+            postNotification("info", "Operation in Progress",
+                             "Batch update is already in progress.");
+            return;
+        }
+        m_activeAppOperations.insert(cleanId, "update");
+
+        AppTransactionRecord rec;
+        rec.opId = opId;
+        rec.appId = cleanId;
+        rec.targetPackage = "All Packages";
+        rec.appName = "All Available Updates";
+        rec.iconUrl = "";
+        rec.provider = "multi";
+        rec.operation = "update";
+        rec.stage = "preparing";
+        rec.percentage = -1;
+        rec.isDeterminate = false;
+        rec.message = "Coordinating package updates...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+    }
+    emit activeAppOperationsChanged();
+
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, cleanId, opId]() {
+        struct ProgressCtx {
+            QPointer<RyzoraBackend> backend;
+            QString appId;
+        };
+        auto ctx = new ProgressCtx{self, cleanId};
+
+        char *rawRes = ryzora_apply_all_updates_with_progress(appProgressTrampoline, ctx);
+        delete ctx;
+
+        bool success = false;
+        QString message = "No response from backend";
+        if (rawRes) {
+            QString resStr = QString::fromUtf8(rawRes);
+            ryzora_free_string(rawRes);
+            QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
+            success = doc.object().value("success").toBool();
+            message = doc.object().value("message").toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, cleanId, success, message]() {
             if (self) {
+                {
+                    QMutexLocker locker(&self->m_appOpMutex);
+                    self->m_activeAppOperations.remove(cleanId);
+
+                    AppTransactionRecord termRec;
+                    if (self->m_appTransactions.contains(cleanId)) {
+                        termRec = self->m_appTransactions.take(cleanId);
+                    }
+                    termRec.isFinished = true;
+                    termRec.success = success;
+                    termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                    if (success) {
+                        termRec.stage = "succeeded";
+                        termRec.percentage = 100;
+                        termRec.message = "Batch update completed successfully";
+                    } else {
+                        termRec.stage = "failed";
+                        termRec.error = message;
+                        termRec.message = message;
+                    }
+                    if (!termRec.opId.isEmpty()) {
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) {
+                            self->m_recentTransactions.removeLast();
+                        }
+                    }
+                }
+                emit self->activeAppOperationsChanged();
                 self->postNotification(success ? "success" : "error",
-                                       success ? "Updates Completed" : "Updates Failed",
-                                       msg);
+                                       success ? "Batch Updates Completed" : "Updates Failed",
+                                       message);
                 self->loadUpdates();
                 self->loadLibrary(true);
             }

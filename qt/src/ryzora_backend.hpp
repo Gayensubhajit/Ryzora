@@ -114,6 +114,8 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(QVariantList updatesList READ updatesList NOTIFY updatesChanged)
     Q_PROPERTY(int updatesCount READ updatesCount NOTIFY updatesChanged)
     Q_PROPERTY(bool isUpdatesLoading READ isUpdatesLoading NOTIFY updatesLoadingChanged)
+    Q_PROPERTY(QString lastUpdatesCheckedTime READ lastUpdatesCheckedTime NOTIFY updatesCheckedTimeChanged)
+    Q_PROPERTY(QString updatesError READ updatesError NOTIFY updatesChanged)
 
     // Settings & Host System
     Q_PROPERTY(QVariantMap settingsData READ settingsData NOTIFY settingsChanged)
@@ -158,6 +160,8 @@ public:
     QVariantList updatesList() const { return m_updatesList; }
     int updatesCount() const { return m_updatesList.size(); }
     bool isUpdatesLoading() const { return m_isUpdatesLoading; }
+    QString lastUpdatesCheckedTime() const { return m_lastUpdatesCheckedTime; }
+    QString updatesError() const { return m_updatesError; }
 
     QVariantMap settingsData() const { return m_settingsData; }
     QVariantMap systemInfo() const { return m_systemInfo; }
@@ -198,6 +202,7 @@ public:
     Q_INVOKABLE void openFastfetchConfigInEditor();
     Q_INVOKABLE void loadSnapshots();
     Q_INVOKABLE void loadUpdates();
+    Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE void saveSettings(const QVariantMap &settings);
     Q_INVOKABLE void resetSettings();
@@ -271,6 +276,7 @@ signals:
 
     void updatesChanged();
     void updatesLoadingChanged();
+    void updatesCheckedTimeChanged();
 
     void settingsChanged();
     void systemInfoChanged();
@@ -326,6 +332,8 @@ private:
 
     QVariantList m_updatesList;
     bool m_isUpdatesLoading{false};
+    QString m_lastUpdatesCheckedTime;
+    QString m_updatesError;
 
     QVariantMap m_settingsData;
     QVariantMap m_systemInfo;

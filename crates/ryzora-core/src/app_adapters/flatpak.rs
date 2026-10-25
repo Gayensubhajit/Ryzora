@@ -604,6 +604,185 @@ pub fn install_flatpak_app(app_id: &str) -> Result<String, String> {
     install_flatpak_app_streamed(app_id, |_stage, _pct, _msg, _is_det, _dl, _tot, _spd, _cur_step, _tot_steps, _item, _eta, _diag| {}, None)
 }
 
+/// Updates an installed Flatpak application or runtime using the exact installed scope.
+pub fn update_flatpak_app_streamed<F>(
+    app_id: &str,
+    mut progress_cb: F,
+    on_spawn: Option<&dyn Fn(u32)>,
+) -> Result<String, String>
+where
+    F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
+{
+    if !is_valid_flatpak_id(app_id) {
+        return Err("Invalid Flatpak application ID.".to_string());
+    }
+
+    if std::env::var("RYZORA_TEST_NO_FLATPAK").as_deref() == Ok("1") {
+        return Err("Flatpak is not installed on this system.".to_string());
+    }
+
+    if let Ok(_sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        progress_cb(
+            "downloading",
+            Some(45),
+            "Downloading update package delta...",
+            true,
+            Some("15 MB"),
+            Some("45 MB"),
+            Some("6.5 MB/s"),
+            Some(1),
+            Some(2),
+            Some(app_id),
+            Some("~4 sec"),
+            Some("Elapsed: 2s | Pulling updated Ostree delta"),
+        );
+        progress_cb(
+            "installing",
+            Some(85),
+            "Deploying updated sandbox files...",
+            true,
+            None,
+            None,
+            None,
+            Some(2),
+            Some(2),
+            Some(app_id),
+            None,
+            Some("Elapsed: 4s | Deploying application update"),
+        );
+        invalidate_flatpak_cache();
+        progress_cb(
+            "completed",
+            Some(100),
+            "Flatpak application updated successfully",
+            true,
+            None,
+            None,
+            None,
+            Some(2),
+            Some(2),
+            Some(app_id),
+            None,
+            Some("Elapsed: 5s | Update completed"),
+        );
+        return Ok(format!("Successfully updated Flatpak application '{}' (test mode)", app_id));
+    }
+
+    let (has_flatpak, _) = crate::app_adapters::check_binary("flatpak");
+    if !has_flatpak {
+        return Err("Flatpak is not installed on this system.".to_string());
+    }
+
+    let scope = detect_installed_flatpak_scope(app_id).unwrap_or("--user");
+    let args = vec!["update".to_string(), scope.to_string(), "-y".to_string(), app_id.to_string()];
+    progress_cb(
+        "resolving",
+        None,
+        "Resolving Flathub remotes and pending updates...",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(&format!("Scope: {} | Target: {}", scope, app_id)),
+    );
+
+    let mut cmd = Command::new("flatpak");
+    cmd.args(&args);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to invoke flatpak update: {}", e))?;
+    let pid = child.id();
+    if let Some(register) = on_spawn {
+        register(pid);
+    }
+
+    let stdout = child.stdout.take().ok_or_else(|| "Failed to capture stdout of flatpak".to_string())?;
+    let stderr = child.stderr.take().ok_or_else(|| "Failed to capture stderr of flatpak".to_string())?;
+
+    let stderr_handle = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut err_str = String::new();
+        let mut err_reader = std::io::BufReader::new(stderr);
+        let _ = err_reader.read_to_string(&mut err_str);
+        err_str
+    });
+
+    let mut state = crate::app_adapters::transaction::FlatpakTransactionParserState::new(
+        format!("update-{}", app_id),
+        "update".to_string(),
+        app_id.to_string(),
+    );
+
+    let mut reader = std::io::BufReader::new(stdout);
+    let mut line_buf = Vec::new();
+    let mut byte_buf = [0u8; 1024];
+
+    loop {
+        use std::io::Read;
+        let n = match reader.read(&mut byte_buf) {
+            Ok(0) => break,
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(format!("Error reading flatpak stdout: {}", e)),
+        };
+
+        line_buf.extend_from_slice(&byte_buf[..n]);
+        let lines = crate::app_adapters::transaction::split_output_lines(&mut line_buf);
+
+        for line in lines {
+            if let Some(ev) = crate::app_adapters::transaction::parse_flatpak_line(&line, &mut state) {
+                let is_det = ev.percentage.is_some() || (ev.bytes_downloaded_str.is_some() && ev.bytes_total_str.is_some());
+                progress_cb(
+                    &ev.stage,
+                    ev.percentage,
+                    &ev.message,
+                    is_det,
+                    ev.bytes_downloaded_str.as_deref(),
+                    ev.bytes_total_str.as_deref(),
+                    ev.download_speed.as_deref(),
+                    ev.current_package_index,
+                    ev.total_packages,
+                    ev.current_package.as_deref(),
+                    state.eta_str.as_deref(),
+                    state.diagnostic_details.as_deref(),
+                );
+            }
+        }
+    }
+
+    let status = child.wait().map_err(|e| format!("Failed to wait on flatpak process: {}", e))?;
+    let err_msg = stderr_handle.join().unwrap_or_default();
+    if !status.success() {
+        let trimmed_err = err_msg.trim();
+        #[cfg(unix)]
+        let killed_by_sig = {
+            use std::os::unix::process::ExitStatusExt;
+            matches!(status.signal(), Some(2) | Some(9) | Some(15))
+        };
+        #[cfg(not(unix))]
+        let killed_by_sig = false;
+
+        if trimmed_err.contains("cancelled") || status.code() == Some(130) || status.code() == Some(137) || status.code() == Some(143) || killed_by_sig {
+            return Err("Update cancelled by user.".to_string());
+        }
+        return Err(if !trimmed_err.is_empty() {
+            format!("flatpak update failed: {}", trimmed_err)
+        } else {
+            format!("flatpak update failed with exit code {:?}", status.code())
+        });
+    }
+
+    invalidate_flatpak_cache();
+    crate::app_adapters::updates::invalidate_updates_cache();
+    progress_cb("completed", Some(100), "Flatpak application updated successfully", true, None, None, None, state.total_packages, state.total_packages, state.current_package.as_deref(), None, Some("Elapsed: done | Completed successfully"));
+    Ok(format!("Successfully updated Flatpak application '{}'", app_id))
+}
+
 /// Uninstalls a Flatpak application.
 pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
     if !is_valid_flatpak_id(app_id) {

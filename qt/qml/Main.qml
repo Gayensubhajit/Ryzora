@@ -490,6 +490,7 @@ ApplicationWindow {
 
                 UpdatesView {
                     id: updatesView
+                    objectName: "updatesView"
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "updates"
                 }

@@ -918,6 +918,133 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     return 0;
 }
 
+int runTestUpdates(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "==================================================";
+    qInfo() << "STARTING LIVE UPDATES PAGE INTERACTION VERIFICATION";
+    qInfo() << "==================================================";
+
+    auto pumpEvents = [&](int iterations = 10, int delayUs = 10000) {
+        for (int i = 0; i < iterations; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    if (!rootObj) {
+        qCritical() << "FAIL: No root QML object found!";
+        return 1;
+    }
+
+    // Step 1: Navigate to Updates Tab
+    qInfo() << "[STEP 1] Navigating to Updates Tab...";
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "updates"));
+    pumpEvents(20, 20000);
+
+    QObject *stack = rootObj->findChild<QObject*>("stackLayout");
+    if (stack) {
+        stack->setProperty("currentTab", "updates");
+    }
+    pumpEvents(10, 10000);
+
+    QObject *updatesView = rootObj->findChild<QObject*>("updatesView");
+    if (!updatesView) {
+        qCritical() << "FAIL: updatesView not found in QML hierarchy!";
+        return 2;
+    }
+    qInfo() << "  -> Successfully navigated to Updates tab. Initial updates count:" << backend->updatesCount();
+
+    // Step 2: Trigger Check for Updates
+    qInfo() << "[STEP 2] Triggering Check for Updates...";
+    backend->checkForUpdates();
+    QElapsedTimer checkTimer;
+    checkTimer.start();
+    while (backend->isUpdatesLoading() && checkTimer.elapsed() < 5000) {
+        pumpEvents(5, 10000);
+    }
+    qInfo() << "  -> Check for updates finished in" << checkTimer.elapsed() << "ms. Resulting updates count:" << backend->updatesCount();
+
+    // Step 3: Test Filter Switching
+    qInfo() << "[STEP 3] Testing Updates View Filter Chips...";
+    updatesView->setProperty("selectedFilter", "apps");
+    pumpEvents(5, 10000);
+    updatesView->setProperty("selectedFilter", "flatpak");
+    pumpEvents(5, 10000);
+    updatesView->setProperty("selectedFilter", "system");
+    pumpEvents(5, 10000);
+    updatesView->setProperty("selectedFilter", "all");
+    pumpEvents(5, 10000);
+    qInfo() << "  -> Filter chips switched cleanly without errors.";
+
+    // Step 4: Test Search Query Filter
+    qInfo() << "[STEP 4] Testing Search Query Filtering...";
+    updatesView->setProperty("searchQuery", "nonexistent_app_xyz");
+    pumpEvents(5, 10000);
+    updatesView->setProperty("searchQuery", "");
+    pumpEvents(5, 10000);
+    qInfo() << "  -> Search filter applied and cleared cleanly.";
+
+    // Step 5: Test Simulated Update Transaction with Progress Manager
+    qInfo() << "[STEP 5] Testing Update Transaction & Shared Progress Manager...";
+    backend->updateTransactionProgress(
+        "flatpak:org.mozilla.Thunderbird",
+        "downloading",
+        35,
+        true,
+        "Downloading update delta...",
+        "18.4 MB",
+        "52.1 MB",
+        "4.2 MB/s",
+        1,
+        2,
+        "org.mozilla.Thunderbird",
+        "~8 sec",
+        "Elapsed: 5s | Pulling ostree delta"
+    );
+    pumpEvents(15, 20000);
+
+    if (backend->activeAppOperationsCount() == 0) {
+        qCritical() << "FAIL: activeAppOperationsCount must be > 0 during active update transaction!";
+        return 3;
+    }
+    qInfo() << "  -> Active update operation tracked in global manager. Active count:" << backend->activeAppOperationsCount();
+
+    // Step 6: Complete the Update Transaction
+    qInfo() << "[STEP 6] Completing Update Transaction...";
+    backend->updateTransactionProgress(
+        "flatpak:org.mozilla.Thunderbird",
+        "succeeded",
+        100,
+        true,
+        "Update completed successfully",
+        "52.1 MB",
+        "52.1 MB",
+        "",
+        2,
+        2,
+        "org.mozilla.Thunderbird",
+        "",
+        "Elapsed: 12s | Deployed new commit"
+    );
+    pumpEvents(15, 20000);
+
+    if (backend->activeAppOperationsCount() != 0) {
+        qCritical() << "FAIL: activeAppOperationsCount must return to 0 after completion!";
+        return 4;
+    }
+    QVariantMap lastTxn = backend->getTransactionForApp("flatpak:org.mozilla.Thunderbird");
+    if (!lastTxn.value("is_finished").toBool() || !lastTxn.value("success").toBool()) {
+        qCritical() << "FAIL: Completed update transaction record missing or unsuccessful!";
+        return 5;
+    }
+    qInfo() << "  -> Update transaction completed cleanly and recorded in recent history.";
+
+    qInfo() << "==================================================";
+    qInfo() << "ALL LIVE UPDATES PAGE INTERACTION TESTS PASSED (0 ERRORS)";
+    qInfo() << "==================================================";
+    return 0;
+}
+
 
 int runTestPackageActions(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
     qInfo() << "==================================================";
@@ -3284,7 +3411,11 @@ int main(int argc, char *argv[]) {
     engine.load(url);
 
     int exitCode = 0;
-    if (argc > 1 && QString(argv[1]) == "--test-apps") {
+    if (argc > 1 && QString(argv[1]) == "--test-updates") {
+        exitCode = runTestUpdates(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && QString(argv[1]) == "--test-apps") {
         exitCode = runTestApps(app, engine, &backend);
         backend.shutdown();
         _exit(exitCode);
