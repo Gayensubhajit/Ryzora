@@ -50,9 +50,16 @@ Rectangle {
                 border.width: 1
 
                 Image {
+                    id: wsIconImg
                     anchors.fill: parent
                     anchors.margins: 4
-                    source: root.iconUrl
+                    source: {
+                        if (!root.iconUrl) return ""
+                        var u = root.iconUrl.trim()
+                        if (u.indexOf(":/") !== -1 || u.indexOf("qrc:/") === 0 || u.indexOf("data:") === 0) return u
+                        if (u.indexOf("/") === 0) return "file://" + u
+                        return u
+                    }
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     visible: status === Image.Ready
@@ -63,7 +70,7 @@ Rectangle {
                     name: "download"
                     size: 22
                     color: theme.accent
-                    visible: !parent.children[0].visible
+                    visible: wsIconImg.status !== Image.Ready
                 }
             }
 
@@ -198,37 +205,57 @@ Rectangle {
                 if (root.bytesDownloaded !== "" && root.bytesTotal !== "") {
                     return root.bytesDownloaded + " / " + root.bytesTotal
                 }
-                if (root.isDeterminate) return "Calculating…"
+                if (root.stage === "resolving") return "Checking deps"
+                if (root.stage === "building") return "Compiling source"
+                if (root.stage === "authenticating") return "Authorizing"
+                if (root.stage === "installing") return "Deploying files"
+                if (root.stage === "downloading") return root.isDeterminate ? "Calculating…" : "Retrieving…"
                 return "—"
             }
-            downloadedHelper: root.bytesTotal !== "" ? "Total package & runtime size" : "Total size not yet available"
+            downloadedHelper: {
+                if (root.bytesTotal !== "") return "Total package & runtime size"
+                if (root.stage === "resolving") return "Package dependency resolution"
+                if (root.stage === "building") return "makepkg compilation phase"
+                if (root.stage === "authenticating") return "Administrator privilege check"
+                if (root.stage === "installing") return "Pacman package deployment"
+                return "Current phase status"
+            }
             speedValue: {
                 if (root.downloadSpeed !== "") return root.downloadSpeed
                 if (root.stage === "downloading") return "Measuring…"
+                if (root.stage === "building") return "Active build"
+                if (root.stage === "resolving") return "Resolving"
                 return "—"
             }
-            speedHelper: "Based on real byte transfer"
+            speedHelper: {
+                if (root.downloadSpeed !== "") return "Based on real byte transfer"
+                if (root.stage === "building") return "Compiling binary objects"
+                if (root.stage === "resolving") return "Repository metadata query"
+                return "Transfer rate"
+            }
             etaValue: {
                 if (root.etaStr !== "") return root.etaStr
-                if (root.stage === "downloading" || root.stage === "installing") return "Estimating…"
+                if (root.stage === "downloading" && root.downloadSpeed !== "") return "Estimating…"
                 return "—"
             }
-            etaHelper: "Updated during download"
+            etaHelper: root.etaStr !== "" ? "Estimated remaining time" : (root.stage === "downloading" ? "Updated during download" : "Indeterminate phase")
             stepValue: {
                 if (root.currentStep > 0 && root.totalSteps > 0) {
                     return "Step " + root.currentStep + " of " + root.totalSteps
                 }
                 if (root.stage === "resolving") return "Step 1 of 4"
                 if (root.stage === "downloading") return "Step 2 of 4"
-                if (root.stage === "installing") return "Step 3 of 4"
-                if (root.stage === "finalizing") return "Step 4 of 4"
+                if (root.stage === "building") return "Step 3 of 4"
+                if (root.stage === "installing") return "Step 4 of 4"
+                if (root.stage === "finalizing") return "Finalizing"
                 return "In progress"
             }
             stepHelper: {
-                if (root.currentItem !== "" && root.currentItem.indexOf("Platform") !== -1) return "Downloading runtime"
+                if (root.currentItem !== "") return root.currentItem
+                if (root.stage === "building") return "Source compilation"
                 if (root.stage === "downloading") return "Downloading application"
                 if (root.stage === "installing") return "Deploying files"
-                return "Installation activity"
+                return "Current operation phase"
             }
         }
 

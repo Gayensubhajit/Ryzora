@@ -86,14 +86,10 @@ ApplicationWindow {
             }
         }
         function onAppInstalled(appId, success, message) {
-            if (appsView) {
-                backend.filterApps(appsView.selectedCategory, appsView.searchQuery);
-            }
+            // Backend already refreshes appsList after install
         }
         function onAppUninstalled(appId, success, message) {
-            if (appsView) {
-                backend.filterApps(appsView.selectedCategory, appsView.searchQuery);
-            }
+            // Backend already refreshes appsList after uninstall
         }
     }
 
@@ -374,14 +370,14 @@ ApplicationWindow {
                         discoverView.updateFilter()
                     } else if (stackLayout.currentTab === "apps") {
                         appsView.searchQuery = q
-                        backend.filterApps(appsView.selectedCategory, q)
+                        backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, q, appsView.selectedProvider)
                     }
                 }
                 onRefreshClicked: {
                     if (stackLayout.currentTab === "discover") {
                         discoverView.updateFilter()
                     } else if (stackLayout.currentTab === "apps") {
-                        backend.filterApps(appsView.selectedCategory, appsView.searchQuery)
+                        backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, appsView.searchQuery, appsView.selectedProvider)
                     } else if (stackLayout.currentTab === "library") {
                         backend.loadLibrary(true)
                     } else if (stackLayout.currentTab === "backups") {
@@ -426,7 +422,14 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "discover"
                     onPackageSelected: function(pkg) {
-                        // DiscoverView manages its own selectedPackage via setSelectedPackage
+                        if (pkg && (pkg.package_type === "desktop_app" || pkg.appData || pkg.is_application)) {
+                            window.navigateTo("apps")
+                            if (appsView) {
+                                appsView.setSelectedApp(pkg.appData || pkg)
+                            }
+                        } else {
+                            discoverView.setSelectedPackage(pkg)
+                        }
                     }
                     onActionRequested: function(action, data, targetOverride) {
                         window.handlePackageAction(action, data, targetOverride)
@@ -457,11 +460,11 @@ ApplicationWindow {
                         backend.launchApp(appId)
                     }
                     onCategorySelected: function(cat) {
-                        backend.filterApps(cat, appsView.searchQuery)
+                        // Category filtering reuses the loaded in-memory catalog without redundant backend queries
                     }
                     onClearSearchRequested: {
                         topBar.searchQuery = ""
-                        backend.filterApps(appsView.selectedCategory, "")
+                        backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, "", appsView.selectedProvider)
                     }
                 }
 
@@ -493,6 +496,12 @@ ApplicationWindow {
                     objectName: "updatesView"
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "updates"
+                    onAppSelected: function(app) {
+                        window.navigateTo("apps")
+                        if (appsView) {
+                            appsView.setSelectedApp(app)
+                        }
+                    }
                 }
 
                 CollectionsView {

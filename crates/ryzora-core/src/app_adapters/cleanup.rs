@@ -271,12 +271,15 @@ pub fn discover_pacman_unused_dependencies(pkg_name: &str) -> (Vec<UnusedDepende
 
 /// Inspects potential cleanup for an application without performing any removal.
 pub fn inspect_app_cleanup(package_id: &str, provider: &str) -> Result<AppCleanupPreview, String> {
-    let trimmed = package_id.trim();
-    if trimmed.is_empty() {
+    let raw = package_id.trim();
+    if raw.is_empty() {
         return Err("Package ID cannot be empty".to_string());
     }
 
-    let provider_norm = provider.to_lowercase();
+    let (prov_prefixed, target_name) = crate::app_adapters::parse_provider_prefixed_id(raw);
+    let provider_norm = prov_prefixed.unwrap_or_else(|| provider.to_lowercase());
+    let trimmed = target_name.as_str();
+
     let home = crate::snapshot::get_home_dir();
     let cfg_base = home.join(".config");
     let cache_base = home.join(".cache");
@@ -455,14 +458,22 @@ pub fn inspect_app_cleanup(package_id: &str, provider: &str) -> Result<AppCleanu
 
 /// Executes the verified cleanup operations based on explicit user selections.
 pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCleanupExecutionResult, String> {
-    let trimmed = request.package_id.trim();
-    if trimmed.is_empty() {
+    let raw = request.package_id.trim();
+    if raw.is_empty() {
         return Err("Package ID cannot be empty".to_string());
     }
 
-    let provider = request.provider_id.to_lowercase();
+    let (prov_prefixed, target_name) = crate::app_adapters::parse_provider_prefixed_id(raw);
+    let provider = prov_prefixed.unwrap_or_else(|| request.provider_id.to_lowercase());
+    let trimmed = target_name.as_str();
+
+    let (unused_deps, _) = if request.remove_unused_dependencies && (provider == "pacman" || provider == "aur") {
+        discover_pacman_unused_dependencies(trimmed)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
     let mut total_reclaimed = 0u64;
-    let deps_removed = Vec::new();
     let mut cache_removed_count = 0usize;
     let mut errors = Vec::new();
     let mut package_removed = false;
@@ -528,23 +539,42 @@ pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCle
                 }
             }
         } else if provider == "flatpak" {
-            let mut args = vec!["uninstall", "-y"];
-            if request.clean_flatpak_data {
-                args.push("--delete-data");
-            }
-            args.push(trimmed);
+            if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+                package_removed = true;
+                if request.clean_flatpak_data {
+                    let home = crate::snapshot::get_home_dir();
+                    let vapp = home.join(".var/app").join(trimmed);
+                    if vapp.exists() {
+                        let (sz, _) = calculate_dir_size(&vapp);
+                        let _ = fs::remove_dir_all(&vapp);
+                        total_reclaimed += sz;
+                    }
+                }
+                crate::app_adapters::flatpak::invalidate_flatpak_cache();
+            } else {
+                let scope = crate::app_adapters::flatpak::detect_installed_flatpak_scope(trimmed)
+                    .unwrap_or("--user");
+                let mut args = vec!["uninstall", scope, "-y"];
+                if request.clean_flatpak_data {
+                    args.push("--delete-data");
+                }
+                args.push(trimmed);
 
-            match Command::new("flatpak").args(&args).output() {
-                Ok(o) if o.status.success() => {
-                    package_removed = true;
-                    crate::app_adapters::flatpak::invalidate_flatpak_cache();
-                }
-                Ok(o) => {
-                    let err = String::from_utf8_lossy(&o.stderr);
-                    errors.push(format!("Flatpak uninstall failed: {}", err.trim()));
-                }
-                Err(e) => {
-                    errors.push(format!("Failed to invoke flatpak uninstall: {}", e));
+                match Command::new("flatpak").args(&args).output() {
+                    Ok(o) if o.status.success() => {
+                        package_removed = true;
+                        crate::app_adapters::flatpak::invalidate_flatpak_cache();
+                        if request.remove_unused_dependencies {
+                            let _ = Command::new("flatpak").args(&["uninstall", scope, "--unused", "-y"]).output();
+                        }
+                    }
+                    Ok(o) => {
+                        let err = String::from_utf8_lossy(&o.stderr);
+                        errors.push(format!("Flatpak uninstall failed: {}", err.trim()));
+                    }
+                    Err(e) => {
+                        errors.push(format!("Failed to invoke flatpak uninstall: {}", e));
+                    }
                 }
             }
         }
@@ -640,6 +670,14 @@ pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCle
                 total_reclaimed += sz;
             }
         }
+
+        let paru_cache = home.join(".cache/paru/clone").join(trimmed);
+        if paru_cache.exists() && paru_cache.is_dir() {
+            let (sz, _) = calculate_dir_size(&paru_cache);
+            if fs::remove_dir_all(&paru_cache).is_ok() {
+                total_reclaimed += sz;
+            }
+        }
     }
 
     let success = errors.is_empty() && (package_removed || !request.remove_package);
@@ -647,6 +685,12 @@ pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCle
         format!("Successfully completed cleanup for '{}'", trimmed)
     } else {
         format!("Cleanup encountered issues: {}", errors.join("; "))
+    };
+
+    let deps_removed: Vec<String> = if request.remove_unused_dependencies && package_removed {
+        unused_deps.into_iter().map(|d| d.name).collect()
+    } else {
+        Vec::new()
     };
 
     Ok(AppCleanupExecutionResult {

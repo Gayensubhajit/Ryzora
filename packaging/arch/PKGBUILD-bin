@@ -6,7 +6,7 @@ pkgdesc="Universal Linux Desktop Customization Platform (Pre-compiled binary)"
 arch=('x86_64')
 url="https://github.com/Gayensubhajit/Ryzora"
 license=('MIT')
-depends=('gtk3' 'webkit2gtk-4.1' 'openssl' 'hicolor-icon-theme')
+depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-quickcontrols2' 'polkit' 'hicolor-icon-theme')
 optdepends=(
     'hyprland: Wayland compositor support'
     'waybar: Status bar customization'
@@ -14,6 +14,7 @@ optdepends=(
     'fastfetch: System info fetch customization'
     'kitty: GPU-accelerated terminal rice support'
     'alacritty: Fast terminal rice support'
+    'flatpak: Flatpak application repository management'
 )
 provides=('ryzora')
 conflicts=('ryzora')

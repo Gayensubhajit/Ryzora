@@ -588,13 +588,27 @@ pub fn parse_aur_line(line: &str, state: &mut AurTransactionParserState) -> Opti
 
     state.current_stage = stage.clone();
 
-    // Only extract percentage if directly reported as N%
-    let percentage = clean.split_whitespace().find_map(|word| {
-        word.trim_matches(|c: char| c != '%' && !c.is_ascii_digit())
-            .strip_suffix('%')
-            .and_then(|number| number.parse::<u8>().ok())
-            .filter(|number| *number <= 100)
-    });
+    // Truthful progress: resolving dependencies and source compilation do not have known numeric percentages
+    let percentage = if stage == "resolving" || stage == "building" {
+        None
+    } else {
+        clean.split_whitespace().find_map(|word| {
+            word.trim_matches(|c: char| c != '%' && !c.is_ascii_digit())
+                .strip_suffix('%')
+                .and_then(|number| number.parse::<u8>().ok())
+                .filter(|number| *number <= 100)
+        })
+    };
+
+    let mut download_speed = None;
+    if stage == "downloading" {
+        for word in clean.split_whitespace() {
+            let w_clean = word.trim_matches(|c: char| c == '(' || c == ')' || c == ',' || c == '[' || c == ']');
+            if (w_clean.ends_with("/s") || w_clean.ends_with("/s") || w_clean.contains("B/s") || w_clean.contains("b/s")) && download_speed.is_none() {
+                download_speed = Some(w_clean.to_string());
+            }
+        }
+    }
 
     Some(TransactionProgressEvent {
         transaction_id: state.transaction_id.clone(),
@@ -609,7 +623,7 @@ pub fn parse_aur_line(line: &str, state: &mut AurTransactionParserState) -> Opti
         total_packages: None,
         bytes_downloaded_str: None,
         bytes_total_str: None,
-        download_speed: None,
+        download_speed,
         message: clean.to_string(),
         raw_line: Some(line.to_string()),
         error: if lower.starts_with("error:") { Some(clean.to_string()) } else { None },

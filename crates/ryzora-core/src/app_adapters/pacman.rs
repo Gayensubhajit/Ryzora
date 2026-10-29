@@ -123,10 +123,10 @@ pub fn parse_alpm_desc(content: &str, repo_name: &str) -> Option<PacmanPackageIn
     })
 }
 
-/// Checks whether a package is installed in `local_dir`, returning `(is_installed, installed_version)`.
-pub fn check_installed_status_in(pkg_name: &str, local_dir: &Path) -> (bool, Option<String>) {
+/// Checks whether a package is installed in `local_dir`, returning `(is_installed, installed_version, installed_size)`.
+pub fn check_installed_status_and_size_in(pkg_name: &str, local_dir: &Path) -> (bool, Option<String>, Option<u64>) {
     if !local_dir.exists() {
-        return (false, None);
+        return (false, None, None);
     }
 
     if let Ok(entries) = fs::read_dir(local_dir) {
@@ -144,19 +144,25 @@ pub fn check_installed_status_in(pkg_name: &str, local_dir: &Path) -> (bool, Opt
                         if let Ok(content) = fs::read_to_string(&desc_file) {
                             if let Some(parsed) = parse_alpm_desc(&content, "local") {
                                 if parsed.name == pkg_name {
-                                    return (true, Some(parsed.version));
+                                    return (true, Some(parsed.version), parsed.size_bytes);
                                 }
                             }
                         }
                     }
                     // Fallback to directory name slice if desc wasn't fully readable
-                    return (true, Some(remainder.to_string()));
+                    return (true, Some(remainder.to_string()), None);
                 }
             }
         }
     }
 
-    (false, None)
+    (false, None, None)
+}
+
+/// Checks whether a package is installed in `local_dir`, returning `(is_installed, installed_version)`.
+pub fn check_installed_status_in(pkg_name: &str, local_dir: &Path) -> (bool, Option<String>) {
+    let (inst, ver, _) = check_installed_status_and_size_in(pkg_name, local_dir);
+    (inst, ver)
 }
 
 /// Searches all ALPM `.db` archives in `sync_dir` for packages matching `query`.
@@ -302,6 +308,24 @@ pub fn get_pacman_package_details_in(
     sync_dir: &Path,
     local_dir: &Path,
 ) -> Result<Option<PacmanPackageInfo>, String> {
+    if std::env::var("RYZORA_SYSTEM_ROOT").is_err() && sync_dir == Path::new(DEFAULT_PACMAN_SYNC_DIR) {
+        if let Some(item) = crate::app_adapters::catalog::get_catalog_item_by_id(pkg_name) {
+            let (is_installed, installed_ver) = check_installed_status_in(&item.id, local_dir);
+            return Ok(Some(PacmanPackageInfo {
+                name: item.id,
+                version: item.version,
+                description: item.description,
+                repository: item.repository,
+                url: item.homepage,
+                license: item.license,
+                size_bytes: item.download_size.or(item.installed_size),
+                is_installed,
+                installed_version: installed_ver,
+                dependencies: item.dependencies,
+            }));
+        }
+    }
+
     // Check sync repositories first
     if sync_dir.exists() {
         let mut db_files: Vec<PathBuf> = fs::read_dir(sync_dir)

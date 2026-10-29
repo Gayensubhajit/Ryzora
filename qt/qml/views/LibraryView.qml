@@ -15,13 +15,29 @@ Item {
     property string selectedStatusFilter: "all" // "all" | "active"
     property var pendingUninstallPackage: null
 
-    function getCombinedList() {
+    property int libraryAppsRev: 0
+
+    Connections {
+        target: backend
+        function onAppsChanged() {
+            root.libraryAppsRev++
+        }
+        function onLibraryChanged() {
+            root.libraryAppsRev++
+        }
+        function onActiveAppOperationsChanged() {
+            root.libraryAppsRev++
+        }
+    }
+
+    readonly property var combinedList: {
+        var _rev = root.libraryAppsRev
         var combined = []
-        var libList = backend.libraryList || []
+        var libList = backend ? (backend.libraryList || []) : []
         for (var i = 0; i < libList.length; ++i) {
             if (libList[i]) combined.push(libList[i])
         }
-        var apps = backend.appsList || []
+        var apps = backend ? (backend.getFilteredApps("Installed", "", "all", "name") || []) : []
         for (var j = 0; j < apps.length; ++j) {
             var a = apps[j]
             if (a && a.is_installed) {
@@ -42,6 +58,10 @@ Item {
             }
         }
         return combined
+    }
+
+    function getCombinedList() {
+        return root.combinedList
     }
 
     function getPackageCategory(item) {
@@ -554,7 +574,7 @@ Item {
                                 Image {
                                     id: cardImg
                                     anchors.fill: parent
-                                    source: (modelData && modelData.preview_url && String(modelData.preview_url).indexOf("://") !== -1) ? modelData.preview_url : ""
+                                    source: (modelData && modelData.preview_url && String(modelData.preview_url).indexOf("://") !== -1 && !String(modelData.preview_url).toLowerCase().endsWith(".jxl")) ? modelData.preview_url : ""
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
                                     mipmap: true

@@ -659,14 +659,15 @@ fn load_icon_file(path: &Path) -> (Option<String>, Option<String>, Option<String
                 if fs::metadata(p).map(|m| m.len() < 2 * 1024 * 1024).unwrap_or(false) {
                     if let Ok(bytes) = fs::read(p) {
                         return (
-                            icon_path_str,
+                            Some(p.display().to_string()),
                             None,
                             Some(format!("data:image/png;base64,{}", encode_base64(&bytes))),
                         );
                     }
                 }
+                return (Some(p.display().to_string()), None, None);
             }
-            (icon_path_str, None, None)
+            (None, None, None)
         }
         "xpm" => {
             if fs::metadata(path).map(|m| m.len() < 512 * 1024).unwrap_or(false) {
@@ -734,6 +735,54 @@ static SWCATALOG_ICON_CACHE: std::sync::OnceLock<std::collections::HashMap<Strin
 fn get_swcatalog_icon_cache() -> &'static std::collections::HashMap<String, PathBuf> {
     SWCATALOG_ICON_CACHE.get_or_init(|| {
         let mut map = std::collections::HashMap::new();
+
+        let index_icon_file = |p: &Path, map: &mut std::collections::HashMap<String, PathBuf>| {
+            if let Some(file_name) = p.file_name().and_then(|s| s.to_str()) {
+                let lower_file = file_name.to_lowercase();
+                if lower_file.ends_with(".jxl") {
+                    return;
+                }
+                if !p.is_file() {
+                    return;
+                }
+                map.entry(lower_file.clone()).or_insert_with(|| p.to_path_buf());
+
+                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                    let lower_stem = stem.to_lowercase();
+                    map.entry(lower_stem.clone()).or_insert_with(|| p.to_path_buf());
+
+                    let dashed = lower_stem.replace('.', "-");
+                    map.entry(dashed.clone()).or_insert_with(|| p.to_path_buf());
+
+                    let parts: Vec<&str> = lower_stem.split('.').collect();
+                    if parts.len() >= 2 {
+                        let without_prefix = parts[1..].join(".");
+                        map.entry(without_prefix.clone()).or_insert_with(|| p.to_path_buf());
+                        map.entry(without_prefix.replace('.', "-")).or_insert_with(|| p.to_path_buf());
+                        if let Some(last) = parts.last() {
+                            map.entry(last.to_string()).or_insert_with(|| p.to_path_buf());
+                        }
+                    }
+                    for part in &parts {
+                        if part.len() > 2 && *part != "org" && *part != "com" && *part != "net" && *part != "io" && *part != "app" && *part != "github" {
+                            map.entry(part.to_string()).or_insert_with(|| p.to_path_buf());
+                        }
+                    }
+
+                    // AppStream cached icons are often named <pkgname>_<desktop_id_or_name>
+                    if let Some((pkg, rest)) = lower_stem.split_once('_') {
+                        if !pkg.is_empty() {
+                            map.entry(pkg.to_string()).or_insert_with(|| p.to_path_buf());
+                        }
+                        if !rest.is_empty() {
+                            map.entry(rest.to_string()).or_insert_with(|| p.to_path_buf());
+                        }
+                    }
+                }
+            }
+        };
+
+        // 1. Scan standard system AppStream directories
         let base_dirs = [
             "/usr/share/swcatalog/icons",
             "/var/lib/app-info/icons",
@@ -757,25 +806,41 @@ fn get_swcatalog_icon_cache() -> &'static std::collections::HashMap<String, Path
                     let dir = base_path.join(sub).join(sz);
                     if let Ok(entries) = fs::read_dir(&dir) {
                         for entry in entries.flatten() {
-                            let p = entry.path();
-                            if !p.is_file() {
-                                continue;
-                            }
-                            if let Some(file_name) = p.file_name().and_then(|s| s.to_str()) {
-                                let lower_file = file_name.to_lowercase();
-                                map.entry(lower_file.clone()).or_insert_with(|| p.clone());
+                            index_icon_file(&entry.path(), &mut map);
+                        }
+                    }
+                }
+            }
+        }
 
-                                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
-                                    let lower_stem = stem.to_lowercase();
-                                    map.entry(lower_stem.clone()).or_insert_with(|| p.clone());
+        // 2. Scan Flatpak AppStream icon directories (system and per-user)
+        let mut flatpak_roots = vec![PathBuf::from("/var/lib/flatpak/appstream")];
+        let user_home = crate::snapshot::get_home_dir();
+        flatpak_roots.push(user_home.join(".local/share/flatpak/appstream"));
 
-                                    // AppStream cached icons are often named <pkgname>_<desktop_id_or_name>
-                                    if let Some((pkg, rest)) = lower_stem.split_once('_') {
-                                        if !pkg.is_empty() {
-                                            map.entry(pkg.to_string()).or_insert_with(|| p.clone());
-                                        }
-                                        if !rest.is_empty() {
-                                            map.entry(rest.to_string()).or_insert_with(|| p.clone());
+        for fp_root in flatpak_roots {
+            if !fp_root.exists() {
+                continue;
+            }
+            // Walk up to 4 levels: remote / arch / branch-or-hash / icons / {128x128, 64x64}
+            if let Ok(remotes) = fs::read_dir(&fp_root) {
+                for remote in remotes.flatten() {
+                    let r_path = remote.path();
+                    if !r_path.is_dir() { continue; }
+                    if let Ok(arches) = fs::read_dir(&r_path) {
+                        for arch in arches.flatten() {
+                            let a_path = arch.path();
+                            if !a_path.is_dir() { continue; }
+                            if let Ok(branches) = fs::read_dir(&a_path) {
+                                for branch in branches.flatten() {
+                                    let b_path = branch.path();
+                                    if !b_path.is_dir() { continue; }
+                                    for sz in &["128x128", "64x64"] {
+                                        let icons_dir = b_path.join("icons").join(sz);
+                                        if let Ok(entries) = fs::read_dir(&icons_dir) {
+                                            for entry in entries.flatten() {
+                                                index_icon_file(&entry.path(), &mut map);
+                                            }
                                         }
                                     }
                                 }
@@ -785,8 +850,118 @@ fn get_swcatalog_icon_cache() -> &'static std::collections::HashMap<String, Path
                 }
             }
         }
+
+        // 3. Scan system pixmaps, standard hicolor/theme icon dirs, and Ryzora decoded JXL cache
+        let mut direct_dirs: Vec<PathBuf> = [
+            "/usr/share/pixmaps",
+            "/usr/share/icons/hicolor/128x128/apps",
+            "/usr/share/icons/hicolor/scalable/apps",
+            "/usr/share/icons/hicolor/64x64/apps",
+            "/usr/share/icons/hicolor/48x48/apps",
+            "/usr/share/icons/Papirus/48x48/apps",
+            "/usr/share/icons/Papirus/64x64/apps",
+            "/usr/share/icons/breeze/apps/48",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+        direct_dirs.push(user_home.join(".cache/ryzora/icons/jxl_cache"));
+
+        for p in &direct_dirs {
+            if let Ok(entries) = fs::read_dir(p) {
+                for entry in entries.flatten() {
+                    index_icon_file(&entry.path(), &mut map);
+                }
+            }
+        }
+
         map
     })
+}
+
+static DESKTOP_ICON_NAME_CACHE: std::sync::OnceLock<std::collections::HashMap<String, String>> = std::sync::OnceLock::new();
+
+fn get_desktop_icon_name_cache() -> &'static std::collections::HashMap<String, String> {
+    DESKTOP_ICON_NAME_CACHE.get_or_init(|| {
+        let mut map = std::collections::HashMap::new();
+        for dir in get_desktop_dirs() {
+            if !dir.exists() {
+                continue;
+            }
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.extension().and_then(|s| s.to_str()) != Some("desktop") {
+                        continue;
+                    }
+                    if let Ok(content) = fs::read_to_string(&p) {
+                        let parsed = parse_desktop_file(&content);
+                        if let Some(icon) = parsed.icon {
+                            let icon_trimmed = icon.trim();
+                            if icon_trimmed.is_empty() {
+                                continue;
+                            }
+                            if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                                let stem_low = stem.to_lowercase();
+                                map.entry(stem_low.clone()).or_insert_with(|| icon_trimmed.to_string());
+                                if let Some(last) = stem_low.split('.').last() {
+                                    if last.len() > 2 {
+                                        map.entry(last.to_string()).or_insert_with(|| icon_trimmed.to_string());
+                                    }
+                                }
+                            }
+                            if let Some(name) = parsed.name {
+                                let name_low = name.trim().to_lowercase();
+                                if !name_low.is_empty() {
+                                    map.entry(name_low.clone()).or_insert_with(|| icon_trimmed.to_string());
+                                    map.entry(name_low.replace(' ', "-")).or_insert_with(|| icon_trimmed.to_string());
+                                }
+                            }
+                            if let Some(wm) = parsed.startup_wm_class {
+                                let wm_low = wm.trim().to_lowercase();
+                                if !wm_low.is_empty() {
+                                    map.entry(wm_low).or_insert_with(|| icon_trimmed.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        map
+    })
+}
+
+pub fn find_desktop_icon_fast(pkg_id: &str) -> Option<PathBuf> {
+    if let Some(path) = find_swcatalog_icon(pkg_id, None) {
+        return Some(path);
+    }
+    let clean = pkg_id.trim().to_lowercase();
+    if clean.is_empty() {
+        return None;
+    }
+    let desk_cache = get_desktop_icon_name_cache();
+    let stripped = strip_packaging_suffix(&clean);
+    let icon_val = desk_cache
+        .get(&clean)
+        .or_else(|| stripped.and_then(|s| desk_cache.get(s)))
+        .or_else(|| {
+            if clean.contains('.') {
+                clean.split('.').last().and_then(|t| desk_cache.get(t))
+            } else {
+                None
+            }
+        });
+    if let Some(icon_str) = icon_val {
+        let p = Path::new(icon_str);
+        if p.is_absolute() && p.is_file() && !icon_str.to_lowercase().ends_with(".jxl") {
+            return Some(p.to_path_buf());
+        }
+        if let Some(found) = find_swcatalog_icon(&clean, Some(icon_str)) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 pub fn find_swcatalog_icon(pkg_id: &str, icon_name: Option<&str>) -> Option<PathBuf> {

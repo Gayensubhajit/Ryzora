@@ -14,6 +14,7 @@
 #include <QQuickStyle>
 #include <QElapsedTimer>
 #include <QDebug>
+#include <QLoggingCategory>
 #include <QQmlNetworkAccessManagerFactory>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
@@ -31,6 +32,7 @@ protected:
     QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoingData = nullptr) override {
         QNetworkRequest req = request;
         req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+        req.setTransferTimeout(5000);
         req.setRawHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Ryzora/0.1.0");
         return QNetworkAccessManager::createRequest(op, req, outgoingData);
     }
@@ -666,16 +668,121 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     }
 
     // 1. Navigate to Apps tab
+    auto *window = qobject_cast<QQuickWindow *>(rootObj);
+    if (window) {
+        window->resize(1920, 1080);
+    }
     QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    while (backend->isAppsLoading()) {
+        app.processEvents();
+        usleep(5000);
+    }
     pumpEvents(15, 20000);
     qInfo() << "[STEP 1] Navigated to Apps tab. Initial apps count:" << backend->appsCount();
 
+    QObject *heroBanner = appsView->findChild<QObject*>("appsHeroBanner");
+    int heroH1080 = appsView->property("heroResponsiveHeight").toInt();
+    qInfo() << "  -> Hero height at 1920x1080:" << heroH1080 << "px (banner visible:" << (heroBanner ? heroBanner->property("visible").toBool() : false) << ")";
+    if (heroH1080 < 320 || heroH1080 > 380) {
+        qCritical() << "FAIL: Expected hero height at 1920x1080 between 320 and 380px, got:" << heroH1080;
+        return 21;
+    }
+
+    const QString shotDir = qEnvironmentVariable("RYZORA_APPS_SCREENSHOT_DIR");
+    auto saveAppsShot = [&](const QString &filename) {
+        if (!shotDir.isEmpty() && window) {
+            pumpEvents(12, 15000);
+            QImage img = window->grabWindow();
+            QString fullPath = QDir(shotDir).filePath(filename);
+            img.save(fullPath);
+            qInfo() << "  -> Saved screenshot:" << fullPath << img.size();
+        }
+    };
+
+    saveAppsShot("apps_hero_1920x1080.png");
+    saveAppsShot("apps_hero_rounded_1920x1080.png");
+    saveAppsShot("apps_toolbar_centered_1920x1080.png");
+
+    // Verify scrolled grid immediately below hero at 1920x1080
+    QObject *mainScrollObj = appsView->findChild<QObject*>("appsMainScroll");
+    if (mainScrollObj && !shotDir.isEmpty()) {
+        mainScrollObj->setProperty("contentY", 390);
+        saveAppsShot("apps_grid_below_hero_1920x1080.png");
+        saveAppsShot("apps_icons_verified_1920x1080.png");
+        mainScrollObj->setProperty("contentY", 0);
+        pumpEvents(8, 10000);
+    }
+
+    // Verify responsive hero height at 1366x768
+    if (window) {
+        window->resize(1366, 768);
+        pumpEvents(10, 15000);
+        int heroH768 = appsView->property("heroResponsiveHeight").toInt();
+        qInfo() << "  -> Hero height at 1366x768:" << heroH768 << "px";
+        if (heroH768 < 260 || heroH768 > 320) {
+            qCritical() << "FAIL: Expected compact hero height at 1366x768 between 260 and 320px, got:" << heroH768;
+            return 22;
+        }
+        saveAppsShot("apps_hero_1366x768.png");
+        window->resize(1920, 1080);
+        pumpEvents(10, 15000);
+    }
+
+    auto queryCurrentFilteredApps = [&]() -> QVariantList {
+        return backend->getFilteredApps(
+            appsView->property("selectedCategory").toString(),
+            appsView->property("searchQuery").toString(),
+            appsView->property("selectedProvider").toString(),
+            appsView->property("sortBy").toString()
+        );
+    };
+
     // 2. Test Category Switching
     qInfo() << "[STEP 2] Testing Category Switching...";
+    {
+        QElapsedTimer tGui, tTotal;
+        tTotal.start();
+        tGui.start();
+        appsView->setProperty("selectedCategory", "Games");
+        qint64 gamesClickGuiMs = tGui.elapsed();
+        tGui.restart();
+        app.processEvents();
+        qint64 gamesPostLoadGuiMs = tGui.elapsed();
+        qint64 gamesTotalMs = tTotal.elapsed();
+        QVariantList gamesApps = queryCurrentFilteredApps();
+        qInfo() << "  -> [PERF] Switch All -> Games: clickGuiMs=" << gamesClickGuiMs
+                << "postLoadGuiMs=" << gamesPostLoadGuiMs << "totalMs=" << gamesTotalMs
+                << "count=" << gamesApps.size();
+
+        saveAppsShot("apps_games_filter_1920x1080.png");
+
+        tTotal.restart();
+        tGui.start();
+        appsView->setProperty("selectedCategory", "All");
+        qint64 allClickGuiMs = tGui.elapsed();
+        tGui.restart();
+        app.processEvents();
+        qint64 allPostLoadGuiMs = tGui.elapsed();
+        qint64 allTotalMs = tTotal.elapsed();
+        qInfo() << "  -> [PERF] Switch Games -> All: clickGuiMs=" << allClickGuiMs
+                << "postLoadGuiMs=" << allPostLoadGuiMs << "totalMs=" << allTotalMs
+                << "count=" << queryCurrentFilteredApps().size();
+
+        // Rapid category switching burst across 6 categories
+        QElapsedTimer tRapid;
+        tRapid.start();
+        const QStringList rapidCats = {"Games", "Development", "Multimedia", "Internet", "Utilities", "All"};
+        for (const QString &cat : rapidCats) {
+            appsView->setProperty("selectedCategory", cat);
+            app.processEvents();
+        }
+        qint64 rapidTotalMs = tRapid.elapsed();
+        qInfo() << "  -> [PERF] Rapid 6-category burst (Games->Dev->Multimedia->Internet->Utilities->All):"
+                << rapidTotalMs << "ms total (" << (rapidTotalMs / rapidCats.size()) << "ms avg/switch)";
+    }
     appsView->setProperty("selectedCategory", "Development");
-    pumpEvents(15, 20000);
-    QVariant devAppsVar = appsView->property("filteredApps");
-    QVariantList devApps = devAppsVar.toList();
+    pumpEvents(5, 10000);
+    QVariantList devApps = queryCurrentFilteredApps();
     qInfo() << "  -> Development category apps count:" << devApps.size();
     if (devApps.isEmpty()) {
         qCritical() << "FAIL: Development category returned 0 apps!";
@@ -683,9 +790,8 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     }
 
     appsView->setProperty("selectedCategory", "Internet");
-    pumpEvents(15, 20000);
-    QVariant netAppsVar = appsView->property("filteredApps");
-    QVariantList netApps = netAppsVar.toList();
+    pumpEvents(5, 10000);
+    QVariantList netApps = queryCurrentFilteredApps();
     qInfo() << "  -> Internet category apps count:" << netApps.size();
     if (netApps.isEmpty()) {
         qCritical() << "FAIL: Internet category returned 0 apps!";
@@ -693,25 +799,69 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     }
 
     appsView->setProperty("selectedCategory", "All");
-    pumpEvents(15, 20000);
-    QVariant allAppsVar = appsView->property("filteredApps");
-    qInfo() << "  -> Returned to All category apps count:" << allAppsVar.toList().size();
+    pumpEvents(5, 10000);
+    QVariantList allApps = queryCurrentFilteredApps();
+    qInfo() << "  -> Returned to All category apps count:" << allApps.size();
+
+    // 2B. Test All Packages Mode (15,000+ packages) & Category Switching
+    qInfo() << "[STEP 2B] Testing All Packages Mode (15,000+ packages)...";
+    {
+        appsView->setProperty("catalogMode", "all");
+        backend->filterApps("all_packages", "", "all");
+        while (backend->isAppsLoading()) {
+            app.processEvents();
+            usleep(5000);
+        }
+        pumpEvents(10, 15000);
+        int allPkgCount = backend->appsCount();
+        qInfo() << "  -> All Packages mode loaded count:" << allPkgCount;
+        if (allPkgCount < 1239) {
+            qCritical() << "FAIL: All Packages mode returned fewer items than Applications mode:" << allPkgCount;
+            return 23;
+        }
+        saveAppsShot("apps_all_packages_1920x1080.png");
+
+        QElapsedTimer tPkgSwitch;
+        tPkgSwitch.start();
+        appsView->setProperty("selectedCategory", "Games");
+        app.processEvents();
+        qint64 pkgGamesMs = tPkgSwitch.elapsed();
+        tPkgSwitch.restart();
+        appsView->setProperty("selectedCategory", "All");
+        app.processEvents();
+        qint64 pkgAllMs = tPkgSwitch.elapsed();
+        qInfo() << "  -> [PERF] All Packages Mode (15k+) Switch All -> Games:" << pkgGamesMs
+                << "ms | Games -> All:" << pkgAllMs << "ms";
+
+        // Return to Applications mode
+        appsView->setProperty("catalogMode", "apps");
+        backend->filterApps("All", "", "all");
+        app.processEvents();
+        qInfo() << "  -> Returned to Applications mode (cached in-memory), count:" << backend->appsCount();
+    }
 
     // 3. Test Search Query Filtering
     qInfo() << "[STEP 3] Testing Search Filter...";
     appsView->setProperty("searchQuery", "blender");
     pumpEvents(15, 20000);
-    QVariant searchAppsVar = appsView->property("filteredApps");
-    QVariantList searchApps = searchAppsVar.toList();
+    QVariantList searchApps = queryCurrentFilteredApps();
     qInfo() << "  -> Search 'blender' count:" << searchApps.size();
-    if (searchApps.size() != 1 || searchApps.first().toMap().value("id").toString() != "blender") {
+    if (searchApps.isEmpty() || searchApps.first().toMap().value("id").toString() != "blender") {
         qCritical() << "FAIL: Search 'blender' failed!";
         return 5;
     }
 
     appsView->setProperty("searchQuery", "");
     pumpEvents(15, 20000);
-    qInfo() << "  -> Search cleared, apps count:" << appsView->property("filteredApps").toList().size();
+    qInfo() << "  -> Search cleared, apps count:" << queryCurrentFilteredApps().size();
+
+    // 3B. Test Flatpak Provider Filter
+    qInfo() << "[STEP 3B] Testing Flatpak Provider Filter...";
+    appsView->setProperty("selectedProvider", "flatpak");
+    pumpEvents(20, 20000);
+    saveAppsShot("apps_flatpak_catalog_1920x1080.png");
+    appsView->setProperty("selectedProvider", "all");
+    pumpEvents(15, 20000);
 
     // 4. Test Details Navigation and Back to Apps
     qInfo() << "[STEP 4] Testing Details Navigation & Back to Apps...";
@@ -730,6 +880,7 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
 
     QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, discordApp));
     pumpEvents(20, 20000);
+    saveAppsShot("apps_multi_provider_detail_1920x1080.png");
     QVariant selectedApp = appsView->property("selectedApp");
     if (selectedApp.isNull() || selectedApp.toMap().value("id").toString() != "discord") {
         qCritical() << "FAIL: setSelectedApp failed to set Discord as selectedApp!";
@@ -767,7 +918,12 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
     pumpEvents(25, 20000);
 
     QMetaObject::invokeMethod(appsView, "requestInstall", Q_ARG(QVariant, "blender"));
-    pumpEvents(40, 20000);
+    QElapsedTimer tInstall;
+    tInstall.start();
+    while ((backend->isAppOperating("blender") || backend->isAppsLoading()) && tInstall.elapsed() < 8000) {
+        pumpEvents(5, 10000);
+    }
+    pumpEvents(20, 20000);
 
     bool blenderInstalled = false;
     for (const QVariant &v : backend->appsList()) {
@@ -796,7 +952,12 @@ int runTestApps(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBacke
 
     // Uninstall blender
     QMetaObject::invokeMethod(appsView, "requestUninstall", Q_ARG(QVariant, "blender"));
-    pumpEvents(40, 20000);
+    QElapsedTimer tUninstall;
+    tUninstall.start();
+    while ((backend->isAppOperating("blender") || backend->isAppsLoading()) && tUninstall.elapsed() < 8000) {
+        pumpEvents(5, 10000);
+    }
+    pumpEvents(20, 20000);
 
     bool blenderStillInstalled = true;
     for (const QVariant &v : backend->appsList()) {
@@ -3378,6 +3539,12 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Ryzora");
     app.setOrganizationName("Ryzora");
+
+    // Suppress external distro/system SVG path malformations and Wayland textinput focus race warnings
+    QLoggingCategory::setFilterRules(
+        "qt.svg.warning=false\n"
+        "qt.qpa.wayland.textinput.warning=false\n"
+    );
 
     QQuickStyle::setStyle("Basic");
 

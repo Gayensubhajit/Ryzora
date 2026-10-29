@@ -306,13 +306,25 @@ Rectangle {
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: {
-                            if (previewImg.status === Image.Loading) return "LOADING…"
+                            if (previewImg.status === Image.Loading && Boolean(card.itemData && card.itemData.preview_url)) return "LOADING…"
                             return card.itemData ? (card.itemData.category ? String(card.itemData.category).toUpperCase() : "PACKAGE") : "PACKAGE"
                         }
                         font.pixelSize: 10
                         font.letterSpacing: 1.0
                         font.bold: true
                         color: theme.textMuted
+                    }
+                }
+            }
+
+            Timer {
+                id: loadingWatchdog
+                interval: 3500
+                running: previewImg.status === Image.Loading
+                repeat: false
+                onTriggered: {
+                    if (previewImg.status === Image.Loading) {
+                        previewImg.source = ""
                     }
                 }
             }
@@ -340,8 +352,8 @@ Rectangle {
                 fillMode: (card.itemData && (card.itemData.subfilter === "emblem" || card.itemData.category === "fastfetch")) ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                 asynchronous: true
                 cache: true
-                sourceSize.width: 640
-                sourceSize.height: 480
+                sourceSize.width: 384
+                sourceSize.height: 240
                 smooth: true
                 visible: status === Image.Ready && (!videoLoader.item || !videoLoader.item.hasFirstFrame)
             }
@@ -350,7 +362,6 @@ Rectangle {
             Loader {
                 id: videoLoader
                 anchors.fill: parent
-                asynchronous: true
                 active: card.playVideoActive
                 sourceComponent: demoVideoComp
             }
@@ -380,14 +391,14 @@ Rectangle {
                         loops: MediaPlayer.Infinite
                         source: card.videoSource
                         Component.onCompleted: play()
-                        onPositionChanged: {
-                            if (!videoRoot.hasFirstFrame && position > 0) {
+                        onPositionChanged: function() {
+                            if (!videoRoot.hasFirstFrame && cardPlayer.position > 0) {
                                 videoRoot.hasFirstFrame = true
                             }
                         }
-                        onMediaStatusChanged: {
-                            if (mediaStatus === MediaPlayer.LoadedMedia || mediaStatus === MediaPlayer.BufferedMedia) {
-                                if (playbackState !== MediaPlayer.PlayingState) play()
+                        onMediaStatusChanged: function() {
+                            if (cardPlayer.mediaStatus === MediaPlayer.LoadedMedia || cardPlayer.mediaStatus === MediaPlayer.BufferedMedia) {
+                                if (cardPlayer.playbackState !== MediaPlayer.PlayingState) cardPlayer.play()
                             }
                         }
                     }

@@ -37,10 +37,10 @@ PKG="$2"
 
 # Validate operation
 case "$OPERATION" in
-    install|uninstall|reinstall|uninstall-deps|clean-cache)
+    install|uninstall|reinstall|uninstall-deps|clean-cache|upgrade-all)
         ;;
     *)
-        die "Unknown operation: '$OPERATION'. Allowed: install, uninstall, reinstall, uninstall-deps, clean-cache"
+        die "Unknown operation: '$OPERATION'. Allowed: install, uninstall, reinstall, uninstall-deps, clean-cache, upgrade-all"
         ;;
 esac
 
@@ -105,5 +105,8 @@ case "$OPERATION" in
             echo "No cached package archives found for '$PKG'"
         fi
         exit 0
+        ;;
+    upgrade-all)
+        exec "$PACMAN_BIN" -Syu --noconfirm
         ;;
 esac

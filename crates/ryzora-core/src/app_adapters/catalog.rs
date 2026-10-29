@@ -869,10 +869,10 @@ fn find_appstream_cached_icon(icon_filename: &str, icons_dir: &Path) -> Option<S
                 continue;
             }
             let candidate = dir.join(icon_filename);
-            if candidate.is_file() {
+            if candidate.is_file() && !candidate.to_string_lossy().ends_with(".jxl") {
                 return Some(candidate.to_string_lossy().to_string());
             }
-            for ext in &["jxl", "png", "svg"] {
+            for ext in &["png", "svg"] {
                 let cand_ext = dir.join(format!("{}.{}", stem, ext));
                 if cand_ext.is_file() {
                     return Some(cand_ext.to_string_lossy().to_string());
@@ -1633,11 +1633,9 @@ Include = /etc/pacman.d/mirrorlist
         assert_eq!(extract_tag_content("  <name>GIMP Photo Editor</name> ", "name"), "GIMP Photo Editor");
     }
 
-    static TEST_CATALOG_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     #[test]
     fn test_installed_state_refresh_and_query() {
-        let _guard = TEST_CATALOG_MUTEX.lock().unwrap();
+        let _guard = crate::app_adapters::TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let store_arc = get_catalog_store();
         {
             let mut store = store_arc.write().unwrap();
@@ -1736,7 +1734,7 @@ Include = /etc/pacman.d/mirrorlist
 
     #[test]
     fn test_real_machine_catalog_full_validation() {
-        let _guard = TEST_CATALOG_MUTEX.lock().unwrap();
+        let _guard = crate::app_adapters::TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let store_arc = get_catalog_store();
         // Force reload full catalog from cache into store to ensure clean state
         let cache_file = resolve_cache_file_path();

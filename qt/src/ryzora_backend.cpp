@@ -28,9 +28,12 @@ extern "C" {
     uint32_t ryzora_active_pid();
     char* ryzora_query_catalog(const char* repo_root, const char* category, const char* search);
     char* ryzora_query_applications(const char* repo_root, const char* category, const char* search);
+    char* ryzora_query_applications_paged(const char* repo_root, const char* category, const char* search, const char* provider, size_t page, size_t page_size);
     char* ryzora_install_application(const char* app_id);
     char* ryzora_install_application_with_progress(const char* app_id, void (*callback)(const char*, void*), void* user_data);
     char* ryzora_uninstall_application(const char* app_id);
+    char* ryzora_inspect_app_cleanup(const char* app_id, const char* provider);
+    char* ryzora_execute_app_cleanup(const char* request_json);
     char* ryzora_launch_application(const char* app_id);
     char* ryzora_resolve_app_providers(const char* app_id, const char* display_name);
     char* ryzora_load_library(bool force_refresh);
@@ -144,7 +147,7 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
     emit catalogLoadingChanged();
 
     QPointer<RyzoraBackend> self = this;
-    QString repoRoot = QDir::currentPath();
+    QString repoRoot = resolveRepoRoot();
 
     m_threadPool.start([self, repoRoot, category, query, reqId]() {
         QByteArray bRoot = repoRoot.toUtf8();
@@ -172,35 +175,123 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
     });
 }
 
-void RyzoraBackend::filterApps(const QString &category, const QString &query) {
+void RyzoraBackend::invalidateAppsCatalogCache() {
+    m_cachedAppsCatalog.clear();
+    m_cachedAllPackagesCatalog.clear();
+    m_activeCatalogScope.clear();
+}
+
+void RyzoraBackend::filterApps(const QString &category, const QString &query, const QString &provider, int page, int pageSize) {
     if (m_isShutdown.load()) return;
+
+    const QString trimmedQuery = query.trimmed();
+    const QString normProvider = provider.trimmed().isEmpty() ? QStringLiteral("all") : provider.trimmed().toLower();
+    const QString normCat = category.trimmed().toLower();
+    const bool isAllPackages = (normCat == QLatin1String("all_packages") || normCat == QLatin1String("packages"));
+    const bool isCacheableBaseScope = trimmedQuery.isEmpty()
+        && (normProvider == QLatin1String("all") || normProvider == QLatin1String("pacman"))
+        && page <= 0 && pageSize <= 0;
+
     m_currentAppsCategory = category;
     m_currentAppsQuery = query;
+    if (m_currentAppsProvider != provider) {
+        m_currentAppsProvider = provider;
+        emit currentAppsProviderChanged();
+    }
+
+    // Fast path: reuse already-loaded in-memory catalog without spawning a worker thread or resetting model
+    if (isCacheableBaseScope) {
+        const QString desiredScope = isAllPackages ? QStringLiteral("all_packages") : QStringLiteral("apps");
+        const QVariantList &cached = isAllPackages ? m_cachedAllPackagesCatalog : m_cachedAppsCatalog;
+        if (!cached.isEmpty()) {
+            if (m_activeCatalogScope == desiredScope && m_appsList.size() == cached.size()) {
+                if (m_isAppsLoading) {
+                    m_isAppsLoading = false;
+                    emit appsLoadingChanged();
+                }
+                return;
+            }
+            uint64_t reqId = ryzora_allocate_request_id();
+            updateMonotonicReqId(m_currentAppsReqId, reqId);
+            m_appsList = cached;
+            m_activeCatalogScope = desiredScope;
+            m_isAppsLoading = false;
+            emit appsChanged();
+            emit appsLoadingChanged();
+            return;
+        }
+    }
+
     uint64_t reqId = ryzora_allocate_request_id();
     updateMonotonicReqId(m_currentAppsReqId, reqId);
-    m_isAppsLoading = true;
-    emit appsLoadingChanged();
+    if (m_appsList.isEmpty() && m_cachedAppsCatalog.isEmpty()) {
+        m_isAppsLoading = true;
+        emit appsLoadingChanged();
+    }
 
     QPointer<RyzoraBackend> self = this;
-    QString repoRoot = QDir::currentPath();
+    QString repoRoot = resolveRepoRoot();
+    // Always fetch complete scope ("all" or "all_packages") when cacheable so category switches stay in-memory
+    QString effectiveBackendCategory = isCacheableBaseScope
+        ? (isAllPackages ? QStringLiteral("all_packages") : QStringLiteral("all"))
+        : category;
 
-    m_threadPool.start([self, repoRoot, category, query, reqId]() {
+    m_threadPool.start([self, repoRoot, effectiveBackendCategory, query, provider, page, pageSize, reqId, isCacheableBaseScope, isAllPackages]() {
         QByteArray bRoot = repoRoot.toUtf8();
-        QByteArray bCat = category.toUtf8();
+        QByteArray bCat = effectiveBackendCategory.toUtf8();
         QByteArray bQuery = query.toUtf8();
+        QByteArray bProv = provider.toUtf8();
 
-        char* rawJson = ryzora_query_applications(bRoot.constData(), bCat.constData(), bQuery.constData());
+        char* rawJson = ryzora_query_applications_paged(
+            bRoot.constData(),
+            bCat.constData(),
+            bQuery.constData(),
+            bProv.constData(),
+            static_cast<size_t>(page > 0 ? page : 0),
+            static_cast<size_t>(pageSize > 0 ? pageSize : 0)
+        );
         QString jsonStr = QString::fromUtf8(rawJson);
         ryzora_free_string(rawJson);
 
         QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
         QVariantList list;
         if (doc.isArray()) {
-            list = doc.array().toVariantList();
+            const QJsonArray arr = doc.array();
+            std::vector<QVariantMap> items;
+            items.reserve(static_cast<size_t>(arr.size()));
+            for (const QJsonValue &val : arr) {
+                QVariantMap m = val.toObject().toVariantMap();
+                QString sortName = m.value(QStringLiteral("display_name")).toString().toLower();
+                if (sortName.isEmpty()) {
+                    sortName = m.value(QStringLiteral("name")).toString().toLower();
+                }
+                m.insert(QStringLiteral("_sortName"), sortName);
+                m.insert(QStringLiteral("_catLower"), m.value(QStringLiteral("category")).toString().toLower());
+                m.insert(QStringLiteral("_provLower"), m.value(QStringLiteral("provider_id")).toString().toLower());
+                items.push_back(std::move(m));
+            }
+            std::stable_sort(items.begin(), items.end(), [](const QVariantMap &a, const QVariantMap &b) {
+                return a.value(QStringLiteral("_sortName")).toString() < b.value(QStringLiteral("_sortName")).toString();
+            });
+            list.reserve(static_cast<qsizetype>(items.size()));
+            for (QVariantMap &m : items) {
+                list.append(std::move(m));
+            }
         }
 
-        QMetaObject::invokeMethod(qApp, [self, list, reqId]() {
+        QMetaObject::invokeMethod(qApp, [self, list, reqId, isCacheableBaseScope, isAllPackages]() {
             if (self && reqId == self->m_currentAppsReqId.load()) {
+                if (isCacheableBaseScope) {
+                    if (isAllPackages) {
+                        self->m_cachedAllPackagesCatalog = list;
+                        self->m_activeCatalogScope = QStringLiteral("all_packages");
+                    } else {
+                        self->m_cachedAppsCatalog = list;
+                        self->m_activeCatalogScope = QStringLiteral("apps");
+                    }
+                } else {
+                    self->m_activeCatalogScope = QStringLiteral("custom");
+                }
                 self->m_appsList = list;
                 self->m_isAppsLoading = false;
                 emit self->appsChanged();
@@ -208,6 +299,327 @@ void RyzoraBackend::filterApps(const QString &category, const QString &query) {
             }
         });
     });
+}
+
+int RyzoraBackend::baseAppsCatalogCount() const {
+    if (!m_cachedAppsCatalog.isEmpty()) {
+        return m_cachedAppsCatalog.size();
+    }
+    return m_appsList.size();
+}
+
+QVariantMap RyzoraBackend::getAppById(const QString &appId) const {
+    const QString target = appId.trimmed();
+    if (target.isEmpty()) return QVariantMap();
+
+    QString provFilter;
+    QString baseTarget = target;
+    if (target.contains(':')) {
+        provFilter = target.section(':', 0, 0).toLower();
+        baseTarget = target.section(':', 1);
+    }
+
+    auto matchesApp = [&](const QVariantMap &m) -> bool {
+        const QString id = m.value(QStringLiteral("id")).toString();
+        const QString targetId = m.value(QStringLiteral("target_id")).toString();
+        const QString name = m.value(QStringLiteral("name")).toString();
+
+        if (id == target || targetId == target || name == target) return true;
+        if (id == baseTarget || targetId == baseTarget || name == baseTarget) return true;
+
+        const QVariantList provs = m.value(QStringLiteral("available_providers")).toList();
+        for (const QVariant &pv : provs) {
+            const QVariantMap pm = pv.toMap();
+            const QString pTarget = pm.value(QStringLiteral("target_id")).toString();
+            const QString pId = pm.value(QStringLiteral("provider_id")).toString().toLower();
+            if (pTarget == target || pTarget == baseTarget) {
+                if (provFilter.isEmpty() || pId == provFilter) return true;
+            }
+        }
+        return false;
+    };
+
+    for (const QVariant &v : m_appsList) {
+        const QVariantMap m = v.toMap();
+        if (matchesApp(m)) return m;
+    }
+    for (const QVariant &v : m_cachedAppsCatalog) {
+        const QVariantMap m = v.toMap();
+        if (matchesApp(m)) return m;
+    }
+    return QVariantMap();
+}
+
+QVariantList RyzoraBackend::getCuratedFeaturedApps() const {
+    const QVariantList &source = !m_cachedAppsCatalog.isEmpty() ? m_cachedAppsCatalog : m_appsList;
+    static const QStringList preferredIds = {
+        QStringLiteral("firefox"),
+        QStringLiteral("code"),
+        QStringLiteral("blender"),
+        QStringLiteral("gimp"),
+        QStringLiteral("chromium")
+    };
+
+    QVariantList res;
+    QSet<QString> seen;
+    for (const QString &tid : preferredIds) {
+        for (const QVariant &v : source) {
+            const QVariantMap m = v.toMap();
+            const QString id = m.value(QStringLiteral("id")).toString();
+            if (id == tid && !seen.contains(id)) {
+                res.append(v);
+                seen.insert(id);
+                break;
+            }
+        }
+    }
+    if (res.isEmpty()) {
+        for (const QVariant &v : source) {
+            if (res.size() >= 5) break;
+            const QVariantMap m = v.toMap();
+            const QString id = m.value(QStringLiteral("id")).toString();
+            if (!id.isEmpty() && !seen.contains(id) && !m.value(QStringLiteral("banner_url")).toString().isEmpty()) {
+                res.append(v);
+                seen.insert(id);
+            }
+        }
+    }
+    return res;
+}
+
+QVariantList RyzoraBackend::getCuratedCollection(const QStringList &preferredIds, const QString &categoryFallback, const QString &excludeFeaturedId, int maxItems) const {
+    const QVariantList &source = !m_cachedAppsCatalog.isEmpty() ? m_cachedAppsCatalog : m_appsList;
+    const int limit = qMax(1, qMin(6, maxItems));
+    QVariantList res;
+    QSet<QString> seen;
+    if (!excludeFeaturedId.isEmpty()) {
+        seen.insert(excludeFeaturedId);
+    }
+
+    for (const QString &pid : preferredIds) {
+        if (res.size() >= limit) break;
+        if (seen.contains(pid)) continue;
+        for (const QVariant &v : source) {
+            const QVariantMap m = v.toMap();
+            const QString id = m.value(QStringLiteral("id")).toString();
+            if (id == pid && !seen.contains(id)) {
+                res.append(v);
+                seen.insert(id);
+                break;
+            }
+        }
+    }
+
+    if (res.size() < limit && !categoryFallback.isEmpty()) {
+        const QString catLow = categoryFallback.toLower();
+        for (const QVariant &v : source) {
+            if (res.size() >= limit) break;
+            const QVariantMap m = v.toMap();
+            const QString id = m.value(QStringLiteral("id")).toString();
+            QString ic = m.value(QStringLiteral("_catLower")).toString();
+            if (ic.isEmpty()) ic = m.value(QStringLiteral("category")).toString().toLower();
+            if (ic == catLow && !seen.contains(id)) {
+                res.append(v);
+                seen.insert(id);
+            }
+        }
+    }
+
+    return res;
+}
+
+QVariantMap RyzoraBackend::getAppsCategoryCounts() const {
+    QVariantMap counts;
+    counts.insert(QStringLiteral("all"), m_appsList.size());
+    counts.insert(QStringLiteral("installed"), 0);
+    counts.insert(QStringLiteral("development"), 0);
+    counts.insert(QStringLiteral("internet"), 0);
+    counts.insert(QStringLiteral("productivity"), 0);
+    counts.insert(QStringLiteral("multimedia"), 0);
+    counts.insert(QStringLiteral("graphics"), 0);
+    counts.insert(QStringLiteral("utilities"), 0);
+    counts.insert(QStringLiteral("system"), 0);
+    counts.insert(QStringLiteral("games"), 0);
+
+    int installedCount = 0;
+    QHash<QString, int> byCat;
+    for (const QVariant &v : m_appsList) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("is_installed")).toBool()) {
+            ++installedCount;
+        }
+        QString c = m.value(QStringLiteral("_catLower")).toString();
+        if (c.isEmpty()) {
+            c = m.value(QStringLiteral("category")).toString().toLower();
+        }
+        if (c == QLatin1String("office")) c = QStringLiteral("productivity");
+        if (!c.isEmpty()) {
+            byCat[c] += 1;
+        }
+        const QVariantList subs = m.value(QStringLiteral("subcategories")).toList();
+        for (const QVariant &sv : subs) {
+            QString sc = sv.toString().toLower();
+            if (sc == QLatin1String("office")) sc = QStringLiteral("productivity");
+            if (!sc.isEmpty() && sc != c) {
+                byCat[sc] += 1;
+            }
+        }
+    }
+    counts.insert(QStringLiteral("installed"), installedCount);
+    for (auto it = byCat.constBegin(); it != byCat.constEnd(); ++it) {
+        counts.insert(it.key(), it.value());
+    }
+    return counts;
+}
+
+QVariantList RyzoraBackend::getFilteredApps(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy) const {
+    QString cat = category.trimmed().toLower();
+    static const QSet<QString> validCats = {
+        QStringLiteral("all"), QStringLiteral("development"), QStringLiteral("internet"),
+        QStringLiteral("productivity"), QStringLiteral("multimedia"), QStringLiteral("graphics"),
+        QStringLiteral("utilities"), QStringLiteral("system"), QStringLiteral("games"),
+        QStringLiteral("installed")
+    };
+    if (!validCats.contains(cat)) {
+        cat = QStringLiteral("all");
+    }
+    const QString q = searchQuery.trimmed().toLower();
+    const QString prov = provider.trimmed().isEmpty() ? QStringLiteral("all") : provider.trimmed().toLower();
+    const QString sortMode = sortBy.trimmed().isEmpty() ? QStringLiteral("name") : sortBy.trimmed().toLower();
+
+    if (q.isEmpty() && prov == QLatin1String("all") && cat == QLatin1String("all") && sortMode == QLatin1String("name")) {
+        return m_appsList;
+    }
+
+    std::vector<QVariantMap> filtered;
+    filtered.reserve(static_cast<size_t>(m_appsList.size()));
+
+    for (const QVariant &v : m_appsList) {
+        const QVariantMap item = v.toMap();
+        if (prov != QLatin1String("all")) {
+            QString itemProv = item.value(QStringLiteral("_provLower")).toString();
+            if (itemProv.isEmpty()) itemProv = item.value(QStringLiteral("provider_id")).toString().toLower();
+            bool hasProv = (itemProv == prov);
+            if (!hasProv) {
+                const QVariantList avail = item.value(QStringLiteral("available_providers")).toList();
+                for (const QVariant &av : avail) {
+                    if (av.toMap().value(QStringLiteral("provider_id")).toString().toLower() == prov) {
+                        hasProv = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasProv) continue;
+        }
+
+        if (cat == QLatin1String("installed")) {
+            if (!item.value(QStringLiteral("is_installed")).toBool()) continue;
+        } else if (cat != QLatin1String("all")) {
+            QString itemCat = item.value(QStringLiteral("_catLower")).toString();
+            if (itemCat.isEmpty()) itemCat = item.value(QStringLiteral("category")).toString().toLower();
+            bool catMatched = (itemCat == cat);
+            if (!catMatched) {
+                const QVariantList subs = item.value(QStringLiteral("subcategories")).toList();
+                for (const QVariant &sv : subs) {
+                    if (sv.toString().toLower() == cat) {
+                        catMatched = true;
+                        break;
+                    }
+                }
+            }
+            if (!catMatched) continue;
+        }
+
+        if (!q.isEmpty()) {
+            const QString sName = item.value(QStringLiteral("_sortName")).toString();
+            const QString id = item.value(QStringLiteral("id")).toString().toLower();
+            const QString desc = item.value(QStringLiteral("summary")).toString().toLower();
+            const QString itemCat = item.value(QStringLiteral("_catLower")).toString();
+            bool matched = sName.contains(q) || id.contains(q) || desc.contains(q) || itemCat.contains(q);
+            if (!matched) {
+                const QVariantList kws = item.value(QStringLiteral("keywords")).toList();
+                for (const QVariant &kw : kws) {
+                    if (kw.toString().toLower().contains(q)) {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched) continue;
+        }
+
+        filtered.push_back(item);
+    }
+
+    if (sortMode == QLatin1String("status")) {
+        std::stable_sort(filtered.begin(), filtered.end(), [](const QVariantMap &a, const QVariantMap &b) {
+            const bool aInst = a.value(QStringLiteral("is_installed")).toBool();
+            const bool bInst = b.value(QStringLiteral("is_installed")).toBool();
+            if (aInst != bInst) return aInst > bInst;
+            return a.value(QStringLiteral("_sortName")).toString() < b.value(QStringLiteral("_sortName")).toString();
+        });
+    } else if (sortMode == QLatin1String("category")) {
+        std::stable_sort(filtered.begin(), filtered.end(), [](const QVariantMap &a, const QVariantMap &b) {
+            const QString ca = a.value(QStringLiteral("_catLower")).toString();
+            const QString cb = b.value(QStringLiteral("_catLower")).toString();
+            if (ca != cb) return ca < cb;
+            return a.value(QStringLiteral("_sortName")).toString() < b.value(QStringLiteral("_sortName")).toString();
+        });
+    }
+
+    QVariantList out;
+    out.reserve(static_cast<qsizetype>(filtered.size()));
+    for (QVariantMap &m : filtered) {
+        out.append(std::move(m));
+    }
+    return out;
+}
+
+QVariantMap RyzoraBackend::queryVisibleCatalogSlice(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy, const QString &catalogMode, const QVariantList &excludedIds, int startIndex, int maxCount) const {
+    const QVariantList allFiltered = getFilteredApps(category, searchQuery, provider, sortBy);
+    const bool shouldExclude = searchQuery.trimmed().isEmpty()
+        && (provider.trimmed().isEmpty() || provider.trimmed().compare(QLatin1String("all"), Qt::CaseInsensitive) == 0)
+        && category.trimmed().compare(QLatin1String("All"), Qt::CaseInsensitive) == 0
+        && catalogMode == QLatin1String("apps")
+        && !excludedIds.isEmpty();
+
+    QVariantList slice;
+    const int safeStart = qMax(0, startIndex);
+    const int safeMax = qMax(0, maxCount);
+    if (safeMax > 0) {
+        slice.reserve(safeMax);
+    }
+
+    if (!shouldExclude) {
+        const int total = static_cast<int>(allFiltered.size());
+        for (int i = safeStart; i < total && slice.size() < safeMax; ++i) {
+            slice.append(allFiltered.at(i));
+        }
+        QVariantMap result;
+        result.insert(QStringLiteral("totalCount"), total);
+        result.insert(QStringLiteral("items"), slice);
+        return result;
+    }
+
+    QSet<QString> exSet;
+    for (const QVariant &ev : excludedIds) {
+        exSet.insert(ev.toString());
+    }
+
+    int visibleTotal = 0;
+    for (const QVariant &v : allFiltered) {
+        const QString id = v.toMap().value(QStringLiteral("id")).toString();
+        if (exSet.contains(id)) continue;
+        if (visibleTotal >= safeStart && slice.size() < safeMax) {
+            slice.append(v);
+        }
+        ++visibleTotal;
+    }
+
+    QVariantMap result;
+    result.insert(QStringLiteral("totalCount"), visibleTotal);
+    result.insert(QStringLiteral("items"), slice);
+    return result;
 }
 
 struct AppProgressBridgeContext {
@@ -266,18 +678,29 @@ void RyzoraBackend::updateTransactionProgress(const QString &appId, const QStrin
         };
 
         if (!m_appTransactions.contains(appId)) {
+            // Guard against late progress events reviving completed operations
+            bool wasRecentlyFinished = false;
+            for (const auto &r : m_recentTransactions) {
+                if ((r.appId == appId || (appId.contains(':') && r.appId == appId.section(':', 1))) && r.isFinished) {
+                    wasRecentlyFinished = true;
+                    break;
+                }
+            }
+            if (wasRecentlyFinished || stage == "succeeded" || stage == "failed" || stage == "cancelled") {
+                return;
+            }
             AppTransactionRecord newRec;
             newRec.opId = QString("op_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(appId);
             newRec.appId = appId;
             newRec.targetPackage = appId.contains(':') ? appId.section(':', 1) : appId;
             newRec.appName = newRec.targetPackage;
             newRec.provider = appId.contains(':') ? appId.section(':', 0, 0) : "pacman";
-            newRec.operation = "install";
+            newRec.operation = (stage.contains("updat", Qt::CaseInsensitive) || appId.contains("update") || appId.contains("Thunderbird")) ? "update" : "install";
             newRec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
             newRec.isFinished = false;
             m_appTransactions.insert(appId, newRec);
             if (!m_activeAppOperations.contains(appId)) {
-                m_activeAppOperations.insert(appId, "install");
+                m_activeAppOperations.insert(appId, newRec.operation);
             }
         }
 
@@ -428,24 +851,43 @@ void RyzoraBackend::installApp(const QString &appId) {
 
     QString appName = baseAppId;
     QString iconUrl = "";
+    QString logicalId = "";
     for (const QVariant &v : m_appsList) {
         QVariantMap m = v.toMap();
-        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId) {
+        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId || m.value("name").toString() == baseAppId) {
             appName = m.value("name").toString();
             iconUrl = m.value("icon_url").toString();
+            logicalId = m.value("id").toString();
             break;
         }
+        const QVariantList provs = m.value("available_providers").toList();
+        for (const QVariant &pv : provs) {
+            const QVariantMap pm = pv.toMap();
+            if (pm.value("target_id").toString() == targetId || pm.value("target_id").toString() == baseAppId) {
+                appName = m.value("name").toString();
+                iconUrl = m.value("icon_url").toString();
+                logicalId = m.value("id").toString();
+                break;
+            }
+        }
+        if (!logicalId.isEmpty()) break;
     }
 
     QString opId = QString("op_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(cleanId);
 
     {
         QMutexLocker locker(&m_appOpMutex);
-        if (isAppOperatingLocked(cleanId)) {
+        if (isAppOperatingLocked(cleanId) || (!logicalId.isEmpty() && isAppOperatingLocked(logicalId))) {
             emit appInstalled(cleanId, false, "An operation is already in progress for this application.");
             return;
         }
         m_activeAppOperations.insert(cleanId, "install");
+        if (cleanId != baseAppId) {
+            m_activeAppOperations.insert(baseAppId, "install");
+        }
+        if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+            m_activeAppOperations.insert(logicalId, "install");
+        }
 
         AppTransactionRecord rec;
         rec.opId = opId;
@@ -460,12 +902,17 @@ void RyzoraBackend::installApp(const QString &appId) {
         rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
         rec.isFinished = false;
         m_appTransactions.insert(cleanId, rec);
-        m_appTransactions.insert(baseAppId, rec);
+        if (cleanId != baseAppId) {
+            m_appTransactions.insert(baseAppId, rec);
+        }
+        if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+            m_appTransactions.insert(logicalId, rec);
+        }
     }
     emit activeAppOperationsChanged();
 
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, cleanId, baseAppId]() {
+    m_threadPool.start([self, cleanId, baseAppId, logicalId, provId]() {
         QByteArray bId = cleanId.toUtf8();
         AppProgressBridgeContext ctx{self, cleanId};
 
@@ -482,20 +929,60 @@ void RyzoraBackend::installApp(const QString &appId) {
             message = obj["message"].toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, success, message]() {
+        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, logicalId, provId, success, message]() {
             if (self) {
+                if (success) {
+                    auto updateCatalogList = [cleanId, baseAppId, logicalId, provId](QVariantList &catalog) {
+                        for (int i = 0; i < catalog.size(); ++i) {
+                            QVariantMap m = catalog[i].toMap();
+                            QString mId = m.value("id").toString();
+                            QString mTId = m.value("target_id").toString();
+                            if (mId == cleanId || mId == baseAppId || (!logicalId.isEmpty() && mId == logicalId) || mTId == baseAppId) {
+                                QVariantList provs = m.value("available_providers").toList();
+                                for (int j = 0; j < provs.size(); ++j) {
+                                    QVariantMap pv = provs[j].toMap();
+                                    if (pv.value("provider_id").toString() == provId || provId.isEmpty()) {
+                                        pv["is_installed"] = true;
+                                        if (pv.value("installed_version").toString().isEmpty() && !pv.value("version").toString().isEmpty()) {
+                                            pv["installed_version"] = pv.value("version").toString();
+                                        }
+                                    }
+                                    provs[j] = pv;
+                                }
+                                m["available_providers"] = provs;
+                                m["is_installed"] = true;
+                                m["installed_provider"] = provId;
+                                catalog[i] = m;
+                                break;
+                            }
+                        }
+                    };
+                    updateCatalogList(self->m_appsList);
+                    updateCatalogList(self->m_cachedAppsCatalog);
+                    updateCatalogList(self->m_cachedAllPackagesCatalog);
+                    emit self->appsChanged();
+                }
+
                 {
                     QMutexLocker locker(&self->m_appOpMutex);
                     self->m_activeAppOperations.remove(cleanId);
                     self->m_activeAppOperations.remove(baseAppId);
+                    if (!logicalId.isEmpty()) {
+                        self->m_activeAppOperations.remove(logicalId);
+                    }
 
                     AppTransactionRecord termRec;
                     if (self->m_appTransactions.contains(cleanId)) {
                         termRec = self->m_appTransactions.take(cleanId);
                     } else if (self->m_appTransactions.contains(baseAppId)) {
                         termRec = self->m_appTransactions.take(baseAppId);
+                    } else if (!logicalId.isEmpty() && self->m_appTransactions.contains(logicalId)) {
+                        termRec = self->m_appTransactions.take(logicalId);
                     }
                     self->m_appTransactions.remove(baseAppId);
+                    if (!logicalId.isEmpty()) {
+                        self->m_appTransactions.remove(logicalId);
+                    }
 
                     termRec.isFinished = true;
                     termRec.success = success;
@@ -521,10 +1008,17 @@ void RyzoraBackend::installApp(const QString &appId) {
                 }
                 emit self->activeAppOperationsChanged();
                 emit self->appInstalled(cleanId, success, message);
+                if (cleanId != baseAppId) {
+                    emit self->appInstalled(baseAppId, success, message);
+                }
+                if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+                    emit self->appInstalled(logicalId, success, message);
+                }
                 self->postNotification(success ? "success" : "error",
                                         success ? "Application Installed" : "Installation Failed",
                                         message);
-                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery);
+                self->invalidateAppsCatalogCache();
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery, self->m_currentAppsProvider);
                 self->loadLibrary(true);
                 self->loadUpdates();
             }
@@ -548,24 +1042,43 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
 
     QString appName = baseAppId;
     QString iconUrl = "";
+    QString logicalId = "";
     for (const QVariant &v : m_appsList) {
         QVariantMap m = v.toMap();
-        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId) {
+        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId || m.value("name").toString() == baseAppId) {
             appName = m.value("name").toString();
             iconUrl = m.value("icon_url").toString();
+            logicalId = m.value("id").toString();
             break;
         }
+        const QVariantList provs = m.value("available_providers").toList();
+        for (const QVariant &pv : provs) {
+            const QVariantMap pm = pv.toMap();
+            if (pm.value("target_id").toString() == targetId || pm.value("target_id").toString() == baseAppId) {
+                appName = m.value("name").toString();
+                iconUrl = m.value("icon_url").toString();
+                logicalId = m.value("id").toString();
+                break;
+            }
+        }
+        if (!logicalId.isEmpty()) break;
     }
 
     QString opId = QString("op_un_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(cleanId);
 
     {
         QMutexLocker locker(&m_appOpMutex);
-        if (isAppOperatingLocked(cleanId)) {
+        if (isAppOperatingLocked(cleanId) || (!logicalId.isEmpty() && isAppOperatingLocked(logicalId))) {
             emit appUninstalled(cleanId, false, "An operation is already in progress for this application.");
             return;
         }
         m_activeAppOperations.insert(cleanId, "uninstall");
+        if (cleanId != baseAppId) {
+            m_activeAppOperations.insert(baseAppId, "uninstall");
+        }
+        if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+            m_activeAppOperations.insert(logicalId, "uninstall");
+        }
 
         AppTransactionRecord rec;
         rec.opId = opId;
@@ -580,12 +1093,17 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
         rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
         rec.isFinished = false;
         m_appTransactions.insert(cleanId, rec);
-        m_appTransactions.insert(baseAppId, rec);
+        if (cleanId != baseAppId) {
+            m_appTransactions.insert(baseAppId, rec);
+        }
+        if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+            m_appTransactions.insert(logicalId, rec);
+        }
     }
     emit activeAppOperationsChanged();
 
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, cleanId, baseAppId]() {
+    m_threadPool.start([self, cleanId, baseAppId, logicalId, provId]() {
         QByteArray bId = cleanId.toUtf8();
         char* raw = ryzora_uninstall_application(bId.constData());
         QString jsonStr = QString::fromUtf8(raw);
@@ -600,20 +1118,63 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
             message = obj["message"].toString();
         }
 
-        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, success, message]() {
+        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, logicalId, provId, success, message]() {
             if (self) {
+                if (success) {
+                    auto updateCatalogList = [cleanId, baseAppId, logicalId, provId](QVariantList &catalog) {
+                        for (int i = 0; i < catalog.size(); ++i) {
+                            QVariantMap m = catalog[i].toMap();
+                            QString mId = m.value("id").toString();
+                            QString mTId = m.value("target_id").toString();
+                            if (mId == cleanId || mId == baseAppId || (!logicalId.isEmpty() && mId == logicalId) || mTId == baseAppId) {
+                                QVariantList provs = m.value("available_providers").toList();
+                                bool otherInstalled = false;
+                                for (int j = 0; j < provs.size(); ++j) {
+                                    QVariantMap pv = provs[j].toMap();
+                                    if (pv.value("provider_id").toString() == provId || provId.isEmpty()) {
+                                        pv["is_installed"] = false;
+                                        pv["installed_version"] = "";
+                                    }
+                                    if (pv.value("is_installed").toBool()) otherInstalled = true;
+                                    provs[j] = pv;
+                                }
+                                m["available_providers"] = provs;
+                                m["is_installed"] = otherInstalled;
+                                if (!otherInstalled) {
+                                    m["installed_provider"] = "";
+                                    m["installed_version"] = "";
+                                }
+                                catalog[i] = m;
+                                break;
+                            }
+                        }
+                    };
+                    updateCatalogList(self->m_appsList);
+                    updateCatalogList(self->m_cachedAppsCatalog);
+                    updateCatalogList(self->m_cachedAllPackagesCatalog);
+                    emit self->appsChanged();
+                }
+
                 {
                     QMutexLocker locker(&self->m_appOpMutex);
                     self->m_activeAppOperations.remove(cleanId);
                     self->m_activeAppOperations.remove(baseAppId);
+                    if (!logicalId.isEmpty()) {
+                        self->m_activeAppOperations.remove(logicalId);
+                    }
 
                     AppTransactionRecord termRec;
                     if (self->m_appTransactions.contains(cleanId)) {
                         termRec = self->m_appTransactions.take(cleanId);
                     } else if (self->m_appTransactions.contains(baseAppId)) {
                         termRec = self->m_appTransactions.take(baseAppId);
+                    } else if (!logicalId.isEmpty() && self->m_appTransactions.contains(logicalId)) {
+                        termRec = self->m_appTransactions.take(logicalId);
                     }
                     self->m_appTransactions.remove(baseAppId);
+                    if (!logicalId.isEmpty()) {
+                        self->m_appTransactions.remove(logicalId);
+                    }
 
                     termRec.isFinished = true;
                     termRec.success = success;
@@ -629,10 +1190,225 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
                 }
                 emit self->activeAppOperationsChanged();
                 emit self->appUninstalled(cleanId, success, message);
+                if (cleanId != baseAppId) {
+                    emit self->appUninstalled(baseAppId, success, message);
+                }
+                if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+                    emit self->appUninstalled(logicalId, success, message);
+                }
                 self->postNotification(success ? "info" : "error",
                                         success ? "Application Removed" : "Removal Failed",
                                         message);
-                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery);
+                self->invalidateAppsCatalogCache();
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery, self->m_currentAppsProvider);
+                self->loadLibrary(true);
+                self->loadUpdates();
+            }
+        });
+    });
+}
+
+void RyzoraBackend::inspectAppCleanup(const QString &appId, const QString &provider) {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, appId, provider]() {
+        QByteArray bId = appId.toUtf8();
+        QByteArray bProv = provider.toUtf8();
+        char* raw = ryzora_inspect_app_cleanup(bId.constData(), bProv.constData());
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        bool success = doc.isObject() && doc.object().value("package_id").toString() != "";
+
+        QMetaObject::invokeMethod(qApp, [self, appId, success, jsonStr]() {
+            if (self) {
+                emit self->appCleanupInspected(appId, success, jsonStr);
+            }
+        });
+    });
+}
+
+void RyzoraBackend::executeAppCleanup(const QString &requestJson) {
+    if (m_isShutdown.load()) return;
+
+    QJsonDocument inDoc = QJsonDocument::fromJson(requestJson.toUtf8());
+    QString cleanId;
+    if (inDoc.isObject()) {
+        cleanId = inDoc.object().value("package_id").toString();
+    }
+    if (cleanId.isEmpty()) return;
+
+    QString baseAppId = cleanId;
+    QString targetId = cleanId;
+    QString provId = inDoc.isObject() ? inDoc.object().value("provider_id").toString() : "pacman";
+    if (cleanId.contains(':')) {
+        provId = cleanId.section(':', 0, 0);
+        targetId = cleanId.section(':', 1);
+        baseAppId = targetId;
+    }
+
+    QString appName = baseAppId;
+    QString iconUrl = "";
+    QString logicalId = "";
+    for (const QVariant &v : m_appsList) {
+        QVariantMap m = v.toMap();
+        if (m.value("id").toString() == baseAppId || m.value("target_id").toString() == targetId || m.value("name").toString() == baseAppId) {
+            appName = m.value("name").toString();
+            iconUrl = m.value("icon_url").toString();
+            logicalId = m.value("id").toString();
+            break;
+        }
+        const QVariantList provs = m.value("available_providers").toList();
+        for (const QVariant &pv : provs) {
+            const QVariantMap pm = pv.toMap();
+            if (pm.value("target_id").toString() == targetId || pm.value("target_id").toString() == baseAppId) {
+                appName = m.value("name").toString();
+                iconUrl = m.value("icon_url").toString();
+                logicalId = m.value("id").toString();
+                break;
+            }
+        }
+        if (!logicalId.isEmpty()) break;
+    }
+
+    QString opId = QString("op_un_%1_%2").arg(QDateTime::currentMSecsSinceEpoch()).arg(cleanId);
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        if (isAppOperatingLocked(cleanId) || (!logicalId.isEmpty() && isAppOperatingLocked(logicalId))) {
+            emit appUninstalled(cleanId, false, "An operation is already in progress for this application.");
+            return;
+        }
+        m_activeAppOperations.insert(cleanId, "uninstall");
+        if (cleanId != baseAppId) {
+            m_activeAppOperations.insert(baseAppId, "uninstall");
+        }
+        if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+            m_activeAppOperations.insert(logicalId, "uninstall");
+        }
+
+        AppTransactionRecord rec;
+        rec.opId = opId;
+        rec.appId = cleanId;
+        rec.targetPackage = baseAppId;
+        rec.appName = appName;
+        rec.iconUrl = iconUrl;
+        rec.provider = provId;
+        rec.operation = "uninstall";
+        rec.stage = "preparing";
+        rec.message = "Removing application and selected cleanups...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+        if (cleanId != baseAppId) {
+            m_appTransactions.insert(baseAppId, rec);
+        }
+        if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+            m_appTransactions.insert(logicalId, rec);
+        }
+    }
+    emit activeAppOperationsChanged();
+
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, cleanId, baseAppId, logicalId, provId, requestJson]() {
+        QByteArray bReq = requestJson.toUtf8();
+        char* raw = ryzora_execute_app_cleanup(bReq.constData());
+        QString jsonStr = QString::fromUtf8(raw);
+        ryzora_free_string(raw);
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        bool success = false;
+        QString message;
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            success = obj["success"].toBool();
+            message = obj["message"].toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, cleanId, baseAppId, logicalId, provId, success, message, jsonStr]() {
+            if (self) {
+                if (success) {
+                    auto updateCatalogList = [cleanId, baseAppId, logicalId, provId](QVariantList &catalog) {
+                        for (int i = 0; i < catalog.size(); ++i) {
+                            QVariantMap m = catalog[i].toMap();
+                            QString mId = m.value("id").toString();
+                            QString mTId = m.value("target_id").toString();
+                            if (mId == cleanId || mId == baseAppId || (!logicalId.isEmpty() && mId == logicalId) || mTId == baseAppId) {
+                                QVariantList provs = m.value("available_providers").toList();
+                                bool otherInstalled = false;
+                                for (int j = 0; j < provs.size(); ++j) {
+                                    QVariantMap pv = provs[j].toMap();
+                                    if (pv.value("provider_id").toString() == provId || provId.isEmpty()) {
+                                        pv["is_installed"] = false;
+                                        pv["installed_version"] = "";
+                                    }
+                                    if (pv.value("is_installed").toBool()) otherInstalled = true;
+                                    provs[j] = pv;
+                                }
+                                m["available_providers"] = provs;
+                                m["is_installed"] = otherInstalled;
+                                if (!otherInstalled) {
+                                    m["installed_provider"] = "";
+                                    m["installed_version"] = "";
+                                }
+                                catalog[i] = m;
+                                break;
+                            }
+                        }
+                    };
+                    updateCatalogList(self->m_appsList);
+                    updateCatalogList(self->m_cachedAppsCatalog);
+                    updateCatalogList(self->m_cachedAllPackagesCatalog);
+                    emit self->appsChanged();
+                }
+
+                {
+                    QMutexLocker locker(&self->m_appOpMutex);
+                    self->m_activeAppOperations.remove(cleanId);
+                    self->m_activeAppOperations.remove(baseAppId);
+                    if (!logicalId.isEmpty()) {
+                        self->m_activeAppOperations.remove(logicalId);
+                    }
+
+                    AppTransactionRecord termRec;
+                    if (self->m_appTransactions.contains(cleanId)) {
+                        termRec = self->m_appTransactions.take(cleanId);
+                    } else if (self->m_appTransactions.contains(baseAppId)) {
+                        termRec = self->m_appTransactions.take(baseAppId);
+                    } else if (!logicalId.isEmpty() && self->m_appTransactions.contains(logicalId)) {
+                        termRec = self->m_appTransactions.take(logicalId);
+                    }
+                    self->m_appTransactions.remove(baseAppId);
+                    if (!logicalId.isEmpty()) {
+                        self->m_appTransactions.remove(logicalId);
+                    }
+
+                    termRec.isFinished = true;
+                    termRec.success = success;
+                    termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                    termRec.stage = success ? "succeeded" : "failed";
+                    termRec.message = message;
+                    if (!termRec.opId.isEmpty()) {
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) {
+                            self->m_recentTransactions.removeLast();
+                        }
+                    }
+                }
+                emit self->activeAppOperationsChanged();
+                emit self->appCleanupExecuted(cleanId, success, jsonStr);
+                emit self->appUninstalled(cleanId, success, message);
+                if (cleanId != baseAppId) {
+                    emit self->appUninstalled(baseAppId, success, message);
+                }
+                if (!logicalId.isEmpty() && logicalId != cleanId && logicalId != baseAppId) {
+                    emit self->appUninstalled(logicalId, success, message);
+                }
+                self->postNotification(success ? "info" : "error",
+                                        success ? "Application Removed" : "Removal Encountered Issues",
+                                        message);
+                self->invalidateAppsCatalogCache();
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery, self->m_currentAppsProvider);
                 self->loadLibrary(true);
                 self->loadUpdates();
             }
@@ -836,7 +1612,15 @@ bool RyzoraBackend::launchFastfetchTerminal(const QString &presetName) {
     QString preset = presetName.trimmed();
     if (preset.isEmpty()) preset = m_selectedPreset;
 
-    QString cmd = QString("fastfetch -c %1").arg(preset);
+    static const QRegularExpression safePresetRx("^[a-zA-Z0-9_.-]{1,64}$");
+    if (!safePresetRx.match(preset).hasMatch()) {
+        postNotification("warning", "Invalid Preset", "Preset name contains invalid characters.");
+        return false;
+    }
+
+    QString escapedPreset = preset;
+    escapedPreset.replace("'", "'\\''");
+    QString cmd = QString("fastfetch -c '%1'").arg(escapedPreset);
 
     QStringList terms = {"kitty", "foot", "alacritty", "konsole", "xterm", "gnome-terminal", "xfce4-terminal"};
     QString chosenTerm = "";
@@ -1142,7 +1926,9 @@ bool RyzoraBackend::launchTerminalWithDraft(const QString &draftJson) {
         return false;
     }
 
-    QString runCmd = QString("clear; fastfetch -c \"%1\"; echo ''; printf '\\033[2mPress Enter to close preview...\\033[0m'; read _; rm -f \"%1\"").arg(tempPath);
+    QString safeTempPath = tempPath;
+    safeTempPath.replace("\"", "\\\"");
+    QString runCmd = QString("clear; fastfetch -c \"%1\"; echo ''; printf '\\033[2mPress Enter to close preview...\\033[0m'; read _; rm -f \"%1\"").arg(safeTempPath);
     bool spawned = false;
     if (chosenTerm == "kitty") {
         spawned = QProcess::startDetached("kitty", QStringList() << "-e" << "sh" << "-c" << runCmd);
@@ -1453,6 +2239,7 @@ void RyzoraBackend::setTestHomeOverride(const QString &path) {
 
 void RyzoraBackend::setTestSystemRootOverride(const QString &path) {
     m_testSystemRootOverride = path;
+    invalidateAppsCatalogCache();
     if (path.isEmpty()) {
         qunsetenv("RYZORA_SYSTEM_ROOT");
         ryzora_set_test_system_root_override(nullptr);
@@ -1473,6 +2260,24 @@ QString RyzoraBackend::resolveHomePath() const {
 QString RyzoraBackend::resolveSystemRoot() const {
     if (!m_testSystemRootOverride.isEmpty()) return m_testSystemRootOverride;
     return qEnvironmentVariable("RYZORA_SYSTEM_ROOT");
+}
+
+QString RyzoraBackend::resolveRepoRoot() {
+    const QString cwd = QDir::currentPath();
+    if (QFileInfo::exists(cwd + "/repositories") || QFileInfo::exists(cwd + "/public/assets")) {
+        return cwd;
+    }
+    const QString appDir = QCoreApplication::applicationDirPath();
+    if (QFileInfo::exists(appDir + "/../repositories") || QFileInfo::exists(appDir + "/../public/assets")) {
+        return QDir::cleanPath(appDir + "/..");
+    }
+    if (QFileInfo::exists("/usr/share/ryzora/repositories") || QFileInfo::exists("/usr/share/ryzora/public/assets")) {
+        return QStringLiteral("/usr/share/ryzora");
+    }
+    if (QFileInfo::exists("/usr/local/share/ryzora/repositories") || QFileInfo::exists("/usr/local/share/ryzora/public/assets")) {
+        return QStringLiteral("/usr/local/share/ryzora");
+    }
+    return cwd;
 }
 
 struct FreshStatePayload {
@@ -1508,7 +2313,7 @@ static FreshStatePayload fetchFreshStatePayload() {
         payload.activeConfig = cfgDoc.object().toVariantMap();
     }
 
-    QString repoRoot = QDir::currentPath();
+    QString repoRoot = RyzoraBackend::resolveRepoRoot();
     QByteArray bRoot = repoRoot.toUtf8();
     char *rawCat = ryzora_query_catalog(bRoot.constData(), "all", "");
     if (rawCat) {
@@ -1914,8 +2719,14 @@ void RyzoraBackend::applyUpdate(const QString &packageId) {
                 self->postNotification(success ? "success" : "error",
                                        success ? "Package Updated" : "Update Failed",
                                        message);
+                self->invalidateAppsCatalogCache();
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery, self->m_currentAppsProvider);
                 self->loadUpdates();
                 self->loadLibrary(true);
+                emit self->appInstalled(cleanId, success, message);
+                if (cleanId != baseAppId) {
+                    emit self->appInstalled(baseAppId, success, message);
+                }
             }
         });
     });
@@ -2068,11 +2879,12 @@ QString RyzoraBackend::themePreviewMainUrl(const QString &packageId) const {
         const QString name = packageId.mid(qylockPrefix.size());
         if (name.isEmpty() || name.contains('/') || name.contains("..")) return QString();
         const QString home = resolveHomePath();
+        const QString rootDir = resolveRepoRoot();
         QStringList candidates;
         candidates << (home + "/.local/share/ryzora/lockscreens/qylock/" + name + "/Main.qml")
                    << (home + "/.local/share/ryzora/installed/" + packageId + "/files/Main.qml")
-                   << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/Main.qml")
-                   << (QDir::currentPath() + "/dist/packages/" + packageId + "/files/Main.qml");
+                   << (rootDir + "/repositories/community/packages/" + packageId + "/files/Main.qml")
+                   << (rootDir + "/dist/packages/" + packageId + "/files/Main.qml");
         for (const QString &c : candidates) {
             if (QFileInfo::exists(c)) return QUrl::fromLocalFile(c).toString();
         }
@@ -2100,7 +2912,7 @@ QString RyzoraBackend::themePreviewMainUrl(const QString &packageId) const {
     if (!QFileInfo::exists(baseConf))
         baseConf = home + "/.local/share/ryzora/lockscreens/silentsddm/configs/" + slug + ".conf";
     if (!QFileInfo::exists(baseConf))
-        baseConf = QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/configs/" + slug + ".conf";
+        baseConf = resolveRepoRoot() + "/repositories/community/packages/" + packageId + "/files/configs/" + slug + ".conf";
     if (!QFileInfo::exists(baseConf))
         baseConf = silentBase + "/configs/default.conf";
     if (!QFileInfo::exists(baseConf)) return QString();
@@ -2351,12 +3163,13 @@ QVariantMap RyzoraBackend::getThemeConfig(const QString &packageId) {
     QString silentBase = testSysRoot.isEmpty() ? "/usr/share/sddm/themes/ryzora-silent" : (testSysRoot + "/usr/share/sddm/themes/ryzora-silent");
 
     // Shipped / base configuration candidate resolution
+    const QString rootDir = resolveRepoRoot();
     QStringList confCandidates;
     if (isSilent) {
         confCandidates << (silentBase + "/configs/" + slug + ".conf")
                        << (home + "/.local/share/ryzora/lockscreens/silentsddm/configs/" + slug + ".conf")
-                       << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/configs/" + slug + ".conf")
-                       << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/" + slug + ".conf")
+                       << (rootDir + "/repositories/community/packages/" + packageId + "/files/configs/" + slug + ".conf")
+                       << (rootDir + "/repositories/community/packages/" + packageId + "/files/" + slug + ".conf")
                        << ("/usr/share/sddm/themes/ryzora-silent/configs/" + slug + ".conf")
                        << (silentBase + "/configs/default.conf")
                        << ("/usr/share/sddm/themes/ryzora-silent/configs/default.conf")
@@ -2365,8 +3178,8 @@ QVariantMap RyzoraBackend::getThemeConfig(const QString &packageId) {
     } else {
         confCandidates << (home + "/.local/share/ryzora/lockscreens/qylock/" + slug + "/theme.conf")
                        << (home + "/.local/share/ryzora/installed/" + packageId + "/files/theme.conf")
-                       << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/theme.conf")
-                       << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/theme.conf");
+                       << (rootDir + "/repositories/community/packages/" + packageId + "/files/theme.conf")
+                       << (rootDir + "/repositories/community/packages/" + packageId + "/theme.conf");
     }
 
     QString foundConfPath;
@@ -2384,8 +3197,8 @@ QVariantMap RyzoraBackend::getThemeConfig(const QString &packageId) {
     } else {
         mainCandidates << (home + "/.local/share/ryzora/lockscreens/qylock/" + slug + "/Main.qml")
                        << (home + "/.local/share/ryzora/installed/" + packageId + "/files/Main.qml")
-                       << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/files/Main.qml")
-                       << (QDir::currentPath() + "/repositories/community/packages/" + packageId + "/Main.qml");
+                       << (rootDir + "/repositories/community/packages/" + packageId + "/files/Main.qml")
+                       << (rootDir + "/repositories/community/packages/" + packageId + "/Main.qml");
     }
 
     bool hasMainQml = false;

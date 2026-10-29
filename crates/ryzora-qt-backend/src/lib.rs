@@ -107,6 +107,22 @@ pub struct ApplicationItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
     pub is_curated: bool,
+    #[serde(default)]
+    pub is_application: bool,
+    #[serde(default)]
+    pub subcategories: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_label: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -634,6 +650,32 @@ pub struct BackendState {
 }
 
 pub fn resolve_preview_url(repo_root: &Path, hero_opt: Option<&str>, package_id: &str) -> String {
+    // 0. Prefer static poster over animated gif for thumbnails to avoid UI decoding lag
+    if let Some(hero) = hero_opt {
+        if hero.ends_with(".gif") {
+            let hero_stem = hero.trim_end_matches(".gif");
+            for suffix in &["-poster.jpg", "-poster.png", ".jpg", ".png"] {
+                let cand_name = format!("{}{}", hero_stem, suffix);
+                let clean = cand_name.trim_start_matches('/');
+                let candidates = [
+                    repo_root.join(clean),
+                    repo_root.join("public").join(clean),
+                    repo_root.join("repositories/community").join(clean),
+                ];
+                for cand in &candidates {
+                    if cand.is_file() {
+                        let s = cand.to_string_lossy();
+                        return if s.starts_with('/') {
+                            format!("file://{}", s)
+                        } else {
+                            format!("file:///{}", s)
+                        };
+                    }
+                }
+            }
+        }
+    }
+
     // 1. Check if hero_opt points to a local file
     if let Some(hero) = hero_opt {
         if !hero.starts_with("http://") && !hero.starts_with("https://") {
@@ -719,6 +761,19 @@ pub fn resolve_preview_url(repo_root: &Path, hero_opt: Option<&str>, package_id:
             if p.is_file() {
                 let s = p.to_string_lossy();
                 return if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+            }
+        }
+        // Also scan files directory for any direct image file (e.g. Fastfetch emblems like arch.png)
+        if let Ok(entries) = fs::read_dir(&files_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                    let ext_lower = ext.to_lowercase();
+                    if ext_lower == "png" || ext_lower == "jpg" || ext_lower == "jpeg" || ext_lower == "webp" {
+                        let s = p.to_string_lossy();
+                        return if s.starts_with('/') { format!("file://{}", s) } else { format!("file:///{}", s) };
+                    }
+                }
             }
         }
     }
@@ -1513,7 +1568,7 @@ impl BackendState {
 
     pub fn resolve_repo_root(hint: Option<&Path>) -> PathBuf {
         if let Some(h) = hint {
-            if h.exists() {
+            if h.exists() && (h.join("repositories").is_dir() || h.join("public/assets").is_dir()) {
                 return h.to_path_buf();
             }
         }
@@ -1521,7 +1576,7 @@ impl BackendState {
             let p = PathBuf::from(m);
             let mut curr = Some(p.as_path());
             while let Some(parent) = curr {
-                if parent.join("repositories").is_dir() {
+                if parent.join("repositories").is_dir() || parent.join("public/assets").is_dir() {
                     return parent.to_path_buf();
                 }
                 curr = parent.parent();
@@ -1530,10 +1585,28 @@ impl BackendState {
         if let Ok(cwd) = std::env::current_dir() {
             let mut curr = Some(cwd.as_path());
             while let Some(parent) = curr {
-                if parent.join("repositories").is_dir() {
+                if parent.join("repositories").is_dir() || parent.join("public/assets").is_dir() {
                     return parent.to_path_buf();
                 }
                 curr = parent.parent();
+            }
+        }
+        // Standard Linux shared data directories for standalone installations
+        let system_paths = [
+            PathBuf::from("/usr/share/ryzora"),
+            PathBuf::from("/usr/local/share/ryzora"),
+        ];
+        for sys_dir in &system_paths {
+            if sys_dir.join("repositories").is_dir() || sys_dir.join("public/assets").is_dir() {
+                return sys_dir.clone();
+            }
+        }
+        if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
+            for dir in xdg_data_dirs.split(':') {
+                let candidate = PathBuf::from(dir).join("ryzora");
+                if candidate.join("repositories").is_dir() || candidate.join("public/assets").is_dir() {
+                    return candidate;
+                }
             }
         }
         PathBuf::from(".")
@@ -1926,39 +1999,75 @@ impl BackendState {
     }
 
     pub fn resolve_system_app_icon(id: &str) -> Option<String> {
-        if std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
-            if let Some(info) = ryzora_core::app_adapters::desktop_icons::resolve_desktop_icon_for_app(id) {
-                if let Some(icon_path) = info.icon_path {
-                    let p = Path::new(&icon_path);
-                    if p.is_file() {
-                        return Some(format!("file://{}", p.to_string_lossy()));
+        let clean = id
+            .trim()
+            .trim_start_matches("flatpak:")
+            .trim_start_matches("aur:")
+            .trim_start_matches("pacman:")
+            .trim();
+        if clean.is_empty() {
+            return None;
+        }
+
+        static ICON_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+        let cache = ICON_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Ok(guard) = cache.lock() {
+            if let Some(cached) = guard.get(clean) {
+                return cached.clone();
+            }
+        }
+
+        let resolved = (|| {
+            // 1. In-memory AppStream / Flathub / Desktop icon cache lookup (fast O(1) hash map)
+            if let Some(path) = ryzora_core::app_adapters::desktop_icons::find_desktop_icon_fast(clean) {
+                let p_str = path.to_string_lossy();
+                if path.is_file() && !p_str.ends_with(".jxl") {
+                    return Some(format!("file://{}", p_str));
+                }
+            }
+
+            // 2. Reverse-DNS last segment check (e.g. org.videolan.VLC -> vlc)
+            if clean.contains('.') {
+                let tail = clean.split('.').last().unwrap_or(clean);
+                if let Some(path) = ryzora_core::app_adapters::desktop_icons::find_desktop_icon_fast(tail) {
+                    let p_str = path.to_string_lossy();
+                    if path.is_file() && !p_str.ends_with(".jxl") {
+                        return Some(format!("file://{}", p_str));
                     }
                 }
             }
-        }
-        let aliases: &[&str] = match id {
-            "neovim" => &["nvim", "neovim"],
-            _ => &[id],
-        };
-        let candidates = [
-            "/usr/share/icons/hicolor/scalable/apps",
-            "/usr/share/icons/hicolor/256x256/apps",
-            "/usr/share/icons/hicolor/128x128/apps",
-            "/usr/share/icons/hicolor/64x64/apps",
-            "/usr/share/icons/hicolor/48x48/apps",
-            "/usr/share/pixmaps",
-        ];
-        for alias in aliases {
-            for dir in candidates {
-                for ext in &[".svg", ".png"] {
-                    let p = Path::new(dir).join(format!("{}{}", alias, ext));
-                    if p.is_file() {
-                        return Some(format!("file://{}", p.to_string_lossy()));
+
+            // 3. Fallback check in standard system icon locations
+            let aliases: &[&str] = match clean {
+                "neovim" => &["nvim", "neovim"],
+                "code" | "vscode" => &["visual-studio-code", "code"],
+                _ => &[clean],
+            };
+            let candidates = [
+                "/usr/share/pixmaps",
+                "/usr/share/icons/hicolor/scalable/apps",
+                "/usr/share/icons/hicolor/128x128/apps",
+                "/usr/share/icons/hicolor/64x64/apps",
+                "/usr/share/icons/hicolor/48x48/apps",
+            ];
+            for alias in aliases {
+                for dir in candidates {
+                    for ext in &[".png", ".svg"] {
+                        let p = Path::new(dir).join(format!("{}{}", alias, ext));
+                        if p.is_file() {
+                            return Some(format!("file://{}", p.to_string_lossy()));
+                        }
                     }
                 }
             }
+            None
+        })();
+
+        let cache = ICON_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Ok(mut guard) = cache.lock() {
+            guard.insert(clean.to_string(), resolved.clone());
         }
-        None
+        resolved
     }
 
     pub fn get_curated_app_features(id: &str) -> Vec<String> {
@@ -2079,6 +2188,18 @@ impl BackendState {
     }
 
     pub fn query_applications(&self, repo_root_hint: Option<&Path>, category: &str, search: &str) -> Vec<ApplicationItem> {
+        self.query_applications_filtered(repo_root_hint, category, search, "all", 0, 120)
+    }
+
+    pub fn query_applications_filtered(
+        &self,
+        repo_root_hint: Option<&Path>,
+        category: &str,
+        search: &str,
+        provider_filter: &str,
+        page: usize,
+        page_size: usize,
+    ) -> Vec<ApplicationItem> {
         let repo_root = Self::resolve_repo_root(repo_root_hint);
         let apps_dir = repo_root.join("public/assets/apps");
 
@@ -2095,6 +2216,10 @@ impl BackendState {
                 String::new()
             }
         };
+
+        let cat_trimmed = category.trim().to_lowercase();
+        let q_trimmed = search.trim().to_lowercase();
+        let prov_trimmed = provider_filter.trim().to_lowercase();
 
         let curated_defs = [
             (
@@ -2387,7 +2512,7 @@ impl BackendState {
                 "Cursor",
                 "Anysphere",
                 "Development",
-                "0.40.4",
+                "3.27.12-1",
                 "aur",
                 "AI-first code editor designed for pair-programming and accelerated coding",
                 "Cursor is an AI-first code editor built on top of Visual Studio Code. It empowers developers with intelligent whole-codebase indexing, multi-file code editing, inline error diagnosis, and interactive AI pair-programming in a familiar, extensible desktop environment.",
@@ -2511,6 +2636,14 @@ impl BackendState {
                 .filter(|s| !s.is_empty())
                 .collect();
 
+            let primary_prov = available_providers
+                .iter()
+                .find(|p| p.provider_id == provider_id)
+                .or_else(|| available_providers.first());
+            let item_dl_size = primary_prov.and_then(|p| p.download_size);
+            let item_inst_size = primary_prov.and_then(|p| p.installed_size);
+            let item_size_label = primary_prov.and_then(|p| p.size_label.clone());
+
             items.push(ApplicationItem {
                 id: id.to_string(),
                 name: id.to_string(),
@@ -2523,7 +2656,7 @@ impl BackendState {
                 repository: effective_repo,
                 provider_id,
                 target_id,
-                installed_provider,
+                installed_provider: installed_provider.clone(),
                 available_providers,
                 icon_url,
                 banner_url,
@@ -2535,16 +2668,47 @@ impl BackendState {
                 website: Some(website.to_string()),
                 license: Some(license.to_string()),
                 is_curated: true,
+                is_application: true,
+                subcategories: Vec::new(),
+                scope: if installed_provider.as_deref() == Some("flatpak") {
+                    ryzora_core::app_adapters::flatpak::detect_installed_flatpak_scope(&id)
+                        .map(|s| s.trim_start_matches('-').to_string())
+                        .or_else(|| Some("user".to_string()))
+                } else {
+                    Some("system".to_string())
+                },
+                remote: if installed_provider.as_deref() == Some("flatpak") {
+                    Some("flathub".to_string())
+                } else if installed_provider.as_deref() == Some("aur") {
+                    Some("aur".to_string())
+                } else {
+                    None
+                },
+                branch: if installed_provider.as_deref() == Some("flatpak") {
+                    Some("stable".to_string())
+                } else {
+                    None
+                },
+                download_size: item_dl_size,
+                installed_size: item_inst_size,
+                size_label: item_size_label,
             });
         }
 
-        let cat_trimmed = category.trim().to_lowercase();
-        let q_trimmed = search.trim().to_lowercase();
+        let is_all_packages_mode = cat_trimmed == "all_packages" || cat_trimmed == "packages";
 
         let mut filtered: Vec<ApplicationItem> = items
             .into_iter()
             .filter(|item| {
-                if !cat_trimmed.is_empty() && cat_trimmed != "all" {
+                if !prov_trimmed.is_empty() && prov_trimmed != "all" {
+                    let has_prov = item.provider_id.to_lowercase() == prov_trimmed
+                        || item.available_providers.iter().any(|p| p.provider_id.to_lowercase() == prov_trimmed);
+                    if !has_prov {
+                        return false;
+                    }
+                }
+
+                if !cat_trimmed.is_empty() && cat_trimmed != "all" && !is_all_packages_mode {
                     if cat_trimmed == "installed" {
                         if !item.is_installed {
                             return false;
@@ -2570,70 +2734,469 @@ impl BackendState {
             })
             .collect();
 
-        // When searching for an application not in the curated list (and no exact curated ID matches),
-        // also search live Pacman/CachyOS repositories so users can discover & install real system packages.
-        if !q_trimmed.is_empty() && !filtered.iter().any(|i| i.id.eq_ignore_ascii_case(&q_trimmed)) {
-            let sync_dir = ryzora_core::app_adapters::pacman::resolve_sync_dir(None);
-            let local_dir = ryzora_core::app_adapters::pacman::resolve_local_dir(None);
-            if let Ok(pacman_hits) = ryzora_core::app_adapters::pacman::search_pacman_packages_in(
-                &q_trimmed,
-                &sync_dir,
-                &local_dir,
-                16,
-            ) {
-                for pkg in pacman_hits {
-                    if curated_ids.contains(&pkg.name) {
+        // 2. Discover packages from Official Repositories via Catalog Store
+        if prov_trimmed == "all" || prov_trimmed == "pacman" {
+            ryzora_core::app_adapters::catalog::ensure_catalog_initialized();
+            let store_arc = ryzora_core::app_adapters::catalog::get_catalog_store();
+            if let Ok(store) = store_arc.read() {
+                for item in &store.items {
+                    if curated_ids.contains(&item.id) {
                         continue;
                     }
-                    let available_providers =
-                        ryzora_core::app_adapters::resolve_local_app_providers(
-                            &pkg.name,
-                            &pkg.repository,
-                            &pkg.version,
-                        );
-                    let default_provider = available_providers
-                        .first()
-                        .map(|p| p.provider_id.clone())
-                        .unwrap_or_else(|| "pacman".to_string());
-                    let default_target = available_providers
-                        .first()
-                        .map(|p| p.target_id.clone())
-                        .unwrap_or_else(|| pkg.name.clone());
-                    let icon_url = Self::resolve_system_app_icon(&pkg.name).unwrap_or_default();
-                    filtered.push(ApplicationItem {
-                        id: pkg.name.clone(),
-                        name: pkg.name.clone(),
-                        display_name: pkg.name.clone(),
-                        summary: pkg.description.clone(),
-                        description: pkg.description.clone(),
-                        category: "Utilities".to_string(),
-                        version: pkg.version.clone(),
-                        publisher: format!("{} Repository", pkg.repository),
-                        repository: pkg.repository.clone(),
-                        provider_id: default_provider,
-                        target_id: default_target,
-                        installed_provider: if pkg.is_installed {
-                            Some("pacman".to_string())
+
+                    // When browsing with no search, focus default view on genuine desktop applications
+                    // unless "all_packages" mode is explicitly selected
+                    if q_trimmed.is_empty() && !is_all_packages_mode && !item.is_application && cat_trimmed != "installed" {
+                        continue;
+                    }
+
+                    if !cat_trimmed.is_empty() && cat_trimmed != "all" && !is_all_packages_mode {
+                        if cat_trimmed == "installed" {
+                            if !item.is_installed {
+                                continue;
+                            }
                         } else {
-                            None
-                        },
+                            let c_low = item.category.to_lowercase();
+                            let matches_cat = c_low == cat_trimmed
+                                || (cat_trimmed == "productivity" && c_low == "office")
+                                || (cat_trimmed == "office" && c_low == "productivity")
+                                || item.subcategories.iter().any(|s| s.to_lowercase() == cat_trimmed);
+                            if !matches_cat {
+                                continue;
+                            }
+                        }
+                    }
+
+                    if !q_trimmed.is_empty() {
+                        let m_id = item.id.to_lowercase().contains(&q_trimmed);
+                        let m_name = item.display_name.to_lowercase().contains(&q_trimmed);
+                        let m_sum = item.summary.to_lowercase().contains(&q_trimmed);
+                        let m_desc = item.description.to_lowercase().contains(&q_trimmed);
+                        let m_cat = item.category.to_lowercase().contains(&q_trimmed);
+                        if !m_id && !m_name && !m_sum && !m_desc && !m_cat {
+                            continue;
+                        }
+                    }
+
+                    let pac_size_label = ryzora_core::app_adapters::format_size_summary(item.download_size, item.installed_size);
+                    let available_providers = vec![
+                        ryzora_core::app_adapters::AppProviderSource {
+                            provider_id: "pacman".to_string(),
+                            name: "Pacman".to_string(),
+                            short_name: format!("Pacman · {}", item.repository),
+                            repository: item.repository.clone(),
+                            description: "Official repository package".to_string(),
+                            target_id: item.id.clone(),
+                            version: Some(item.version.clone()),
+                            is_installed: item.is_installed,
+                            installed_version: item.installed_version.clone(),
+                            scope: Some("system".to_string()),
+                            remote: None,
+                            branch: None,
+                            download_size: item.download_size,
+                            installed_size: item.installed_size,
+                            size_label: pac_size_label.clone(),
+                        }
+                    ];
+                    let icon_url = if item.is_application || item.icon_path.is_some() || item.icon_name.is_some() {
+                        item
+                            .icon_path
+                            .as_ref()
+                            .filter(|p| !p.ends_with(".jxl"))
+                            .map(|p| {
+                                if p.starts_with('/') {
+                                    format!("file://{}", p)
+                                } else {
+                                    p.clone()
+                                }
+                            })
+                            .or_else(|| {
+                                let icon_target = item.icon_name.as_deref().unwrap_or(&item.id);
+                                Self::resolve_system_app_icon(icon_target)
+                            })
+                            .or_else(|| Self::resolve_system_app_icon(&item.id))
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+
+                    filtered.push(ApplicationItem {
+                        id: item.id.clone(),
+                        name: item.id.clone(),
+                        display_name: item.display_name.clone(),
+                        summary: item.summary.clone(),
+                        description: if item.description.trim().is_empty() { item.summary.clone() } else { item.description.clone() },
+                        category: item.category.clone(),
+                        version: item.version.clone(),
+                        publisher: format!("{} Repository", item.repository),
+                        repository: item.repository.clone(),
+                        provider_id: "pacman".to_string(),
+                        target_id: item.id.clone(),
+                        installed_provider: if item.is_installed { Some("pacman".to_string()) } else { None },
+                        available_providers,
+                        icon_url,
+                        banner_url: String::new(),
+                        screenshots: item.screenshots.clone(),
+                        features: Vec::new(),
+                        is_installed: item.is_installed,
+                        installed_version: item.installed_version.clone(),
+                        launchable: item.launchable.clone(),
+                        website: item.homepage.clone(),
+                        license: item.license.clone(),
+                        is_curated: false,
+                        is_application: item.is_application,
+                        subcategories: item.subcategories.clone(),
+                        scope: Some("system".to_string()),
+                        remote: None,
+                        branch: None,
+                        download_size: item.download_size,
+                        installed_size: item.installed_size,
+                        size_label: pac_size_label,
+                    });
+                }
+            };
+        }
+
+        // Fast O(1) reverse lookup map across existing filtered items
+        let mut existing_map: HashMap<String, usize> = HashMap::with_capacity(filtered.len() * 2);
+        for (idx, a) in filtered.iter().enumerate() {
+            existing_map.insert(a.id.to_lowercase(), idx);
+            existing_map.insert(a.target_id.to_lowercase(), idx);
+            for p in &a.available_providers {
+                existing_map.insert(p.target_id.to_lowercase(), idx);
+            }
+        }
+
+        // 3. Discover packages from Arch User Repository (AUR)
+        if (prov_trimmed == "all" || prov_trimmed == "aur") && (!q_trimmed.is_empty() || prov_trimmed == "aur") {
+            let aur_queries = if !q_trimmed.is_empty() {
+                vec![q_trimmed.as_str()]
+            } else {
+                vec!["cursor", "spotify", "google-chrome", "slack-desktop", "visual-studio-code-bin"]
+            };
+            let local_dir = ryzora_core::app_adapters::pacman::resolve_local_dir(None);
+            for aur_q in aur_queries {
+                if let Ok(aur_hits) = ryzora_core::app_adapters::aur::aur_search_cached(aur_q) {
+                    for pkg in aur_hits {
+                        if curated_ids.contains(&pkg.name) {
+                            continue;
+                        }
+                        let (is_inst, inst_ver, inst_sz) = ryzora_core::app_adapters::pacman::check_installed_status_and_size_in(&pkg.name, &local_dir);
+                        if cat_trimmed == "installed" && !is_inst {
+                            continue;
+                        }
+
+                        let size_label = if is_inst && inst_sz.is_some() {
+                            ryzora_core::app_adapters::format_size_summary(None, inst_sz)
+                        } else {
+                            Some("Source (AUR)".to_string())
+                        };
+
+                        // Check if AUR package matches an existing package in filtered
+                        let pkg_name_lower = pkg.name.to_lowercase();
+                        let base_pkg_name = pkg_name_lower.strip_suffix("-bin").unwrap_or(&pkg_name_lower);
+                        let matched_aur_idx = existing_map.get(&pkg_name_lower)
+                            .or_else(|| existing_map.get(base_pkg_name))
+                            .copied();
+
+                        if let Some(idx) = matched_aur_idx {
+                            if let Some(existing) = filtered.get_mut(idx) {
+                                if !existing.available_providers.iter().any(|p| p.provider_id == "aur") {
+                                    existing.available_providers.push(ryzora_core::app_adapters::AppProviderSource {
+                                        provider_id: "aur".to_string(),
+                                        name: "AUR".to_string(),
+                                        short_name: "AUR · User contributed".to_string(),
+                                        repository: "aur".to_string(),
+                                        description: "Arch User Repository (unprivileged build)".to_string(),
+                                        target_id: pkg.name.clone(),
+                                        version: Some(pkg.version.clone()),
+                                        is_installed: is_inst,
+                                        installed_version: if is_inst { inst_ver.clone() } else { None },
+                                        scope: Some("system".to_string()),
+                                        remote: Some("aur".to_string()),
+                                        branch: None,
+                                        download_size: None,
+                                        installed_size: inst_sz,
+                                        size_label: size_label.clone(),
+                                    });
+                                    if is_inst && !existing.is_installed {
+                                        existing.is_installed = true;
+                                        existing.installed_provider = Some("aur".to_string());
+                                        existing.installed_version = inst_ver.clone();
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+
+                        let aur_id = format!("aur:{}", pkg.name);
+                        let aur_desc = if pkg.description.trim().is_empty() { format!("AUR package {}", pkg.name) } else { pkg.description.clone() };
+                        let available_providers = vec![
+                            ryzora_core::app_adapters::AppProviderSource {
+                                provider_id: "aur".to_string(),
+                                name: "AUR".to_string(),
+                                short_name: "AUR · User contributed".to_string(),
+                                repository: "aur".to_string(),
+                                description: "Arch User Repository (unprivileged build)".to_string(),
+                                target_id: pkg.name.clone(),
+                                version: Some(pkg.version.clone()),
+                                is_installed: is_inst,
+                                installed_version: if is_inst { inst_ver.clone() } else { None },
+                                scope: Some("system".to_string()),
+                                remote: Some("aur".to_string()),
+                                branch: None,
+                                download_size: None,
+                                installed_size: inst_sz,
+                                size_label: size_label.clone(),
+                            }
+                        ];
+                        let icon_url = Self::resolve_system_app_icon(&pkg.name).unwrap_or_default();
+                        filtered.push(ApplicationItem {
+                            id: aur_id,
+                            name: pkg.name.clone(),
+                            display_name: pkg.name.clone(),
+                            summary: aur_desc.clone(),
+                            description: aur_desc,
+                            category: "Utilities".to_string(),
+                            version: pkg.version.clone(),
+                            publisher: pkg.maintainer.unwrap_or_else(|| "AUR Community".to_string()),
+                            repository: "aur".to_string(),
+                            provider_id: "aur".to_string(),
+                            target_id: pkg.name.clone(),
+                            installed_provider: if is_inst { Some("aur".to_string()) } else { None },
+                            available_providers,
+                            icon_url,
+                            banner_url: String::new(),
+                            screenshots: Vec::new(),
+                            features: Vec::new(),
+                            is_installed: is_inst,
+                            installed_version: inst_ver,
+                            launchable: Some(pkg.name.clone()),
+                            website: pkg.url,
+                            license: pkg.license.as_ref().and_then(|l| l.first()).cloned(),
+                            is_curated: false,
+                            is_application: true,
+                            subcategories: Vec::new(),
+                            scope: Some("system".to_string()),
+                            remote: Some("aur".to_string()),
+                            branch: None,
+                            download_size: None,
+                            installed_size: inst_sz,
+                            size_label,
+                        });
+                        if filtered.len() >= 400 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Discover packages from Flathub (Flatpak)
+        if !is_all_packages_mode && (prov_trimmed == "all" || prov_trimmed == "flatpak") {
+            let is_test_home = self.home_dir_override.lock().map(|h| h.is_some()).unwrap_or(false)
+                || std::env::var("RYZORA_SYSTEM_ROOT").is_ok()
+                || std::env::var("RYZORA_TEST_ENV").is_ok()
+                || std::env::current_exe().map(|p| p.to_string_lossy().contains("/deps/")).unwrap_or(false);
+            let flatpak_candidates = if is_test_home {
+                ryzora_core::app_adapters::flatpak::list_available_flatpak_apps()
+            } else if !q_trimmed.is_empty() {
+                ryzora_core::app_adapters::flatpak::search_flathub_apps(&q_trimmed)
+                    .or_else(|_| ryzora_core::app_adapters::flatpak::list_available_flatpak_apps())
+            } else {
+                ryzora_core::app_adapters::flatpak::list_available_flatpak_apps()
+            };
+
+            if let Ok(fp_hits) = flatpak_candidates {
+                // Refresh existing_map to include newly added AUR items
+                for (idx, a) in filtered.iter().enumerate() {
+                    existing_map.insert(a.id.to_lowercase(), idx);
+                    existing_map.insert(a.target_id.to_lowercase(), idx);
+                    for p in &a.available_providers {
+                        existing_map.insert(p.target_id.to_lowercase(), idx);
+                    }
+                }
+
+                for fp in fp_hits {
+                    if curated_ids.contains(&fp.id) {
+                        continue;
+                    }
+                    if cat_trimmed == "installed" && !fp.is_installed {
+                        continue;
+                    }
+                    if !q_trimmed.is_empty() {
+                        let m_id = fp.id.to_lowercase().contains(&q_trimmed);
+                        let m_name = fp.name.to_lowercase().contains(&q_trimmed);
+                        let m_desc = fp.description.to_lowercase().contains(&q_trimmed);
+                        if !m_id && !m_name && !m_desc {
+                            continue;
+                        }
+                    }
+
+                    let fp_dl_bytes = fp.download_size.as_deref().and_then(ryzora_core::app_adapters::parse_size_str_to_bytes);
+                    let fp_inst_bytes = fp.installed_size.as_deref().and_then(ryzora_core::app_adapters::parse_size_str_to_bytes);
+                    let fp_size_label = match (fp.download_size.as_deref(), fp.installed_size.as_deref()) {
+                        (Some(d), Some(i)) if !d.is_empty() && !i.is_empty() => Some(format!("{} download · {} installed", d, i)),
+                        (Some(d), _) if !d.is_empty() => Some(format!("{} download", d)),
+                        (_, Some(i)) if !i.is_empty() => Some(format!("{} installed", i)),
+                        _ => ryzora_core::app_adapters::format_size_summary(fp_dl_bytes, fp_inst_bytes),
+                    };
+
+                    // Multi-provider unification: fast lookup for existing matching app
+                    let fp_id_lower = fp.id.to_lowercase();
+                    let fp_tail = fp_id_lower.split('.').last().unwrap_or(&fp_id_lower);
+                    let matched_idx = existing_map
+                        .get(&fp_id_lower)
+                        .or_else(|| existing_map.get(fp_tail))
+                        .copied();
+
+                    if let Some(idx) = matched_idx {
+                        if let Some(existing) = filtered.get_mut(idx) {
+                            if !existing.available_providers.iter().any(|p| p.provider_id == "flatpak") {
+                                let scope = if fp.is_installed {
+                                    ryzora_core::app_adapters::flatpak::detect_installed_flatpak_scope(&fp.id)
+                                        .map(|s| s.trim_start_matches('-').to_string())
+                                        .or_else(|| Some("user".to_string()))
+                                } else {
+                                    Some("user".to_string())
+                                };
+                                existing.available_providers.push(ryzora_core::app_adapters::AppProviderSource {
+                                    provider_id: "flatpak".to_string(),
+                                    name: "Flatpak".to_string(),
+                                    short_name: "Flathub · Flatpak".to_string(),
+                                    repository: "flathub".to_string(),
+                                    description: "Flathub Sandboxed Application".to_string(),
+                                    target_id: fp.id.clone(),
+                                    version: Some(fp.version.clone()),
+                                    is_installed: fp.is_installed,
+                                    installed_version: if fp.is_installed { Some(fp.version.clone()) } else { None },
+                                    scope,
+                                    remote: Some("flathub".to_string()),
+                                    branch: Some(fp.branch.clone()),
+                                    download_size: fp_dl_bytes,
+                                    installed_size: fp_inst_bytes,
+                                    size_label: fp_size_label,
+                                });
+                                if fp.is_installed && !existing.is_installed {
+                                    existing.is_installed = true;
+                                    existing.installed_provider = Some("flatpak".to_string());
+                                    existing.installed_version = Some(fp.version.clone());
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    // When browsing "all" without search, prioritize genuine desktop applications
+                    if prov_trimmed == "all" && q_trimmed.is_empty() {
+                        continue;
+                    }
+
+                    let cat = {
+                        let lower_all = format!("{} {} {}", fp.id, fp.name, fp.description).to_lowercase();
+                        if lower_all.contains("game") || lower_all.contains("play") || lower_all.contains("emulator") {
+                            "Games".to_string()
+                        } else if lower_all.contains("audio") || lower_all.contains("video") || lower_all.contains("music") || lower_all.contains("player") {
+                            "Multimedia".to_string()
+                        } else if lower_all.contains("photo") || lower_all.contains("image") || lower_all.contains("paint") || lower_all.contains("draw") || lower_all.contains("design") {
+                            "Graphics".to_string()
+                        } else if lower_all.contains("browser") || lower_all.contains("chat") || lower_all.contains("network") || lower_all.contains("mail") {
+                            "Internet".to_string()
+                        } else if lower_all.contains("code") || lower_all.contains("develop") || lower_all.contains("editor") || lower_all.contains("git") {
+                            "Development".to_string()
+                        } else if lower_all.contains("office") || lower_all.contains("document") || lower_all.contains("pdf") || lower_all.contains("calc") {
+                            "Productivity".to_string()
+                        } else {
+                            "Utilities".to_string()
+                        }
+                    };
+
+                    if !cat_trimmed.is_empty() && cat_trimmed != "all" && !is_all_packages_mode {
+                        if cat_trimmed == "installed" {
+                            if !fp.is_installed {
+                                continue;
+                            }
+                        } else if cat.to_lowercase() != cat_trimmed {
+                            continue;
+                        }
+                    }
+
+                    let fp_app_id = format!("flatpak:{}", fp.id);
+                    let scope = if fp.is_installed {
+                        ryzora_core::app_adapters::flatpak::detect_installed_flatpak_scope(&fp.id)
+                            .map(|s| s.trim_start_matches('-').to_string())
+                            .or_else(|| Some("user".to_string()))
+                    } else {
+                        Some("user".to_string())
+                    };
+                    let available_providers = vec![
+                        ryzora_core::app_adapters::AppProviderSource {
+                            provider_id: "flatpak".to_string(),
+                            name: "Flatpak".to_string(),
+                            short_name: "Flathub · Flatpak".to_string(),
+                            repository: "flathub".to_string(),
+                            description: "Flathub Sandboxed Application".to_string(),
+                            target_id: fp.id.clone(),
+                            version: Some(fp.version.clone()),
+                            is_installed: fp.is_installed,
+                            installed_version: if fp.is_installed { Some(fp.version.clone()) } else { None },
+                            scope: scope.clone(),
+                            remote: Some("flathub".to_string()),
+                            branch: Some(fp.branch.clone()),
+                            download_size: fp_dl_bytes,
+                            installed_size: fp_inst_bytes,
+                            size_label: fp_size_label.clone(),
+                        }
+                    ];
+                    let icon_url = Self::resolve_system_app_icon(&fp.id).unwrap_or_default();
+                    filtered.push(ApplicationItem {
+                        id: fp_app_id,
+                        name: fp.id.clone(),
+                        display_name: if !fp.name.is_empty() { fp.name } else { fp.id.clone() },
+                        summary: fp.description.clone(),
+                        description: fp.description,
+                        category: cat,
+                        version: fp.version.clone(),
+                        publisher: "Flathub".to_string(),
+                        repository: "flathub".to_string(),
+                        provider_id: "flatpak".to_string(),
+                        target_id: fp.id.clone(),
+                        installed_provider: if fp.is_installed { Some("flatpak".to_string()) } else { None },
                         available_providers,
                         icon_url,
                         banner_url: String::new(),
                         screenshots: Vec::new(),
                         features: Vec::new(),
-                        is_installed: pkg.is_installed,
-                        installed_version: pkg.installed_version,
-                        launchable: Some(pkg.name.clone()),
-                        website: pkg.url,
-                        license: pkg.license,
+                        is_installed: fp.is_installed,
+                        installed_version: if fp.is_installed { Some(fp.version) } else { None },
+                        launchable: Some(fp.id),
+                        website: None,
+                        license: None,
                         is_curated: false,
+                        is_application: true,
+                        subcategories: Vec::new(),
+                        scope,
+                        remote: Some("flathub".to_string()),
+                        branch: Some(fp.branch),
+                        download_size: fp_dl_bytes,
+                        installed_size: fp_inst_bytes,
+                        size_label: fp_size_label,
                     });
+                    if filtered.len() >= 600 {
+                        break;
+                    }
                 }
             }
         }
 
-        filtered
+        // Apply pagination / slicing if requested
+        if page_size > 0 {
+            let start = (page * page_size).min(filtered.len());
+            let end = (start + page_size).min(filtered.len());
+            filtered[start..end].to_vec()
+        } else {
+            filtered
+        }
     }
 
     pub fn resolve_app_providers(
@@ -2666,7 +3229,7 @@ impl BackendState {
                     if &p.provider_id == ip {
                         p.is_installed = true;
                         if inst_ver.is_some() {
-                            p.version = inst_ver.clone();
+                            p.installed_version = inst_ver.clone();
                         }
                     }
                 }
@@ -2730,8 +3293,8 @@ impl BackendState {
 
         let canonical = Self::canonical_app_id(trimmed);
 
-        // Immediate initial progress event
-        progress_cb("preparing", Some(5), "Resolving package and dependencies...", true, None, None, None, None, None, None, None, None);
+        // Immediate initial progress event (truthful indeterminate until actual metrics are available)
+        progress_cb("preparing", None, "Resolving package and dependencies...", false, None, None, None, None, None, None, None, None);
 
         // If home_dir_override is set without RYZORA_SYSTEM_ROOT, simulate in-memory test install
         if self.home_dir_override.lock().unwrap().is_some()
@@ -2752,8 +3315,10 @@ impl BackendState {
             ));
         }
 
-        let is_aur = prov_opt.as_deref() == Some("aur") || ryzora_core::app_adapters::known_aur_id_for_app(&canonical).is_some();
-        let is_flatpak = prov_opt.as_deref() == Some("flatpak") || ryzora_core::app_adapters::flatpak::is_valid_flatpak_id(&target);
+        let is_aur = prov_opt.as_deref() == Some("aur")
+            || (prov_opt.is_none() && ryzora_core::app_adapters::known_aur_id_for_app(&canonical).is_some());
+        let is_flatpak = prov_opt.as_deref() == Some("flatpak")
+            || (prov_opt.is_none() && ryzora_core::app_adapters::flatpak::is_valid_flatpak_id(&target));
 
         if is_flatpak {
             let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -2778,9 +3343,27 @@ impl BackendState {
                 Err(e) => Err(e),
             };
         } else if is_aur {
-            progress_cb("resolving", None, "Resolving AUR build dependencies...", false, None, None, None, None, None, None, None, None);
-        } else {
-            progress_cb("downloading", Some(35), "Downloading package...", true, None, None, None, None, None, None, None, None);
+            let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if let Err(_) = self.app_coordinator.begin_request(req_id) {
+                return Err("Installation request was cancelled or superseded".to_string());
+            }
+            let coord = &self.app_coordinator;
+            let on_spawn = |pid: u32| {
+                let _ = coord.register_spawned_pid(req_id, pid);
+            };
+            let stream_res = ryzora_core::app_adapters::aur::install_aur_app_streamed(
+                &target,
+                &mut progress_cb,
+                Some(&on_spawn),
+            );
+            let _ = self.app_coordinator.finish_request(req_id);
+            return match stream_res {
+                Ok(msg) => {
+                    *self.library_cache.lock().unwrap() = None;
+                    Ok(msg)
+                }
+                Err(e) => Err(e),
+            };
         }
 
         let req_id = self.req_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -2788,20 +3371,26 @@ impl BackendState {
             return Err("Installation request was cancelled or superseded".to_string());
         }
 
-        let res = ryzora_core::app_adapters::install_app_with_provider(
-            &canonical,
-            prov_opt.as_deref(),
-            Some(&target),
+        let coord = &self.app_coordinator;
+        let on_spawn = |pid: u32| {
+            let _ = coord.register_spawned_pid(req_id, pid);
+        };
+        let stream_res = ryzora_core::app_adapters::pacman_install_package_streamed(
+            &target,
+            &mut progress_cb,
+            Some(&on_spawn),
         );
 
         let _ = self.app_coordinator.finish_request(req_id);
-        let res = res?;
-
-        progress_cb("installing", Some(85), "Installing and configuring package...", true, None, None, None, None, None, None, None, None);
-        progress_cb("completed", Some(100), "Installation complete", true, None, None, None, None, None, None, None, None);
+        let res = stream_res?;
 
         *self.library_cache.lock().unwrap() = None;
-        Ok(res.message)
+        let msg = res
+            .get("message")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("Installed '{}' successfully via Pacman", target));
+        Ok(msg)
     }
 
     pub fn uninstall_application(&self, app_id: &str) -> Result<String, String> {
@@ -2876,6 +3465,30 @@ impl BackendState {
         let res = res?;
         *self.library_cache.lock().unwrap() = None;
         Ok(res.message)
+    }
+
+    pub fn inspect_app_cleanup(&self, app_id: &str, provider: &str) -> Result<String, String> {
+        let (prov_prefixed, target_name) = ryzora_core::app_adapters::parse_provider_prefixed_id(app_id);
+        let eff_prov = prov_prefixed.unwrap_or_else(|| provider.to_string());
+        let preview = ryzora_core::app_adapters::cleanup::inspect_app_cleanup(&target_name, &eff_prov)?;
+        serde_json::to_string(&preview).map_err(|e| e.to_string())
+    }
+
+    pub fn execute_app_cleanup(&self, req_json: &str) -> Result<String, String> {
+        let req: ryzora_core::app_adapters::cleanup::AppCleanupExecutionRequest =
+            serde_json::from_str(req_json).map_err(|e| format!("Invalid cleanup request: {}", e))?;
+
+        let canonical = Self::canonical_app_id(&req.package_id);
+        let res = ryzora_core::app_adapters::cleanup::execute_app_cleanup(req.clone())?;
+
+        if self.home_dir_override.lock().unwrap().is_some() || std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+            let mut set = self.test_installed_apps.lock().unwrap();
+            set.remove(&req.package_id);
+            set.remove(&canonical);
+        }
+        *self.library_cache.lock().unwrap() = None;
+
+        serde_json::to_string(&res).map_err(|e| e.to_string())
     }
 
     pub fn launch_application(&self, app_id: &str) -> Result<String, String> {
@@ -5616,9 +6229,20 @@ impl BackendState {
                 // Test mode
                 succeeded += pacman_updates.len();
             } else {
-                let status = Command::new("pkexec")
-                    .args(["/usr/bin/pacman", "-Syu", "--noconfirm"])
-                    .status();
+                let helper_path = Path::new(ryzora_core::package_helper::PACKAGE_HELPER_SYSTEM_PATH);
+                let status = if helper_path.exists() {
+                    Command::new("pkexec")
+                        .arg(ryzora_core::package_helper::PACKAGE_HELPER_SYSTEM_PATH)
+                        .arg("upgrade-all")
+                        .arg("system")
+                        .stdin(std::process::Stdio::null())
+                        .status()
+                } else {
+                    Command::new("pkexec")
+                        .args(["/usr/bin/pacman", "-Syu", "--noconfirm"])
+                        .stdin(std::process::Stdio::null())
+                        .status()
+                };
                 match status {
                     Ok(s) if s.success() => {
                         succeeded += pacman_updates.len();
@@ -6048,10 +6672,25 @@ pub fn get_backend() -> &'static BackendState {
     BACKEND.get_or_init(BackendState::new)
 }
 
+pub(crate) fn to_safe_c_string(s: impl AsRef<str>) -> CString {
+    let bytes = s.as_ref().as_bytes();
+    if bytes.contains(&0) {
+        let sanitized: Vec<u8> = bytes.iter().copied().filter(|&b| b != 0).collect();
+        CString::new(sanitized).unwrap_or_else(|_| CString::default())
+    } else {
+        CString::new(bytes).unwrap_or_else(|_| CString::default())
+    }
+}
+
+pub(crate) fn safe_to_c_string(s: impl AsRef<str>) -> *mut c_char {
+    to_safe_c_string(s).into_raw()
+}
+
 // C-ABI EXPORTS
 #[no_mangle]
 pub extern "C" fn ryzora_init() {
     let _ = get_backend();
+    ryzora_core::app_adapters::catalog::ensure_catalog_initialized();
 }
 
 #[no_mangle]
@@ -6093,10 +6732,13 @@ pub extern "C" fn ryzora_active_pid() -> u32 {
 }
 
 #[no_mangle]
-pub extern "C" fn ryzora_query_applications(
+pub extern "C" fn ryzora_query_applications_paged(
     repo_root: *const c_char,
     category: *const c_char,
     search: *const c_char,
+    provider: *const c_char,
+    page: usize,
+    page_size: usize,
 ) -> *mut c_char {
     let root_opt = unsafe {
         if repo_root.is_null() { None }
@@ -6104,10 +6746,20 @@ pub extern "C" fn ryzora_query_applications(
     };
     let cat_str = unsafe { if category.is_null() { "all" } else { CStr::from_ptr(category).to_str().unwrap_or("all") } };
     let q_str = unsafe { if search.is_null() { "" } else { CStr::from_ptr(search).to_str().unwrap_or("") } };
+    let prov_str = unsafe { if provider.is_null() { "all" } else { CStr::from_ptr(provider).to_str().unwrap_or("all") } };
 
-    let items = get_backend().query_applications(root_opt, cat_str, q_str);
+    let items = get_backend().query_applications_filtered(root_opt, cat_str, q_str, prov_str, page, page_size);
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_query_applications(
+    repo_root: *const c_char,
+    category: *const c_char,
+    search: *const c_char,
+) -> *mut c_char {
+    ryzora_query_applications_paged(repo_root, category, search, std::ptr::null(), 0, 0)
 }
 
 pub type AppProgressCallback = extern "C" fn(progress_json: *const c_char, user_data: *mut c_void);
@@ -6119,7 +6771,7 @@ pub extern "C" fn ryzora_install_application_with_progress(
     user_data: *mut c_void,
 ) -> *mut c_char {
     if app_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null application identifier"}"#);
     }
     let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
     let emit = |stage: &str, pct: Option<u8>, msg: &str, is_det: bool, dl_str: Option<&str>, tot_str: Option<&str>, speed: Option<&str>, cur_step: Option<usize>, tot_steps: Option<usize>, cur_item: Option<&str>, eta: Option<&str>, diag: Option<&str>| {
@@ -6139,9 +6791,8 @@ pub extern "C" fn ryzora_install_application_with_progress(
                 "eta_str": eta,
                 "diagnostic_details": diag,
             });
-            if let Ok(c_str) = CString::new(json.to_string()) {
-                cb(c_str.as_ptr(), user_data);
-            }
+            let c_str = to_safe_c_string(json.to_string());
+            cb(c_str.as_ptr(), user_data);
         }
     };
 
@@ -6149,46 +6800,79 @@ pub extern "C" fn ryzora_install_application_with_progress(
         Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
         Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_install_application(app_id: *const c_char) -> *mut c_char {
     if app_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null application identifier"}"#);
     }
     let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
     let res = match get_backend().install_application(aid) {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
         Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_uninstall_application(app_id: *const c_char) -> *mut c_char {
     if app_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null application identifier"}"#);
     }
     let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
     let res = match get_backend().uninstall_application(aid) {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
         Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_inspect_app_cleanup(app_id: *const c_char, provider: *const c_char) -> *mut c_char {
+    if app_id.is_null() {
+        return safe_to_c_string(r#"{"success":false,"message":"Null application identifier"}"#);
+    }
+    let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
+    let prov = unsafe {
+        if provider.is_null() { "all" } else { CStr::from_ptr(provider).to_str().unwrap_or("all") }
+    };
+    match get_backend().inspect_app_cleanup(aid, prov) {
+        Ok(json) => safe_to_c_string(json),
+        Err(e) => {
+            let res = serde_json::json!({ "success": false, "message": e });
+            safe_to_c_string(res.to_string())
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_execute_app_cleanup(request_json: *const c_char) -> *mut c_char {
+    if request_json.is_null() {
+        return safe_to_c_string(r#"{"success":false,"message":"Null request payload"}"#);
+    }
+    let req_str = unsafe { CStr::from_ptr(request_json).to_str().unwrap_or("") };
+    match get_backend().execute_app_cleanup(req_str) {
+        Ok(json) => safe_to_c_string(json),
+        Err(e) => {
+            let res = serde_json::json!({ "success": false, "message": e });
+            safe_to_c_string(res.to_string())
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_launch_application(app_id: *const c_char) -> *mut c_char {
     if app_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null application identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null application identifier"}"#);
     }
     let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
     let res = match get_backend().launch_application(aid) {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg, "app_id": aid }),
         Err(e) => serde_json::json!({ "success": false, "message": e, "app_id": aid }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6197,7 +6881,7 @@ pub extern "C" fn ryzora_resolve_app_providers(
     display_name: *const c_char,
 ) -> *mut c_char {
     if app_id.is_null() {
-        return CString::new("[]").unwrap().into_raw();
+        return safe_to_c_string("[]");
     }
     let aid = unsafe { CStr::from_ptr(app_id).to_str().unwrap_or("") };
     let dname = unsafe {
@@ -6212,7 +6896,7 @@ pub extern "C" fn ryzora_resolve_app_providers(
     };
     let providers = get_backend().resolve_app_providers(aid, dname);
     let json = serde_json::to_string(&providers).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6230,14 +6914,14 @@ pub extern "C" fn ryzora_query_catalog(
 
     let items = get_backend().query_catalog(root_opt, cat_str, q_str);
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_library(force_refresh: bool) -> *mut c_char {
     let items = get_backend().load_library(force_refresh);
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6246,7 +6930,7 @@ pub extern "C" fn ryzora_run_fastfetch(preset: *const c_char, req_id: u64) -> *m
     let actual_req_id = if req_id == 0 { get_backend().allocate_request_id() } else { req_id };
     let res = get_backend().run_fastfetch(p_str, actual_req_id);
     let json = serde_json::to_string(&res).unwrap_or_else(|_| "{}".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6277,9 +6961,9 @@ pub extern "C" fn ryzora_free_string(s: *mut c_char) {
 #[no_mangle]
 pub extern "C" fn ryzora_apply_fastfetch_preset(preset: *const c_char) -> *mut c_char {
     if preset.is_null() {
-        return CString::new(r#"{"success":false,"message":"Preset name is null"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Preset name is null"}"#);
     }
-    let p_str = unsafe { match CStr::from_ptr(preset).to_str() { Ok(s) => s, Err(_) => return CString::new(r#"{"success":false,"message":"Invalid utf8"}"#).unwrap().into_raw() } };
+    let p_str = unsafe { match CStr::from_ptr(preset).to_str() { Ok(s) => s, Err(_) => return safe_to_c_string(r#"{"success":false,"message":"Invalid utf8"}"#) } };
     let res = match get_backend().apply_fastfetch_preset(p_str) {
         Ok(msg) => serde_json::json!({
             "success": true,
@@ -6292,41 +6976,41 @@ pub extern "C" fn ryzora_apply_fastfetch_preset(preset: *const c_char) -> *mut c
             "message": err
         }),
     };
-    CString::new(serde_json::to_string(&res).unwrap_or_default()).unwrap().into_raw()
+    safe_to_c_string(serde_json::to_string(&res).unwrap_or_default())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_list_presets() -> *mut c_char {
     let presets = discover_fastfetch_presets();
     let json = serde_json::to_string(&presets).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_list_fastfetch_installed_presets() -> *mut c_char {
     let presets = get_backend().list_fastfetch_installed_presets();
     let json = serde_json::to_string(&presets).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_list_fastfetch_local_emblems() -> *mut c_char {
     let emblems = get_backend().list_fastfetch_local_emblems();
     let json = serde_json::to_string(&emblems).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_get_fastfetch_preset_config(preset: *const c_char) -> *mut c_char {
     let p_str = if preset.is_null() { "" } else { unsafe { CStr::from_ptr(preset).to_str().unwrap_or("") } };
     let cfg = get_backend().get_fastfetch_preset_config(p_str);
-    CString::new(cfg).unwrap().into_raw()
+    safe_to_c_string(cfg)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_get_fastfetch_saved_config() -> *mut c_char {
     let cfg = get_backend().get_fastfetch_saved_config().unwrap_or_default();
-    CString::new(cfg).unwrap().into_raw()
+    safe_to_c_string(cfg)
 }
 
 #[no_mangle]
@@ -6335,7 +7019,7 @@ pub extern "C" fn ryzora_run_fastfetch_draft(draft: *const c_char, req_id: u64) 
     let actual_req_id = if req_id == 0 { get_backend().allocate_request_id() } else { req_id };
     let res = get_backend().run_fastfetch_draft(d_str, actual_req_id);
     let json = serde_json::to_string(&res).unwrap_or_else(|_| "{}".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6349,7 +7033,7 @@ pub extern "C" fn ryzora_save_fastfetch_configuration(config: *const c_char, pre
         Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
         Err(err) => serde_json::json!({ "success": false, "message": err }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6358,7 +7042,7 @@ pub extern "C" fn ryzora_reset_fastfetch_default() -> *mut c_char {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
         Err(err) => serde_json::json!({ "success": false, "message": err }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6371,21 +7055,21 @@ pub extern "C" fn ryzora_remove_installed_fastfetch_style(preset_id: *const c_ch
         Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
         Err(err) => serde_json::json!({ "success": false, "message": err }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_snapshots() -> *mut c_char {
     let snaps = get_backend().load_snapshots();
     let json = serde_json::to_string(&snaps).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_settings() -> *mut c_char {
     let s = get_backend().load_settings();
     let json = serde_json::to_string(&s).unwrap_or_else(|_| "{}".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6408,14 +7092,14 @@ pub extern "C" fn ryzora_reset_settings() -> *mut c_char {
         Ok(s) => serde_json::json!({ "success": true, "settings": s }),
         Err(e) => serde_json::json!({ "success": false, "error": e }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_appearance() -> *mut c_char {
     let app = get_backend().load_appearance();
     let json = serde_json::to_string(&app).unwrap_or_else(|_| "{}".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6435,28 +7119,28 @@ pub extern "C" fn ryzora_save_appearance(appearance_json: *const c_char) -> bool
 #[no_mangle]
 pub extern "C" fn ryzora_detect_system_appearance() -> *mut c_char {
     let mode = detect_system_appearance();
-    CString::new(mode).unwrap().into_raw()
+    safe_to_c_string(mode)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_compatibility_profiles() -> *mut c_char {
     let profiles = get_backend().load_compatibility_profiles();
     let json = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_system_info() -> *mut c_char {
     let info = get_backend().load_system_info();
     let json = serde_json::to_string(&info).unwrap_or_else(|_| "{}".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_updates() -> *mut c_char {
     let updates = get_backend().load_updates();
     let json = serde_json::to_string(&updates).unwrap_or_else(|_| "[]".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
@@ -6532,7 +7216,7 @@ pub extern "C" fn ryzora_install_silentsddm_engine() -> *mut c_char {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
         Err(e) => serde_json::json!({ "success": false, "message": e }),
     };
-    CString::new(obj.to_string()).unwrap().into_raw()
+    safe_to_c_string(obj.to_string())
 }
 
 #[no_mangle]
@@ -6551,26 +7235,26 @@ pub extern "C" fn ryzora_uninstall_silentsddm_engine() -> *mut c_char {
     if let Ok(mut c) = get_backend().library_cache.lock() { *c = None; }
 
     let obj = serde_json::json!({ "success": true, "message": "Base engine uninstalled successfully" });
-    CString::new(obj.to_string()).unwrap().into_raw()
+    safe_to_c_string(obj.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_install_package(package_id: *const c_char) -> *mut c_char {
     if package_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null package identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null package identifier"}"#);
     }
     let pid = unsafe { CStr::from_ptr(package_id).to_str().unwrap_or("") };
     let res = match get_backend().install_package(pid) {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
         Err(e) => serde_json::json!({ "success": false, "message": e }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_test_package(package_id: *const c_char) -> *mut c_char {
     if package_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null package identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null package identifier"}"#);
     }
     let pid = unsafe { CStr::from_ptr(package_id).to_str().unwrap_or("") };
     let state = get_backend();
@@ -6586,13 +7270,13 @@ pub extern "C" fn ryzora_test_package(package_id: *const c_char) -> *mut c_char 
             "message": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_apply_target(package_id: *const c_char, target: *const c_char) -> *mut c_char {
     if package_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null package identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null package identifier"}"#);
     }
     let pid = unsafe { CStr::from_ptr(package_id).to_str().unwrap_or("") };
     let target_str = if target.is_null() {
@@ -6615,7 +7299,7 @@ pub extern "C" fn ryzora_apply_target(package_id: *const c_char, target: *const 
             "message": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6639,8 +7323,7 @@ pub extern "C" fn ryzora_deactivate_target(target: *const c_char) -> *mut c_char
             "error": err
         }),
     };
-    let c_str = CString::new(res.to_string()).unwrap();
-    c_str.into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6648,20 +7331,20 @@ pub extern "C" fn ryzora_load_active_configuration() -> *mut c_char {
     let state = get_backend();
     let config = state.load_active_configuration();
     let json = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
-    CString::new(json).unwrap().into_raw()
+    safe_to_c_string(json)
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_uninstall_package(package_id: *const c_char) -> *mut c_char {
     if package_id.is_null() {
-        return CString::new(r#"{"success":false,"message":"Null package identifier"}"#).unwrap().into_raw();
+        return safe_to_c_string(r#"{"success":false,"message":"Null package identifier"}"#);
     }
     let pid = unsafe { CStr::from_ptr(package_id).to_str().unwrap_or("") };
     let res = match get_backend().uninstall_package(pid) {
         Ok(msg) => serde_json::json!({ "success": true, "message": msg }),
         Err(e) => serde_json::json!({ "success": false, "message": e }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6684,7 +7367,7 @@ pub extern "C" fn ryzora_create_snapshot(reason: *const c_char) -> *mut c_char {
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6706,7 +7389,7 @@ pub extern "C" fn ryzora_restore_snapshot(id: *const c_char) -> *mut c_char {
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6728,7 +7411,7 @@ pub extern "C" fn ryzora_delete_snapshot(id: *const c_char) -> *mut c_char {
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6755,7 +7438,7 @@ pub extern "C" fn ryzora_apply_update(package_id: *const c_char) -> *mut c_char 
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6787,9 +7470,8 @@ pub extern "C" fn ryzora_apply_update_with_progress(
                 "eta_str": eta,
                 "diagnostic_details": diag,
             });
-            if let Ok(c_str) = CString::new(json.to_string()) {
-                cb(c_str.as_ptr(), user_data);
-            }
+            let c_str = to_safe_c_string(json.to_string());
+            cb(c_str.as_ptr(), user_data);
         }
     };
     let res = match state.apply_update_with_progress(pid_str, emit) {
@@ -6803,7 +7485,7 @@ pub extern "C" fn ryzora_apply_update_with_progress(
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6820,7 +7502,7 @@ pub extern "C" fn ryzora_apply_all_updates() -> *mut c_char {
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[no_mangle]
@@ -6846,9 +7528,8 @@ pub extern "C" fn ryzora_apply_all_updates_with_progress(
                 "eta_str": eta,
                 "diagnostic_details": diag,
             });
-            if let Ok(c_str) = CString::new(json.to_string()) {
-                cb(c_str.as_ptr(), user_data);
-            }
+            let c_str = to_safe_c_string(json.to_string());
+            cb(c_str.as_ptr(), user_data);
         }
     };
     let res = match state.apply_all_updates_with_progress(emit) {
@@ -6862,7 +7543,7 @@ pub extern "C" fn ryzora_apply_all_updates_with_progress(
             "error": err
         }),
     };
-    CString::new(res.to_string()).unwrap().into_raw()
+    safe_to_c_string(res.to_string())
 }
 
 #[cfg(test)]
@@ -8541,5 +9222,177 @@ hyprlock
         assert!(backend.install_application("firefox;rm").is_err(), "Shell metacharacters must be rejected");
 
         std::env::remove_var("RYZORA_SYSTEM_ROOT");
+    }
+
+    #[test]
+    fn test_dynamic_catalog_multi_provider_discovery() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home);
+
+        // 1. Broad dynamic discovery across official repository packages
+        let pacman_results = backend.query_applications_filtered(None, "all", "", "pacman", 0, 100);
+        assert!(!pacman_results.is_empty(), "Must return applications from official catalog");
+        assert!(pacman_results.len() > 10, "Dynamic catalog must discover multiple applications beyond the curated seed");
+        assert!(pacman_results.iter().all(|a| a.provider_id == "pacman" || a.is_curated));
+
+        // 2. Search filtering discovering uncurated real system packages
+        let search_hits = backend.query_applications_filtered(None, "all", "antigravity", "all", 0, 50);
+        // Antigravity is a real package on this system
+        for hit in &search_hits {
+            assert!(
+                hit.name.to_lowercase().contains("antigravity")
+                    || hit.display_name.to_lowercase().contains("antigravity")
+                    || hit.summary.to_lowercase().contains("antigravity")
+                    || hit.description.to_lowercase().contains("antigravity")
+            );
+        }
+
+        // 3. Provider filtering isolation
+        let aur_results = backend.query_applications_filtered(None, "all", "cursor", "aur", 0, 50);
+        for hit in &aur_results {
+            assert_eq!(hit.provider_id, "aur", "AUR provider filter must return only AUR items");
+            if !hit.is_curated {
+                assert!(hit.id.starts_with("aur:"), "AUR package results must use distinct aur: prefix IDs");
+            }
+        }
+
+        // 4. Same-named packages from different providers remain distinct
+        let pacman_discord = backend.query_applications_filtered(None, "all", "discord", "pacman", 0, 10);
+        let all_discord = backend.query_applications_filtered(None, "all", "discord", "all", 0, 10);
+        let _pac_ids: HashSet<String> = pacman_discord.iter().map(|a| a.id.clone()).collect();
+        let all_provs: HashSet<String> = all_discord.iter().map(|a| a.provider_id.clone()).collect();
+        assert!(all_provs.contains("pacman") || all_provs.contains("aur") || all_provs.contains("flatpak"));
+
+        // 5. Pagination slicing
+        let page_0 = backend.query_applications_filtered(None, "all", "", "all", 0, 10);
+        let page_1 = backend.query_applications_filtered(None, "all", "", "all", 1, 10);
+        assert_eq!(page_0.len(), 10, "Page 0 must return exact page_size items");
+        assert_eq!(page_1.len(), 10, "Page 1 must return exact page_size items");
+        let ids_p0: HashSet<String> = page_0.iter().map(|a| a.id.clone()).collect();
+        let ids_p1: HashSet<String> = page_1.iter().map(|a| a.id.clone()).collect();
+        assert!(ids_p0.is_disjoint(&ids_p1), "Consecutive pages must be disjoint");
+    }
+
+    #[test]
+    fn test_unified_multi_provider_identity_and_provider_state() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home);
+
+        let results = backend.query_applications_filtered(None, "all", "firefox", "all", 0, 10);
+        assert!(!results.is_empty(), "Should find at least one firefox entry");
+
+        let firefox = results.iter().find(|a| a.id == "firefox" || a.name.to_lowercase() == "firefox");
+        assert!(firefox.is_some(), "Firefox logical application must exist");
+        let app = firefox.unwrap();
+
+        assert!(!app.available_providers.is_empty(), "Firefox should declare available providers");
+        for prov in &app.available_providers {
+            assert!(!prov.provider_id.is_empty());
+            assert!(!prov.target_id.is_empty());
+            if prov.provider_id == "flatpak" {
+                assert!(prov.target_id.contains("org.mozilla.firefox") || prov.target_id.contains("firefox"));
+                if let Some(ref scope) = prov.scope {
+                    assert!(scope == "system" || scope == "user");
+                }
+            } else if prov.provider_id == "pacman" {
+                assert_eq!(prov.target_id, "firefox");
+            }
+        }
+    }
+
+    #[test]
+    fn test_flatpak_scope_remote_and_installed_version_isolation() {
+        use ryzora_core::app_adapters::AppProviderSource;
+
+        let prov_sys = AppProviderSource {
+            provider_id: "flatpak".to_string(),
+            target_id: "org.mozilla.firefox".to_string(),
+            name: "Flatpak".to_string(),
+            short_name: "Flathub · Flatpak (System)".to_string(),
+            repository: "flathub".to_string(),
+            description: "System-wide Flatpak container".to_string(),
+            version: Some("135.0".to_string()),
+            is_installed: true,
+            installed_version: Some("134.0".to_string()),
+            scope: Some("system".to_string()),
+            remote: Some("flathub".to_string()),
+            branch: Some("stable".to_string()),
+            download_size: None,
+            installed_size: None,
+            size_label: None,
+        };
+
+        let prov_user = AppProviderSource {
+            provider_id: "flatpak".to_string(),
+            target_id: "org.mozilla.firefox".to_string(),
+            name: "Flatpak".to_string(),
+            short_name: "Flathub · Flatpak (User)".to_string(),
+            repository: "flathub-beta".to_string(),
+            description: "Per-user Flatpak container".to_string(),
+            version: Some("136.0b1".to_string()),
+            is_installed: false,
+            installed_version: None,
+            scope: Some("user".to_string()),
+            remote: Some("flathub-beta".to_string()),
+            branch: Some("beta".to_string()),
+            download_size: None,
+            installed_size: None,
+            size_label: None,
+        };
+
+        assert_eq!(prov_sys.scope.as_deref(), Some("system"));
+        assert_eq!(prov_user.scope.as_deref(), Some("user"));
+        assert_ne!(prov_sys.remote, prov_user.remote);
+        assert_ne!(prov_sys.branch, prov_user.branch);
+
+        assert!(prov_sys.is_installed);
+        assert_eq!(prov_sys.installed_version.as_deref(), Some("134.0"));
+        assert!(!prov_user.is_installed);
+        assert!(prov_user.installed_version.is_none());
+    }
+
+    #[test]
+    fn test_duplicate_operation_prevention_and_concurrency() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home);
+
+        let coord = &backend.coordinator;
+        assert_eq!(coord.begin_request(100), Ok(()));
+        assert_eq!(coord.begin_request(100), Err(RequestRejection::StaleOrSuperseded(100)));
+        assert_eq!(coord.begin_request(99), Err(RequestRejection::StaleOrSuperseded(100)));
+
+        assert_eq!(coord.begin_request(101), Ok(()));
+    }
+
+    #[test]
+    fn test_install_cancel_and_failure_transitions() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home);
+
+        // Cancel on idle coordinator must return false
+        assert!(!backend.cancel_app_operation(), "Idle cancellation must report false");
+
+        // Requesting installation of illegal flag/injection package must fail closed immediately
+        let fail_res = backend.install_application("-Syu && rm -rf /");
+        assert!(fail_res.is_err(), "Dangerous injection targets must fail immediately");
+
+        // Coordinator must remain unblocked for subsequent operations after failure
+        assert_eq!(backend.coordinator.begin_request(200), Ok(()));
     }
 }

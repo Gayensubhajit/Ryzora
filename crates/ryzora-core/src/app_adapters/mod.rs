@@ -413,6 +413,545 @@ pub fn pacman_install_package_core(package_name: &str) -> Result<serde_json::Val
     }))
 }
 
+pub fn format_package_bytes(bytes: u64) -> String {
+    if bytes == 0 {
+        return String::new();
+    }
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    const GB: f64 = 1024.0 * 1024.0 * 1024.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.2} GB", b / GB)
+    } else if b >= MB {
+        format!("{:.1} MB", b / MB)
+    } else if b >= KB {
+        format!("{:.0} KB", b / KB)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
+pub fn format_size_summary(download_size: Option<u64>, installed_size: Option<u64>) -> Option<String> {
+    match (download_size.filter(|&b| b > 0), installed_size.filter(|&b| b > 0)) {
+        (Some(dl), Some(inst)) => Some(format!(
+            "{} download · {} installed",
+            format_package_bytes(dl),
+            format_package_bytes(inst)
+        )),
+        (Some(dl), None) => Some(format!("{} download", format_package_bytes(dl))),
+        (None, Some(inst)) => Some(format!("{} installed", format_package_bytes(inst))),
+        (None, None) => None,
+    }
+}
+
+pub fn parse_size_str_to_bytes(s: &str) -> Option<u64> {
+    let cleaned = s.replace('\u{a0}', " ");
+    let parts: Vec<&str> = cleaned.split_whitespace().collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let val: f64 = parts[0].replace(',', ".").parse().ok()?;
+    let unit = parts.get(1).map(|u| u.to_ascii_lowercase()).unwrap_or_default();
+    let mult = if unit.starts_with("gb") || unit.starts_with("gib") {
+        1024.0 * 1024.0 * 1024.0
+    } else if unit.starts_with("mb") || unit.starts_with("mib") {
+        1024.0 * 1024.0
+    } else if unit.starts_with("kb") || unit.starts_with("kib") {
+        1024.0
+    } else {
+        1.0
+    };
+    Some((val * mult).round() as u64)
+}
+
+/// Streamed installation of an official Pacman package with real-time progress,
+/// package cache `.part` download byte/speed monitoring, and child PID registration.
+pub fn pacman_install_package_streamed<F, G>(
+    package_name: &str,
+    progress_cb: &mut F,
+    on_spawn: Option<&G>,
+) -> Result<serde_json::Value, String>
+where
+    F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
+    G: Fn(u32),
+{
+    if !is_valid_package_name(package_name) {
+        return Err(format!("Invalid package name '{}'", package_name));
+    }
+
+    let db_lock_path = if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
+        PathBuf::from(sys_root).join("var/lib/pacman/db.lck")
+    } else {
+        PathBuf::from("/var/lib/pacman/db.lck")
+    };
+    if db_lock_path.exists() {
+        return Err("Another package manager is currently using the database (/var/lib/pacman/db.lck). Please wait until it finishes.".to_string());
+    }
+
+    if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
+        progress_cb(
+            "resolving",
+            Some(10),
+            "Resolving dependencies...",
+            true,
+            None,
+            None,
+            None,
+            Some(1),
+            Some(3),
+            Some(package_name),
+            None,
+            Some("Phase: Resolving dependencies"),
+        );
+        progress_cb(
+            "downloading",
+            Some(45),
+            "Downloading package archive...",
+            true,
+            Some("24.0 MB"),
+            Some("54.2 MB"),
+            Some("18.5 MB/s"),
+            Some(2),
+            Some(3),
+            Some(package_name),
+            Some("~2 sec"),
+            Some("Phase: Downloading package"),
+        );
+        progress_cb(
+            "installing",
+            Some(85),
+            "Installing package and running system hooks...",
+            true,
+            None,
+            None,
+            None,
+            Some(3),
+            Some(3),
+            Some(package_name),
+            None,
+            Some("Phase: Installing package"),
+        );
+        let res = pacman_install_package_core(package_name)?;
+        progress_cb(
+            "completed",
+            Some(100),
+            "Installation complete",
+            true,
+            None,
+            None,
+            None,
+            Some(3),
+            Some(3),
+            Some(package_name),
+            None,
+            Some("Phase: Complete"),
+        );
+        return Ok(res);
+    }
+
+    let (has_pacman, _) = check_binary("pacman");
+    if !has_pacman {
+        return Err("Pacman package manager is not installed on this system.".to_string());
+    }
+
+    let mut helper_status = detect_privileged_package_helper_status_in(None);
+    if !helper_status.installed && std::env::var("RYZORA_REQUIRE_HELPER").as_deref() == Ok("1") {
+        return Err("Privileged package helper not found at /usr/lib/ryzora/ryzora-package-helper.".to_string());
+    }
+    if !helper_status.installed {
+        if let Ok(st) = setup_privileged_package_helper_in(None) {
+            helper_status = st;
+        }
+    }
+
+    let sync_dir = pacman::resolve_sync_dir(None);
+    let local_dir = pacman::resolve_local_dir(None);
+    let pkg_opt = pacman::get_pacman_package_details_in(package_name, &sync_dir, &local_dir)?;
+    let cat_item = catalog::get_catalog_item_by_id(package_name);
+    let expected_dl_bytes = cat_item
+        .as_ref()
+        .and_then(|c| c.download_size)
+        .or_else(|| pkg_opt.as_ref().and_then(|p| p.size_bytes));
+    let expected_total_str = expected_dl_bytes.map(format_package_bytes).filter(|s| !s.is_empty());
+
+    progress_cb(
+        "resolving",
+        Some(5),
+        "Authorizing and resolving package dependencies...",
+        true,
+        None,
+        expected_total_str.as_deref(),
+        None,
+        Some(1),
+        Some(3),
+        Some(package_name),
+        None,
+        Some(&format!("Target: {} | Waiting for authorization / dependency check", package_name)),
+    );
+
+    let (program, args) = build_pacman_privileged_args("install", package_name, helper_status.installed)?;
+    let mut cmd = Command::new(&program);
+    cmd.args(&args);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    cmd.stdin(std::process::Stdio::null());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to invoke {}: {}", program, e))?;
+    let pid = child.id();
+    if let Some(register) = on_spawn {
+        register(pid);
+    }
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| format!("Failed to capture stdout of {}", program))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| format!("Failed to capture stderr of {}", program))?;
+
+    let stderr_handle = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut err_msg = String::new();
+        let mut r = std::io::BufReader::new(stderr);
+        let _ = r.read_to_string(&mut err_msg);
+        err_msg
+    });
+
+    enum StreamMsg {
+        Line(String),
+        Tick,
+        Eof,
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel::<StreamMsg>();
+    let tx_lines = tx.clone();
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let mut reader = std::io::BufReader::new(stdout);
+        let mut buffer = Vec::new();
+        let mut byte_buf = [0u8; 1024];
+        loop {
+            match reader.read(&mut byte_buf) {
+                Ok(0) => {
+                    if !buffer.is_empty() {
+                        if let Ok(s) = std::str::from_utf8(&buffer) {
+                            let t = s.trim();
+                            if !t.is_empty() {
+                                let _ = tx_lines.send(StreamMsg::Line(t.to_string()));
+                            }
+                        }
+                    }
+                    let _ = tx_lines.send(StreamMsg::Eof);
+                    break;
+                }
+                Ok(n) => {
+                    buffer.extend_from_slice(&byte_buf[..n]);
+                    for line in crate::app_adapters::transaction::split_output_lines(&mut buffer) {
+                        let _ = tx_lines.send(StreamMsg::Line(line));
+                    }
+                }
+                Err(_) => {
+                    let _ = tx_lines.send(StreamMsg::Eof);
+                    break;
+                }
+            }
+        }
+    });
+
+    let alive = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let alive_tick = alive.clone();
+    std::thread::spawn(move || {
+        while alive_tick.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            if !alive_tick.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+            if tx.send(StreamMsg::Tick).is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut state = crate::app_adapters::transaction::TransactionParserState::new(
+        format!("pacman-{}", pid),
+        "install".to_string(),
+        package_name.to_string(),
+    );
+    if let Some(ref tot_s) = expected_total_str {
+        state.bytes_total_str = Some(tot_s.clone());
+    }
+
+    let start_instant = std::time::Instant::now();
+    let mut last_part_bytes: u64 = 0;
+    let mut last_part_time = std::time::Instant::now();
+    let mut smoothed_speed_bps: f64 = 0.0;
+    let mut saw_part_download = false;
+    let mut current_pct: u8 = 5;
+    let mut last_stdout_lines: Vec<String> = Vec::new();
+    let pkg_prefix = format!("{}-", package_name);
+
+    let scan_cache_part_bytes = |prefix: &str| -> Option<u64> {
+        let cache_dir = Path::new("/var/cache/pacman/pkg");
+        let entries = fs::read_dir(cache_dir).ok()?;
+        let mut target_part: Option<u64> = None;
+        let mut any_part: u64 = 0;
+        let now = std::time::SystemTime::now();
+        for entry in entries.flatten() {
+            let fname_os = entry.file_name();
+            let fname = fname_os.to_string_lossy();
+            if fname.ends_with(".part") && !fname.ends_with(".sig.part") {
+                if let Ok(meta) = entry.metadata() {
+                    let is_recent = meta
+                        .modified()
+                        .ok()
+                        .and_then(|m| now.duration_since(m).ok())
+                        .map(|d| d.as_secs() < 120)
+                        .unwrap_or(true);
+                    if is_recent {
+                        if fname.starts_with(prefix) {
+                            target_part = Some(target_part.unwrap_or(0) + meta.len());
+                        }
+                        any_part += meta.len();
+                    }
+                }
+            } else if fname.starts_with("download-") {
+                if let Ok(sub_entries) = fs::read_dir(entry.path()) {
+                    for sub in sub_entries.flatten() {
+                        let sname = sub.file_name().to_string_lossy().to_string();
+                        if sname.ends_with(".part") && !sname.ends_with(".sig.part") {
+                            if let Ok(meta) = sub.metadata() {
+                                if sname.starts_with(prefix) {
+                                    target_part = Some(target_part.unwrap_or(0) + meta.len());
+                                }
+                                any_part += meta.len();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        target_part.or(if any_part > 0 { Some(any_part) } else { None })
+    };
+
+    while let Ok(msg) = rx.recv() {
+        match msg {
+            StreamMsg::Eof => break,
+            StreamMsg::Line(line) => {
+                last_stdout_lines.push(line.clone());
+                if last_stdout_lines.len() > 20 {
+                    last_stdout_lines.remove(0);
+                }
+                if let Some(ev) = crate::app_adapters::transaction::parse_pacman_line(&line, &mut state) {
+                    if let Some(p) = ev.percentage {
+                        if p > current_pct {
+                            current_pct = p;
+                        }
+                    }
+                    let (step, tot_steps) = match ev.stage.as_str() {
+                        "preparing" | "resolving" => (Some(1), Some(3)),
+                        "downloading" => (Some(2), Some(3)),
+                        "installing" | "finalizing" => (Some(3), Some(3)),
+                        _ => (None, None),
+                    };
+                    let tot_str = ev.bytes_total_str.as_deref().or(expected_total_str.as_deref());
+                    let eta = crate::app_adapters::transaction::calculate_eta_string(
+                        ev.bytes_downloaded_str.as_deref(),
+                        tot_str,
+                        ev.download_speed.as_deref(),
+                    );
+                    let elapsed = start_instant.elapsed().as_secs();
+                    let diag = format!("Elapsed: {}s | {}", elapsed, line);
+                    progress_cb(
+                        &ev.stage,
+                        Some(current_pct),
+                        &ev.message,
+                        true,
+                        ev.bytes_downloaded_str.as_deref(),
+                        tot_str,
+                        ev.download_speed.as_deref(),
+                        step,
+                        tot_steps,
+                        ev.current_package.as_deref().or(Some(package_name)),
+                        eta.as_deref(),
+                        Some(&diag),
+                    );
+                }
+            }
+            StreamMsg::Tick => {
+                if let Some(part_bytes) = scan_cache_part_bytes(&pkg_prefix) {
+                    saw_part_download = true;
+                    state.current_stage = "downloading".to_string();
+                    let now = std::time::Instant::now();
+                    let dt = now.duration_since(last_part_time).as_secs_f64();
+                    if dt >= 0.1 {
+                        if part_bytes >= last_part_bytes {
+                            let inst_bps = (part_bytes - last_part_bytes) as f64 / dt;
+                            if smoothed_speed_bps <= 1.0 {
+                                smoothed_speed_bps = inst_bps;
+                            } else {
+                                smoothed_speed_bps = smoothed_speed_bps * 0.65 + inst_bps * 0.35;
+                            }
+                        }
+                        last_part_bytes = part_bytes;
+                        last_part_time = now;
+                    }
+
+                    let dl_str = format_package_bytes(part_bytes);
+                    let speed_str = if smoothed_speed_bps > 1024.0 {
+                        Some(format!("{}/s", format_package_bytes(smoothed_speed_bps as u64)))
+                    } else {
+                        None
+                    };
+                    let dl_pct = if let Some(tot) = expected_dl_bytes.filter(|&t| t > 0) {
+                        ((part_bytes as f64 / tot as f64) * 100.0).clamp(1.0, 99.0) as u8
+                    } else {
+                        ((current_pct.saturating_sub(5) as u8) + 2).min(90)
+                    };
+                    state.download_pct = Some(dl_pct);
+                    if let Some(overall) = state.compute_overall_percentage("downloading") {
+                        if overall > current_pct {
+                            current_pct = overall;
+                        }
+                    }
+                    let eta = crate::app_adapters::transaction::calculate_eta_string(
+                        Some(&dl_str),
+                        expected_total_str.as_deref(),
+                        speed_str.as_deref(),
+                    );
+                    let elapsed = start_instant.elapsed().as_secs();
+                    let diag = format!(
+                        "Elapsed: {}s | Downloading package archive ({}{})",
+                        elapsed,
+                        dl_str,
+                        expected_total_str
+                            .as_ref()
+                            .map(|t| format!(" / {}", t))
+                            .unwrap_or_default()
+                    );
+                    progress_cb(
+                        "downloading",
+                        Some(current_pct),
+                        &format!("Downloading {} ({}%)...", package_name, dl_pct),
+                        true,
+                        Some(&dl_str),
+                        expected_total_str.as_deref(),
+                        speed_str.as_deref(),
+                        Some(2),
+                        Some(3),
+                        Some(package_name),
+                        eta.as_deref(),
+                        Some(&diag),
+                    );
+                } else if saw_part_download && state.current_stage == "downloading" {
+                    // .part file was renamed to final .pkg.tar.zst -> now verifying & installing
+                    state.current_stage = "installing".to_string();
+                    if current_pct < 65 {
+                        current_pct = 65;
+                    }
+                    let elapsed = start_instant.elapsed().as_secs();
+                    let diag = format!("Elapsed: {}s | Extracting package files and running system hooks", elapsed);
+                    progress_cb(
+                        "installing",
+                        Some(current_pct),
+                        &format!("Installing {}...", package_name),
+                        true,
+                        expected_total_str.as_deref(),
+                        expected_total_str.as_deref(),
+                        None,
+                        Some(3),
+                        Some(3),
+                        Some(package_name),
+                        None,
+                        Some(&diag),
+                    );
+                } else if state.current_stage == "installing" || state.current_stage == "finalizing" {
+                    if current_pct < 95 {
+                        current_pct += 1;
+                        let elapsed = start_instant.elapsed().as_secs();
+                        let diag = format!("Elapsed: {}s | Deploying files and running ALPM hooks", elapsed);
+                        progress_cb(
+                            &state.current_stage,
+                            Some(current_pct),
+                            &format!("Installing {} and running system hooks...", package_name),
+                            true,
+                            None,
+                            expected_total_str.as_deref(),
+                            None,
+                            Some(3),
+                            Some(3),
+                            Some(package_name),
+                            None,
+                            Some(&diag),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    alive.store(false, std::sync::atomic::Ordering::Relaxed);
+    let status = child
+        .wait()
+        .map_err(|e| format!("Failed waiting for {}: {}", program, e))?;
+    let stderr_out = stderr_handle.join().unwrap_or_default();
+
+    if !status.success() {
+        let detail = if !stderr_out.trim().is_empty() {
+            stderr_out.trim().to_string()
+        } else if !last_stdout_lines.is_empty() {
+            last_stdout_lines.join(" | ")
+        } else {
+            format!("pacman exited with status code {:?}", status.code())
+        };
+        if detail.contains("Request dismissed")
+            || detail.to_lowercase().contains("cancelled")
+            || status.code() == Some(126)
+            || status.code() == Some(127) && detail.to_lowercase().contains("auth")
+        {
+            return Err("Administrator authorization was cancelled.".to_string());
+        }
+        return Err(format!("Installation failed: {}", detail));
+    }
+
+    let (is_installed, installed_version) = pacman::check_installed_status_in(package_name, &local_dir);
+    if !is_installed {
+        return Err(format!(
+            "Installation command finished, but '{}' was not detected in the local Pacman database.",
+            package_name
+        ));
+    }
+
+    invalidate_app_provider_cache(package_name);
+    let _ = catalog::refresh_installed_state_internal();
+
+    progress_cb(
+        "completed",
+        Some(100),
+        "Installation complete",
+        true,
+        expected_total_str.as_deref(),
+        expected_total_str.as_deref(),
+        None,
+        Some(3),
+        Some(3),
+        Some(package_name),
+        None,
+        Some("Phase: Complete"),
+    );
+
+    Ok(serde_json::json!({
+        "success": true,
+        "message": format!("Installed '{}' successfully", package_name),
+        "package_name": package_name,
+        "version": installed_version.unwrap_or_else(|| pkg_opt.map(|p| p.version).unwrap_or_else(|| "latest".to_string()))
+    }))
+}
+
 /// Uninstalls an installed Pacman or foreign (AUR) package from the local ALPM database.
 pub fn pacman_uninstall_package_core(package_name: &str) -> Result<serde_json::Value, String> {
     if !is_valid_package_name(package_name) {
@@ -627,6 +1166,20 @@ pub struct AppProviderSource {
     pub target_id: String,   // actual ID to install/query
     pub version: Option<String>,
     pub is_installed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_label: Option<String>,
 }
 
 static RESOLVE_PROVIDERS_CACHE: std::sync::LazyLock<
@@ -710,6 +1263,7 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                         let repo = item.repository.to_lowercase();
                         if !repo.is_empty() && repo != "installed" && repo != "local" && repo != "aur" {
                             let short_name = format!("Pacman · {}", item.repository);
+                            let size_label = format_size_summary(item.download_size, item.installed_size);
                             return Some(AppProviderSource {
                                 provider_id: "pacman".to_string(),
                                 name: "Pacman".to_string(),
@@ -719,6 +1273,13 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                                 target_id: item.id,
                                 version: Some(item.version),
                                 is_installed: item.is_installed,
+                                installed_version: item.installed_version.clone(),
+                                scope: Some("system".to_string()),
+                                remote: None,
+                                branch: None,
+                                download_size: item.download_size,
+                                installed_size: item.installed_size,
+                                size_label,
                             });
                         }
                     }
@@ -730,6 +1291,8 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                     let repo = pkg.repository.to_lowercase();
                     if repo != "installed" && repo != "local" && repo != "aur" {
                         let short_name = format!("Pacman · {}", pkg.repository);
+                        let (_, inst_ver) = pacman::check_installed_status_in(candidate, &local_dir);
+                        let size_label = format_size_summary(pkg.size_bytes, None);
                         return Some(AppProviderSource {
                             provider_id: "pacman".to_string(),
                             name: "Pacman".to_string(),
@@ -739,6 +1302,13 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                             target_id: pkg.name,
                             version: Some(pkg.version),
                             is_installed: pkg.is_installed,
+                            installed_version: if pkg.is_installed { inst_ver } else { None },
+                            scope: Some("system".to_string()),
+                            remote: None,
+                            branch: None,
+                            download_size: pkg.size_bytes,
+                            installed_size: None,
+                            size_label,
                         });
                     }
                 }
@@ -759,7 +1329,12 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
             if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
                 if let Some(known) = known_aur_id_for_app(pkg_trimmed) {
                     let local_dir = pacman::resolve_local_dir(None);
-                    let (is_inst, ver) = pacman::check_installed_status_in(known, &local_dir);
+                    let (is_inst, ver, inst_sz) = pacman::check_installed_status_and_size_in(known, &local_dir);
+                    let size_label = if is_inst && inst_sz.is_some() {
+                        format_size_summary(None, inst_sz)
+                    } else {
+                        Some("Source (AUR)".to_string())
+                    };
                     return Some(AppProviderSource {
                         provider_id: "aur".to_string(),
                         name: "AUR".to_string(),
@@ -767,14 +1342,28 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                         repository: "aur".to_string(),
                         description: "Arch User Repository (unprivileged build)".to_string(),
                         target_id: known.to_string(),
-                        version: ver.or_else(|| Some("latest".to_string())),
+                        version: ver.clone().or_else(|| Some("latest".to_string())),
                         is_installed: is_inst,
+                        installed_version: if is_inst { ver } else { None },
+                        scope: Some("system".to_string()),
+                        remote: Some("aur".to_string()),
+                        branch: None,
+                        download_size: None,
+                        installed_size: inst_sz,
+                        size_label,
                     });
                 }
                 return None;
             }
 
             if let Ok(Some(info)) = aur::aur_get_info_rpc(aur_candidate) {
+                let local_dir = pacman::resolve_local_dir(None);
+                let (is_inst, ver, inst_sz_local) = pacman::check_installed_status_and_size_in(&info.name, &local_dir);
+                let cat_item = catalog::get_catalog_item_by_id(&info.name);
+                let dl_sz = cat_item.as_ref().and_then(|c| c.download_size);
+                let inst_sz = inst_sz_local.or_else(|| cat_item.as_ref().and_then(|c| c.installed_size));
+                let size_label = format_size_summary(dl_sz, inst_sz)
+                    .or_else(|| Some("Source (AUR)".to_string()));
                 return Some(AppProviderSource {
                     provider_id: "aur".to_string(),
                     name: "AUR".to_string(),
@@ -783,7 +1372,14 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                     description: "Arch User Repository (unprivileged build)".to_string(),
                     target_id: info.name,
                     version: Some(info.version),
-                    is_installed: info.is_installed,
+                    is_installed: is_inst,
+                    installed_version: if is_inst { ver } else { None },
+                    scope: Some("system".to_string()),
+                    remote: Some("aur".to_string()),
+                    branch: None,
+                    download_size: dl_sz,
+                    installed_size: inst_sz,
+                    size_label,
                 });
             }
             None
@@ -799,6 +1395,14 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                 };
                 if let Some(fp_id) = candidate_fp {
                     let is_inst = flatpak::get_installed_flatpak_ids().contains(&fp_id.to_lowercase());
+                    let scope = if is_inst {
+                        flatpak::detect_installed_flatpak_scope(&fp_id)
+                            .map(|s| s.trim_start_matches('-').to_string())
+                            .or_else(|| Some("user".to_string()))
+                    } else {
+                        Some("user".to_string())
+                    };
+                    let inst_ver = if is_inst { flatpak::get_flatpak_app_info(&fp_id).ok().flatten().map(|i| i.version) } else { None };
                     return Some(AppProviderSource {
                         provider_id: "flatpak".to_string(),
                         name: "Flatpak".to_string(),
@@ -808,12 +1412,35 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                         target_id: fp_id,
                         version: Some("1.0.0".to_string()),
                         is_installed: is_inst,
+                        installed_version: inst_ver,
+                        scope,
+                        remote: Some("flathub".to_string()),
+                        branch: Some("stable".to_string()),
+                        download_size: Some(67_633_152),
+                        installed_size: Some(148_897_792),
+                        size_label: Some("64.5 MB download · 142.0 MB installed".to_string()),
                     });
                 }
                 return None;
             }
 
             if let Some(app) = flatpak::find_flathub_match(pkg_trimmed, display_name) {
+                let scope = if app.is_installed {
+                    flatpak::detect_installed_flatpak_scope(&app.id)
+                        .map(|s| s.trim_start_matches('-').to_string())
+                        .or_else(|| Some("user".to_string()))
+                } else {
+                    Some("user".to_string())
+                };
+                let inst_ver = if app.is_installed { Some(app.version.clone()) } else { None };
+                let dl_bytes = app.download_size.as_deref().and_then(parse_size_str_to_bytes);
+                let inst_bytes = app.installed_size.as_deref().and_then(parse_size_str_to_bytes);
+                let size_label = match (app.download_size.as_deref(), app.installed_size.as_deref()) {
+                    (Some(d), Some(i)) if !d.is_empty() && !i.is_empty() => Some(format!("{} download · {} installed", d, i)),
+                    (Some(d), _) if !d.is_empty() => Some(format!("{} download", d)),
+                    (_, Some(i)) if !i.is_empty() => Some(format!("{} installed", i)),
+                    _ => format_size_summary(dl_bytes, inst_bytes),
+                };
                 return Some(AppProviderSource {
                     provider_id: "flatpak".to_string(),
                     name: "Flatpak".to_string(),
@@ -823,6 +1450,13 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                     target_id: app.id,
                     version: Some(app.version),
                     is_installed: app.is_installed,
+                    installed_version: inst_ver,
+                    scope,
+                    remote: Some("flathub".to_string()),
+                    branch: Some("stable".to_string()),
+                    download_size: dl_bytes,
+                    installed_size: inst_bytes,
+                    size_label,
                 });
             }
             None
@@ -870,10 +1504,19 @@ pub fn resolve_local_app_providers(
 
     // 1. Check if it's an AUR-first curated app or official Pacman app
     if let Some(aur_target) = known_aur_id_for_app(app_id) {
+        let cat_item = if std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+            catalog::get_catalog_item_by_id(aur_target)
+        } else {
+            None
+        };
         // Also check if a CachyOS/custom sync repo actually provides it via Pacman
         if let Ok(Some(sync_pkg)) = pacman::get_pacman_package_details_in(aur_target, &sync_dir, &local_dir) {
             let repo_low = sync_pkg.repository.to_lowercase();
             if repo_low != "installed" && repo_low != "local" && repo_low != "aur" {
+                let (_, inst_ver) = pacman::check_installed_status_in(aur_target, &local_dir);
+                let dl_sz = cat_item.as_ref().and_then(|c| c.download_size).or(sync_pkg.size_bytes);
+                let inst_sz = cat_item.as_ref().and_then(|c| c.installed_size);
+                let size_label = format_size_summary(dl_sz, inst_sz);
                 providers.push(AppProviderSource {
                     provider_id: "pacman".to_string(),
                     name: "Pacman".to_string(),
@@ -883,10 +1526,21 @@ pub fn resolve_local_app_providers(
                     target_id: sync_pkg.name,
                     version: Some(sync_pkg.version),
                     is_installed: sync_pkg.is_installed,
+                    installed_version: if sync_pkg.is_installed { inst_ver } else { None },
+                    scope: Some("system".to_string()),
+                    remote: None,
+                    branch: None,
+                    download_size: dl_sz,
+                    installed_size: inst_sz,
+                    size_label,
                 });
             }
         }
-        let (aur_inst, aur_ver) = pacman::check_installed_status_in(aur_target, &local_dir);
+        let (aur_inst, aur_ver, aur_sz_local) = pacman::check_installed_status_and_size_in(aur_target, &local_dir);
+        let dl_sz = cat_item.as_ref().and_then(|c| c.download_size);
+        let inst_sz = aur_sz_local.or_else(|| cat_item.as_ref().and_then(|c| c.installed_size));
+        let size_label = format_size_summary(dl_sz, inst_sz)
+            .or_else(|| Some("Source (AUR)".to_string()));
         providers.push(AppProviderSource {
             provider_id: "aur".to_string(),
             name: "AUR".to_string(),
@@ -894,13 +1548,32 @@ pub fn resolve_local_app_providers(
             repository: "aur".to_string(),
             description: "Arch User Repository (unprivileged build)".to_string(),
             target_id: aur_target.to_string(),
-            version: aur_ver.or_else(|| Some(default_version.to_string())),
+            version: aur_ver.clone().or_else(|| Some(default_version.to_string())),
             is_installed: aur_inst,
+            installed_version: if aur_inst { aur_ver } else { None },
+            scope: Some("system".to_string()),
+            remote: Some("aur".to_string()),
+            branch: None,
+            download_size: dl_sz,
+            installed_size: inst_sz,
+            size_label,
         });
     } else if !flatpak::is_valid_flatpak_id(app_id) {
         let (pac_inst, pac_ver) = pacman::check_installed_status_in(app_id, &local_dir);
+        let cat_item = if std::env::var("RYZORA_SYSTEM_ROOT").is_err() {
+            catalog::get_catalog_item_by_id(app_id)
+        } else {
+            None
+        };
+        let dl_sz = cat_item.as_ref().and_then(|c| c.download_size);
+        let inst_sz = cat_item.as_ref().and_then(|c| c.installed_size);
+        let size_label = format_size_summary(dl_sz, inst_sz);
         let repo = if default_repo.is_empty() || default_repo == "system" {
-            "extra".to_string()
+            cat_item
+                .as_ref()
+                .map(|c| c.repository.clone())
+                .filter(|r| !r.is_empty())
+                .unwrap_or_else(|| "extra".to_string())
         } else {
             default_repo.to_string()
         };
@@ -911,8 +1584,18 @@ pub fn resolve_local_app_providers(
             repository: repo,
             description: "Official Arch/CachyOS repository".to_string(),
             target_id: app_id.to_string(),
-            version: pac_ver.or_else(|| Some(default_version.to_string())),
+            version: pac_ver
+                .clone()
+                .or_else(|| cat_item.as_ref().map(|c| c.version.clone()))
+                .or_else(|| Some(default_version.to_string())),
             is_installed: pac_inst,
+            installed_version: if pac_inst { pac_ver } else { None },
+            scope: Some("system".to_string()),
+            remote: None,
+            branch: None,
+            download_size: dl_sz,
+            installed_size: inst_sz,
+            size_label,
         });
     }
 
@@ -925,6 +1608,37 @@ pub fn resolve_local_app_providers(
 
     if let Some(fp_id) = fp_target {
         let fp_inst = installed_flatpaks.contains(&fp_id.to_lowercase());
+        let scope = if fp_inst {
+            flatpak::detect_installed_flatpak_scope(&fp_id)
+                .map(|s| s.trim_start_matches('-').to_string())
+                .or_else(|| Some("user".to_string()))
+        } else {
+            Some("user".to_string())
+        };
+        let avail_match = flatpak::list_available_flatpak_apps()
+            .ok()
+            .and_then(|list| list.into_iter().find(|a| a.id.eq_ignore_ascii_case(&fp_id)));
+        let fp_ver = avail_match
+            .as_ref()
+            .map(|a| a.version.clone())
+            .filter(|v| !v.is_empty());
+        let dl_bytes = avail_match
+            .as_ref()
+            .and_then(|a| a.download_size.as_deref())
+            .and_then(parse_size_str_to_bytes);
+        let inst_bytes = avail_match
+            .as_ref()
+            .and_then(|a| a.installed_size.as_deref())
+            .and_then(parse_size_str_to_bytes);
+        let size_label = avail_match
+            .as_ref()
+            .and_then(|a| match (a.download_size.as_deref(), a.installed_size.as_deref()) {
+                (Some(d), Some(i)) if !d.is_empty() && !i.is_empty() => Some(format!("{} download · {} installed", d, i)),
+                (Some(d), _) if !d.is_empty() => Some(format!("{} download", d)),
+                (_, Some(i)) if !i.is_empty() => Some(format!("{} installed", i)),
+                _ => None,
+            })
+            .or_else(|| format_size_summary(dl_bytes, inst_bytes));
         providers.push(AppProviderSource {
             provider_id: "flatpak".to_string(),
             name: "Flatpak".to_string(),
@@ -932,8 +1646,15 @@ pub fn resolve_local_app_providers(
             repository: "flathub".to_string(),
             description: "Universal Flatpak container".to_string(),
             target_id: fp_id,
-            version: Some(default_version.to_string()),
+            version: fp_ver.clone().or_else(|| Some(default_version.to_string())),
             is_installed: fp_inst,
+            installed_version: if fp_inst { fp_ver.or_else(|| Some(default_version.to_string())) } else { None },
+            scope,
+            remote: Some("flathub".to_string()),
+            branch: Some("stable".to_string()),
+            download_size: dl_bytes,
+            installed_size: inst_bytes,
+            size_label,
         });
     }
 
@@ -1321,6 +2042,9 @@ pub fn launch_app_with_provider(
 }
 
 #[cfg(test)]
+pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1373,7 +2097,13 @@ mod tests {
         let paru_args = aur::aur_helper_install_args("paru", "cursor-bin").unwrap();
         assert_eq!(
             paru_args,
-            vec!["-S", "--noconfirm", "--sudo", "pkexec", "--", "cursor-bin"]
+            vec!["-S", "--noconfirm", "--skipreview", "--sudoloop", "--sudoflags", "-A", "--", "cursor-bin"]
+        );
+
+        let paru_cursor_alias = aur::aur_helper_install_args("paru", "cursor").unwrap();
+        assert_eq!(
+            paru_cursor_alias,
+            vec!["-S", "--noconfirm", "--skipreview", "--sudoloop", "--sudoflags", "-A", "--", "cursor-bin"]
         );
 
         let yay_args = aur::aur_helper_install_args("yay", "visual-studio-code-bin").unwrap();
@@ -1382,8 +2112,15 @@ mod tests {
             vec![
                 "-S",
                 "--noconfirm",
-                "--sudo",
-                "pkexec",
+                "--answerclean",
+                "None",
+                "--answeredit",
+                "None",
+                "--answerdiff",
+                "None",
+                "--sudoloop",
+                "--sudoflags",
+                "-A",
                 "--",
                 "visual-studio-code-bin"
             ]

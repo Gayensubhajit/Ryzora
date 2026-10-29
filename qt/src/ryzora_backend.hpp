@@ -88,6 +88,7 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(QVariantList appsList READ appsList NOTIFY appsChanged)
     Q_PROPERTY(int appsCount READ appsCount NOTIFY appsChanged)
     Q_PROPERTY(bool isAppsLoading READ isAppsLoading NOTIFY appsLoadingChanged)
+    Q_PROPERTY(QString currentAppsProvider READ currentAppsProvider NOTIFY currentAppsProviderChanged)
 
     // Global App Transactions / Installation Manager
     Q_PROPERTY(int activeAppOperationsCount READ activeAppOperationsCount NOTIFY activeAppOperationsChanged)
@@ -142,6 +143,7 @@ public:
     QVariantList appsList() const { return m_appsList; }
     int appsCount() const { return m_appsList.size(); }
     bool isAppsLoading() const { return m_isAppsLoading; }
+    QString currentAppsProvider() const { return m_currentAppsProvider; }
 
     QString fastfetchHtml() const { return m_fastfetchHtml; }
     bool isFastfetchLoading() const { return m_isFastfetchLoading; }
@@ -170,7 +172,7 @@ public:
 
     // Invokable Methods
     Q_INVOKABLE void filterCatalog(const QString &category, const QString &query);
-    Q_INVOKABLE void filterApps(const QString &category, const QString &query);
+    Q_INVOKABLE void filterApps(const QString &category, const QString &query, const QString &provider = "all", int page = 0, int pageSize = 0);
     Q_INVOKABLE void installApp(const QString &appId);
     Q_INVOKABLE void cancelAppOperation(const QString &appId);
     Q_INVOKABLE bool isAppOperating(const QString &appId) const;
@@ -181,6 +183,8 @@ public:
     Q_INVOKABLE QVariantMap getTransactionForApp(const QString &appId) const;
     void updateTransactionProgress(const QString &appId, const QString &stage, int pct, bool isDet, const QString &msg, const QString &dl, const QString &tot, const QString &spd, int curStep, int totSteps, const QString &curItem, const QString &eta, const QString &diag);
     Q_INVOKABLE void uninstallApp(const QString &appId);
+    Q_INVOKABLE void inspectAppCleanup(const QString &appId, const QString &provider);
+    Q_INVOKABLE void executeAppCleanup(const QString &requestJson);
     Q_INVOKABLE void launchApp(const QString &appId);
     Q_INVOKABLE QVariantList resolveAppProviders(const QString &appId, const QString &displayName = QString());
     Q_INVOKABLE void loadLibrary(bool forceRefresh = false);
@@ -245,15 +249,26 @@ public:
     Q_INVOKABLE int activeDecoderCount() const { return m_activeDecoderCount.load(); }
 
     Q_INVOKABLE QString resolveHomePath() const;
+    Q_INVOKABLE static QString resolveRepoRoot();
+    Q_INVOKABLE int baseAppsCatalogCount() const;
+    Q_INVOKABLE QVariantMap getAppById(const QString &appId) const;
+    Q_INVOKABLE QVariantList getCuratedFeaturedApps() const;
+    Q_INVOKABLE QVariantList getCuratedCollection(const QStringList &preferredIds, const QString &categoryFallback, const QString &excludeFeaturedId, int maxItems) const;
+    Q_INVOKABLE QVariantMap getAppsCategoryCounts() const;
+    Q_INVOKABLE QVariantList getFilteredApps(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy) const;
+    Q_INVOKABLE QVariantMap queryVisibleCatalogSlice(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy, const QString &catalogMode, const QVariantList &excludedIds, int startIndex, int maxCount) const;
 
 signals:
     void catalogChanged();
     void appsChanged();
     void appsLoadingChanged();
+    void currentAppsProviderChanged();
     void activeAppOperationsChanged();
     void appInstalled(const QString &appId, bool success, const QString &message);
     void appInstallProgress(const QString &appId, const QString &stage, int percentage, bool isDeterminate, const QString &message, const QString &bytesDownloaded, const QString &bytesTotal, const QString &downloadSpeed, int currentStep = 0, int totalSteps = 0, const QString &currentItem = QString(), const QString &etaStr = QString(), const QString &diagnosticDetails = QString());
     void appUninstalled(const QString &appId, bool success, const QString &message);
+    void appCleanupInspected(const QString &appId, bool success, const QString &previewJson);
+    void appCleanupExecuted(const QString &appId, bool success, const QString &resultJson);
     void appLaunched(const QString &appId, bool success, const QString &message);
     void libraryChanged();
     void activeConfigurationChanged();
@@ -299,10 +314,15 @@ private:
 
     QVariantList m_catalogList;
     QVariantList m_appsList;
+    QVariantList m_cachedAppsCatalog;
+    QVariantList m_cachedAllPackagesCatalog;
+    QString m_activeCatalogScope;
+    void invalidateAppsCatalogCache();
     bool m_isAppsLoading{false};
     std::atomic<uint64_t> m_currentAppsReqId{0};
     QString m_currentAppsCategory{"all"};
     QString m_currentAppsQuery{""};
+    QString m_currentAppsProvider{"all"};
     QVariantList m_libraryList;
     bool m_isCatalogLoading{false};
     bool m_isLibraryLoading{false};

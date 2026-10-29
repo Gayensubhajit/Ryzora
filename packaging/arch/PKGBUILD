@@ -6,8 +6,8 @@ pkgdesc="Universal Linux Desktop Customization Platform"
 arch=('x86_64')
 url="https://github.com/Gayensubhajit/Ryzora"
 license=('MIT')
-depends=('gtk3' 'webkit2gtk-4.1' 'openssl' 'hicolor-icon-theme')
-makedepends=('cargo' 'npm' 'nodejs' 'git')
+depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-quickcontrols2' 'polkit' 'hicolor-icon-theme')
+makedepends=('cargo' 'cmake' 'ninja' 'git')
 optdepends=(
     'hyprland: Wayland compositor support'
     'waybar: Status bar customization'
@@ -15,50 +15,22 @@ optdepends=(
     'fastfetch: System info fetch customization'
     'kitty: GPU-accelerated terminal rice support'
     'alacritty: Fast terminal rice support'
+    'flatpak: Flatpak application repository management'
 )
 provides=('ryzora')
 conflicts=('ryzora-bin')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('f5120df510fd644cab4ff018b8faf037b490a71c59535006de40ce68a1c6cb28')
+sha256sums=('SKIP')
 
 build() {
     cd "$srcdir/$pkgname-$pkgver"
-    npm install --frozen-lockfile || npm install
-    npm run build
-    cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+    cmake -B build -S qt -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build --parallel
 }
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
-
-    # Explicitly install binaries ONLY - NEVER package target/ directory!
-    install -Dm755 "src-tauri/target/release/ryzora" "$pkgdir/usr/bin/ryzora"
-    if [ -f "src-tauri/target/release/ryzora-ci" ]; then
-        install -Dm755 "src-tauri/target/release/ryzora-ci" "$pkgdir/usr/bin/ryzora-ci"
-    fi
-
-    # Desktop entries and MIME registration
-    install -Dm644 "dist-assets/io.ryzora.Ryzora.desktop" "$pkgdir/usr/share/applications/io.ryzora.Ryzora.desktop"
-    ln -sf "io.ryzora.Ryzora.desktop" "$pkgdir/usr/share/applications/ryzora.desktop"
-
-    # AppStream metainfo
-    install -Dm644 "dist-assets/io.ryzora.Ryzora.metainfo.xml" "$pkgdir/usr/share/metainfo/io.ryzora.Ryzora.metainfo.xml"
-
-    # Icons
-    install -Dm644 "dist-assets/icons/hicolor/scalable/apps/ryzora.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/ryzora.svg"
-    for size in 16 32 48 64 128 256 512; do
-        if [ -f "dist-assets/icons/hicolor/${size}x${size}/apps/ryzora.png" ]; then
-            install -Dm644 "dist-assets/icons/hicolor/${size}x${size}/apps/ryzora.png"                 "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/ryzora.png"
-        fi
-    done
-
-    # Privileged helper scripts and Polkit security policies
-    install -Dm755 "src-tauri/resources/ryzora-sddm-helper" "$pkgdir/usr/lib/ryzora/ryzora-sddm-helper"
-    install -Dm755 "src-tauri/resources/ryzora-package-helper" "$pkgdir/usr/lib/ryzora/ryzora-package-helper"
-    install -Dm644 "src-tauri/resources/io.ryzora.sddm.policy" "$pkgdir/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
-    install -Dm644 "src-tauri/resources/io.ryzora.package.policy" "$pkgdir/usr/share/polkit-1/actions/io.ryzora.package.policy"
-    install -Dm644 "src-tauri/resources/io.ryzora.sddm.rules" "$pkgdir/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
-    install -Dm644 "src-tauri/resources/io.ryzora.package.rules" "$pkgdir/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
+    DESTDIR="$pkgdir" cmake --install build
 
     # Documentation & License
     install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

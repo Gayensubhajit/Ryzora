@@ -36,6 +36,12 @@ Item {
     property real savedBrowseScrollY: 0
     property var masterAppsList: []
 
+    readonly property int heroResponsiveHeight: {
+        if (!heroPanel.visible) return 0
+        if (root.height < 800 || root.width < 1400) return 290
+        return 350
+    }
+
     // Dynamic responsive column count (cards stay between 220px and 270px wide)
     readonly property int responsiveColumns: {
         var w = root.width - (root.width < 600 ? 24 : 40)
@@ -133,6 +139,29 @@ Item {
             repository: root.selectedApp.repository || pId,
             version: root.selectedApp.version || ""
         }
+    }
+
+    function isCurrentProviderInstalled() {
+        if (!root.selectedApp) return false
+        var src = currentSelectedProviderSource()
+        if (src && typeof src.is_installed === "boolean") {
+            return src.is_installed
+        }
+        return Boolean(root.selectedApp.is_installed)
+    }
+
+    function currentInstalledVersion() {
+        if (!root.selectedApp) return ""
+        var src = currentSelectedProviderSource()
+        if (src && src.installed_version) return src.installed_version
+        return (root.selectedApp && root.selectedApp.is_installed) ? (root.selectedApp.version || "") : ""
+    }
+
+    function currentAvailableVersion() {
+        if (!root.selectedApp) return ""
+        var src = currentSelectedProviderSource()
+        if (src && src.version) return src.version
+        return (root.selectedApp && root.selectedApp.version) ? root.selectedApp.version : "Latest"
     }
 
     function currentActionAppId() {
@@ -390,7 +419,7 @@ Item {
             var tid = preferredIds[p]
             for (var i = 0; i < list.length; i++) {
                 var item = list[i]
-                if (item && item.id === tid && !seen[item.id]) {
+                if (item && (item.id === tid || item.id.endsWith(":" + tid)) && !seen[item.id]) {
                     res.push(item)
                     seen[item.id] = true
                     break
@@ -401,7 +430,7 @@ Item {
         if (res.length === 0) {
             for (var j = 0; j < list.length && res.length < 5; j++) {
                 var cand = list[j]
-                if (cand && !seen[cand.id] && cand.banner_url) {
+                if (cand && !seen[cand.id]) {
                     res.push(cand)
                     seen[cand.id] = true
                 }
@@ -671,6 +700,7 @@ Item {
     // ──────────────────────────────────────────────────────────────────────────
     Flickable {
         id: mainScroll
+        objectName: "appsMainScroll"
         anchors.fill: parent
         visible: root.selectedApp === null
         contentWidth: width
@@ -827,9 +857,10 @@ Item {
             // ── 2. FEATURED APPLICATION SUPER HERO CAROUSEL (Authentic Windows 11 Microsoft Store Layout) ──
             Rectangle {
                 id: heroPanel
+                objectName: "appsHeroBanner"
                 visible: root.activeFeaturedApp !== null
                 Layout.fillWidth: true
-                Layout.preferredHeight: visible ? (root.width < 760 ? 330 : 375) : 0
+                Layout.preferredHeight: visible ? root.heroResponsiveHeight : 0
                 height: Layout.preferredHeight
                 radius: theme.radiusLg
                 border.color: Qt.rgba(255, 255, 255, 0.12)
@@ -1599,11 +1630,22 @@ Item {
             border.width: 1
             z: 2
 
-            ColumnLayout {
-                id: leftPaneCol
+            Flickable {
+                id: leftPaneFlickable
                 anchors.fill: parent
-                anchors.margins: 22
-                spacing: 0
+                contentWidth: width
+                contentHeight: leftPaneCol.height + 44
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
+
+                ColumnLayout {
+                    id: leftPaneCol
+                    x: 22
+                    y: 22
+                    width: parent.width - 44
+                    height: Math.max(leftPaneFlickable.height - 44, implicitHeight)
+                    spacing: 0
 
                 // ── 1. Top Back Navigation ──
                 RowLayout {
@@ -1725,7 +1767,7 @@ Item {
 
                     // Primary Action: Open Application (when installed)
                     Rectangle {
-                        visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
+                        visible: Boolean(root.selectedApp && root.isCurrentProviderInstalled())
                         width: 228
                         height: 46
                         radius: 6
@@ -1760,7 +1802,7 @@ Item {
 
                     // Primary Action: Install / Get (when not installed and not pending)
                     Rectangle {
-                        visible: Boolean(root.selectedApp && !root.selectedApp.is_installed && !root.isSelectedAppPending())
+                        visible: Boolean(root.selectedApp && !root.isCurrentProviderInstalled() && !root.isSelectedAppPending())
                         width: 228
                         height: 46
                         radius: 6
@@ -1800,7 +1842,7 @@ Item {
                     // ── Active Installation Placeholder (Directs attention to Wide Install Section) ──
                     Rectangle {
                         id: activeInstallPlaceholder
-                        visible: Boolean(root.selectedApp && !root.selectedApp.is_installed && root.isSelectedAppPending() && root.pendingAction === "install")
+                        visible: Boolean(root.selectedApp && !root.isCurrentProviderInstalled() && root.isSelectedAppPending() && root.pendingAction === "install")
                         width: 228
                         height: 40
                         radius: 8
@@ -1835,7 +1877,7 @@ Item {
 
                     // Secondary Action: Uninstall (when installed)
                     Rectangle {
-                        visible: Boolean(root.selectedApp && root.selectedApp.is_installed)
+                        visible: Boolean(root.selectedApp && root.isCurrentProviderInstalled())
                         width: 228
                         height: 34
                         radius: 6
@@ -1923,7 +1965,7 @@ Item {
                                     id: provMouse
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    enabled: !Boolean(root.selectedApp && root.selectedApp.is_installed)
+                                    enabled: !root.isSelectedAppPending()
                                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                     onClicked: {
                                         root.selectedProviderId = modelData.provider_id
@@ -1948,7 +1990,7 @@ Item {
                         spacing: 2
                         Text {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.selectedApp ? (root.selectedApp.version || "Latest") : ""
+                            text: root.currentInstalledVersion() || root.currentAvailableVersion() || "Latest"
                             font.family: appDetailOverlay.uiFont
                             font.pixelSize: 15
                             font.weight: Font.DemiBold
@@ -1982,7 +2024,7 @@ Item {
                                 width: 7
                                 height: 7
                                 radius: 4
-                                color: (root.selectedApp && root.selectedApp.is_installed) ? "#10B981" : theme.accent
+                                color: (root.selectedApp && root.isCurrentProviderInstalled()) ? "#10B981" : theme.accent
                             }
                             Text {
                                 text: {
@@ -1990,7 +2032,7 @@ Item {
                                     if (root.isSelectedAppPending() && root.pendingAction === "install") {
                                         return root.installStage === "cancelling" ? "Cancelling" : "Installing"
                                     }
-                                    if (root.selectedApp.is_installed) return "Installed"
+                                    if (root.isCurrentProviderInstalled()) return "Installed"
                                     var src = root.currentSelectedProviderSource()
                                     if (src) {
                                         if (src.provider_id === "flatpak") return "Flathub"
@@ -2004,7 +2046,7 @@ Item {
                                 font.weight: Font.DemiBold
                                 font.bold: true
                                 color: {
-                                    if (root.selectedApp && root.selectedApp.is_installed) return (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
+                                    if (root.selectedApp && root.isCurrentProviderInstalled()) return (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
                                     if (root.isSelectedAppPending() && root.pendingAction === "install") return theme.accent
                                     return theme.text
                                 }
@@ -2014,7 +2056,7 @@ Item {
                             Layout.alignment: Qt.AlignHCenter
                             text: {
                                 if (root.isSelectedAppPending() && root.pendingAction === "install") return "In progress"
-                                if (root.selectedApp && root.selectedApp.is_installed) return "System state"
+                                if (root.selectedApp && root.isCurrentProviderInstalled()) return "System state"
                                 var src = root.currentSelectedProviderSource()
                                 if (src && src.provider_id === "flatpak") return "Sandboxed Flatpak"
                                 if (src && src.provider_id === "aur") return "AUR User Repo"
@@ -2175,6 +2217,7 @@ Item {
                 }
             }
         }
+    }
 
         // ══════════════════════════════════════════════════════════════════════
         // B. RIGHT CONTENT PANE (Screenshots, Description, Info & Requirements)
@@ -2741,9 +2784,9 @@ Item {
                                 Layout.alignment: Qt.AlignTop
                                 spacing: 10
                                 RyzoraIcon {
-                                    name: (root.isSelectedAppPending() ? (root.pendingAction === "uninstall" ? "trash" : "download") : (root.selectedApp && root.selectedApp.is_installed ? "check" : "download"))
+                                    name: (root.isSelectedAppPending() ? (root.pendingAction === "uninstall" ? "trash" : "download") : (root.isCurrentProviderInstalled() ? "check" : "download"))
                                     size: 15
-                                    color: (root.isSelectedAppPending() ? theme.accent : (root.selectedApp && root.selectedApp.is_installed ? "#10B981" : theme.textMuted))
+                                    color: (root.isSelectedAppPending() ? theme.accent : (root.isCurrentProviderInstalled() ? "#10B981" : theme.textMuted))
                                     Layout.alignment: Qt.AlignTop
                                     Layout.topMargin: 2
                                 }
@@ -2754,7 +2797,10 @@ Item {
                                     Text {
                                         text: {
                                             if (!root.selectedApp) return ""
-                                            if (root.selectedApp.is_installed) return "Installed on this system"
+                                            if (root.isCurrentProviderInstalled()) {
+                                                var v = root.currentInstalledVersion() || root.currentAvailableVersion()
+                                                return v ? "Installed on this system (" + v + ")" : "Installed on this system"
+                                            }
                                             if (root.isSelectedAppPending() && root.pendingAction === "install") {
                                                 if (root.installStage === "cancelling") return "Cancelling installation..."
                                                 if (root.installStage === "downloading") return "Downloading (" + (root.installPercentage >= 0 ? root.installPercentage + "%" : "in progress") + ")"
@@ -2770,7 +2816,7 @@ Item {
                                         font.pixelSize: 14
                                         font.weight: Font.Medium
                                         color: {
-                                            if (root.selectedApp && root.selectedApp.is_installed) return (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
+                                            if (root.isCurrentProviderInstalled()) return (theme.resolvedTheme === "light" ? "#059669" : "#34D399")
                                             if (root.isSelectedAppPending()) return theme.accent
                                             return theme.textSecondary
                                         }

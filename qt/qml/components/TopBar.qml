@@ -19,7 +19,15 @@ Rectangle {
     signal libraryClicked()
     property string searchQuery: ""
     property string currentTab: "hub"
-    readonly property string placeholderText: currentTab === "apps" ? "Search applications…" : "Search rices, themes, lockscreens…"
+    readonly property string placeholderText: currentTab === "apps" ? "Search apps, packages, Flatpaks… (Ctrl+K)" : "Search rices, themes, lockscreens… (Ctrl+K)"
+
+    Shortcut {
+        sequences: [StandardKey.Find, "Ctrl+K"]
+        onActivated: {
+            searchInput.forceActiveFocus()
+            searchInput.selectAll()
+        }
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -113,9 +121,15 @@ Rectangle {
             }
         }
 
-        // ── 3. Search Bar ──
+        // Left Flexible Spacer (Centers search box)
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
+        // ── 3. Centered Search Bar ──
         Rectangle {
-            Layout.preferredWidth: Math.min(360, Math.max(180, root.width * 0.3))
+            Layout.preferredWidth: Math.min(480, Math.max(220, root.width * 0.36))
             Layout.fillWidth: false
             height: 34
             radius: theme.radiusMd

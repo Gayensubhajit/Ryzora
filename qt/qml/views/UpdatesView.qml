@@ -6,6 +6,8 @@ import "../components"
 Item {
     id: root
 
+    signal appSelected(var appData)
+
     property string selectedFilter: "all"
     property string searchQuery: ""
     property var expandedDetails: ({})
@@ -457,12 +459,19 @@ Item {
                                 border.width: 1
 
                                 Image {
+                                    id: updIconImg
                                     anchors.centerIn: parent
                                     width: 28
                                     height: 28
-                                    source: modelData.icon_url || ""
+                                    source: {
+                                        var u = (modelData.icon_url || "").trim()
+                                        if (!u) return ""
+                                        if (u.indexOf(":/") !== -1 || u.indexOf("qrc:/") === 0 || u.indexOf("data:") === 0) return u
+                                        if (u.indexOf("/") === 0) return "file://" + u
+                                        return u
+                                    }
                                     fillMode: Image.PreserveAspectFit
-                                    visible: source !== "" && status === Image.Ready
+                                    visible: status === Image.Ready
                                 }
 
                                 RyzoraIcon {
@@ -475,7 +484,7 @@ Item {
                                     }
                                     size: 20
                                     color: theme.accent
-                                    visible: !modelData.icon_url
+                                    visible: updIconImg.status !== Image.Ready
                                 }
                             }
 
@@ -491,7 +500,21 @@ Item {
                                         text: modelData.name || modelData.package_id
                                         font.pixelSize: 14
                                         font.bold: true
-                                        color: theme.text
+                                        color: nameMouse.containsMouse ? theme.accent : theme.text
+                                        MouseArea {
+                                            id: nameMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (backend) {
+                                                    var app = backend.getAppById(modelData.package_id || modelData.name)
+                                                    if (app && app.id) {
+                                                        root.appSelected(app)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
 
                                     // Provider Pill

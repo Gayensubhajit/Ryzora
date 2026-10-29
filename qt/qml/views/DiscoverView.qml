@@ -655,18 +655,19 @@ Item {
             }
 
             // Responsive Virtualized Image-First GridView
-            // Anchored with leftMargin: 24 and rightMargin: 0 so the vertical scrollbar sits at the far-right edge of the viewport
+            // Anchored with leftMargin: 24 and rightMargin: 16 for balanced viewport edges
             GridView {
                 id: grid
                 objectName: "discoverGrid"
                 anchors.fill: parent
                 anchors.leftMargin: 24
-                anchors.rightMargin: 0
+                anchors.rightMargin: 16
                 clip: true
                 visible: root.filteredPackages.length > 0
                 boundsBehavior: Flickable.StopAtBounds
                 flickDeceleration: 1800
                 maximumFlickVelocity: 4500
+                cacheBuffer: 520
 
                 WheelHandler {
                     target: null
@@ -679,11 +680,19 @@ Item {
                     }
                 }
 
-                // Responsive columns: 4 columns >= 1150px, 3 columns >= 820px, 2 columns >= 520px, 1 column below
-                // Width minus 18 ensures right-hand cards do not touch the scrollbar thumb
-                property int columnCount: (width - 18) >= 1150 ? 4 : ((width - 18) >= 820 ? 3 : ((width - 18) >= 520 ? 2 : 1))
-                cellWidth: Math.floor((width - 18) / columnCount)
-                cellHeight: 260
+                // Responsive columns: 4-6 columns on wide screens, scaling down smoothly
+                // Targets ~240-280px per card with no large empty space
+                property int columnCount: {
+                    var avail = width - 16;
+                    if (avail >= 1550) return 6;
+                    if (avail >= 1260) return 5;
+                    if (avail >= 960) return 4;
+                    if (avail >= 680) return 3;
+                    if (avail >= 440) return 2;
+                    return 1;
+                }
+                cellWidth: Math.floor((width - 16) / Math.max(1, columnCount))
+                cellHeight: 250
 
                 model: root.filteredPackages
                 delegate: Item {
@@ -692,7 +701,7 @@ Item {
 
                     StoreCard {
                         anchors.fill: parent
-                        anchors.margins: 8
+                        anchors.margins: 6
                         itemData: modelData
                         isPageVisible: root.visible
                         allowAutoplay: true

@@ -46,3 +46,57 @@ target_link_libraries(ryzora PRIVATE
     dl
     m
 )
+
+# ── Installation Rules ──
+include(GNUInstallDirs)
+
+# Main Executable
+install(TARGETS ryzora
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Restricted Privileged Helpers
+install(PROGRAMS
+    "${RUST_WORKSPACE_DIR}/crates/ryzora-core/resources/ryzora-package-helper"
+    "${RUST_WORKSPACE_DIR}/crates/ryzora-core/resources/ryzora-sddm-helper"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/ryzora
+)
+
+# Polkit Authorization Actions & Rules
+install(FILES
+    "${RUST_WORKSPACE_DIR}/crates/ryzora-core/resources/io.ryzora.package.policy"
+    "${RUST_WORKSPACE_DIR}/crates/ryzora-core/resources/io.ryzora.sddm.policy"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/polkit-1/actions
+)
+install(FILES
+    "${RUST_WORKSPACE_DIR}/crates/ryzora-core/resources/io.ryzora.package.rules"
+    "${RUST_WORKSPACE_DIR}/crates/ryzora-core/resources/io.ryzora.sddm.rules"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/polkit-1/rules.d
+)
+
+# Desktop Entry & AppStream Metadata
+install(FILES
+    "${RUST_WORKSPACE_DIR}/dist-assets/io.ryzora.Ryzora.desktop"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
+install(FILES
+    "${RUST_WORKSPACE_DIR}/dist-assets/io.ryzora.Ryzora.metainfo.xml"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
+)
+
+# Application Icons
+install(DIRECTORY
+    "${RUST_WORKSPACE_DIR}/dist-assets/icons/hicolor"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons
+)
+
+# Shared Data & Package Repository Metadata
+install(DIRECTORY
+    "${RUST_WORKSPACE_DIR}/repositories"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/ryzora
+)
+install(DIRECTORY
+    "${RUST_WORKSPACE_DIR}/public/assets"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/ryzora/public
+)
+
