@@ -24,6 +24,7 @@ pkgbase = ryzora
 	optdepends = flatpak: Flatpak application repository management
 	provides = ryzora
 	conflicts = ryzora-bin
+	options = strip
 	source = ryzora-0.1.0.tar.gz::https://github.com/Gayensubhajit/Ryzora/archive/refs/tags/v0.1.0.tar.gz
 	sha256sums = SKIP
 

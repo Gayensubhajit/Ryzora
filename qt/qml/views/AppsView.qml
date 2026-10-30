@@ -33,8 +33,16 @@ Item {
     property bool showInstallDetails: false
     property string selectedProviderId: ""
     property string selectedTargetId: ""
+    property string catalogMode: "apps" // "apps" | "all_packages"
+    property string selectedProvider: "all" // "all" | "pacman" | "aur" | "flatpak"
     property real savedBrowseScrollY: 0
     property var masterAppsList: []
+
+    onSelectedProviderChanged: {
+        if (root.catalogMode === "all_packages" && backend) {
+            backend.filterApps("all_packages", root.searchQuery, root.selectedProvider)
+        }
+    }
 
     readonly property int heroResponsiveHeight: {
         if (!heroPanel.visible) return 0
@@ -162,6 +170,63 @@ Item {
         var src = currentSelectedProviderSource()
         if (src && src.version) return src.version
         return (root.selectedApp && root.selectedApp.version) ? root.selectedApp.version : "Latest"
+    }
+
+    function formatAppBytes(bytes) {
+        if (!bytes || bytes <= 0 || isNaN(bytes)) return ""
+        var b = Number(bytes)
+        var units = ["B", "KB", "MB", "GB", "TB"]
+        var u = 0
+        while (b >= 1024 && u < units.length - 1) {
+            b /= 1024
+            u++
+        }
+        return (u === 0 ? b : b.toFixed(1)) + " " + units[u]
+    }
+
+    function currentAppDisplaySize() {
+        if (!root.selectedApp) return "Unknown"
+        var src = currentSelectedProviderSource()
+        var isInst = isCurrentProviderInstalled()
+        var inst = src ? src.installed_size : root.selectedApp.installed_size
+        var dl = src ? src.download_size : root.selectedApp.download_size
+        var pId = (src ? src.provider_id : (root.selectedApp.provider_id || "")).toLowerCase()
+
+        if (isInst && inst && inst > 0) {
+            return formatAppBytes(inst)
+        }
+        if (isInst) {
+            return "Installed"
+        }
+        if (pId === "aur") {
+            return "Source build"
+        }
+        if (dl && dl > 0) {
+            return formatAppBytes(dl)
+        }
+        if (inst && inst > 0) {
+            return formatAppBytes(inst)
+        }
+        var lbl = (src && src.size_label) ? src.size_label : (root.selectedApp.size_label || "")
+        if (lbl && (lbl.indexOf("MB") !== -1 || lbl.indexOf("GB") !== -1 || lbl.indexOf("KB") !== -1 || lbl.indexOf("B") !== -1) && lbl.indexOf("Source") === -1) {
+            return lbl
+        }
+        return "Unknown"
+    }
+
+    function currentAppSizeSubtext() {
+        if (!root.selectedApp) return "Size"
+        var isInst = isCurrentProviderInstalled()
+        var src = currentSelectedProviderSource()
+        var inst = src ? src.installed_size : root.selectedApp.installed_size
+        var dl = src ? src.download_size : root.selectedApp.download_size
+        var pId = (src ? src.provider_id : (root.selectedApp.provider_id || "")).toLowerCase()
+
+        if (isInst) return "Disk footprint"
+        if (pId === "aur") return "Source (AUR)"
+        if (dl && dl > 0) return "Download size"
+        if (inst && inst > 0) return "Installed footprint"
+        return "Size"
     }
 
     function currentActionAppId() {
@@ -335,16 +400,56 @@ Item {
         return "layout-grid"
     }
 
+    // Helper: Determine if an application item matches the selected provider
+    function appMatchesProvider(item, pTarget) {
+        if (!item) return false
+        if (!pTarget || pTarget === "all") return true
+        var target = pTarget.toLowerCase()
+        var provId = String(item.provider_id || item.installed_provider || "").toLowerCase()
+        var rName = String(item.repository || "").toLowerCase()
+
+        if (target === "pacman") {
+            if (provId === "pacman" || (provId !== "aur" && provId !== "flatpak" && rName !== "aur" && rName !== "flatpak" && rName !== "flathub")) {
+                return true
+            }
+        } else if (target === "aur") {
+            if (provId === "aur" || rName === "aur") return true
+        } else if (target === "flatpak") {
+            if (provId === "flatpak" || rName === "flatpak" || rName === "flathub") return true
+        }
+
+        // Also inspect available_providers so apps offered across multiple providers (e.g. Spotify, Chrome) match
+        var provs = item.available_providers || []
+        for (var i = 0; i < provs.length; i++) {
+            var ap = provs[i]
+            if (!ap) continue
+            var apId = String(ap.provider_id || "").toLowerCase()
+            if (target === "pacman" && (apId === "pacman" || apId === "arch" || apId === "core" || apId === "extra")) {
+                return true
+            }
+            if (target === "aur" && apId === "aur") {
+                return true
+            }
+            if (target === "flatpak" && (apId === "flatpak" || apId === "flathub")) {
+                return true
+            }
+        }
+        return false
+    }
+
     // Helper: Count distinct applications for category chips
     function getCategoryCount(catName) {
         var list = (root.masterAppsList && root.masterAppsList.length > 0) ? root.masterAppsList : (backend.appsList || [])
         var c = catName.toLowerCase()
-        if (c === "all") return list.length
         var count = 0
         for (var i = 0; i < list.length; i++) {
             var item = list[i]
             if (!item) continue
-            if (c === "installed") {
+            if (!root.appMatchesProvider(item, root.selectedProvider)) continue
+
+            if (c === "all") {
+                count++
+            } else if (c === "installed") {
                 if (item.is_installed) count++
             } else if (String(item.category || "").toLowerCase() === c) {
                 count++
@@ -379,14 +484,21 @@ Item {
 
             // 2. Category Filter
             if (cat === "all") {
-                res.push(item)
+                // pass
             } else if (cat === "installed") {
-                if (item.is_installed) res.push(item)
+                if (!item.is_installed) continue
             } else {
-                if (String(item.category || "").toLowerCase() === cat) {
-                    res.push(item)
+                if (String(item.category || "").toLowerCase() !== cat) {
+                    continue
                 }
             }
+
+            // 3. Provider / Source Filter (all | pacman | aur | flatpak)
+            if (!root.appMatchesProvider(item, root.selectedProvider)) {
+                continue
+            }
+
+            res.push(item)
         }
 
         // 3. Sorting
@@ -687,6 +799,16 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 Text {
+                    readonly property var szBytes: (cardRoot.appData ? (cardRoot.appData.installed_size || cardRoot.appData.download_size) : 0)
+                    visible: Boolean(szBytes && szBytes > 0)
+                    text: root.formatAppBytes(szBytes)
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    font.weight: Font.Medium
+                    color: theme.textMuted
+                }
+
+                Text {
                     text: (cardRoot.appData && cardRoot.appData.license) ? cardRoot.appData.license : "Native"
                     font.pixelSize: 11
                     color: theme.textMuted
@@ -800,6 +922,156 @@ Item {
                                     root.searchQuery = ""
                                     root.clearSearchRequested()
                                     backend.filterApps(root.selectedCategory, "")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── APPLICATION CATALOGUE & SOURCE FILTER TOOLBAR ──
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                // Left: Catalogue Mode Switcher (Applications vs All Packages)
+                Rectangle {
+                    height: 32
+                    implicitWidth: modeRow.implicitWidth + 8
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: modeRow
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        // Applications Button
+                        Rectangle {
+                            height: 26
+                            implicitWidth: appsModeRow.implicitWidth + 14
+                            radius: theme.radiusSm - 1
+                            color: root.catalogMode === "apps" ? theme.accent : "transparent"
+
+                            RowLayout {
+                                id: appsModeRow
+                                anchors.centerIn: parent
+                                spacing: 5
+                                RyzoraIcon {
+                                    name: "layout-grid"
+                                    size: 11
+                                    color: root.catalogMode === "apps" ? "#ffffff" : theme.textSecondary
+                                }
+                                Text {
+                                    text: "Applications"
+                                    font.pixelSize: 11
+                                    font.weight: root.catalogMode === "apps" ? Font.DemiBold : Font.Medium
+                                    color: root.catalogMode === "apps" ? "#ffffff" : theme.textSecondary
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.catalogMode !== "apps") {
+                                        root.catalogMode = "apps"
+                                        root.selectedCategory = "All"
+                                        backend.filterApps("all", root.searchQuery, root.selectedProvider)
+                                    }
+                                }
+                            }
+                        }
+
+                        // All Packages Button
+                        Rectangle {
+                            height: 26
+                            implicitWidth: pkgsModeRow.implicitWidth + 14
+                            radius: theme.radiusSm - 1
+                            color: root.catalogMode === "all_packages" ? theme.accent : "transparent"
+
+                            RowLayout {
+                                id: pkgsModeRow
+                                anchors.centerIn: parent
+                                spacing: 5
+                                RyzoraIcon {
+                                    name: "package"
+                                    size: 11
+                                    color: root.catalogMode === "all_packages" ? "#ffffff" : theme.textSecondary
+                                }
+                                Text {
+                                    text: "All Packages (15,966+)"
+                                    font.pixelSize: 11
+                                    font.weight: root.catalogMode === "all_packages" ? Font.DemiBold : Font.Medium
+                                    color: root.catalogMode === "all_packages" ? "#ffffff" : theme.textSecondary
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.catalogMode !== "all_packages") {
+                                        root.catalogMode = "all_packages"
+                                        root.selectedCategory = "All"
+                                        backend.filterApps("all_packages", root.searchQuery, root.selectedProvider)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Right: Source Filter Buttons (All Sources / Official Repos / AUR / Flatpak)
+                Rectangle {
+                    height: 32
+                    implicitWidth: provRow.implicitWidth + 8
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: provRow
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Repeater {
+                            model: [
+                                { id: "all", label: "All Sources" },
+                                { id: "pacman", label: "Official Repos" },
+                                { id: "aur", label: "AUR" },
+                                { id: "flatpak", label: "Flatpak" }
+                            ]
+
+                            delegate: Rectangle {
+                                readonly property bool isCurrent: root.selectedProvider === modelData.id
+                                height: 26
+                                implicitWidth: provText.implicitWidth + 14
+                                radius: theme.radiusSm - 1
+                                color: isCurrent ? theme.accent : (provMouse.containsMouse ? theme.surfaceHover : "transparent")
+
+                                Text {
+                                    id: provText
+                                    anchors.centerIn: parent
+                                    text: modelData.label
+                                    font.pixelSize: 11
+                                    font.weight: isCurrent ? Font.DemiBold : Font.Medium
+                                    color: isCurrent ? "#ffffff" : (provMouse.containsMouse ? theme.text : theme.textSecondary)
+                                }
+
+                                MouseArea {
+                                    id: provMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.selectedProvider = modelData.id
+                                    }
                                 }
                             }
                         }
@@ -1607,7 +1879,7 @@ Item {
         readonly property bool isWideDetail: root.width >= 760
         readonly property int outerPad: root.width < 760 ? 12 : 16
         readonly property int paneGap: 14
-        readonly property int leftPaneWidth: root.width < 920 ? 280 : 320
+        readonly property int leftPaneWidth: root.width < 960 ? 300 : (root.width < 1400 ? 330 : 350)
 
         // ══════════════════════════════════════════════════════════════════════
         // A. LEFT PRODUCT PANE (Fixed-Width Fluent Product Identity & Primary Action)
@@ -1628,6 +1900,7 @@ Item {
             color: theme.surface
             border.color: theme.borderSubtle
             border.width: 1
+            clip: true
             z: 2
 
             Flickable {
@@ -1979,54 +2252,107 @@ Item {
 
                 Item { Layout.preferredHeight: 22 }
 
-                // ── 6. Two-Column Legitimate Metadata Stat Row (with Vertical Divider) ──
+                // ── 6. Three-Column Legitimate Metadata Stat Row (with Vertical Dividers) ──
                 RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 24
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: leftPaneCol.width
+                    spacing: 4
 
-                    // Left Stat: Version
+                    // 1. Version Stat
                     ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Math.floor((leftPaneCol.width - 16) / 3)
+                        Layout.maximumWidth: Math.floor((leftPaneCol.width - 16) / 3)
                         Layout.alignment: Qt.AlignVCenter
+                        clip: true
                         spacing: 2
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                             text: root.currentInstalledVersion() || root.currentAvailableVersion() || "Latest"
                             font.family: appDetailOverlay.uiFont
-                            font.pixelSize: 15
+                            font.pixelSize: 13
                             font.weight: Font.DemiBold
                             font.bold: true
                             color: theme.text
+                            elide: Text.ElideRight
                         }
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                             text: "Version"
                             font.family: appDetailOverlay.uiFont
-                            font.pixelSize: 12
+                            font.pixelSize: 11
                             color: theme.textMuted
+                            elide: Text.ElideRight
                         }
                     }
 
-                    // Vertical Divider
+                    // Vertical Divider 1
                     Rectangle {
                         width: 1
-                        height: 32
+                        height: 28
                         color: theme.borderSubtle
                     }
 
-                    // Right Stat: Status / Repository
+                    // 2. Size Stat
                     ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Math.floor((leftPaneCol.width - 16) / 3)
+                        Layout.maximumWidth: Math.floor((leftPaneCol.width - 16) / 3)
                         Layout.alignment: Qt.AlignVCenter
+                        clip: true
+                        spacing: 2
+                        Text {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            text: root.currentAppDisplaySize()
+                            font.family: appDetailOverlay.uiFont
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            font.bold: true
+                            color: theme.text
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            text: root.currentAppSizeSubtext()
+                            font.family: appDetailOverlay.uiFont
+                            font.pixelSize: 11
+                            color: theme.textMuted
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Vertical Divider 2
+                    Rectangle {
+                        width: 1
+                        height: 28
+                        color: theme.borderSubtle
+                    }
+
+                    // 3. Status / State Stat
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Math.floor((leftPaneCol.width - 16) / 3)
+                        Layout.maximumWidth: Math.floor((leftPaneCol.width - 16) / 3)
+                        Layout.alignment: Qt.AlignVCenter
+                        clip: true
                         spacing: 2
                         RowLayout {
+                            Layout.fillWidth: true
                             Layout.alignment: Qt.AlignHCenter
-                            spacing: 6
+                            spacing: 4
                             Rectangle {
-                                width: 7
-                                height: 7
-                                radius: 4
+                                width: 6
+                                height: 6
+                                radius: 3
                                 color: (root.selectedApp && root.isCurrentProviderInstalled()) ? "#10B981" : theme.accent
                             }
                             Text {
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignLeft
                                 text: {
                                     if (!root.selectedApp) return ""
                                     if (root.isSelectedAppPending() && root.pendingAction === "install") {
@@ -2042,7 +2368,7 @@ Item {
                                     return root.selectedApp.repository || "Official"
                                 }
                                 font.family: appDetailOverlay.uiFont
-                                font.pixelSize: 15
+                                font.pixelSize: 13
                                 font.weight: Font.DemiBold
                                 font.bold: true
                                 color: {
@@ -2050,21 +2376,24 @@ Item {
                                     if (root.isSelectedAppPending() && root.pendingAction === "install") return theme.accent
                                     return theme.text
                                 }
+                                elide: Text.ElideRight
                             }
                         }
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                             text: {
                                 if (root.isSelectedAppPending() && root.pendingAction === "install") return "In progress"
                                 if (root.selectedApp && root.isCurrentProviderInstalled()) return "System state"
                                 var src = root.currentSelectedProviderSource()
-                                if (src && src.provider_id === "flatpak") return "Sandboxed Flatpak"
+                                if (src && src.provider_id === "flatpak") return "Sandboxed"
                                 if (src && src.provider_id === "aur") return "AUR User Repo"
-                                return "Official Repository"
+                                return "Official Repo"
                             }
                             font.family: appDetailOverlay.uiFont
-                            font.pixelSize: 12
+                            font.pixelSize: 11
                             color: theme.textMuted
+                            elide: Text.ElideRight
                         }
                     }
                 }
@@ -2775,6 +3104,132 @@ Item {
                                     spacing: 2
                                     Text { text: "Architecture"; font.family: appDetailOverlay.uiFont; font.pixelSize: 12; color: theme.textMuted }
                                     Text { text: "x86_64 (Linux 64-bit)"; font.family: appDetailOverlay.uiFont; font.pixelSize: 14; color: theme.textSecondary; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+                            }
+
+                            // 7. Download size
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 10
+                                RyzoraIcon { name: "download"; size: 15; color: theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 2 }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Download size"; font.family: appDetailOverlay.uiFont; font.pixelSize: 12; color: theme.textMuted }
+                                    Text {
+                                        readonly property var dlBytes: {
+                                            var src = root.currentSelectedProviderSource()
+                                            return src ? (src.download_size || root.selectedApp.download_size) : (root.selectedApp ? root.selectedApp.download_size : 0)
+                                        }
+                                        text: {
+                                            var src = root.currentSelectedProviderSource()
+                                            var pId = (src ? src.provider_id : (root.selectedApp ? root.selectedApp.provider_id : "")).toLowerCase()
+                                            if (pId === "aur" && !root.isCurrentProviderInstalled()) {
+                                                return "Source build (No binary download)"
+                                            }
+                                            if (dlBytes && dlBytes > 0) {
+                                                return root.formatAppBytes(dlBytes) + " (" + Number(dlBytes).toLocaleString() + " B)"
+                                            }
+                                            return "Unknown"
+                                        }
+                                        font.family: appDetailOverlay.uiFont
+                                        font.pixelSize: 14
+                                        color: theme.textSecondary
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            // 8. Installed size / Disk footprint
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 10
+                                RyzoraIcon { name: "hard-drive"; size: 15; color: theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 2 }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Installed size (Disk footprint)"; font.family: appDetailOverlay.uiFont; font.pixelSize: 12; color: theme.textMuted }
+                                    Text {
+                                        readonly property var instBytes: {
+                                            var src = root.currentSelectedProviderSource()
+                                            return src ? (src.installed_size || root.selectedApp.installed_size) : (root.selectedApp ? root.selectedApp.installed_size : 0)
+                                        }
+                                        text: {
+                                            var src = root.currentSelectedProviderSource()
+                                            var pId = (src ? src.provider_id : (root.selectedApp ? root.selectedApp.provider_id : "")).toLowerCase()
+                                            if (root.isCurrentProviderInstalled() && instBytes && instBytes > 0) {
+                                                return root.formatAppBytes(instBytes) + " (" + Number(instBytes).toLocaleString() + " B)"
+                                            }
+                                            if (pId === "aur" && !root.isCurrentProviderInstalled()) {
+                                                return "Unknown until built"
+                                            }
+                                            if (instBytes && instBytes > 0) {
+                                                return root.formatAppBytes(instBytes) + " (" + Number(instBytes).toLocaleString() + " B)"
+                                            }
+                                            return "Unknown"
+                                        }
+                                        font.family: appDetailOverlay.uiFont
+                                        font.pixelSize: 14
+                                        color: theme.textSecondary
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            // 9. Source package / Build strategy
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 10
+                                RyzoraIcon { name: "file-text"; size: 15; color: theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 2 }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Source package"; font.family: appDetailOverlay.uiFont; font.pixelSize: 12; color: theme.textMuted }
+                                    Text {
+                                        text: {
+                                            var src = root.currentSelectedProviderSource()
+                                            var pId = (src ? src.provider_id : (root.selectedApp ? root.selectedApp.provider_id : "")).toLowerCase()
+                                            if (pId === "aur") return "AUR Git repository / PKGBUILD"
+                                            if (pId === "flatpak") return "Flathub OCI container"
+                                            return "Official Arch Linux package archive"
+                                        }
+                                        font.family: appDetailOverlay.uiFont
+                                        font.pixelSize: 14
+                                        color: theme.textSecondary
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            // 10. Build environment
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 10
+                                RyzoraIcon { name: "terminal"; size: 15; color: theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 2 }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: "Build environment"; font.family: appDetailOverlay.uiFont; font.pixelSize: 12; color: theme.textMuted }
+                                    Text {
+                                        text: {
+                                            var src = root.currentSelectedProviderSource()
+                                            var pId = (src ? src.provider_id : (root.selectedApp ? root.selectedApp.provider_id : "")).toLowerCase()
+                                            if (pId === "aur") return "Unprivileged makepkg sandbox"
+                                            return "Pre-compiled distribution binary"
+                                        }
+                                        font.family: appDetailOverlay.uiFont
+                                        font.pixelSize: 14
+                                        color: theme.textSecondary
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
                                 }
                             }
 

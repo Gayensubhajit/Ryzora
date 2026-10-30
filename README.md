@@ -63,16 +63,19 @@ To build a `.deb` locally (pure user-space, zero `sudo` required):
 ./scripts/build-deb.sh
 ```
 
-### Arch Linux / AUR
-Ryzora is packaged for Arch Linux via `PKGBUILD`:
+### Arch Linux / CachyOS (.pkg.tar.zst)
+To build and install the native Arch package locally:
+```bash
+# Build native .pkg.tar.zst package
+./scripts/build-arch-package.sh
+
+# Install package via pacman
+sudo pacman -U target/arch/ryzora-0.1.0-1-x86_64.pkg.tar.zst
+```
+Or build from AUR / PKGBUILD:
 ```bash
 cd packaging/arch
 makepkg -si
-```
-Or for pre-compiled binary package:
-```bash
-cd packaging/arch
-makepkg -p PKGBUILD-bin -si
 ```
 
 ### Standalone Binary Tarball

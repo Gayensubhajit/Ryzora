@@ -1333,7 +1333,7 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                     let size_label = if is_inst && inst_sz.is_some() {
                         format_size_summary(None, inst_sz)
                     } else {
-                        Some("Source (AUR)".to_string())
+                        None
                     };
                     return Some(AppProviderSource {
                         provider_id: "aur".to_string(),
@@ -1362,8 +1362,7 @@ pub fn resolve_app_providers_sync(package_id: &str, display_name: Option<&str>) 
                 let cat_item = catalog::get_catalog_item_by_id(&info.name);
                 let dl_sz = cat_item.as_ref().and_then(|c| c.download_size);
                 let inst_sz = inst_sz_local.or_else(|| cat_item.as_ref().and_then(|c| c.installed_size));
-                let size_label = format_size_summary(dl_sz, inst_sz)
-                    .or_else(|| Some("Source (AUR)".to_string()));
+                let size_label = format_size_summary(dl_sz, inst_sz);
                 return Some(AppProviderSource {
                     provider_id: "aur".to_string(),
                     name: "AUR".to_string(),
@@ -1539,8 +1538,7 @@ pub fn resolve_local_app_providers(
         let (aur_inst, aur_ver, aur_sz_local) = pacman::check_installed_status_and_size_in(aur_target, &local_dir);
         let dl_sz = cat_item.as_ref().and_then(|c| c.download_size);
         let inst_sz = aur_sz_local.or_else(|| cat_item.as_ref().and_then(|c| c.installed_size));
-        let size_label = format_size_summary(dl_sz, inst_sz)
-            .or_else(|| Some("Source (AUR)".to_string()));
+        let size_label = format_size_summary(dl_sz, inst_sz);
         providers.push(AppProviderSource {
             provider_id: "aur".to_string(),
             name: "AUR".to_string(),

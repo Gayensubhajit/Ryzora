@@ -540,9 +540,9 @@ where
         );
         progress_cb(
             "downloading",
-            Some(35),
+            None,
             "Retrieving package sources and PKGBUILD...",
-            true,
+            false,
             Some("12.4 MB"),
             Some("45.2 MB"),
             Some("4.8 MB/s"),
@@ -555,7 +555,7 @@ where
         progress_cb(
             "building",
             None,
-            "Building and compiling package...",
+            "Building and compiling package from source...",
             false,
             None,
             None,
@@ -568,9 +568,9 @@ where
         );
         progress_cb(
             "installing",
-            Some(85),
+            None,
             "Deploying files and running hooks...",
-            true,
+            false,
             None,
             None,
             None,
@@ -625,6 +625,21 @@ where
             return Err("No AUR helper (paru, yay, or makepkg) is installed on this system.".to_string());
         }
 
+        progress_cb(
+            "resolving",
+            None,
+            "Resolving AUR PKGBUILD snapshot...",
+            false,
+            None,
+            None,
+            None,
+            Some(1),
+            Some(4),
+            Some(&target),
+            None,
+            Some("Resolving AUR tarball snapshot"),
+        );
+
         // Fallback: unprivileged makepkg
         let home = crate::snapshot::get_home_dir();
         let build_root = home.join(".cache/ryzora/aur-build").join(&target);
@@ -641,8 +656,38 @@ where
         let mut archive = tar::Archive::new(gz);
         archive.unpack(&build_root).map_err(|e| format!("Failed to unpack snapshot: {}", e))?;
 
+        progress_cb(
+            "downloading",
+            None,
+            "AUR sources unpacked, preparing build...",
+            false,
+            None,
+            None,
+            None,
+            Some(2),
+            Some(4),
+            Some(&target),
+            None,
+            Some("Unpacked AUR snapshot"),
+        );
+
         let source_dir = build_root.join(&target);
         let working_dir = if source_dir.exists() { source_dir } else { build_root.clone() };
+
+        progress_cb(
+            "building",
+            None,
+            "Compiling AUR package with makepkg...",
+            false,
+            None,
+            None,
+            None,
+            Some(3),
+            Some(4),
+            Some(&target),
+            None,
+            Some("Building package with makepkg"),
+        );
 
         let mut cmd = Command::new("makepkg");
         cmd.args(["-s", "--noconfirm"]);
@@ -669,6 +714,21 @@ where
         }
         let built_package = pkg_file.ok_or_else(|| "Build completed but no .pkg.tar.zst was found".to_string())?;
 
+        progress_cb(
+            "installing",
+            None,
+            "Deploying built package to system with pacman...",
+            false,
+            None,
+            None,
+            None,
+            Some(4),
+            Some(4),
+            Some(&target),
+            None,
+            Some("Deploying package with Pacman"),
+        );
+
         let install_output = Command::new("pkexec")
             .args(["pacman", "-U", "--noconfirm"])
             .arg(&built_package)
@@ -683,6 +743,21 @@ where
 
         crate::app_adapters::invalidate_app_provider_cache(&target);
         let _ = crate::app_adapters::catalog::refresh_installed_state_internal();
+
+        progress_cb(
+            "completed",
+            Some(100),
+            "AUR package installed successfully",
+            true,
+            None,
+            None,
+            None,
+            Some(4),
+            Some(4),
+            Some(&target),
+            None,
+            Some("Phase: Complete"),
+        );
         return Ok(format!("Successfully built and installed '{}'", target));
     };
 
@@ -752,16 +827,22 @@ where
                         let (cur_step, tot_steps) = match ev.stage.as_str() {
                             "resolving" | "preparing" => (Some(1), Some(4)),
                             "downloading" => (Some(2), Some(4)),
-                            "building" => (Some(3), Some(4)),
-                            "authenticating" => (Some(3), Some(4)),
+                            "building" | "authenticating" => (Some(3), Some(4)),
                             "installing" | "finalizing" => (Some(4), Some(4)),
+                            "completed" => (Some(4), Some(4)),
                             _ => (None, None),
                         };
-                        let is_det = ev.percentage.is_some() && ev.stage != "resolving" && ev.stage != "building" && ev.stage != "authenticating";
+                        let (pct_out, is_det) = if ev.stage == "completed" {
+                            (Some(100), true)
+                        } else if let Some(p) = ev.percentage {
+                            (Some(p), true)
+                        } else {
+                            (None, false)
+                        };
                         let diag = format!("Helper: {} | Stage: {} | Line: {}", helper, ev.stage, line.trim());
                         progress_cb(
                             &ev.stage,
-                            ev.percentage,
+                            pct_out,
                             &ev.message,
                             is_det,
                             ev.bytes_downloaded_str.as_deref(),

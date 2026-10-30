@@ -2191,14 +2191,10 @@ impl BackendState {
         self.query_applications_filtered(repo_root_hint, category, search, "all", 0, 120)
     }
 
-    pub fn query_applications_filtered(
+    /// Returns curated desktop applications instantly (<1ms) without blocking on full catalogue discovery.
+    pub fn get_curated_applications_instant(
         &self,
         repo_root_hint: Option<&Path>,
-        category: &str,
-        search: &str,
-        provider_filter: &str,
-        page: usize,
-        page_size: usize,
     ) -> Vec<ApplicationItem> {
         let repo_root = Self::resolve_repo_root(repo_root_hint);
         let apps_dir = repo_root.join("public/assets/apps");
@@ -2217,10 +2213,6 @@ impl BackendState {
             }
         };
 
-        let cat_trimmed = category.trim().to_lowercase();
-        let q_trimmed = search.trim().to_lowercase();
-        let prov_trimmed = provider_filter.trim().to_lowercase();
-
         let curated_defs = [
             (
                 "firefox",
@@ -2236,6 +2228,8 @@ impl BackendState {
                 vec!["firefox/screen1.jpg", "firefox/screen2.jpg"],
                 "https://www.mozilla.org/firefox/",
                 "MPL-2.0",
+                82000000u64,
+                260000000u64,
             ),
             (
                 "chromium",
@@ -2251,6 +2245,8 @@ impl BackendState {
                 vec!["chromium/screen1.jpg", "chromium/screen2.jpg"],
                 "https://www.chromium.org/Home",
                 "BSD-3-Clause",
+                110000000u64,
+                350000000u64,
             ),
             (
                 "code",
@@ -2266,6 +2262,8 @@ impl BackendState {
                 vec!["code/screen1.jpg", "code/screen2.jpg"],
                 "https://github.com/microsoft/vscode",
                 "MIT",
+                20000000u64,
+                98000000u64,
             ),
             (
                 "discord",
@@ -2281,6 +2279,8 @@ impl BackendState {
                 vec!["discord/screen1.jpg", "discord/screen2.jpg"],
                 "https://discord.com",
                 "Proprietary",
+                90000000u64,
+                240000000u64,
             ),
             (
                 "steam",
@@ -2296,6 +2296,8 @@ impl BackendState {
                 vec!["steam/screen1.jpg", "steam/screen2.jpg"],
                 "https://store.steampowered.com/",
                 "Proprietary",
+                3500000u64,
+                18000000u64,
             ),
             (
                 "vlc",
@@ -2311,6 +2313,8 @@ impl BackendState {
                 vec!["vlc/screen1.jpg", "vlc/screen2.jpg"],
                 "https://www.videolan.org/vlc/",
                 "GPL-2.0-or-later",
+                18000000u64,
+                78000000u64,
             ),
             (
                 "gimp",
@@ -2326,6 +2330,8 @@ impl BackendState {
                 vec!["gimp/screen1.jpg"],
                 "https://www.gimp.org/",
                 "GPL-3.0-or-later",
+                38000000u64,
+                150000000u64,
             ),
             (
                 "obs-studio",
@@ -2341,6 +2347,8 @@ impl BackendState {
                 vec!["obs-studio/screen1.jpg"],
                 "https://obsproject.com/",
                 "GPL-2.0-or-later",
+                35000000u64,
+                120000000u64,
             ),
             (
                 "blender",
@@ -2356,6 +2364,8 @@ impl BackendState {
                 vec!["blender/screen1.jpg"],
                 "https://www.blender.org/",
                 "GPL-3.0-or-later",
+                250000000u64,
+                650000000u64,
             ),
             (
                 "inkscape",
@@ -2371,6 +2381,8 @@ impl BackendState {
                 vec!["inkscape/screen1.jpg", "inkscape/screen2.jpg"],
                 "https://inkscape.org/",
                 "GPL-3.0-or-later",
+                45000000u64,
+                170000000u64,
             ),
             (
                 "alacritty",
@@ -2386,6 +2398,8 @@ impl BackendState {
                 vec![],
                 "https://alacritty.org",
                 "Apache-2.0",
+                5000000u64,
+                17000000u64,
             ),
             (
                 "kitty",
@@ -2401,6 +2415,8 @@ impl BackendState {
                 vec![],
                 "https://sw.kovidgoyal.net/kitty/",
                 "GPL-3.0-or-later",
+                12000000u64,
+                38000000u64,
             ),
             (
                 "neovim",
@@ -2416,6 +2432,8 @@ impl BackendState {
                 vec![],
                 "https://neovim.io",
                 "Apache-2.0",
+                8000000u64,
+                32000000u64,
             ),
             (
                 "spotify",
@@ -2431,6 +2449,8 @@ impl BackendState {
                 vec!["spotify/screen1.jpg", "spotify/screen2.jpg"],
                 "https://spotify.com",
                 "Proprietary",
+                188000000u64,
+                320000000u64,
             ),
             (
                 "telegram-desktop",
@@ -2446,6 +2466,8 @@ impl BackendState {
                 vec![],
                 "https://desktop.telegram.org/",
                 "GPL-3.0-or-later",
+                52000000u64,
+                145000000u64,
             ),
             (
                 "thunderbird",
@@ -2461,6 +2483,8 @@ impl BackendState {
                 vec![],
                 "https://www.thunderbird.net/",
                 "MPL-2.0",
+                65000000u64,
+                220000000u64,
             ),
             (
                 "mpv",
@@ -2476,6 +2500,8 @@ impl BackendState {
                 vec![],
                 "https://mpv.io/",
                 "GPL-2.0-or-later",
+                4500000u64,
+                15000000u64,
             ),
             (
                 "btop",
@@ -2491,6 +2517,8 @@ impl BackendState {
                 vec![],
                 "https://github.com/aristocratos/btop",
                 "Apache-2.0",
+                1300000u64,
+                4000000u64,
             ),
             (
                 "git",
@@ -2506,6 +2534,8 @@ impl BackendState {
                 vec![],
                 "https://git-scm.com/",
                 "GPL-2.0-only",
+                8000000u64,
+                48000000u64,
             ),
             (
                 "cursor",
@@ -2521,6 +2551,8 @@ impl BackendState {
                 vec![],
                 "https://cursor.com",
                 "Proprietary",
+                125000000u64,
+                390000000u64,
             ),
             (
                 "visual-studio-code-bin",
@@ -2536,6 +2568,8 @@ impl BackendState {
                 vec!["visual-studio-code-bin/screen1.jpg", "visual-studio-code-bin/screen2.jpg"],
                 "https://code.visualstudio.com/",
                 "Proprietary",
+                102000000u64,
+                350000000u64,
             ),
             (
                 "fastfetch",
@@ -2551,11 +2585,12 @@ impl BackendState {
                 vec![],
                 "https://github.com/fastfetch-cli/fastfetch",
                 "MIT",
+                880000u64,
+                2800000u64,
             ),
         ];
 
         let mut items = Vec::new();
-        let mut curated_ids = HashSet::new();
 
         for def in &curated_defs {
             let id = def.0;
@@ -2571,8 +2606,8 @@ impl BackendState {
             let screenshots_rel = &def.10;
             let website = def.11;
             let license = def.12;
-
-            curated_ids.insert(id.to_string());
+            let def_dl_size = def.13;
+            let def_inst_size = def.14;
 
             let (is_installed, installed_version, installed_provider, installed_target) =
                 self.check_app_installed_with_provider(id);
@@ -2640,9 +2675,36 @@ impl BackendState {
                 .iter()
                 .find(|p| p.provider_id == provider_id)
                 .or_else(|| available_providers.first());
-            let item_dl_size = primary_prov.and_then(|p| p.download_size);
-            let item_inst_size = primary_prov.and_then(|p| p.installed_size);
-            let item_size_label = primary_prov.and_then(|p| p.size_label.clone());
+            let is_aur_primary = primary_prov.map(|p| p.provider_id == "aur").unwrap_or(repository == "aur");
+            let item_dl_size = if is_aur_primary && !is_installed {
+                None
+            } else {
+                primary_prov.and_then(|p| p.download_size).or(if repository == "aur" && !is_installed { None } else { Some(def_dl_size) })
+            };
+            let item_inst_size = if is_aur_primary && !is_installed {
+                None
+            } else {
+                primary_prov.and_then(|p| p.installed_size).or(if repository == "aur" && !is_installed { None } else { Some(def_inst_size) })
+            };
+            let item_size_label = ryzora_core::app_adapters::format_size_summary(item_dl_size, item_inst_size);
+
+            for p in &mut available_providers {
+                if p.provider_id == "aur" && !p.is_installed {
+                    p.download_size = None;
+                    p.installed_size = None;
+                    p.size_label = None;
+                } else {
+                    if p.download_size.is_none() {
+                        p.download_size = Some(def_dl_size);
+                    }
+                    if p.installed_size.is_none() {
+                        p.installed_size = Some(def_inst_size);
+                    }
+                    if p.size_label.is_none() || p.size_label.as_deref() == Some("Source (AUR)") {
+                        p.size_label = ryzora_core::app_adapters::format_size_summary(p.download_size, p.installed_size);
+                    }
+                }
+            }
 
             items.push(ApplicationItem {
                 id: id.to_string(),
@@ -2695,6 +2757,29 @@ impl BackendState {
             });
         }
 
+
+        items
+    }
+
+    pub fn query_applications_filtered(
+        &self,
+        repo_root_hint: Option<&Path>,
+        category: &str,
+        search: &str,
+        provider_filter: &str,
+        page: usize,
+        page_size: usize,
+    ) -> Vec<ApplicationItem> {
+        let _repo_root = Self::resolve_repo_root(repo_root_hint);
+        let cat_trimmed = category.trim().to_lowercase();
+        let q_trimmed = search.trim().to_lowercase();
+        let prov_trimmed = provider_filter.trim().to_lowercase();
+
+        let items = self.get_curated_applications_instant(repo_root_hint);
+        let mut curated_ids = HashSet::new();
+        for item in &items {
+            curated_ids.insert(item.id.clone());
+        }
         let is_all_packages_mode = cat_trimmed == "all_packages" || cat_trimmed == "packages";
 
         let mut filtered: Vec<ApplicationItem> = items
@@ -6749,6 +6834,17 @@ pub extern "C" fn ryzora_query_applications_paged(
     let prov_str = unsafe { if provider.is_null() { "all" } else { CStr::from_ptr(provider).to_str().unwrap_or("all") } };
 
     let items = get_backend().query_applications_filtered(root_opt, cat_str, q_str, prov_str, page, page_size);
+    let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
+    safe_to_c_string(json)
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_curated_applications(repo_root: *const c_char) -> *mut c_char {
+    let root_opt = unsafe {
+        if repo_root.is_null() { None }
+        else { CStr::from_ptr(repo_root).to_str().ok().map(Path::new) }
+    };
+    let items = get_backend().get_curated_applications_instant(root_opt);
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
     safe_to_c_string(json)
 }

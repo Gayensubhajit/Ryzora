@@ -45,8 +45,8 @@ jobs:
       - name: Install Arch Build Dependencies
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel git cargo rust nodejs npm \
-            gtk3 webkit2gtk-4.1 openssl hicolor-icon-theme \
+            base-devel git cargo rust cmake ninja \
+            qt6-base qt6-declarative qt6-multimedia qt6-quickcontrols2 polkit hicolor-icon-theme \
             desktop-file-utils appstream
           useradd -m -s /bin/bash builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -62,12 +62,11 @@ jobs:
           appstreamcli validate --no-net dist-assets/io.ryzora.Ryzora.metainfo.xml
 
       - name: Build via makepkg
-        run: su builder -c "cd packaging/arch && makepkg -sf --noconfirm"
+        run: su builder -c "./scripts/build-arch-package.sh"
 
       - name: Test Pacman Install / Verify / Uninstall
         run: |
-          cd packaging/arch
-          PKG_FILE=$(ls ryzora-*.pkg.tar.zst | head -n1)
+          PKG_FILE=$(ls target/arch/ryzora-*.pkg.tar.zst | head -n1)
           pacman -U --noconfirm "$PKG_FILE"
           test -x /usr/bin/ryzora
           test -f /usr/share/applications/io.ryzora.Ryzora.desktop

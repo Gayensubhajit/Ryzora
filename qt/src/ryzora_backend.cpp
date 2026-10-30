@@ -29,6 +29,7 @@ extern "C" {
     char* ryzora_query_catalog(const char* repo_root, const char* category, const char* search);
     char* ryzora_query_applications(const char* repo_root, const char* category, const char* search);
     char* ryzora_query_applications_paged(const char* repo_root, const char* category, const char* search, const char* provider, size_t page, size_t page_size);
+    char* ryzora_get_curated_applications(const char* repo_root);
     char* ryzora_install_application(const char* app_id);
     char* ryzora_install_application_with_progress(const char* app_id, void (*callback)(const char*, void*), void* user_data);
     char* ryzora_uninstall_application(const char* app_id);
@@ -104,6 +105,31 @@ RyzoraBackend::RyzoraBackend(QObject *parent) : QObject(parent) {
 
     ryzora_init();
     filterCatalog("all", "");
+
+    // Pre-populate appsList instantly with curated storefront applications (<1ms, zero I/O blocking)
+    QString repoRoot = resolveRepoRoot();
+    QByteArray bRoot = repoRoot.toUtf8();
+    char* curJson = ryzora_get_curated_applications(bRoot.constData());
+    if (curJson) {
+        QString jsonStr = QString::fromUtf8(curJson);
+        ryzora_free_string(curJson);
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        if (doc.isArray()) {
+            for (const QJsonValue &val : doc.array()) {
+                QVariantMap m = val.toObject().toVariantMap();
+                QString sortName = m.value(QStringLiteral("display_name")).toString().toLower();
+                if (sortName.isEmpty()) sortName = m.value(QStringLiteral("name")).toString().toLower();
+                m.insert(QStringLiteral("_sortName"), sortName);
+                m.insert(QStringLiteral("_catLower"), m.value(QStringLiteral("category")).toString().toLower());
+                m.insert(QStringLiteral("_provLower"), m.value(QStringLiteral("provider_id")).toString().toLower());
+                m_appsList.append(std::move(m));
+            }
+            m_cachedAppsCatalog = m_appsList;
+            m_activeCatalogScope = QStringLiteral("apps");
+        }
+    }
+    m_isAppsLoading = false;
+
     filterApps("all", "");
     loadLibrary(false);
     loadFastfetchInstalledPresets();
@@ -178,6 +204,8 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
 void RyzoraBackend::invalidateAppsCatalogCache() {
     m_cachedAppsCatalog.clear();
     m_cachedAllPackagesCatalog.clear();
+    m_hasFullAppsCatalog = false;
+    m_hasFullPackagesCatalog = false;
     m_activeCatalogScope.clear();
 }
 
@@ -202,8 +230,9 @@ void RyzoraBackend::filterApps(const QString &category, const QString &query, co
     // Fast path: reuse already-loaded in-memory catalog without spawning a worker thread or resetting model
     if (isCacheableBaseScope) {
         const QString desiredScope = isAllPackages ? QStringLiteral("all_packages") : QStringLiteral("apps");
+        const bool hasFull = isAllPackages ? m_hasFullPackagesCatalog : m_hasFullAppsCatalog;
         const QVariantList &cached = isAllPackages ? m_cachedAllPackagesCatalog : m_cachedAppsCatalog;
-        if (!cached.isEmpty()) {
+        if (hasFull && !cached.isEmpty()) {
             if (m_activeCatalogScope == desiredScope && m_appsList.size() == cached.size()) {
                 if (m_isAppsLoading) {
                     m_isAppsLoading = false;
@@ -284,9 +313,11 @@ void RyzoraBackend::filterApps(const QString &category, const QString &query, co
                 if (isCacheableBaseScope) {
                     if (isAllPackages) {
                         self->m_cachedAllPackagesCatalog = list;
+                        self->m_hasFullPackagesCatalog = true;
                         self->m_activeCatalogScope = QStringLiteral("all_packages");
                     } else {
                         self->m_cachedAppsCatalog = list;
+                        self->m_hasFullAppsCatalog = true;
                         self->m_activeCatalogScope = QStringLiteral("apps");
                     }
                 } else {

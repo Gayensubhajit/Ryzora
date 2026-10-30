@@ -316,6 +316,8 @@ private:
     QVariantList m_appsList;
     QVariantList m_cachedAppsCatalog;
     QVariantList m_cachedAllPackagesCatalog;
+    bool m_hasFullAppsCatalog{false};
+    bool m_hasFullPackagesCatalog{false};
     QString m_activeCatalogScope;
     void invalidateAppsCatalogCache();
     bool m_isAppsLoading{false};
