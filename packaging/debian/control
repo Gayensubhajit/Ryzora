@@ -5,11 +5,10 @@ Maintainer: Ryzora Contributors <contributors@ryzora.org>
 Build-Depends: debhelper-compat (= 13),
                cargo,
                rustc (>= 1.75),
-               nodejs (>= 18),
-               npm,
-               libgtk-3-dev,
-               libwebkit2gtk-4.1-dev,
-               libssl-dev,
+               cmake,
+               qt6-base-dev,
+               qt6-declarative-dev,
+               libqt6quickcontrols2-6,
                pkg-config
 Standards-Version: 4.6.2
 Homepage: https://github.com/Gayensubhajit/Ryzora
@@ -20,9 +19,12 @@ Package: ryzora
 Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         libgtk-3-0,
-         libwebkit2gtk-4.1-0,
-         libssl3,
+         libqt6core6,
+         libqt6gui6,
+         libqt6qml6,
+         libqt6quick6,
+         libqt6quickcontrols2-6,
+         libqt6widgets6,
          hicolor-icon-theme
 Suggests: hyprland,
           waybar,

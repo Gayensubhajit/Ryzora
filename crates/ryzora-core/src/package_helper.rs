@@ -135,25 +135,25 @@ pub fn detect_privileged_package_helper_status() -> PrivilegedPackageHelperStatu
 pub fn find_bundled_package_helper_resources() -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let mut candidate_dirs = vec![
         PathBuf::from("resources"),
-        PathBuf::from("src-tauri/resources"),
+        PathBuf::from("crates/ryzora-core/resources"),
         PathBuf::from("../resources"),
-        PathBuf::from("../src-tauri/resources"),
-        PathBuf::from("../../src-tauri/resources"),
+        PathBuf::from("../crates/ryzora-core/resources"),
+        PathBuf::from("../../crates/ryzora-core/resources"),
         PathBuf::from("/usr/share/ryzora/resources"),
+        PathBuf::from("/usr/lib/ryzora"),
     ];
 
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         let m = PathBuf::from(&manifest_dir);
         candidate_dirs.push(m.join("resources"));
-        candidate_dirs.push(m.join("../../src-tauri/resources"));
-        candidate_dirs.push(m.join("../src-tauri/resources"));
+        candidate_dirs.push(m.join("../crates/ryzora-core/resources"));
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             candidate_dirs.push(parent.join("resources"));
             candidate_dirs.push(parent.join("../resources"));
-            candidate_dirs.push(parent.join("../../src-tauri/resources"));
+            candidate_dirs.push(parent.join("../crates/ryzora-core/resources"));
         }
     }
 

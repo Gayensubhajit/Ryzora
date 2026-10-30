@@ -12,7 +12,7 @@ echo "=== Ryzora AppImage Builder ==="
 echo "Working directory: $ROOT_DIR"
 
 # Read version from Cargo.toml
-VERSION=$(grep '^version' "$ROOT_DIR/src-tauri/Cargo.toml" | head -n1 | cut -d '"' -f 2)
+VERSION=$(grep '^version' "$ROOT_DIR/crates/ryzora-core/Cargo.toml" | head -n1 | cut -d '"' -f 2)
 echo "Target version: $VERSION"
 
 # 1. Clean AppDir
@@ -26,28 +26,16 @@ mkdir -p "$APP_DIR/usr/share/icons"
 # 2. Build or verify release binaries
 echo "[2/5] Verifying / compiling release binaries..."
 BIN_PATH=""
-if [ -f "$ROOT_DIR/src-tauri/target/release/ryzora" ]; then
-    BIN_PATH="$ROOT_DIR/src-tauri/target/release/ryzora"
-elif [ -f "$ROOT_DIR/src-tauri/target/debug/ryzora" ]; then
-    echo "Release binary not found, using existing debug binary for AppImage packaging..."
-    BIN_PATH="$ROOT_DIR/src-tauri/target/debug/ryzora"
-elif which cargo >/dev/null 2>&1; then
-    echo "Compiling release binaries..."
-    cd "$ROOT_DIR"
-    npm run build
-    cargo build --manifest-path src-tauri/Cargo.toml --release --locked
-    BIN_PATH="$ROOT_DIR/src-tauri/target/release/ryzora"
+if [ -f "$ROOT_DIR/qt/build/ryzora" ]; then
+    BIN_PATH="$ROOT_DIR/qt/build/ryzora"
 else
-    echo "Error: No compiled ryzora binary found and cargo is not available."
-    exit 1
+    echo "Compiling release Qt binary..."
+    cmake -B "$ROOT_DIR/qt/build" -S "$ROOT_DIR/qt" -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$ROOT_DIR/qt/build" --parallel
+    BIN_PATH="$ROOT_DIR/qt/build/ryzora"
 fi
 cp "$BIN_PATH" "$APP_DIR/usr/bin/ryzora"
 chmod 755 "$APP_DIR/usr/bin/ryzora"
-
-if [ -f "$ROOT_DIR/src-tauri/target/release/ryzora-ci" ]; then
-    cp "$ROOT_DIR/src-tauri/target/release/ryzora-ci" "$APP_DIR/usr/bin/ryzora-ci"
-    chmod 755 "$APP_DIR/usr/bin/ryzora-ci"
-fi
 
 # 3. Copy Desktop entry, Metainfo, and Icons
 echo "[3/5] Installing desktop integration and icons..."
@@ -65,26 +53,26 @@ cp -r "$ROOT_DIR/dist-assets/icons/hicolor" "$APP_DIR/usr/share/icons/"
 
 # 3b. Privileged SDDM & Package helper & Polkit policy resources in AppDir
 mkdir -p "$APP_DIR/usr/lib/ryzora"
-cp "$ROOT_DIR/src-tauri/resources/ryzora-sddm-helper" "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
+cp "$ROOT_DIR/crates/ryzora-core/resources/ryzora-sddm-helper" "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
 chmod 755 "$APP_DIR/usr/lib/ryzora/ryzora-sddm-helper"
-if [ -f "$ROOT_DIR/src-tauri/resources/ryzora-package-helper" ]; then
-    cp "$ROOT_DIR/src-tauri/resources/ryzora-package-helper" "$APP_DIR/usr/lib/ryzora/ryzora-package-helper"
+if [ -f "$ROOT_DIR/crates/ryzora-core/resources/ryzora-package-helper" ]; then
+    cp "$ROOT_DIR/crates/ryzora-core/resources/ryzora-package-helper" "$APP_DIR/usr/lib/ryzora/ryzora-package-helper"
     chmod 755 "$APP_DIR/usr/lib/ryzora/ryzora-package-helper"
 fi
 
 mkdir -p "$APP_DIR/usr/share/polkit-1/actions" "$APP_DIR/usr/share/polkit-1/rules.d"
-cp "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
+cp "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.sddm.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
 chmod 644 "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.sddm.policy"
-if [ -f "$ROOT_DIR/src-tauri/resources/io.ryzora.package.policy" ]; then
-    cp "$ROOT_DIR/src-tauri/resources/io.ryzora.package.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.package.policy"
+if [ -f "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.package.policy" ]; then
+    cp "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.package.policy" "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.package.policy"
     chmod 644 "$APP_DIR/usr/share/polkit-1/actions/io.ryzora.package.policy"
 fi
-if [ -f "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.rules" ]; then
-    cp "$ROOT_DIR/src-tauri/resources/io.ryzora.sddm.rules" "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
+if [ -f "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.sddm.rules" ]; then
+    cp "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.sddm.rules" "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
     chmod 644 "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.sddm.rules"
 fi
-if [ -f "$ROOT_DIR/src-tauri/resources/io.ryzora.package.rules" ]; then
-    cp "$ROOT_DIR/src-tauri/resources/io.ryzora.package.rules" "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
+if [ -f "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.package.rules" ]; then
+    cp "$ROOT_DIR/crates/ryzora-core/resources/io.ryzora.package.rules" "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
     chmod 644 "$APP_DIR/usr/share/polkit-1/rules.d/io.ryzora.package.rules"
 fi 
 

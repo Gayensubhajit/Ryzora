@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify version consistency across all packaging files
         run: |
-          CARGO=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f2)
+          CARGO=$(grep '^version' crates/ryzora-core/Cargo.toml | head -n1 | cut -d '"' -f2)
           PKG=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
           PKGBUILD=$(grep '^pkgver=' packaging/arch/PKGBUILD | cut -d= -f2)
           SPEC=$(grep '^Version:' packaging/fedora/ryzora.spec | awk '{print $2}')
@@ -94,7 +94,7 @@ jobs:
 
       - name: Prepare Source Tarball
         run: |
-          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -n1 | cut -d '"' -f2)
+          VERSION=$(grep '^version' crates/ryzora-core/Cargo.toml | head -n1 | cut -d '"' -f2)
           mkdir -p /root/rpmbuild/SOURCES
           tar --transform "s,^\.,Ryzora-${VERSION}," --exclude='./.git' \
               -czf "/root/rpmbuild/SOURCES/ryzora-${VERSION}.tar.gz" .

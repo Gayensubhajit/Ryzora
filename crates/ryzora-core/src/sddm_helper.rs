@@ -100,17 +100,16 @@ pub fn find_bundled_helper_resources() -> Result<(PathBuf, PathBuf, PathBuf), St
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             candidate_dirs.push(parent.join("resources"));
-            candidate_dirs.push(parent.join("../Resources/resources"));
             candidate_dirs.push(parent.join("../resources"));
+            candidate_dirs.push(parent.join("../crates/ryzora-core/resources"));
         }
     }
 
     if let Ok(cwd) = std::env::current_dir() {
-        candidate_dirs.push(cwd.join("src-tauri/resources"));
         candidate_dirs.push(cwd.join("resources"));
+        candidate_dirs.push(cwd.join("crates/ryzora-core/resources"));
+        candidate_dirs.push(cwd.join("../crates/ryzora-core/resources"));
     }
-
-    candidate_dirs.push(PathBuf::from("/home/silentbyte/Documents/Code Playground/Ryzora/src-tauri/resources"));
 
     for dir in &candidate_dirs {
         let helper = dir.join("ryzora-sddm-helper");

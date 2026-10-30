@@ -1,7 +1,7 @@
 /**
  * Ryzora Reversible Integration Core — Frontend Types
  *
- * Reflects the backend contracts in src-tauri/src/integration/types.rs
+ * Reflects the backend contracts in crates/ryzora-qt-backend/src/lib.rs
  */
 
 export type ArtifactType =

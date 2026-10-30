@@ -9,19 +9,19 @@ Source0:        https://github.com/Gayensubhajit/Ryzora/archive/refs/tags/v%{ver
 
 BuildRequires:  rust >= 1.75
 BuildRequires:  cargo
-BuildRequires:  nodejs >= 18
-BuildRequires:  npm
+BuildRequires:  cmake
+BuildRequires:  ninja-build
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
 BuildRequires:  pkgconfig
 BuildRequires:  openssl-devel
-BuildRequires:  gtk3-devel
-BuildRequires:  webkit2gtk4.1-devel
+BuildRequires:  qt6-qtbase-devel
+BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  desktop-file-utils
 BuildRequires:  libappstream-glib
 
-Requires:       gtk3
-Requires:       webkit2gtk4.1
+Requires:       qt6-qtbase
+Requires:       qt6-qtdeclarative
 Requires:       openssl
 Requires:       hicolor-icon-theme
 Suggests:       hyprland
@@ -39,16 +39,12 @@ desktop rices, Waybar configs, lock screens, and themes without risking system b
 %autosetup -n Ryzora-%{version}
 
 %build
-npm install --frozen-lockfile || npm install
-npm run build
-cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+cmake -B qt/build -S qt -DCMAKE_BUILD_TYPE=Release
+cmake --build qt/build --parallel
 
 %install
 # Install main binary
-install -Dm755 src-tauri/target/release/ryzora %{buildroot}%{_bindir}/ryzora
-if [ -f src-tauri/target/release/ryzora-ci ]; then
-    install -Dm755 src-tauri/target/release/ryzora-ci %{buildroot}%{_bindir}/ryzora-ci
-fi
+install -Dm755 qt/build/ryzora %{buildroot}%{_bindir}/ryzora
 
 # Desktop entries
 install -Dm644 dist-assets/io.ryzora.Ryzora.desktop %{buildroot}%{_datadir}/applications/io.ryzora.Ryzora.desktop
@@ -67,12 +63,12 @@ for size in 16 32 48 64 128 256 512; do
 done
 
 # Privileged helpers and Polkit security policies
-install -Dm755 src-tauri/resources/ryzora-sddm-helper %{buildroot}%{_prefix}/lib/ryzora/ryzora-sddm-helper
-install -Dm755 src-tauri/resources/ryzora-package-helper %{buildroot}%{_prefix}/lib/ryzora/ryzora-package-helper
-install -Dm644 src-tauri/resources/io.ryzora.sddm.policy %{buildroot}%{_datadir}/polkit-1/actions/io.ryzora.sddm.policy
-install -Dm644 src-tauri/resources/io.ryzora.package.policy %{buildroot}%{_datadir}/polkit-1/actions/io.ryzora.package.policy
-install -Dm644 src-tauri/resources/io.ryzora.sddm.rules %{buildroot}%{_datadir}/polkit-1/rules.d/io.ryzora.sddm.rules
-install -Dm644 src-tauri/resources/io.ryzora.package.rules %{buildroot}%{_datadir}/polkit-1/rules.d/io.ryzora.package.rules
+install -Dm755 crates/ryzora-core/resources/ryzora-sddm-helper %{buildroot}%{_prefix}/lib/ryzora/ryzora-sddm-helper
+install -Dm755 crates/ryzora-core/resources/ryzora-package-helper %{buildroot}%{_prefix}/lib/ryzora/ryzora-package-helper
+install -Dm644 crates/ryzora-core/resources/io.ryzora.sddm.policy %{buildroot}%{_datadir}/polkit-1/actions/io.ryzora.sddm.policy
+install -Dm644 crates/ryzora-core/resources/io.ryzora.package.policy %{buildroot}%{_datadir}/polkit-1/actions/io.ryzora.package.policy
+install -Dm644 crates/ryzora-core/resources/io.ryzora.sddm.rules %{buildroot}%{_datadir}/polkit-1/rules.d/io.ryzora.sddm.rules
+install -Dm644 crates/ryzora-core/resources/io.ryzora.package.rules %{buildroot}%{_datadir}/polkit-1/rules.d/io.ryzora.package.rules
 
 # Licenses and docs
 install -Dm644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
@@ -85,7 +81,6 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/io.ryzora.Ryzora.desk
 %license %{_licensedir}/%{name}/LICENSE
 %doc %{_docdir}/%{name}/README.md
 %{_bindir}/ryzora
-%{_bindir}/ryzora-ci
 %{_datadir}/applications/io.ryzora.Ryzora.desktop
 %{_datadir}/applications/ryzora.desktop
 %{_metainfodir}/io.ryzora.Ryzora.metainfo.xml

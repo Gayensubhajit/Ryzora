@@ -1270,7 +1270,7 @@ pub fn get_default_repository_search_dirs() -> Vec<PathBuf> {
         if repo_subdir.is_dir() {
             dirs.push(repo_subdir);
         }
-        if cwd.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
+        if cwd.file_name().and_then(|n| n.to_str()) == Some("qt") || cwd.file_name().and_then(|n| n.to_str()) == Some("build") {
             if let Some(parent) = cwd.parent() {
                 let parent_repos = parent.join("repositories");
                 if parent_repos.is_dir() {

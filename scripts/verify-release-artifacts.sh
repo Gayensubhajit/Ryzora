@@ -50,10 +50,10 @@ echo "[+] Step 2: Verifying detached Ed25519 signature over SHA256SUMS.txt..."
 RYZORA_CI=""
 if command -v ryzora-ci >/dev/null 2>&1; then
     RYZORA_CI="ryzora-ci"
-elif [ -f "src-tauri/target/release/ryzora-ci" ]; then
-    RYZORA_CI="src-tauri/target/release/ryzora-ci"
-elif [ -f "src-tauri/target/debug/ryzora-ci" ]; then
-    RYZORA_CI="src-tauri/target/debug/ryzora-ci"
+elif [ -f "target/release/ryzora-ci" ]; then
+    RYZORA_CI="target/release/ryzora-ci"
+elif [ -f "target/debug/ryzora-ci" ]; then
+    RYZORA_CI="target/debug/ryzora-ci"
 fi
 
 if [ -n "$RYZORA_CI" ]; then

@@ -359,7 +359,6 @@ test("App routing: Both Emblem and Config cards open full FastfetchDetailView wi
 // 14. Emblem Card Preview and Install Destination Contract
 test("Fastfetch Emblem Card Preview and Install Destination Contract", () => {
   // 1. Emblem manifests install strictly into ~/.config/fastfetch/logos/<package-id>/<filename>
-  const glob = require("node:fs");
   const emblemDir = path.resolve(process.cwd(), "repositories/community/packages");
   const packages = fs.readdirSync(emblemDir).filter(p => p.startsWith("fastfetch-emblem-"));
   assert.equal(packages.length, 11, "Must have exactly 11 emblem packages");
@@ -408,7 +407,7 @@ test("DiscoverView Fastfetch subfilter navigation and CategoryHeader contract", 
 // 15. Fastfetch Config Lifecycle and Safety Invariant Contract
 test("Fastfetch Config Lifecycle: Selecting a preset NEVER touches config.jsonc, Save is atomic", () => {
   const settingsFile = fs.readFileSync(path.resolve(process.cwd(), "src/views/FastfetchView.tsx"), "utf-8");
-  const systemFile = fs.readFileSync(path.resolve(process.cwd(), "src-tauri/src/system.rs"), "utf-8");
+  const systemFile = fs.readFileSync(path.resolve(process.cwd(), "crates/ryzora-qt-backend/src/lib.rs"), "utf-8");
 
   // 1. handleSelectStyle must NOT invoke apply_fastfetch_configuration
   const selectStyleIdx = settingsFile.indexOf("const handleSelectStyle");
@@ -419,23 +418,23 @@ test("Fastfetch Config Lifecycle: Selecting a preset NEVER touches config.jsonc,
     "handleSelectStyle must NEVER call apply_fastfetch_configuration"
   );
 
-  // 2. apply_fastfetch_configuration must reject empty content
+  // 2. save_fastfetch_configuration must reject empty content
   assert.ok(
-    systemFile.includes("content_to_write.trim().is_empty()"),
+    systemFile.includes("trimmed.is_empty()"),
     "Backend must check and reject empty configuration"
   );
   assert.ok(
-    systemFile.includes("Refusing to write empty Fastfetch configuration"),
+    systemFile.includes("Refusing to save empty Fastfetch configuration"),
     "Backend must return error on empty configuration"
   );
 
   // 3. Backend must perform atomic write with temporary file and rename
   assert.ok(
-    systemFile.includes(".config.jsonc.ryzora-tmp"),
+    systemFile.includes(".config.jsonc.tmp."),
     "Backend must write to temporary file before replacing config.jsonc"
   );
   assert.ok(
-    systemFile.includes("fs::rename(&tmp_file_path, &target_path)"),
+    systemFile.includes("fs::rename(&tmp, &target)"),
     "Backend must atomically rename temporary file over target_path"
   );
 

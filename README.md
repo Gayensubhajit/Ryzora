@@ -108,22 +108,35 @@ ryzora-ci verify-file SHA256SUMS.txt SHA256SUMS.txt.sig ryzora-release-0.1.0.pub
 ## 🛠️ Development & Building from Source
 
 ### Prerequisites
-- **Node.js** (v20+) and **npm**
+- **Qt 6** (Qt6 Core, Gui, Quick, Qml, QuickControls2, Multimedia)
+- **CMake** (3.21+) & C++17 compiler (GCC / Clang)
 - **Rust** and **Cargo** (1.80+)
-- **WebKit2GTK** (webkit2gtk-4.1), GTK3, and OpenSSL
+- **Node.js** (v20+) and **npm** (for verification test suite)
 
 ### Build & Run
 ```bash
-npm install
-npm run tauri dev
+# Build and run Qt application
+cmake -B qt/build -S qt -DCMAKE_BUILD_TYPE=Release
+cmake --build qt/build --parallel
+./qt/build/ryzora
+
+# Or run via npm script
+npm run qt
 ```
 
 ### Run Tests & Verification
 ```bash
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo check --manifest-path src-tauri/Cargo.toml
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
-npm run build
+# Rust core and Qt backend tests
+cargo test -p ryzora-core
+cargo test -p ryzora-qt-backend --lib
+
+# Frontend model test suite
+npm test
+npm run typecheck
+
+# Headless integration tests
+QT_QPA_PLATFORM=offscreen timeout 90 ./qt/build/ryzora --test-apps
+QT_QPA_PLATFORM=offscreen timeout 45 ./qt/build/ryzora --test-updates
 ```
 
 ---

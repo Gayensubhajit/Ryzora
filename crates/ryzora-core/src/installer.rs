@@ -12,6 +12,33 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::manifest::{validate_manifest_internal, PackageType, RyzoraManifest};
 use crate::snapshot::{create_snapshot_in, restore_snapshot_in, verify_snapshot_in};
 
+/// Loads, validates, and parses a package's `manifest.json`.
+pub fn load_package_manifest(package_dir: &Path) -> Result<RyzoraManifest, String> {
+    let manifest_path = package_dir.join("manifest.json");
+    if !manifest_path.is_file() {
+        return Err(format!(
+            "manifest.json not found in package directory '{}'",
+            package_dir.display()
+        ));
+    }
+
+    let raw = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Failed to read manifest.json: {}", e))?;
+
+    let validation = validate_manifest_internal(&raw);
+    if !validation.valid {
+        return Err(format!(
+            "Manifest validation failed: {}",
+            validation.errors.join("; ")
+        ));
+    }
+
+    let manifest: RyzoraManifest =
+        serde_json::from_str(&raw).map_err(|e| format!("Failed to parse manifest: {}", e))?;
+
+    Ok(manifest)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Installer Data Types
 // ─────────────────────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-RES_DIR="$ROOT_DIR/src-tauri/resources"
+RES_DIR="$ROOT_DIR/crates/ryzora-core/resources"
 
 echo "=== Ryzora System Integration Setup ==="
 mkdir -p /usr/lib/ryzora /usr/share/polkit-1/actions /usr/share/polkit-1/rules.d

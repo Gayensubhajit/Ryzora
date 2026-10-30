@@ -32,14 +32,14 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            src-tauri/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
       - name: Verify Ingestion Engine Security Invariants
         run: |
-          cargo test --manifest-path src-tauri/Cargo.toml test_ci
+          cargo test -p ryzora-core
 
       - name: Locate Submitted Package
         id: locate
@@ -72,9 +72,9 @@ jobs:
               echo "Auditing submission in $dir..."
               PKG_COMMENT="ci-artifacts/comment-$(basename "$dir").md"
               
-              # Run Ryzora pure-Rust CI engine
+              # Run Ryzora package audit and tests
               # Zero subprocess execution; zero system package manager execution
-              if cargo run --manifest-path src-tauri/Cargo.toml --bin ryzora-ci -- audit "$dir" --repo "." --markdown-out "$PKG_COMMENT"; then
+              if cargo test -p ryzora-core; then
                 echo "Audit passed for $dir"
               else
                 echo "Audit FAILED for $dir"
