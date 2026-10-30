@@ -67,6 +67,8 @@ extern "C" {
     char* ryzora_install_package(const char* package_id);
     char* ryzora_test_package(const char* package_id);
     char* ryzora_uninstall_package(const char* package_id);
+    char* ryzora_get_storage_usage();
+    char* ryzora_clear_content_cache();
     char* ryzora_apply_target(const char* package_id, const char* target);
     char* ryzora_deactivate_target(const char* target);
     char* ryzora_create_snapshot(const char* reason);
@@ -2435,6 +2437,22 @@ void RyzoraBackend::uninstallPackage(const QString &packageId) {
             });
         }
     });
+}
+
+QString RyzoraBackend::getStorageUsage() {
+    char *raw = ryzora_get_storage_usage();
+    if (!raw) return "{}";
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
+}
+
+QString RyzoraBackend::clearContentCache() {
+    char *raw = ryzora_clear_content_cache();
+    if (!raw) return "{}";
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
 }
 
 void RyzoraBackend::testPackage(const QString &packageId) {

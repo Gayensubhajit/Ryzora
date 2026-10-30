@@ -48,12 +48,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-night-city/bg.mp4",
-      "description": "pixel-night-city files/bg.mp4"
+      "description": "pixel-night-city files/bg.mp4",
+      "sha256": "0ff661c2d366ae3d488bb7d2f66ef3d14157248cc4ae98326efe6afdb3a9a4dc",
+      "size_bytes": 2550234,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-night-city/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/PixelifySans-Bold.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-night-city/font/PixelifySans-Bold.ttf",
-      "description": "pixel-night-city files/font/PixelifySans-Bold.ttf"
+      "description": "pixel-night-city files/font/PixelifySans-Bold.ttf",
+      "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+      "size_bytes": 50872,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-night-city/files/font/PixelifySans-Bold.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -89,12 +99,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-night-city/bg.mp4",
-          "description": "pixel-night-city bg.mp4 (quickshell)"
+          "description": "pixel-night-city bg.mp4 (quickshell)",
+          "sha256": "0ff661c2d366ae3d488bb7d2f66ef3d14157248cc4ae98326efe6afdb3a9a4dc",
+          "size_bytes": 2550234,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-night-city/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-night-city/font/PixelifySans-Bold.ttf",
-          "description": "pixel-night-city font/PixelifySans-Bold.ttf (quickshell)"
+          "description": "pixel-night-city font/PixelifySans-Bold.ttf (quickshell)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-night-city/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -129,12 +149,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-pixel-night-city/bg.mp4",
-          "description": "pixel-night-city bg.mp4 (sddm)"
+          "description": "pixel-night-city bg.mp4 (sddm)",
+          "sha256": "0ff661c2d366ae3d488bb7d2f66ef3d14157248cc4ae98326efe6afdb3a9a4dc",
+          "size_bytes": 2550234,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-night-city/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "/usr/share/sddm/themes/ryzora-pixel-night-city/font/PixelifySans-Bold.ttf",
-          "description": "pixel-night-city font/PixelifySans-Bold.ttf (sddm)"
+          "description": "pixel-night-city font/PixelifySans-Bold.ttf (sddm)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-night-city/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

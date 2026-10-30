@@ -37,12 +37,22 @@
     {
       "source": "files/images/fetchimage.png",
       "target": "~/.config/fastfetch/presets/fastfetch-jonaszfetch/images/fetchimage.png",
-      "description": "Fastfetch asset images/fetchimage.png"
+      "description": "Fastfetch asset images/fetchimage.png",
+      "sha256": "b4327514263035d41d4fb64935c44c43460ff434492265a8406a3e9da935278e",
+      "size_bytes": 4153524,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-jonaszfetch/files/images/fetchimage.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/images/preview.png",
       "target": "~/.config/fastfetch/presets/fastfetch-jonaszfetch/images/preview.png",
-      "description": "Fastfetch asset images/preview.png"
+      "description": "Fastfetch asset images/preview.png",
+      "sha256": "0412d4cead9ce69ac35f1600d3c069615a192e59014043163d162e9643ac0262",
+      "size_bytes": 167453,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-jonaszfetch/files/images/preview.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/readme.txt",

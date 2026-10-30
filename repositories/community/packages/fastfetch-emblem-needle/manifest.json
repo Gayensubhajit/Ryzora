@@ -33,7 +33,12 @@
     {
       "source": "files/needle.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-needle/needle.png",
-      "description": "Fastfetch Needle Emblem"
+      "description": "Fastfetch Needle Emblem",
+      "sha256": "bcb5fcd4d7f50b456818aca204d7811d497edb1d660557d06a4c75051c30a9fc",
+      "size_bytes": 19763,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-needle/files/needle.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

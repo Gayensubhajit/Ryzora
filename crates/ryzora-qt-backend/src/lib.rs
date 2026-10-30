@@ -7444,6 +7444,43 @@ pub extern "C" fn ryzora_uninstall_package(package_id: *const c_char) -> *mut c_
 }
 
 #[no_mangle]
+pub extern "C" fn ryzora_get_storage_usage() -> *mut c_char {
+    let home = match BackendState::system_home_dir() {
+        Some(h) => h,
+        None => return safe_to_c_string("{}"),
+    };
+    let usage = ryzora_core::installer::get_storage_usage_in(&home);
+    let json = serde_json::to_string(&usage).unwrap_or_else(|_| "{}".to_string());
+    safe_to_c_string(json)
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_clear_content_cache() -> *mut c_char {
+    let home = match BackendState::system_home_dir() {
+        Some(h) => h,
+        None => return safe_to_c_string(r#"{"success":false,"message":"No home directory resolved"}"#),
+    };
+    match ryzora_core::installer::clear_content_cache_in(&home) {
+        Ok(freed) => {
+            let json = serde_json::json!({
+                "success": true,
+                "freed_bytes": freed,
+                "freed_human": ryzora_core::installer::format_bytes_human(freed),
+                "message": format!("Cleaned {} of cached content", ryzora_core::installer::format_bytes_human(freed))
+            });
+            safe_to_c_string(json.to_string())
+        }
+        Err(e) => {
+            let json = serde_json::json!({
+                "success": false,
+                "message": e
+            });
+            safe_to_c_string(json.to_string())
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn ryzora_create_snapshot(reason: *const c_char) -> *mut c_char {
     let reason_str = if reason.is_null() {
         "Manual restore point"

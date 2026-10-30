@@ -91,12 +91,32 @@ install(DIRECTORY
 )
 
 # Shared Data & Package Repository Metadata
+# Core application package includes lightweight metadata, QML definitions, and configurations.
+# Heavy community media (videos, gifs, fonts, and large raw images) are fetched on-demand by ryzora-core and cached locally.
 install(DIRECTORY
     "${RUST_WORKSPACE_DIR}/repositories"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/ryzora
+    PATTERN "*.mp4" EXCLUDE
+    PATTERN "*.gif" EXCLUDE
+    PATTERN "*.ttf" EXCLUDE
+    PATTERN "*.otf" EXCLUDE
+    PATTERN "repositories/community/packages/lockscreen-*/files/background/*Glow.jpg" EXCLUDE
+    PATTERN "repositories/community/packages/lockscreen-*/files/bg.*" EXCLUDE
+    PATTERN "repositories/community/packages/lockscreen-*/files/background.png" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/logo/girl.jpg" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/images/fetchimage.png" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/ror_fetch.png" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/showcase.png" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/images/penrose-sky-wp.png" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/png/penrose-sky-wp.png" EXCLUDE
+    PATTERN "repositories/community/packages/fastfetch-*/files/images/hypr.png" EXCLUDE
 )
+
+# Public Assets: Exclude heavy animated GIFs and preview videos; retain posters, icons, and screenshots
 install(DIRECTORY
     "${RUST_WORKSPACE_DIR}/public/assets"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/ryzora/public
+    PATTERN "*.gif" EXCLUDE
+    PATTERN "*.mp4" EXCLUDE
 )
 

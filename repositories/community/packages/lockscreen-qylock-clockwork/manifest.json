@@ -43,12 +43,22 @@
     {
       "source": "files/neo-orbital/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/neo-orbital/bg.png",
-      "description": "clockwork files/neo-orbital/bg.png"
+      "description": "clockwork files/neo-orbital/bg.png",
+      "sha256": "14c51a859747dc09b39abb11fc0e1104070a8c2556880fa727a3c45f4c09d986",
+      "size_bytes": 2316938,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/neo-orbital/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/neo-orbital/font/Outfit-Black.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/neo-orbital/font/Outfit-Black.ttf",
-      "description": "clockwork files/neo-orbital/font/Outfit-Black.ttf"
+      "description": "clockwork files/neo-orbital/font/Outfit-Black.ttf",
+      "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+      "size_bytes": 55372,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/neo-orbital/font/Outfit-Black.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/neo-orbital/metadata.desktop",
@@ -68,7 +78,12 @@
     {
       "source": "files/orbital/font/Outfit-Black.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/orbital/font/Outfit-Black.ttf",
-      "description": "clockwork files/orbital/font/Outfit-Black.ttf"
+      "description": "clockwork files/orbital/font/Outfit-Black.ttf",
+      "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+      "size_bytes": 55372,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/orbital/font/Outfit-Black.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/orbital/metadata.desktop",
@@ -88,7 +103,12 @@
     {
       "source": "files/tape/font/Outfit-Black.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/tape/font/Outfit-Black.ttf",
-      "description": "clockwork files/tape/font/Outfit-Black.ttf"
+      "description": "clockwork files/tape/font/Outfit-Black.ttf",
+      "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+      "size_bytes": 55372,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/tape/font/Outfit-Black.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/tape/metadata.desktop",
@@ -119,12 +139,22 @@
         {
           "source": "files/neo-orbital/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/neo-orbital/bg.png",
-          "description": "clockwork neo-orbital/bg.png (quickshell)"
+          "description": "clockwork neo-orbital/bg.png (quickshell)",
+          "sha256": "14c51a859747dc09b39abb11fc0e1104070a8c2556880fa727a3c45f4c09d986",
+          "size_bytes": 2316938,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/neo-orbital/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/neo-orbital/font/Outfit-Black.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/neo-orbital/font/Outfit-Black.ttf",
-          "description": "clockwork neo-orbital/font/Outfit-Black.ttf (quickshell)"
+          "description": "clockwork neo-orbital/font/Outfit-Black.ttf (quickshell)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/neo-orbital/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/neo-orbital/metadata.desktop",
@@ -144,7 +174,12 @@
         {
           "source": "files/orbital/font/Outfit-Black.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/orbital/font/Outfit-Black.ttf",
-          "description": "clockwork orbital/font/Outfit-Black.ttf (quickshell)"
+          "description": "clockwork orbital/font/Outfit-Black.ttf (quickshell)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/orbital/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/orbital/metadata.desktop",
@@ -164,7 +199,12 @@
         {
           "source": "files/tape/font/Outfit-Black.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork/tape/font/Outfit-Black.ttf",
-          "description": "clockwork tape/font/Outfit-Black.ttf (quickshell)"
+          "description": "clockwork tape/font/Outfit-Black.ttf (quickshell)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/tape/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/tape/metadata.desktop",
@@ -194,12 +234,22 @@
         {
           "source": "files/neo-orbital/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-clockwork/neo-orbital/bg.png",
-          "description": "clockwork neo-orbital/bg.png (sddm)"
+          "description": "clockwork neo-orbital/bg.png (sddm)",
+          "sha256": "14c51a859747dc09b39abb11fc0e1104070a8c2556880fa727a3c45f4c09d986",
+          "size_bytes": 2316938,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/neo-orbital/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/neo-orbital/font/Outfit-Black.ttf",
           "target": "/usr/share/sddm/themes/ryzora-clockwork/neo-orbital/font/Outfit-Black.ttf",
-          "description": "clockwork neo-orbital/font/Outfit-Black.ttf (sddm)"
+          "description": "clockwork neo-orbital/font/Outfit-Black.ttf (sddm)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/neo-orbital/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/neo-orbital/metadata.desktop",
@@ -219,7 +269,12 @@
         {
           "source": "files/orbital/font/Outfit-Black.ttf",
           "target": "/usr/share/sddm/themes/ryzora-clockwork/orbital/font/Outfit-Black.ttf",
-          "description": "clockwork orbital/font/Outfit-Black.ttf (sddm)"
+          "description": "clockwork orbital/font/Outfit-Black.ttf (sddm)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/orbital/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/orbital/metadata.desktop",
@@ -239,7 +294,12 @@
         {
           "source": "files/tape/font/Outfit-Black.ttf",
           "target": "/usr/share/sddm/themes/ryzora-clockwork/tape/font/Outfit-Black.ttf",
-          "description": "clockwork tape/font/Outfit-Black.ttf (sddm)"
+          "description": "clockwork tape/font/Outfit-Black.ttf (sddm)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork/files/tape/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/tape/metadata.desktop",

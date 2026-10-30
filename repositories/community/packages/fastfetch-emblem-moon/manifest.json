@@ -33,7 +33,12 @@
     {
       "source": "files/moon.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-moon/moon.png",
-      "description": "Fastfetch Moon Emblem"
+      "description": "Fastfetch Moon Emblem",
+      "sha256": "410d97099f8983cca0f897776986776403bd354713ffef8cdd12d1e85deab6b5",
+      "size_bytes": 12458,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-moon/files/moon.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

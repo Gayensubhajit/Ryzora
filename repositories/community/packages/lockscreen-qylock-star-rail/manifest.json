@@ -43,7 +43,12 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/star-rail/bg.mp4",
-      "description": "star-rail files/bg.mp4"
+      "description": "star-rail files/bg.mp4",
+      "sha256": "480e9e3388f8fd1b3d81810f76bd6a9ffc12d2ac72caa28bc3bf50f60f87720e",
+      "size_bytes": 8134037,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-star-rail/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -74,7 +79,12 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/star-rail/bg.mp4",
-          "description": "star-rail bg.mp4 (quickshell)"
+          "description": "star-rail bg.mp4 (quickshell)",
+          "sha256": "480e9e3388f8fd1b3d81810f76bd6a9ffc12d2ac72caa28bc3bf50f60f87720e",
+          "size_bytes": 8134037,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-star-rail/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -104,7 +114,12 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-star-rail/bg.mp4",
-          "description": "star-rail bg.mp4 (sddm)"
+          "description": "star-rail bg.mp4 (sddm)",
+          "sha256": "480e9e3388f8fd1b3d81810f76bd6a9ffc12d2ac72caa28bc3bf50f60f87720e",
+          "size_bytes": 8134037,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-star-rail/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

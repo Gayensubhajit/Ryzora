@@ -43,12 +43,22 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/man-bicycle/bg.png",
-      "description": "man-bicycle files/bg.png"
+      "description": "man-bicycle files/bg.png",
+      "sha256": "cced9213b0bd0437fc331216b841fc000c3e525ea00eade7fd19cdfc56a6947d",
+      "size_bytes": 5005352,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-man-bicycle/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/Itim-Regular.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/man-bicycle/font/Itim-Regular.ttf",
-      "description": "man-bicycle files/font/Itim-Regular.ttf"
+      "description": "man-bicycle files/font/Itim-Regular.ttf",
+      "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+      "size_bytes": 362640,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-man-bicycle/files/font/Itim-Regular.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/man-bicycle/bg.png",
-          "description": "man-bicycle bg.png (quickshell)"
+          "description": "man-bicycle bg.png (quickshell)",
+          "sha256": "cced9213b0bd0437fc331216b841fc000c3e525ea00eade7fd19cdfc56a6947d",
+          "size_bytes": 5005352,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-man-bicycle/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Itim-Regular.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/man-bicycle/font/Itim-Regular.ttf",
-          "description": "man-bicycle font/Itim-Regular.ttf (quickshell)"
+          "description": "man-bicycle font/Itim-Regular.ttf (quickshell)",
+          "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+          "size_bytes": 362640,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-man-bicycle/files/font/Itim-Regular.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-man-bicycle/bg.png",
-          "description": "man-bicycle bg.png (sddm)"
+          "description": "man-bicycle bg.png (sddm)",
+          "sha256": "cced9213b0bd0437fc331216b841fc000c3e525ea00eade7fd19cdfc56a6947d",
+          "size_bytes": 5005352,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-man-bicycle/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Itim-Regular.ttf",
           "target": "/usr/share/sddm/themes/ryzora-man-bicycle/font/Itim-Regular.ttf",
-          "description": "man-bicycle font/Itim-Regular.ttf (sddm)"
+          "description": "man-bicycle font/Itim-Regular.ttf (sddm)",
+          "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+          "size_bytes": 362640,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-man-bicycle/files/font/Itim-Regular.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

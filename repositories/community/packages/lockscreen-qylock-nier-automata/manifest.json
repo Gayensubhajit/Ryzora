@@ -48,7 +48,12 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/bg.png",
-      "description": "nier-automata files/bg.png"
+      "description": "nier-automata files/bg.png",
+      "sha256": "24c143cb85ca412ebab0f8013b5f0b2c224063ffdec7d4cf70d7d439117b9fd8",
+      "size_bytes": 161561,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nier-automata/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -89,7 +94,12 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/nier-automata/bg.png",
-          "description": "nier-automata bg.png (quickshell)"
+          "description": "nier-automata bg.png (quickshell)",
+          "sha256": "24c143cb85ca412ebab0f8013b5f0b2c224063ffdec7d4cf70d7d439117b9fd8",
+          "size_bytes": 161561,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nier-automata/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -129,7 +139,12 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-nier-automata/bg.png",
-          "description": "nier-automata bg.png (sddm)"
+          "description": "nier-automata bg.png (sddm)",
+          "sha256": "24c143cb85ca412ebab0f8013b5f0b2c224063ffdec7d4cf70d7d439117b9fd8",
+          "size_bytes": 161561,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nier-automata/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",

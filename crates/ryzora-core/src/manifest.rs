@@ -71,7 +71,7 @@ pub struct ManifestCompatibility {
 }
 
 /// A single file mapping inside a Ryzora package.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ManifestFile {
     /// Path relative to the package root (e.g. "files/hypr/hyprland.conf").
     pub source: String,
@@ -83,6 +83,45 @@ pub struct ManifestFile {
     /// Human-readable description of what this file does.
     #[serde(default)]
     pub description: String,
+
+    /// Optional remote download URL for on-demand media/assets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_url: Option<String>,
+
+    /// SHA-256 digest of the remote asset for integrity verification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+
+    /// Size of the remote asset in bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+
+    /// MIME / media type (e.g., "video/mp4", "image/png").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+
+    /// Whether this file is optional downloadable content.
+    #[serde(default)]
+    pub is_optional: bool,
+}
+
+impl ManifestFile {
+    pub fn new(
+        source: impl Into<String>,
+        target: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        Self {
+            source: source.into(),
+            target: target.into(),
+            description: description.into(),
+            remote_url: None,
+            sha256: None,
+            size_bytes: None,
+            media_type: None,
+            is_optional: false,
+        }
+    }
 }
 
 /// Target-specific execution and configuration definition (e.g. Quickshell, SDDM).
@@ -432,22 +471,22 @@ impl RyzoraManifest {
                             .trim_start_matches("lockscreen-qylock-")
                             .trim_start_matches("lockscreen-");
                         Ok(vec![
-                            ManifestFile {
-                                source: "files/config".to_string(),
-                                target: format!(
+                            ManifestFile::new(
+                                "files/config",
+                                format!(
                                     "/usr/share/sddm/themes/ryzora-{}/Main.qml",
                                     theme_id
                                 ),
-                                description: format!("SDDM greeter QML for {}", self.name),
-                            },
-                            ManifestFile {
-                                source: "files/config".to_string(),
-                                target: format!(
+                                format!("SDDM greeter QML for {}", self.name),
+                            ),
+                            ManifestFile::new(
+                                "files/config",
+                                format!(
                                     "/usr/share/sddm/themes/ryzora-{}/metadata.desktop",
                                     theme_id
                                 ),
-                                description: format!("SDDM theme metadata for {}", self.name),
-                            },
+                                format!("SDDM theme metadata for {}", self.name),
+                            ),
                         ])
                     }
                 }
@@ -771,6 +810,31 @@ pub fn validate_manifest_internal(manifest_json: &str) -> ManifestValidationResu
         }
         if file.source.trim().is_empty() {
             errors.push(format!("files[{}]: 'source' must not be empty", i));
+        }
+        if let Some(ref url) = file.remote_url {
+            let trimmed = url.trim();
+            if trimmed.is_empty() {
+                errors.push(format!("files[{}]: 'remote_url' must not be empty if provided", i));
+            } else if !trimmed.starts_with("https://")
+                && !trimmed.starts_with("http://localhost")
+                && !trimmed.starts_with("http://127.0.0.1")
+                && !trimmed.starts_with("mock://")
+            {
+                errors.push(format!("files[{}]: 'remote_url' must use HTTPS scheme ('{}')", i, url));
+            }
+        }
+        if let Some(ref hash) = file.sha256 {
+            let trimmed = hash.trim();
+            if trimmed.len() != 64 || !trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+                errors.push(format!("files[{}]: 'sha256' must be a 64-character hexadecimal string ('{}')", i, hash));
+            }
+        }
+        if let Some(sz) = file.size_bytes {
+            if sz == 0 {
+                warnings.push(format!("files[{}]: 'size_bytes' is 0", i));
+            } else if sz > 2 * 1024 * 1024 * 1024 {
+                errors.push(format!("files[{}]: 'size_bytes' ({} bytes) exceeds maximum 2 GiB limit", i, sz));
+            }
         }
     }
 
@@ -1155,5 +1219,44 @@ mod tests {
         let manifest: RyzoraManifest = serde_json::from_str(dup_json).unwrap();
         let all = manifest.all_dependencies();
         assert_eq!(all.len(), 1, "Expected deduplication to 1 item");
+    }
+
+    #[test]
+    fn test_extended_manifest_remote_asset_validation() {
+        // Valid extended manifest
+        let valid_ext = r#"{
+            "id": "remote-asset-pkg",
+            "name": "Remote Asset Package",
+            "version": "1.0.0",
+            "ryzora_spec": "1",
+            "author": "Tester",
+            "package_type": "lockscreen",
+            "compatibility": {"desktops": [], "sessions": [], "distros": [], "required": [], "optional": []},
+            "files": [
+                {
+                    "source": "files/bg.mp4",
+                    "target": "~/.local/share/ryzora/lockscreens/test/bg.mp4",
+                    "remote_url": "https://example.com/assets/bg.mp4",
+                    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    "size_bytes": 1048576,
+                    "media_type": "video/mp4",
+                    "is_optional": true
+                }
+            ]
+        }"#;
+        let res = validate_manifest_internal(valid_ext);
+        assert!(res.valid, "Valid remote manifest must pass: {:?}", res.errors);
+
+        // Invalid remote URL (insecure http)
+        let insecure_url = valid_ext.replace("https://example.com", "http://insecure.com");
+        let res_insecure = validate_manifest_internal(&insecure_url);
+        assert!(!res_insecure.valid);
+        assert!(res_insecure.errors.iter().any(|e| e.contains("must use HTTPS scheme")));
+
+        // Invalid sha256 (not 64 chars / non-hex)
+        let invalid_sha = valid_ext.replace("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "invalid_short_hash");
+        let res_sha = validate_manifest_internal(&invalid_sha);
+        assert!(!res_sha.valid);
+        assert!(res_sha.errors.iter().any(|e| e.contains("must be a 64-character hexadecimal string")));
     }
 }

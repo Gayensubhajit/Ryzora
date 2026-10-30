@@ -37,7 +37,12 @@
     {
       "source": "files/logo/girl.jpg",
       "target": "~/.config/fastfetch/presets/fastfetch-kitty-cachyos/logo/girl.jpg",
-      "description": "Fastfetch asset logo/girl.jpg"
+      "description": "Fastfetch asset logo/girl.jpg",
+      "sha256": "9874f851dd92936049b3cc1f01f9013b588bc22c5b8f561b10eda11df1d524fb",
+      "size_bytes": 5303553,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kitty-cachyos/files/logo/girl.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

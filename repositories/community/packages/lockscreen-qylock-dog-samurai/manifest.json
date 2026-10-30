@@ -43,12 +43,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/bg.mp4",
-      "description": "dog-samurai files/bg.mp4"
+      "description": "dog-samurai files/bg.mp4",
+      "sha256": "e12c8dbc8afc2cebc9c2c9c5cd440d83257066f2636e39a65f35c164f8e584eb",
+      "size_bytes": 5415334,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-dog-samurai/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/Orbitron-VariableFont_wght.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/font/Orbitron-VariableFont_wght.ttf",
-      "description": "dog-samurai files/font/Orbitron-VariableFont_wght.ttf"
+      "description": "dog-samurai files/font/Orbitron-VariableFont_wght.ttf",
+      "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+      "size_bytes": 38548,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-dog-samurai/files/font/Orbitron-VariableFont_wght.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/bg.mp4",
-          "description": "dog-samurai bg.mp4 (quickshell)"
+          "description": "dog-samurai bg.mp4 (quickshell)",
+          "sha256": "e12c8dbc8afc2cebc9c2c9c5cd440d83257066f2636e39a65f35c164f8e584eb",
+          "size_bytes": 5415334,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-dog-samurai/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/dog-samurai/font/Orbitron-VariableFont_wght.ttf",
-          "description": "dog-samurai font/Orbitron-VariableFont_wght.ttf (quickshell)"
+          "description": "dog-samurai font/Orbitron-VariableFont_wght.ttf (quickshell)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-dog-samurai/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-dog-samurai/bg.mp4",
-          "description": "dog-samurai bg.mp4 (sddm)"
+          "description": "dog-samurai bg.mp4 (sddm)",
+          "sha256": "e12c8dbc8afc2cebc9c2c9c5cd440d83257066f2636e39a65f35c164f8e584eb",
+          "size_bytes": 5415334,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-dog-samurai/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "/usr/share/sddm/themes/ryzora-dog-samurai/font/Orbitron-VariableFont_wght.ttf",
-          "description": "dog-samurai font/Orbitron-VariableFont_wght.ttf (sddm)"
+          "description": "dog-samurai font/Orbitron-VariableFont_wght.ttf (sddm)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-dog-samurai/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

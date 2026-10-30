@@ -43,7 +43,12 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/bg.png",
-      "description": "ninja-gaiden files/bg.png"
+      "description": "ninja-gaiden files/bg.png",
+      "sha256": "5bf876b930e4d006803e2de48911fc8526f354c221adafc3930a91c703a129ed",
+      "size_bytes": 265063,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninja-gaiden/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -53,7 +58,12 @@
     {
       "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
-      "description": "ninja-gaiden files/font/Tektur-VariableFont_wdth,wght.ttf"
+      "description": "ninja-gaiden files/font/Tektur-VariableFont_wdth,wght.ttf",
+      "sha256": "1ff1792ecc4728cf011d31e43a53a5c97e82f5c7cc7b9f23af24b209106e962c",
+      "size_bytes": 162656,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninja-gaiden/files/font/Tektur-VariableFont_wdth,wght.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -84,7 +94,12 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/bg.png",
-          "description": "ninja-gaiden bg.png (quickshell)"
+          "description": "ninja-gaiden bg.png (quickshell)",
+          "sha256": "5bf876b930e4d006803e2de48911fc8526f354c221adafc3930a91c703a129ed",
+          "size_bytes": 265063,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninja-gaiden/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -94,7 +109,12 @@
         {
           "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
-          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (quickshell)"
+          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (quickshell)",
+          "sha256": "1ff1792ecc4728cf011d31e43a53a5c97e82f5c7cc7b9f23af24b209106e962c",
+          "size_bytes": 162656,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninja-gaiden/files/font/Tektur-VariableFont_wdth,wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -124,7 +144,12 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/bg.png",
-          "description": "ninja-gaiden bg.png (sddm)"
+          "description": "ninja-gaiden bg.png (sddm)",
+          "sha256": "5bf876b930e4d006803e2de48911fc8526f354c221adafc3930a91c703a129ed",
+          "size_bytes": 265063,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninja-gaiden/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -134,7 +159,12 @@
         {
           "source": "files/font/Tektur-VariableFont_wdth,wght.ttf",
           "target": "/usr/share/sddm/themes/ryzora-ninja-gaiden/font/Tektur-VariableFont_wdth,wght.ttf",
-          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (sddm)"
+          "description": "ninja-gaiden font/Tektur-VariableFont_wdth,wght.ttf (sddm)",
+          "sha256": "1ff1792ecc4728cf011d31e43a53a5c97e82f5c7cc7b9f23af24b209106e962c",
+          "size_bytes": 162656,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninja-gaiden/files/font/Tektur-VariableFont_wdth,wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

@@ -44,7 +44,12 @@
     {
       "source": "files/font/Outfit-Black.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-orbital/font/Outfit-Black.ttf",
-      "description": "clockwork-orbital files/font/Outfit-Black.ttf"
+      "description": "clockwork-orbital files/font/Outfit-Black.ttf",
+      "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+      "size_bytes": 55372,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork-orbital/files/font/Outfit-Black.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -75,7 +80,12 @@
         {
           "source": "files/font/Outfit-Black.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/clockwork-orbital/font/Outfit-Black.ttf",
-          "description": "clockwork-orbital font/Outfit-Black.ttf (quickshell)"
+          "description": "clockwork-orbital font/Outfit-Black.ttf (quickshell)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork-orbital/files/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -105,7 +115,12 @@
         {
           "source": "files/font/Outfit-Black.ttf",
           "target": "/usr/share/sddm/themes/ryzora-clockwork-orbital/font/Outfit-Black.ttf",
-          "description": "clockwork-orbital font/Outfit-Black.ttf (sddm)"
+          "description": "clockwork-orbital font/Outfit-Black.ttf (sddm)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-clockwork-orbital/files/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

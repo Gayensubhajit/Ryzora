@@ -33,7 +33,12 @@
     {
       "source": "files/katana.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-katana/katana.png",
-      "description": "Fastfetch Katana Emblem"
+      "description": "Fastfetch Katana Emblem",
+      "sha256": "10f46d57f3300950fa08ddfac492db8e68c5f59ad08ffcbb98bad4ae56647288",
+      "size_bytes": 378812,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-katana/files/katana.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

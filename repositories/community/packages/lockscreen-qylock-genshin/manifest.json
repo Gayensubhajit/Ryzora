@@ -53,17 +53,32 @@
     {
       "source": "files/dawn.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dawn.mp4",
-      "description": "genshin files/dawn.mp4"
+      "description": "genshin files/dawn.mp4",
+      "sha256": "47a46c98f6fc8740fce6b2e4fb7455bfe2c4a4bd9c6f19483df1320738c982cb",
+      "size_bytes": 9233903,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/dawn.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/day.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/day.mp4",
-      "description": "genshin files/day.mp4"
+      "description": "genshin files/day.mp4",
+      "sha256": "a1fe36286476a722a750f6b28a3361244bae2b7ea57b26a9ccffbf728dce8128",
+      "size_bytes": 8065996,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/day.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/dusk.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dusk.mp4",
-      "description": "genshin files/dusk.mp4"
+      "description": "genshin files/dusk.mp4",
+      "sha256": "d0b011ee399d74f3cee264c8f31f1a2f956664afef61310d2ef17b3188d6a476",
+      "size_bytes": 8794776,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/dusk.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -73,7 +88,12 @@
     {
       "source": "files/logo.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/logo.png",
-      "description": "genshin files/logo.png"
+      "description": "genshin files/logo.png",
+      "sha256": "bc4c163e761d5831abbf5e2edf6f6d5a24c09558b426951b95c992f29908bb49",
+      "size_bytes": 72226,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/logo.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -83,7 +103,12 @@
     {
       "source": "files/night.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/night.mp4",
-      "description": "genshin files/night.mp4"
+      "description": "genshin files/night.mp4",
+      "sha256": "7e236116426d50b78b599c9f941260f97a47d700deadd11b13ef942f9a31794c",
+      "size_bytes": 8852760,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/night.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/theme.conf",
@@ -119,17 +144,32 @@
         {
           "source": "files/dawn.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dawn.mp4",
-          "description": "genshin dawn.mp4 (quickshell)"
+          "description": "genshin dawn.mp4 (quickshell)",
+          "sha256": "47a46c98f6fc8740fce6b2e4fb7455bfe2c4a4bd9c6f19483df1320738c982cb",
+          "size_bytes": 9233903,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/dawn.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/day.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/day.mp4",
-          "description": "genshin day.mp4 (quickshell)"
+          "description": "genshin day.mp4 (quickshell)",
+          "sha256": "a1fe36286476a722a750f6b28a3361244bae2b7ea57b26a9ccffbf728dce8128",
+          "size_bytes": 8065996,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/day.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/dusk.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/dusk.mp4",
-          "description": "genshin dusk.mp4 (quickshell)"
+          "description": "genshin dusk.mp4 (quickshell)",
+          "sha256": "d0b011ee399d74f3cee264c8f31f1a2f956664afef61310d2ef17b3188d6a476",
+          "size_bytes": 8794776,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/dusk.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -139,7 +179,12 @@
         {
           "source": "files/logo.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/logo.png",
-          "description": "genshin logo.png (quickshell)"
+          "description": "genshin logo.png (quickshell)",
+          "sha256": "bc4c163e761d5831abbf5e2edf6f6d5a24c09558b426951b95c992f29908bb49",
+          "size_bytes": 72226,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -149,7 +194,12 @@
         {
           "source": "files/night.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/genshin/night.mp4",
-          "description": "genshin night.mp4 (quickshell)"
+          "description": "genshin night.mp4 (quickshell)",
+          "sha256": "7e236116426d50b78b599c9f941260f97a47d700deadd11b13ef942f9a31794c",
+          "size_bytes": 8852760,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/night.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/theme.conf",
@@ -184,17 +234,32 @@
         {
           "source": "files/dawn.mp4",
           "target": "/usr/share/sddm/themes/ryzora-genshin/dawn.mp4",
-          "description": "genshin dawn.mp4 (sddm)"
+          "description": "genshin dawn.mp4 (sddm)",
+          "sha256": "47a46c98f6fc8740fce6b2e4fb7455bfe2c4a4bd9c6f19483df1320738c982cb",
+          "size_bytes": 9233903,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/dawn.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/day.mp4",
           "target": "/usr/share/sddm/themes/ryzora-genshin/day.mp4",
-          "description": "genshin day.mp4 (sddm)"
+          "description": "genshin day.mp4 (sddm)",
+          "sha256": "a1fe36286476a722a750f6b28a3361244bae2b7ea57b26a9ccffbf728dce8128",
+          "size_bytes": 8065996,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/day.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/dusk.mp4",
           "target": "/usr/share/sddm/themes/ryzora-genshin/dusk.mp4",
-          "description": "genshin dusk.mp4 (sddm)"
+          "description": "genshin dusk.mp4 (sddm)",
+          "sha256": "d0b011ee399d74f3cee264c8f31f1a2f956664afef61310d2ef17b3188d6a476",
+          "size_bytes": 8794776,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/dusk.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -204,7 +269,12 @@
         {
           "source": "files/logo.png",
           "target": "/usr/share/sddm/themes/ryzora-genshin/logo.png",
-          "description": "genshin logo.png (sddm)"
+          "description": "genshin logo.png (sddm)",
+          "sha256": "bc4c163e761d5831abbf5e2edf6f6d5a24c09558b426951b95c992f29908bb49",
+          "size_bytes": 72226,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -214,7 +284,12 @@
         {
           "source": "files/night.mp4",
           "target": "/usr/share/sddm/themes/ryzora-genshin/night.mp4",
-          "description": "genshin night.mp4 (sddm)"
+          "description": "genshin night.mp4 (sddm)",
+          "sha256": "7e236116426d50b78b599c9f941260f97a47d700deadd11b13ef942f9a31794c",
+          "size_bytes": 8852760,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-genshin/files/night.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/theme.conf",

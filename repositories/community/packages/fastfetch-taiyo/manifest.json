@@ -37,7 +37,12 @@
     {
       "source": "files/preview.png",
       "target": "~/.config/fastfetch/presets/fastfetch-taiyo/preview.png",
-      "description": "Fastfetch asset preview.png"
+      "description": "Fastfetch asset preview.png",
+      "sha256": "4635c557aeb944ad3f9d4962c26b71051670b0cc81aa7a6b636fce77a14435ea",
+      "size_bytes": 326627,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-taiyo/files/preview.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/taiyo.txt",

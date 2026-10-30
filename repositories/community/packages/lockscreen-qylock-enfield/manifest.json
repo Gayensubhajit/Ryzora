@@ -48,7 +48,12 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/enfield/bg.mp4",
-      "description": "enfield files/bg.mp4"
+      "description": "enfield files/bg.mp4",
+      "sha256": "dc768c9f9a1019720ff397b37b397c45b4bb5f1c08ae3974d1c1a459a1f4cb4a",
+      "size_bytes": 11038144,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-enfield/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -58,7 +63,12 @@
     {
       "source": "files/font/Orbitron-VariableFont_wght.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/enfield/font/Orbitron-VariableFont_wght.ttf",
-      "description": "enfield files/font/Orbitron-VariableFont_wght.ttf"
+      "description": "enfield files/font/Orbitron-VariableFont_wght.ttf",
+      "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+      "size_bytes": 38548,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-enfield/files/font/Orbitron-VariableFont_wght.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -94,7 +104,12 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/enfield/bg.mp4",
-          "description": "enfield bg.mp4 (quickshell)"
+          "description": "enfield bg.mp4 (quickshell)",
+          "sha256": "dc768c9f9a1019720ff397b37b397c45b4bb5f1c08ae3974d1c1a459a1f4cb4a",
+          "size_bytes": 11038144,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-enfield/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -104,7 +119,12 @@
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/enfield/font/Orbitron-VariableFont_wght.ttf",
-          "description": "enfield font/Orbitron-VariableFont_wght.ttf (quickshell)"
+          "description": "enfield font/Orbitron-VariableFont_wght.ttf (quickshell)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-enfield/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -139,7 +159,12 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-enfield/bg.mp4",
-          "description": "enfield bg.mp4 (sddm)"
+          "description": "enfield bg.mp4 (sddm)",
+          "sha256": "dc768c9f9a1019720ff397b37b397c45b4bb5f1c08ae3974d1c1a459a1f4cb4a",
+          "size_bytes": 11038144,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-enfield/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -149,7 +174,12 @@
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "/usr/share/sddm/themes/ryzora-enfield/font/Orbitron-VariableFont_wght.ttf",
-          "description": "enfield font/Orbitron-VariableFont_wght.ttf (sddm)"
+          "description": "enfield font/Orbitron-VariableFont_wght.ttf (sddm)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-enfield/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

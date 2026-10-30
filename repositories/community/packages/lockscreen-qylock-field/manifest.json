@@ -43,12 +43,22 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/field/bg.png",
-      "description": "field files/bg.png"
+      "description": "field files/bg.png",
+      "sha256": "4e673009ca8421907a03360e992d934ebefc4d97bc763f6d4541be50329175a7",
+      "size_bytes": 1784920,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-field/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/Orbitron-VariableFont_wght.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/field/font/Orbitron-VariableFont_wght.ttf",
-      "description": "field files/font/Orbitron-VariableFont_wght.ttf"
+      "description": "field files/font/Orbitron-VariableFont_wght.ttf",
+      "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+      "size_bytes": 38548,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-field/files/font/Orbitron-VariableFont_wght.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/field/bg.png",
-          "description": "field bg.png (quickshell)"
+          "description": "field bg.png (quickshell)",
+          "sha256": "4e673009ca8421907a03360e992d934ebefc4d97bc763f6d4541be50329175a7",
+          "size_bytes": 1784920,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-field/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/field/font/Orbitron-VariableFont_wght.ttf",
-          "description": "field font/Orbitron-VariableFont_wght.ttf (quickshell)"
+          "description": "field font/Orbitron-VariableFont_wght.ttf (quickshell)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-field/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-field/bg.png",
-          "description": "field bg.png (sddm)"
+          "description": "field bg.png (sddm)",
+          "sha256": "4e673009ca8421907a03360e992d934ebefc4d97bc763f6d4541be50329175a7",
+          "size_bytes": 1784920,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-field/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "/usr/share/sddm/themes/ryzora-field/font/Orbitron-VariableFont_wght.ttf",
-          "description": "field font/Orbitron-VariableFont_wght.ttf (sddm)"
+          "description": "field font/Orbitron-VariableFont_wght.ttf (sddm)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-field/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

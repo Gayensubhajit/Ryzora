@@ -43,17 +43,32 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/bg.mp4",
-      "description": "wuwa files/bg.mp4"
+      "description": "wuwa files/bg.mp4",
+      "sha256": "2c3287f9a8a2ecfcbfd496b0ca7b75bef8a240bc29fe78d7094b7189c52ce207",
+      "size_bytes": 28098106,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/Orbitron-VariableFont_wght.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/font/Orbitron-VariableFont_wght.ttf",
-      "description": "wuwa files/font/Orbitron-VariableFont_wght.ttf"
+      "description": "wuwa files/font/Orbitron-VariableFont_wght.ttf",
+      "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+      "size_bytes": 38548,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/font/Orbitron-VariableFont_wght.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/logo.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/logo.png",
-      "description": "wuwa files/logo.png"
+      "description": "wuwa files/logo.png",
+      "sha256": "368b0aecc48bb864f308e65e72ab9036e0380eec89180e1c7f9d2176bdb1f54f",
+      "size_bytes": 13208,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/logo.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -84,17 +99,32 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/bg.mp4",
-          "description": "wuwa bg.mp4 (quickshell)"
+          "description": "wuwa bg.mp4 (quickshell)",
+          "sha256": "2c3287f9a8a2ecfcbfd496b0ca7b75bef8a240bc29fe78d7094b7189c52ce207",
+          "size_bytes": 28098106,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/font/Orbitron-VariableFont_wght.ttf",
-          "description": "wuwa font/Orbitron-VariableFont_wght.ttf (quickshell)"
+          "description": "wuwa font/Orbitron-VariableFont_wght.ttf (quickshell)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/logo.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/wuwa/logo.png",
-          "description": "wuwa logo.png (quickshell)"
+          "description": "wuwa logo.png (quickshell)",
+          "sha256": "368b0aecc48bb864f308e65e72ab9036e0380eec89180e1c7f9d2176bdb1f54f",
+          "size_bytes": 13208,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -124,17 +154,32 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-wuwa/bg.mp4",
-          "description": "wuwa bg.mp4 (sddm)"
+          "description": "wuwa bg.mp4 (sddm)",
+          "sha256": "2c3287f9a8a2ecfcbfd496b0ca7b75bef8a240bc29fe78d7094b7189c52ce207",
+          "size_bytes": 28098106,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Orbitron-VariableFont_wght.ttf",
           "target": "/usr/share/sddm/themes/ryzora-wuwa/font/Orbitron-VariableFont_wght.ttf",
-          "description": "wuwa font/Orbitron-VariableFont_wght.ttf (sddm)"
+          "description": "wuwa font/Orbitron-VariableFont_wght.ttf (sddm)",
+          "sha256": "46eefc7084fd9abffd87547c47f729b6071c7f7a8d5af281266bb09e5461c435",
+          "size_bytes": 38548,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/font/Orbitron-VariableFont_wght.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/logo.png",
           "target": "/usr/share/sddm/themes/ryzora-wuwa/logo.png",
-          "description": "wuwa logo.png (sddm)"
+          "description": "wuwa logo.png (sddm)",
+          "sha256": "368b0aecc48bb864f308e65e72ab9036e0380eec89180e1c7f9d2176bdb1f54f",
+          "size_bytes": 13208,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-wuwa/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

@@ -33,7 +33,12 @@
     {
       "source": "files/hawk.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-hawk/hawk.png",
-      "description": "Fastfetch Hawk Emblem"
+      "description": "Fastfetch Hawk Emblem",
+      "sha256": "f7895bea95fa3689bfc89f904859ceac641ee6f01c1e9bbd737a31911de5d5e1",
+      "size_bytes": 249121,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-hawk/files/hawk.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

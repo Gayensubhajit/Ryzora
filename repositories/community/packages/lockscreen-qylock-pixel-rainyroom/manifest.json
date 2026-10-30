@@ -48,12 +48,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/bg.mp4",
-      "description": "pixel-rainyroom files/bg.mp4"
+      "description": "pixel-rainyroom files/bg.mp4",
+      "sha256": "01ff99cf20f5e856af53894189ad105a3a4cdf64606f86437bfdd9c9bfad7a32",
+      "size_bytes": 2275187,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-rainyroom/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/PixelifySans-Bold.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/font/PixelifySans-Bold.ttf",
-      "description": "pixel-rainyroom files/font/PixelifySans-Bold.ttf"
+      "description": "pixel-rainyroom files/font/PixelifySans-Bold.ttf",
+      "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+      "size_bytes": 50872,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-rainyroom/files/font/PixelifySans-Bold.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -89,12 +99,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/bg.mp4",
-          "description": "pixel-rainyroom bg.mp4 (quickshell)"
+          "description": "pixel-rainyroom bg.mp4 (quickshell)",
+          "sha256": "01ff99cf20f5e856af53894189ad105a3a4cdf64606f86437bfdd9c9bfad7a32",
+          "size_bytes": 2275187,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-rainyroom/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-rainyroom/font/PixelifySans-Bold.ttf",
-          "description": "pixel-rainyroom font/PixelifySans-Bold.ttf (quickshell)"
+          "description": "pixel-rainyroom font/PixelifySans-Bold.ttf (quickshell)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-rainyroom/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -129,12 +149,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/bg.mp4",
-          "description": "pixel-rainyroom bg.mp4 (sddm)"
+          "description": "pixel-rainyroom bg.mp4 (sddm)",
+          "sha256": "01ff99cf20f5e856af53894189ad105a3a4cdf64606f86437bfdd9c9bfad7a32",
+          "size_bytes": 2275187,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-rainyroom/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "/usr/share/sddm/themes/ryzora-pixel-rainyroom/font/PixelifySans-Bold.ttf",
-          "description": "pixel-rainyroom font/PixelifySans-Bold.ttf (sddm)"
+          "description": "pixel-rainyroom font/PixelifySans-Bold.ttf (sddm)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-rainyroom/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

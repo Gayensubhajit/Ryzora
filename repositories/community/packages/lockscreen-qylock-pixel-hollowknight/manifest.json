@@ -48,12 +48,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-hollowknight/bg.mp4",
-      "description": "pixel-hollowknight files/bg.mp4"
+      "description": "pixel-hollowknight files/bg.mp4",
+      "sha256": "20cae55fd74ae62451930ca3a5b9b5dfc6c34784a2a82685646e398098d6dc75",
+      "size_bytes": 7793409,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-hollowknight/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/PixelifySans-Bold.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-hollowknight/font/PixelifySans-Bold.ttf",
-      "description": "pixel-hollowknight files/font/PixelifySans-Bold.ttf"
+      "description": "pixel-hollowknight files/font/PixelifySans-Bold.ttf",
+      "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+      "size_bytes": 50872,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-hollowknight/files/font/PixelifySans-Bold.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -89,12 +99,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-hollowknight/bg.mp4",
-          "description": "pixel-hollowknight bg.mp4 (quickshell)"
+          "description": "pixel-hollowknight bg.mp4 (quickshell)",
+          "sha256": "20cae55fd74ae62451930ca3a5b9b5dfc6c34784a2a82685646e398098d6dc75",
+          "size_bytes": 7793409,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-hollowknight/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-hollowknight/font/PixelifySans-Bold.ttf",
-          "description": "pixel-hollowknight font/PixelifySans-Bold.ttf (quickshell)"
+          "description": "pixel-hollowknight font/PixelifySans-Bold.ttf (quickshell)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-hollowknight/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -129,12 +149,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-pixel-hollowknight/bg.mp4",
-          "description": "pixel-hollowknight bg.mp4 (sddm)"
+          "description": "pixel-hollowknight bg.mp4 (sddm)",
+          "sha256": "20cae55fd74ae62451930ca3a5b9b5dfc6c34784a2a82685646e398098d6dc75",
+          "size_bytes": 7793409,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-hollowknight/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "/usr/share/sddm/themes/ryzora-pixel-hollowknight/font/PixelifySans-Bold.ttf",
-          "description": "pixel-hollowknight font/PixelifySans-Bold.ttf (sddm)"
+          "description": "pixel-hollowknight font/PixelifySans-Bold.ttf (sddm)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-hollowknight/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

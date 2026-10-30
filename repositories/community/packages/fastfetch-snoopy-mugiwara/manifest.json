@@ -42,12 +42,22 @@
     {
       "source": "files/Snoppy-mugiwara.png",
       "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/Snoppy-mugiwara.png",
-      "description": "Fastfetch asset Snoppy-mugiwara.png"
+      "description": "Fastfetch asset Snoppy-mugiwara.png",
+      "sha256": "e05bfe068266748dc971cd82607469ab76345af465436d60d7efcb4e5f06529c",
+      "size_bytes": 789480,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-snoopy-mugiwara/files/Snoppy-mugiwara.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/preview.png",
       "target": "~/.config/fastfetch/presets/fastfetch-snoopy-mugiwara/preview.png",
-      "description": "Fastfetch asset preview.png"
+      "description": "Fastfetch asset preview.png",
+      "sha256": "83d27f3ed655b57cda35bcc7f918a57821bb6e6206fcf9bcc8ea57e4b9e430f0",
+      "size_bytes": 491887,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-snoopy-mugiwara/files/preview.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/quotes.txt",

@@ -43,57 +43,112 @@
     {
       "source": "files/avatars/achlys.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/achlys.png",
-      "description": "osu files/avatars/achlys.png"
+      "description": "osu files/avatars/achlys.png",
+      "sha256": "12f61d32a7dbe209491af55abd1cb746cc5430e9472bf8d5b29ed801e3b82963",
+      "size_bytes": 36043,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/achlys.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/avatars/darkkal.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/darkkal.png",
-      "description": "osu files/avatars/darkkal.png"
+      "description": "osu files/avatars/darkkal.png",
+      "sha256": "bca8664cdf773a9e80be2979368d4bbd2d0b03ba32602e89d491f847dc833fa5",
+      "size_bytes": 6962,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/darkkal.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/avatars/kaizky.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/kaizky.png",
-      "description": "osu files/avatars/kaizky.png"
+      "description": "osu files/avatars/kaizky.png",
+      "sha256": "f594b146eb3a530369de2032f3b9ede8c249dfa379e97724e78128122a4f2e22",
+      "size_bytes": 78041,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/kaizky.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/background/A Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/A Glow.jpg",
-      "description": "osu files/background/A Glow.jpg"
+      "description": "osu files/background/A Glow.jpg",
+      "sha256": "38eadcdb5ac4f8cc8e48db54a115cb17ff4a3e61d57d5fdeb625b65b016a5f42",
+      "size_bytes": 1166175,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/A Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/background/B Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/B Glow.jpg",
-      "description": "osu files/background/B Glow.jpg"
+      "description": "osu files/background/B Glow.jpg",
+      "sha256": "66c24917b8c17e792cf963b585cb880d8d07d340aa5bffcdc968a152dd67fdb4",
+      "size_bytes": 1231315,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/B Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/background/C Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/C Glow.jpg",
-      "description": "osu files/background/C Glow.jpg"
+      "description": "osu files/background/C Glow.jpg",
+      "sha256": "ac1cc7ef00923ac9454393495b10186ba0f0629b73cbf305ea99fafcd6390abc",
+      "size_bytes": 1078949,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/C Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/background/D Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/D Glow.jpg",
-      "description": "osu files/background/D Glow.jpg"
+      "description": "osu files/background/D Glow.jpg",
+      "sha256": "8e02f5830bd3dac5b74e1afe192cbbc6bf9b08695b2e3aa1eee39697b9705fd8",
+      "size_bytes": 1147093,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/D Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/background/E Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/E Glow.jpg",
-      "description": "osu files/background/E Glow.jpg"
+      "description": "osu files/background/E Glow.jpg",
+      "sha256": "fb547194c326cc4ba318aca6c90b949c5499c68ed1ccc0f621d74fcd75581468",
+      "size_bytes": 1258874,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/E Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/background/F Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/F Glow.jpg",
-      "description": "osu files/background/F Glow.jpg"
+      "description": "osu files/background/F Glow.jpg",
+      "sha256": "d69dadf068fa59d4071432ef05dfdf306df8bd0d9c0e9521e6e631f275566a4f",
+      "size_bytes": 1161219,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/F Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/background/G Glow.jpg",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/G Glow.jpg",
-      "description": "osu files/background/G Glow.jpg"
+      "description": "osu files/background/G Glow.jpg",
+      "sha256": "3b20d26e1b59c4c2d298878d7090508fdafa60372dbeee4c6976cb0a8042d0d6",
+      "size_bytes": 1169810,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/G Glow.jpg",
+      "media_type": "image/jpeg",
+      "is_optional": false
     },
     {
       "source": "files/font/Torus Regular.otf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/osu/font/Torus Regular.otf",
-      "description": "osu files/font/Torus Regular.otf"
+      "description": "osu files/font/Torus Regular.otf",
+      "sha256": "f3d93e670686556a84db376aef90fee744cbc817aaac7e808dc0e49da0924b7e",
+      "size_bytes": 64592,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/font/Torus Regular.otf",
+      "media_type": "font/otf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -124,57 +179,112 @@
         {
           "source": "files/avatars/achlys.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/achlys.png",
-          "description": "osu avatars/achlys.png (quickshell)"
+          "description": "osu avatars/achlys.png (quickshell)",
+          "sha256": "12f61d32a7dbe209491af55abd1cb746cc5430e9472bf8d5b29ed801e3b82963",
+          "size_bytes": 36043,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/achlys.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/avatars/darkkal.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/darkkal.png",
-          "description": "osu avatars/darkkal.png (quickshell)"
+          "description": "osu avatars/darkkal.png (quickshell)",
+          "sha256": "bca8664cdf773a9e80be2979368d4bbd2d0b03ba32602e89d491f847dc833fa5",
+          "size_bytes": 6962,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/darkkal.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/avatars/kaizky.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/avatars/kaizky.png",
-          "description": "osu avatars/kaizky.png (quickshell)"
+          "description": "osu avatars/kaizky.png (quickshell)",
+          "sha256": "f594b146eb3a530369de2032f3b9ede8c249dfa379e97724e78128122a4f2e22",
+          "size_bytes": 78041,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/kaizky.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/background/A Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/A Glow.jpg",
-          "description": "osu background/A Glow.jpg (quickshell)"
+          "description": "osu background/A Glow.jpg (quickshell)",
+          "sha256": "38eadcdb5ac4f8cc8e48db54a115cb17ff4a3e61d57d5fdeb625b65b016a5f42",
+          "size_bytes": 1166175,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/A Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/B Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/B Glow.jpg",
-          "description": "osu background/B Glow.jpg (quickshell)"
+          "description": "osu background/B Glow.jpg (quickshell)",
+          "sha256": "66c24917b8c17e792cf963b585cb880d8d07d340aa5bffcdc968a152dd67fdb4",
+          "size_bytes": 1231315,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/B Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/C Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/C Glow.jpg",
-          "description": "osu background/C Glow.jpg (quickshell)"
+          "description": "osu background/C Glow.jpg (quickshell)",
+          "sha256": "ac1cc7ef00923ac9454393495b10186ba0f0629b73cbf305ea99fafcd6390abc",
+          "size_bytes": 1078949,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/C Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/D Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/D Glow.jpg",
-          "description": "osu background/D Glow.jpg (quickshell)"
+          "description": "osu background/D Glow.jpg (quickshell)",
+          "sha256": "8e02f5830bd3dac5b74e1afe192cbbc6bf9b08695b2e3aa1eee39697b9705fd8",
+          "size_bytes": 1147093,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/D Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/E Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/E Glow.jpg",
-          "description": "osu background/E Glow.jpg (quickshell)"
+          "description": "osu background/E Glow.jpg (quickshell)",
+          "sha256": "fb547194c326cc4ba318aca6c90b949c5499c68ed1ccc0f621d74fcd75581468",
+          "size_bytes": 1258874,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/E Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/F Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/F Glow.jpg",
-          "description": "osu background/F Glow.jpg (quickshell)"
+          "description": "osu background/F Glow.jpg (quickshell)",
+          "sha256": "d69dadf068fa59d4071432ef05dfdf306df8bd0d9c0e9521e6e631f275566a4f",
+          "size_bytes": 1161219,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/F Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/G Glow.jpg",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/background/G Glow.jpg",
-          "description": "osu background/G Glow.jpg (quickshell)"
+          "description": "osu background/G Glow.jpg (quickshell)",
+          "sha256": "3b20d26e1b59c4c2d298878d7090508fdafa60372dbeee4c6976cb0a8042d0d6",
+          "size_bytes": 1169810,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/G Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/font/Torus Regular.otf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/osu/font/Torus Regular.otf",
-          "description": "osu font/Torus Regular.otf (quickshell)"
+          "description": "osu font/Torus Regular.otf (quickshell)",
+          "sha256": "f3d93e670686556a84db376aef90fee744cbc817aaac7e808dc0e49da0924b7e",
+          "size_bytes": 64592,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/font/Torus Regular.otf",
+          "media_type": "font/otf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -204,57 +314,112 @@
         {
           "source": "files/avatars/achlys.png",
           "target": "/usr/share/sddm/themes/ryzora-osu/avatars/achlys.png",
-          "description": "osu avatars/achlys.png (sddm)"
+          "description": "osu avatars/achlys.png (sddm)",
+          "sha256": "12f61d32a7dbe209491af55abd1cb746cc5430e9472bf8d5b29ed801e3b82963",
+          "size_bytes": 36043,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/achlys.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/avatars/darkkal.png",
           "target": "/usr/share/sddm/themes/ryzora-osu/avatars/darkkal.png",
-          "description": "osu avatars/darkkal.png (sddm)"
+          "description": "osu avatars/darkkal.png (sddm)",
+          "sha256": "bca8664cdf773a9e80be2979368d4bbd2d0b03ba32602e89d491f847dc833fa5",
+          "size_bytes": 6962,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/darkkal.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/avatars/kaizky.png",
           "target": "/usr/share/sddm/themes/ryzora-osu/avatars/kaizky.png",
-          "description": "osu avatars/kaizky.png (sddm)"
+          "description": "osu avatars/kaizky.png (sddm)",
+          "sha256": "f594b146eb3a530369de2032f3b9ede8c249dfa379e97724e78128122a4f2e22",
+          "size_bytes": 78041,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/avatars/kaizky.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/background/A Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/A Glow.jpg",
-          "description": "osu background/A Glow.jpg (sddm)"
+          "description": "osu background/A Glow.jpg (sddm)",
+          "sha256": "38eadcdb5ac4f8cc8e48db54a115cb17ff4a3e61d57d5fdeb625b65b016a5f42",
+          "size_bytes": 1166175,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/A Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/B Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/B Glow.jpg",
-          "description": "osu background/B Glow.jpg (sddm)"
+          "description": "osu background/B Glow.jpg (sddm)",
+          "sha256": "66c24917b8c17e792cf963b585cb880d8d07d340aa5bffcdc968a152dd67fdb4",
+          "size_bytes": 1231315,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/B Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/C Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/C Glow.jpg",
-          "description": "osu background/C Glow.jpg (sddm)"
+          "description": "osu background/C Glow.jpg (sddm)",
+          "sha256": "ac1cc7ef00923ac9454393495b10186ba0f0629b73cbf305ea99fafcd6390abc",
+          "size_bytes": 1078949,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/C Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/D Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/D Glow.jpg",
-          "description": "osu background/D Glow.jpg (sddm)"
+          "description": "osu background/D Glow.jpg (sddm)",
+          "sha256": "8e02f5830bd3dac5b74e1afe192cbbc6bf9b08695b2e3aa1eee39697b9705fd8",
+          "size_bytes": 1147093,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/D Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/E Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/E Glow.jpg",
-          "description": "osu background/E Glow.jpg (sddm)"
+          "description": "osu background/E Glow.jpg (sddm)",
+          "sha256": "fb547194c326cc4ba318aca6c90b949c5499c68ed1ccc0f621d74fcd75581468",
+          "size_bytes": 1258874,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/E Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/F Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/F Glow.jpg",
-          "description": "osu background/F Glow.jpg (sddm)"
+          "description": "osu background/F Glow.jpg (sddm)",
+          "sha256": "d69dadf068fa59d4071432ef05dfdf306df8bd0d9c0e9521e6e631f275566a4f",
+          "size_bytes": 1161219,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/F Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/background/G Glow.jpg",
           "target": "/usr/share/sddm/themes/ryzora-osu/background/G Glow.jpg",
-          "description": "osu background/G Glow.jpg (sddm)"
+          "description": "osu background/G Glow.jpg (sddm)",
+          "sha256": "3b20d26e1b59c4c2d298878d7090508fdafa60372dbeee4c6976cb0a8042d0d6",
+          "size_bytes": 1169810,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/background/G Glow.jpg",
+          "media_type": "image/jpeg",
+          "is_optional": false
         },
         {
           "source": "files/font/Torus Regular.otf",
           "target": "/usr/share/sddm/themes/ryzora-osu/font/Torus Regular.otf",
-          "description": "osu font/Torus Regular.otf (sddm)"
+          "description": "osu font/Torus Regular.otf (sddm)",
+          "sha256": "f3d93e670686556a84db376aef90fee744cbc817aaac7e808dc0e49da0924b7e",
+          "size_bytes": 64592,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-osu/files/font/Torus Regular.otf",
+          "media_type": "font/otf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

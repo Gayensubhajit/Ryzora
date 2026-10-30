@@ -37,10 +37,11 @@ pub use snapshot::{
 
 pub mod installer;
 pub use installer::{
-    get_active_lockscreen_state_in, get_installed_package_in, install_package_in,
-    list_installed_packages_in, save_active_lockscreen_state_in, uninstall_package_in,
-    ActiveLockscreenState, InstallResult, InstalledFileEntry, InstalledHistoryEntry,
-    InstalledPackageRecord, UninstallResult,
+    clear_content_cache_in, format_bytes_human, get_active_lockscreen_state_in,
+    get_installed_package_in, get_storage_usage_in, install_package_in,
+    list_installed_packages_in, resolve_package_source_file, save_active_lockscreen_state_in,
+    uninstall_package_in, ActiveLockscreenState, InstallResult, InstalledFileEntry,
+    InstalledHistoryEntry, InstalledPackageRecord, StorageUsage, UninstallResult,
 };
 
 pub mod sddm_helper;

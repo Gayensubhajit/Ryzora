@@ -62,42 +62,82 @@
     {
       "source": "files/png/2b.png",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/2b.png",
-      "description": "Fastfetch asset png/2b.png"
+      "description": "Fastfetch asset png/2b.png",
+      "sha256": "7f8dfe2de3cebe8a4c250384ccd4cdd7e28393d3ba475db0c76913d0326fa3d2",
+      "size_bytes": 564552,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/2b.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/bazzite.png",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/bazzite.png",
-      "description": "Fastfetch asset png/bazzite.png"
+      "description": "Fastfetch asset png/bazzite.png",
+      "sha256": "cb49ba20d37aaa3d1c87662ab2fd607d19dd78fc518f4a218c20f2b775b9ab19",
+      "size_bytes": 50577,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/bazzite.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/gudetama.webp",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/gudetama.webp",
-      "description": "Fastfetch asset png/gudetama.webp"
+      "description": "Fastfetch asset png/gudetama.webp",
+      "sha256": "9618076ebac9f1dd29e0eef7feebeddf406c5feb635f48a3e3422a9a2adbacb5",
+      "size_bytes": 34794,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/gudetama.webp",
+      "media_type": "image/webp",
+      "is_optional": false
     },
     {
       "source": "files/png/inoue.png",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/inoue.png",
-      "description": "Fastfetch asset png/inoue.png"
+      "description": "Fastfetch asset png/inoue.png",
+      "sha256": "1d09fc64bc86d4a8e3ac2260447bbdc5756a3ee5b59ef9b2e96dbd967ae49cdc",
+      "size_bytes": 17571,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/inoue.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/iusearchbtw.png",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/iusearchbtw.png",
-      "description": "Fastfetch asset png/iusearchbtw.png"
+      "description": "Fastfetch asset png/iusearchbtw.png",
+      "sha256": "721dc68421cde37e6b1eb8b5e6bf2f767bdaf401e465279a1b96e05c2b976d5c",
+      "size_bytes": 287771,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/iusearchbtw.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/orf.png",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/orf.png",
-      "description": "Fastfetch asset png/orf.png"
+      "description": "Fastfetch asset png/orf.png",
+      "sha256": "8e80c144ccc163c9b96a053548b90bf53d9be2d71656d593de595a129af40490",
+      "size_bytes": 649065,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/orf.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/seal-bounce.gif",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/seal-bounce.gif",
-      "description": "Fastfetch asset png/seal-bounce.gif"
+      "description": "Fastfetch asset png/seal-bounce.gif",
+      "sha256": "ae0c0d1ed03956bb1c240caa8759066103b0ca026516d69a809164782ab0618e",
+      "size_bytes": 2450403,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/seal-bounce.gif",
+      "media_type": "image/gif",
+      "is_optional": false
     },
     {
       "source": "files/png/teto.webp",
       "target": "~/.config/fastfetch/presets/fastfetch-kuruma/png/teto.webp",
-      "description": "Fastfetch asset png/teto.webp"
+      "description": "Fastfetch asset png/teto.webp",
+      "sha256": "ce42179741213fea2cbf6587fee77dfcb1abbc56ec16fe784adce7f086a936bc",
+      "size_bytes": 501951,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-kuruma/files/png/teto.webp",
+      "media_type": "image/webp",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

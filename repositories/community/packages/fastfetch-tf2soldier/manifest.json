@@ -42,7 +42,12 @@
     {
       "source": "files/oh-hello-soldier.webp",
       "target": "~/.config/fastfetch/presets/fastfetch-tf2soldier/oh-hello-soldier.webp",
-      "description": "Fastfetch asset oh-hello-soldier.webp"
+      "description": "Fastfetch asset oh-hello-soldier.webp",
+      "sha256": "08bef16b3c90beb3b8ef06824d8215c4b367b57c4c8b91ad089bf93e35ba5768",
+      "size_bytes": 34098,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-tf2soldier/files/oh-hello-soldier.webp",
+      "media_type": "image/webp",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

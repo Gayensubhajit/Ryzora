@@ -47,7 +47,12 @@
     {
       "source": "files/showcase.png",
       "target": "~/.config/fastfetch/presets/fastfetch-friefetch/showcase.png",
-      "description": "Fastfetch asset showcase.png"
+      "description": "Fastfetch asset showcase.png",
+      "sha256": "4d1c1200c853a62dc16ab75a6f78f33f21e70ce037bce0544d78c98bc8d4194b",
+      "size_bytes": 1902851,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-friefetch/files/showcase.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

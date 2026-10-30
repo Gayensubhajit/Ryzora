@@ -48,12 +48,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-skyscrapers/bg.mp4",
-      "description": "pixel-skyscrapers files/bg.mp4"
+      "description": "pixel-skyscrapers files/bg.mp4",
+      "sha256": "d4e6cff3b0edce349dd5644793ec7273efcb70d6bc292724bfdcd7485a65be68",
+      "size_bytes": 1106305,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-skyscrapers/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/PixelifySans-Bold.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-skyscrapers/font/PixelifySans-Bold.ttf",
-      "description": "pixel-skyscrapers files/font/PixelifySans-Bold.ttf"
+      "description": "pixel-skyscrapers files/font/PixelifySans-Bold.ttf",
+      "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+      "size_bytes": 50872,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-skyscrapers/files/font/PixelifySans-Bold.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -89,12 +99,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-skyscrapers/bg.mp4",
-          "description": "pixel-skyscrapers bg.mp4 (quickshell)"
+          "description": "pixel-skyscrapers bg.mp4 (quickshell)",
+          "sha256": "d4e6cff3b0edce349dd5644793ec7273efcb70d6bc292724bfdcd7485a65be68",
+          "size_bytes": 1106305,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-skyscrapers/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/pixel-skyscrapers/font/PixelifySans-Bold.ttf",
-          "description": "pixel-skyscrapers font/PixelifySans-Bold.ttf (quickshell)"
+          "description": "pixel-skyscrapers font/PixelifySans-Bold.ttf (quickshell)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-skyscrapers/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -129,12 +149,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-pixel-skyscrapers/bg.mp4",
-          "description": "pixel-skyscrapers bg.mp4 (sddm)"
+          "description": "pixel-skyscrapers bg.mp4 (sddm)",
+          "sha256": "d4e6cff3b0edce349dd5644793ec7273efcb70d6bc292724bfdcd7485a65be68",
+          "size_bytes": 1106305,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-skyscrapers/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/PixelifySans-Bold.ttf",
           "target": "/usr/share/sddm/themes/ryzora-pixel-skyscrapers/font/PixelifySans-Bold.ttf",
-          "description": "pixel-skyscrapers font/PixelifySans-Bold.ttf (sddm)"
+          "description": "pixel-skyscrapers font/PixelifySans-Bold.ttf (sddm)",
+          "sha256": "7da4a657e842e0266b1f225acfe080756e2b20df064a16edc3733a42d4789ca8",
+          "size_bytes": 50872,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-pixel-skyscrapers/files/font/PixelifySans-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

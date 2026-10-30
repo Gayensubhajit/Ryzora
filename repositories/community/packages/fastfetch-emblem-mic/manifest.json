@@ -33,7 +33,12 @@
     {
       "source": "files/mic.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-mic/mic.png",
-      "description": "Fastfetch Mic Emblem"
+      "description": "Fastfetch Mic Emblem",
+      "sha256": "5e44e2abdef412f681f4f276c337a1e4b1682a4c738b01462053d68470ccdad6",
+      "size_bytes": 137790,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-mic/files/mic.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

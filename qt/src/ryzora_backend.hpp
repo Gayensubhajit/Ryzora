@@ -217,6 +217,8 @@ public:
     Q_INVOKABLE void loadCompatibilityProfiles();
     Q_INVOKABLE void installPackage(const QString &packageId);
     Q_INVOKABLE void uninstallPackage(const QString &packageId);
+    Q_INVOKABLE QString getStorageUsage();
+    Q_INVOKABLE QString clearContentCache();
     Q_INVOKABLE void testPackage(const QString &packageId);
     Q_INVOKABLE void applyTarget(const QString &packageId, const QString &target);
     Q_INVOKABLE void deactivateTarget(const QString &target);

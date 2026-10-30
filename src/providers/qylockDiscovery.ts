@@ -768,7 +768,7 @@ export const DISCOVERED_QYLOCK_THEMES: RawQylockTheme[] = [
     ],
     "accent": "#8b5cf6",
     "surface": "#12141a",
-    "poster": "/assets/lockscreens/man-bicycle-poster.png",
+    "poster": "/assets/lockscreens/man-bicycle-poster.jpg",
     "preview_animated": "/assets/lockscreens/man-bicycle.gif",
     "media_type": "animated",
     "has_audio": false,

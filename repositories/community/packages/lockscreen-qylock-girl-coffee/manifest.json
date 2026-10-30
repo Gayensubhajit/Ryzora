@@ -43,12 +43,22 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/bg.png",
-      "description": "girl-coffee files/bg.png"
+      "description": "girl-coffee files/bg.png",
+      "sha256": "7019b5c5b6fb59aff1ad523ef8e980b48a751a79e0720686213d2743873c81ef",
+      "size_bytes": 1053098,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-girl-coffee/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/Itim-Regular.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/font/Itim-Regular.ttf",
-      "description": "girl-coffee files/font/Itim-Regular.ttf"
+      "description": "girl-coffee files/font/Itim-Regular.ttf",
+      "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+      "size_bytes": 362640,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-girl-coffee/files/font/Itim-Regular.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/bg.png",
-          "description": "girl-coffee bg.png (quickshell)"
+          "description": "girl-coffee bg.png (quickshell)",
+          "sha256": "7019b5c5b6fb59aff1ad523ef8e980b48a751a79e0720686213d2743873c81ef",
+          "size_bytes": 1053098,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-girl-coffee/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Itim-Regular.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/girl-coffee/font/Itim-Regular.ttf",
-          "description": "girl-coffee font/Itim-Regular.ttf (quickshell)"
+          "description": "girl-coffee font/Itim-Regular.ttf (quickshell)",
+          "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+          "size_bytes": 362640,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-girl-coffee/files/font/Itim-Regular.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-girl-coffee/bg.png",
-          "description": "girl-coffee bg.png (sddm)"
+          "description": "girl-coffee bg.png (sddm)",
+          "sha256": "7019b5c5b6fb59aff1ad523ef8e980b48a751a79e0720686213d2743873c81ef",
+          "size_bytes": 1053098,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-girl-coffee/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Itim-Regular.ttf",
           "target": "/usr/share/sddm/themes/ryzora-girl-coffee/font/Itim-Regular.ttf",
-          "description": "girl-coffee font/Itim-Regular.ttf (sddm)"
+          "description": "girl-coffee font/Itim-Regular.ttf (sddm)",
+          "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+          "size_bytes": 362640,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-girl-coffee/files/font/Itim-Regular.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

@@ -37,7 +37,12 @@
     {
       "source": "files/images/Tsukikko.png",
       "target": "~/.config/fastfetch/presets/fastfetch-cmdr-scotty/images/Tsukikko.png",
-      "description": "Fastfetch asset images/Tsukikko.png"
+      "description": "Fastfetch asset images/Tsukikko.png",
+      "sha256": "a876c549c139fcef846596e9fd000b80f4f1df64530bd449e391d68c560b6c41",
+      "size_bytes": 962067,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-cmdr-scotty/files/images/Tsukikko.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

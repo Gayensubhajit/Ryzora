@@ -42,7 +42,12 @@
     {
       "source": "files/ror_fetch.png",
       "target": "~/.config/fastfetch/presets/fastfetch-rorfetch/ror_fetch.png",
-      "description": "Fastfetch asset ror_fetch.png"
+      "description": "Fastfetch asset ror_fetch.png",
+      "sha256": "e5bcb4efb4ca612dff573ba9ef282b7ca5665c974190b1f942705040cdd301b6",
+      "size_bytes": 3096570,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-rorfetch/files/ror_fetch.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

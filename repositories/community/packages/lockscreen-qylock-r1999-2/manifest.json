@@ -43,17 +43,32 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/r1999-2/bg.mp4",
-      "description": "r1999-2 files/bg.mp4"
+      "description": "r1999-2 files/bg.mp4",
+      "sha256": "69219ace4e3d6f927ced83cbdf2c16b7875b4a57f4f5e8fa913e7df09bac4e0c",
+      "size_bytes": 2473959,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/Cinzel-Bold.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/r1999-2/font/Cinzel-Bold.ttf",
-      "description": "r1999-2 files/font/Cinzel-Bold.ttf"
+      "description": "r1999-2 files/font/Cinzel-Bold.ttf",
+      "sha256": "f606ab3a8a0a75863022676ea496478bb0f4d520ae8c40b6050df3d6dbffad20",
+      "size_bytes": 77060,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/font/Cinzel-Bold.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/logo.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/r1999-2/logo.png",
-      "description": "r1999-2 files/logo.png"
+      "description": "r1999-2 files/logo.png",
+      "sha256": "c97d56f2272dcc03c848c9d43912b7a444dcfd976a2bded6f70df981cc4a9b22",
+      "size_bytes": 61345,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/logo.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,17 +94,32 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/r1999-2/bg.mp4",
-          "description": "r1999-2 bg.mp4 (quickshell)"
+          "description": "r1999-2 bg.mp4 (quickshell)",
+          "sha256": "69219ace4e3d6f927ced83cbdf2c16b7875b4a57f4f5e8fa913e7df09bac4e0c",
+          "size_bytes": 2473959,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Cinzel-Bold.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/r1999-2/font/Cinzel-Bold.ttf",
-          "description": "r1999-2 font/Cinzel-Bold.ttf (quickshell)"
+          "description": "r1999-2 font/Cinzel-Bold.ttf (quickshell)",
+          "sha256": "f606ab3a8a0a75863022676ea496478bb0f4d520ae8c40b6050df3d6dbffad20",
+          "size_bytes": 77060,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/font/Cinzel-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/logo.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/r1999-2/logo.png",
-          "description": "r1999-2 logo.png (quickshell)"
+          "description": "r1999-2 logo.png (quickshell)",
+          "sha256": "c97d56f2272dcc03c848c9d43912b7a444dcfd976a2bded6f70df981cc4a9b22",
+          "size_bytes": 61345,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,17 +144,32 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-r1999-2/bg.mp4",
-          "description": "r1999-2 bg.mp4 (sddm)"
+          "description": "r1999-2 bg.mp4 (sddm)",
+          "sha256": "69219ace4e3d6f927ced83cbdf2c16b7875b4a57f4f5e8fa913e7df09bac4e0c",
+          "size_bytes": 2473959,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Cinzel-Bold.ttf",
           "target": "/usr/share/sddm/themes/ryzora-r1999-2/font/Cinzel-Bold.ttf",
-          "description": "r1999-2 font/Cinzel-Bold.ttf (sddm)"
+          "description": "r1999-2 font/Cinzel-Bold.ttf (sddm)",
+          "sha256": "f606ab3a8a0a75863022676ea496478bb0f4d520ae8c40b6050df3d6dbffad20",
+          "size_bytes": 77060,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/font/Cinzel-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/logo.png",
           "target": "/usr/share/sddm/themes/ryzora-r1999-2/logo.png",
-          "description": "r1999-2 logo.png (sddm)"
+          "description": "r1999-2 logo.png (sddm)",
+          "sha256": "c97d56f2272dcc03c848c9d43912b7a444dcfd976a2bded6f70df981cc4a9b22",
+          "size_bytes": 61345,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-r1999-2/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

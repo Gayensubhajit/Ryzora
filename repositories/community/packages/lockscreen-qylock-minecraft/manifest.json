@@ -43,7 +43,12 @@
     {
       "source": "files/background.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/background.png",
-      "description": "minecraft files/background.png"
+      "description": "minecraft files/background.png",
+      "sha256": "c961a47b8cb6f941a8a83b688ce89116105a20ee38f68b70034f57909783cb6e",
+      "size_bytes": 99483,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-minecraft/files/background.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -63,7 +68,12 @@
     {
       "source": "files/title.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/title.png",
-      "description": "minecraft files/title.png"
+      "description": "minecraft files/title.png",
+      "sha256": "416559556fbe3eae4fa2c9f12f43e409103d3cb5b785e38a036a1f2ad80c0af6",
+      "size_bytes": 119404,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-minecraft/files/title.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ],
   "provider": "qylock",
@@ -84,7 +94,12 @@
         {
           "source": "files/background.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/background.png",
-          "description": "minecraft background.png (quickshell)"
+          "description": "minecraft background.png (quickshell)",
+          "sha256": "c961a47b8cb6f941a8a83b688ce89116105a20ee38f68b70034f57909783cb6e",
+          "size_bytes": 99483,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-minecraft/files/background.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -104,7 +119,12 @@
         {
           "source": "files/title.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/minecraft/title.png",
-          "description": "minecraft title.png (quickshell)"
+          "description": "minecraft title.png (quickshell)",
+          "sha256": "416559556fbe3eae4fa2c9f12f43e409103d3cb5b785e38a036a1f2ad80c0af6",
+          "size_bytes": 119404,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-minecraft/files/title.png",
+          "media_type": "image/png",
+          "is_optional": false
         }
       ]
     },
@@ -124,7 +144,12 @@
         {
           "source": "files/background.png",
           "target": "/usr/share/sddm/themes/ryzora-minecraft/background.png",
-          "description": "minecraft background.png (sddm)"
+          "description": "minecraft background.png (sddm)",
+          "sha256": "c961a47b8cb6f941a8a83b688ce89116105a20ee38f68b70034f57909783cb6e",
+          "size_bytes": 99483,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-minecraft/files/background.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -144,7 +169,12 @@
         {
           "source": "files/title.png",
           "target": "/usr/share/sddm/themes/ryzora-minecraft/title.png",
-          "description": "minecraft title.png (sddm)"
+          "description": "minecraft title.png (sddm)",
+          "sha256": "416559556fbe3eae4fa2c9f12f43e409103d3cb5b785e38a036a1f2ad80c0af6",
+          "size_bytes": 119404,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-minecraft/files/title.png",
+          "media_type": "image/png",
+          "is_optional": false
         }
       ]
     }

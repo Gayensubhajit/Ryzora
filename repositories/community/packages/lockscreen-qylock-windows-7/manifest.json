@@ -43,7 +43,12 @@
     {
       "source": "files/background.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/background.png",
-      "description": "windows-7 files/background.png"
+      "description": "windows-7 files/background.png",
+      "sha256": "a1ded79f81c1d262153b21f1638361af1ca6e21a3b1abb8ad74b4a568fe1c139",
+      "size_bytes": 603136,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-windows-7/files/background.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -58,7 +63,12 @@
     {
       "source": "files/pfp.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/pfp.png",
-      "description": "windows-7 files/pfp.png"
+      "description": "windows-7 files/pfp.png",
+      "sha256": "0693daf311793d04535e485fe87ee64a15f39a707c95edd013cd4cb8f785b8cc",
+      "size_bytes": 345346,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-windows-7/files/pfp.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/theme.conf",
@@ -84,7 +94,12 @@
         {
           "source": "files/background.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/background.png",
-          "description": "windows-7 background.png (quickshell)"
+          "description": "windows-7 background.png (quickshell)",
+          "sha256": "a1ded79f81c1d262153b21f1638361af1ca6e21a3b1abb8ad74b4a568fe1c139",
+          "size_bytes": 603136,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-windows-7/files/background.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -99,7 +114,12 @@
         {
           "source": "files/pfp.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/windows-7/pfp.png",
-          "description": "windows-7 pfp.png (quickshell)"
+          "description": "windows-7 pfp.png (quickshell)",
+          "sha256": "0693daf311793d04535e485fe87ee64a15f39a707c95edd013cd4cb8f785b8cc",
+          "size_bytes": 345346,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-windows-7/files/pfp.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/theme.conf",
@@ -124,7 +144,12 @@
         {
           "source": "files/background.png",
           "target": "/usr/share/sddm/themes/ryzora-windows-7/background.png",
-          "description": "windows-7 background.png (sddm)"
+          "description": "windows-7 background.png (sddm)",
+          "sha256": "a1ded79f81c1d262153b21f1638361af1ca6e21a3b1abb8ad74b4a568fe1c139",
+          "size_bytes": 603136,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-windows-7/files/background.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -139,7 +164,12 @@
         {
           "source": "files/pfp.png",
           "target": "/usr/share/sddm/themes/ryzora-windows-7/pfp.png",
-          "description": "windows-7 pfp.png (sddm)"
+          "description": "windows-7 pfp.png (sddm)",
+          "sha256": "0693daf311793d04535e485fe87ee64a15f39a707c95edd013cd4cb8f785b8cc",
+          "size_bytes": 345346,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-windows-7/files/pfp.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/theme.conf",

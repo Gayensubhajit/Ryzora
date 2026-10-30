@@ -43,12 +43,22 @@
     {
       "source": "files/font/NDot55.otf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/nothing/font/NDot55.otf",
-      "description": "nothing files/font/NDot55.otf"
+      "description": "nothing files/font/NDot55.otf",
+      "sha256": "2ca128bd28c27bcfcc561cdf4539f780446f58b1505278475dc68af702f02d9c",
+      "size_bytes": 224708,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nothing/files/font/NDot55.otf",
+      "media_type": "font/otf",
+      "is_optional": false
     },
     {
       "source": "files/font/NType82.otf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/nothing/font/NType82.otf",
-      "description": "nothing files/font/NType82.otf"
+      "description": "nothing files/font/NType82.otf",
+      "sha256": "51afd15702d82b7ceb4819fd7b39805b18de67ed8df8f4ceaf39aa40e208efc3",
+      "size_bytes": 23544,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nothing/files/font/NType82.otf",
+      "media_type": "font/otf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/font/NDot55.otf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/nothing/font/NDot55.otf",
-          "description": "nothing font/NDot55.otf (quickshell)"
+          "description": "nothing font/NDot55.otf (quickshell)",
+          "sha256": "2ca128bd28c27bcfcc561cdf4539f780446f58b1505278475dc68af702f02d9c",
+          "size_bytes": 224708,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nothing/files/font/NDot55.otf",
+          "media_type": "font/otf",
+          "is_optional": false
         },
         {
           "source": "files/font/NType82.otf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/nothing/font/NType82.otf",
-          "description": "nothing font/NType82.otf (quickshell)"
+          "description": "nothing font/NType82.otf (quickshell)",
+          "sha256": "51afd15702d82b7ceb4819fd7b39805b18de67ed8df8f4ceaf39aa40e208efc3",
+          "size_bytes": 23544,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nothing/files/font/NType82.otf",
+          "media_type": "font/otf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/font/NDot55.otf",
           "target": "/usr/share/sddm/themes/ryzora-nothing/font/NDot55.otf",
-          "description": "nothing font/NDot55.otf (sddm)"
+          "description": "nothing font/NDot55.otf (sddm)",
+          "sha256": "2ca128bd28c27bcfcc561cdf4539f780446f58b1505278475dc68af702f02d9c",
+          "size_bytes": 224708,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nothing/files/font/NDot55.otf",
+          "media_type": "font/otf",
+          "is_optional": false
         },
         {
           "source": "files/font/NType82.otf",
           "target": "/usr/share/sddm/themes/ryzora-nothing/font/NType82.otf",
-          "description": "nothing font/NType82.otf (sddm)"
+          "description": "nothing font/NType82.otf (sddm)",
+          "sha256": "51afd15702d82b7ceb4819fd7b39805b18de67ed8df8f4ceaf39aa40e208efc3",
+          "size_bytes": 23544,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-nothing/files/font/NType82.otf",
+          "media_type": "font/otf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

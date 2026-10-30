@@ -43,17 +43,32 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninesols/bg.png",
-      "description": "ninesols files/bg.png"
+      "description": "ninesols files/bg.png",
+      "sha256": "791cd6dc3b4451f6bbd5c3b1b309d7e540f157c60de98fc901c3b48c7720e9a0",
+      "size_bytes": 793159,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/DejaVuSans.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninesols/font/DejaVuSans.ttf",
-      "description": "ninesols files/font/DejaVuSans.ttf"
+      "description": "ninesols files/font/DejaVuSans.ttf",
+      "sha256": "08ca98e69d9d8fa1065584b4f9ab7d49b6205abea6572b90e171b254845bb990",
+      "size_bytes": 741536,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/font/DejaVuSans.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/logo.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/ninesols/logo.png",
-      "description": "ninesols files/logo.png"
+      "description": "ninesols files/logo.png",
+      "sha256": "84329b73a9ee81e94a18e134132830f0e9c331fb3c5618a7a392fe64a8f95925",
+      "size_bytes": 163776,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/logo.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -84,17 +99,32 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninesols/bg.png",
-          "description": "ninesols bg.png (quickshell)"
+          "description": "ninesols bg.png (quickshell)",
+          "sha256": "791cd6dc3b4451f6bbd5c3b1b309d7e540f157c60de98fc901c3b48c7720e9a0",
+          "size_bytes": 793159,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/DejaVuSans.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninesols/font/DejaVuSans.ttf",
-          "description": "ninesols font/DejaVuSans.ttf (quickshell)"
+          "description": "ninesols font/DejaVuSans.ttf (quickshell)",
+          "sha256": "08ca98e69d9d8fa1065584b4f9ab7d49b6205abea6572b90e171b254845bb990",
+          "size_bytes": 741536,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/font/DejaVuSans.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/logo.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/ninesols/logo.png",
-          "description": "ninesols logo.png (quickshell)"
+          "description": "ninesols logo.png (quickshell)",
+          "sha256": "84329b73a9ee81e94a18e134132830f0e9c331fb3c5618a7a392fe64a8f95925",
+          "size_bytes": 163776,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -124,17 +154,32 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-ninesols/bg.png",
-          "description": "ninesols bg.png (sddm)"
+          "description": "ninesols bg.png (sddm)",
+          "sha256": "791cd6dc3b4451f6bbd5c3b1b309d7e540f157c60de98fc901c3b48c7720e9a0",
+          "size_bytes": 793159,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/DejaVuSans.ttf",
           "target": "/usr/share/sddm/themes/ryzora-ninesols/font/DejaVuSans.ttf",
-          "description": "ninesols font/DejaVuSans.ttf (sddm)"
+          "description": "ninesols font/DejaVuSans.ttf (sddm)",
+          "sha256": "08ca98e69d9d8fa1065584b4f9ab7d49b6205abea6572b90e171b254845bb990",
+          "size_bytes": 741536,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/font/DejaVuSans.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/logo.png",
           "target": "/usr/share/sddm/themes/ryzora-ninesols/logo.png",
-          "description": "ninesols logo.png (sddm)"
+          "description": "ninesols logo.png (sddm)",
+          "sha256": "84329b73a9ee81e94a18e134132830f0e9c331fb3c5618a7a392fe64a8f95925",
+          "size_bytes": 163776,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-ninesols/files/logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

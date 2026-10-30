@@ -33,7 +33,12 @@
     {
       "source": "files/lighthouse.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-lighthouse/lighthouse.png",
-      "description": "Fastfetch Lighthouse Emblem"
+      "description": "Fastfetch Lighthouse Emblem",
+      "sha256": "a95576d477e685f7f8eccd871f5c64395777b414257c0ecb6fdbc6b63e99bcb6",
+      "size_bytes": 723473,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-lighthouse/files/lighthouse.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

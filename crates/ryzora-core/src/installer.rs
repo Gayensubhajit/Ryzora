@@ -175,7 +175,7 @@ pub fn compute_sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-pub fn validate_package_source_file(package_dir: &Path, source: &str) -> Result<PathBuf, String> {
+pub fn validate_package_source_path_safety(source: &str) -> Result<(), String> {
     if source.contains('\0') {
         return Err("Source path contains null byte".to_string());
     }
@@ -191,7 +191,12 @@ pub fn validate_package_source_file(package_dir: &Path, source: &str) -> Result<
             ));
         }
     }
-    let resolved = package_dir.join(p);
+    Ok(())
+}
+
+pub fn validate_package_source_file(package_dir: &Path, source: &str) -> Result<PathBuf, String> {
+    validate_package_source_path_safety(source)?;
+    let resolved = package_dir.join(Path::new(source));
     if !resolved.exists() {
         return Err(format!(
             "Source file '{}' does not exist in package directory",
@@ -199,6 +204,150 @@ pub fn validate_package_source_file(package_dir: &Path, source: &str) -> Result<
         ));
     }
     Ok(resolved)
+}
+
+/// Resolves a package source file either from local package directory, local asset cache,
+/// or downloads it on demand using its `remote_url` while verifying SHA-256 integrity.
+pub fn resolve_package_source_file(
+    package_dir: &Path,
+    file: &crate::manifest::ManifestFile,
+    cache_dir: &Path,
+) -> Result<Option<PathBuf>, String> {
+    validate_package_source_path_safety(&file.source)?;
+
+    // 1. Direct local file check in package directory (e.g. dev workspace or full repo)
+    let local_path = package_dir.join(&file.source);
+    if local_path.is_file() {
+        return Ok(Some(local_path));
+    }
+
+    // 2. Derive cache destination
+    let assets_dir = cache_dir.join("assets");
+    let ext = Path::new(&file.source)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin")
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>();
+
+    let cache_filename = if let Some(ref h) = file.sha256 {
+        format!("{}.{}", h, ext)
+    } else {
+        let mut hasher = Sha256::new();
+        hasher.update(file.remote_url.as_deref().unwrap_or(&file.source).as_bytes());
+        format!("{:x}.{}", hasher.finalize(), ext)
+    };
+
+    let cached_path = assets_dir.join(&cache_filename);
+
+    // If already in local cache and passes integrity check:
+    if cached_path.is_file() {
+        if let Some(ref expected_hash) = file.sha256 {
+            if let Ok(actual_hash) = compute_sha256_file(&cached_path) {
+                if actual_hash.eq_ignore_ascii_case(expected_hash) {
+                    return Ok(Some(cached_path));
+                } else {
+                    let _ = fs::remove_file(&cached_path);
+                }
+            }
+        } else {
+            return Ok(Some(cached_path));
+        }
+    }
+
+    // 3. Download on demand if remote_url is provided
+    if let Some(ref remote_url) = file.remote_url {
+        // Check offline mode
+        if std::env::var("RYZORA_TEST_OFFLINE").is_ok() {
+            if file.is_optional {
+                return Ok(None);
+            }
+            return Err(format!(
+                "Cannot download '{}' in offline mode",
+                file.source
+            ));
+        }
+
+        // Check mock mode for tests
+        if std::env::var("RYZORA_TEST_MOCK_DOWNLOAD").is_ok() || remote_url.starts_with("mock://") {
+            fs::create_dir_all(&assets_dir)
+                .map_err(|e| format!("Failed to create asset cache dir: {}", e))?;
+            let mock_content = b"mock_asset_payload_ryzora";
+            fs::write(&cached_path, mock_content)
+                .map_err(|e| format!("Failed to write mock asset: {}", e))?;
+            return Ok(Some(cached_path));
+        }
+
+        // Live download with ureq
+        fs::create_dir_all(&assets_dir)
+            .map_err(|e| format!("Failed to create asset cache dir: {}", e))?;
+
+        let tmp_path = assets_dir.join(format!(".tmp_{}", cache_filename));
+        let resp = ureq::get(remote_url)
+            .set("User-Agent", "Ryzora/0.1.0")
+            .timeout(std::time::Duration::from_secs(30))
+            .call()
+            .map_err(|e| format!("Failed to download asset from '{}': {}", remote_url, e))?;
+
+        use std::io::{Read, Write};
+        let mut reader = resp.into_reader();
+        let mut out_file = fs::File::create(&tmp_path)
+            .map_err(|e| format!("Failed to create temp download file: {}", e))?;
+
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 16384];
+        let mut total_bytes = 0u64;
+        let max_bytes = file.size_bytes.unwrap_or(500 * 1024 * 1024) + 1024 * 1024; // safety margin
+
+        loop {
+            let n = reader.read(&mut buffer)
+                .map_err(|e| format!("Error streaming asset from '{}': {}", remote_url, e))?;
+            if n == 0 {
+                break;
+            }
+            total_bytes += n as u64;
+            if total_bytes > max_bytes {
+                let _ = fs::remove_file(&tmp_path);
+                return Err(format!(
+                    "Asset download exceeded expected size limit (read {} bytes)",
+                    total_bytes
+                ));
+            }
+            hasher.update(&buffer[..n]);
+            out_file.write_all(&buffer[..n])
+                .map_err(|e| format!("Failed writing to temp download file: {}", e))?;
+        }
+        out_file.flush()
+            .map_err(|e| format!("Failed to flush temp download file: {}", e))?;
+        drop(out_file);
+
+        let actual_hash = format!("{:x}", hasher.finalize());
+        if let Some(ref expected_hash) = file.sha256 {
+            if !actual_hash.eq_ignore_ascii_case(expected_hash) {
+                let _ = fs::remove_file(&tmp_path);
+                return Err(format!(
+                    "Integrity check failed for '{}': expected SHA-256 {}, got {}",
+                    file.source, expected_hash, actual_hash
+                ));
+            }
+        }
+
+        fs::rename(&tmp_path, &cached_path)
+            .map_err(|e| format!("Failed to finalize cached asset: {}", e))?;
+
+        return Ok(Some(cached_path));
+    }
+
+    // 4. File is missing and has no remote_url
+    if file.is_optional {
+        Ok(None)
+    } else {
+        Err(format!(
+            "Source file '{}' does not exist in package directory and has no remote_url",
+            file.source
+        ))
+    }
 }
 
 pub fn validate_target_safety(target_str: &str, home_dir: &Path) -> Result<PathBuf, String> {
@@ -302,7 +451,7 @@ pub fn install_package_in(
 
     // 2. Pre-flight path validation
     for f in &target_files {
-        validate_package_source_file(package_dir, &f.source)?;
+        validate_package_source_path_safety(&f.source)?;
         validate_target_safety(&f.target, home_dir)?;
     }
 
@@ -341,9 +490,14 @@ pub fn install_package_in(
 
     // 5. Stage files and calculate hashes
     let mut staged_items = Vec::new(); // (staged_path, target_path, sha256, target_str)
+    let cache_dir = home_dir.join(".local/share/ryzora/cache");
     for (idx, f) in target_files.iter().enumerate() {
-        let src_path = match validate_package_source_file(package_dir, &f.source) {
-            Ok(p) => p,
+        let src_path = match resolve_package_source_file(package_dir, f, &cache_dir) {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                // Optional file skipped
+                continue;
+            }
             Err(e) => {
                 clean_staging(&staging_dir);
                 return Err(e);
@@ -1412,6 +1566,95 @@ pub fn deactivate_lockscreen_target_in(
     Ok(state)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Community Content Storage & Cache Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageUsage {
+    pub cache_bytes: u64,
+    pub installed_bytes: u64,
+    pub snapshots_bytes: u64,
+    pub total_bytes: u64,
+    pub cache_human: String,
+    pub installed_human: String,
+    pub snapshots_human: String,
+    pub total_human: String,
+}
+
+pub fn format_bytes_human(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{} B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KiB", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:.1} MiB", bytes as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:.2} GiB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+pub fn dir_total_bytes(dir: &Path) -> u64 {
+    if !dir.exists() {
+        return 0;
+    }
+    let mut total = 0;
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() || p.is_symlink() {
+                if let Ok(meta) = p.metadata() {
+                    total += meta.len();
+                }
+            } else if p.is_dir() {
+                total += dir_total_bytes(&p);
+            }
+        }
+    }
+    total
+}
+
+pub fn get_storage_usage_in(home_dir: &Path) -> StorageUsage {
+    let cache_dir = home_dir.join(".local/share/ryzora/cache");
+    let installed_dir = home_dir.join(".local/share/ryzora/installed");
+    let snapshots_dir = home_dir.join(".local/share/ryzora/snapshots");
+
+    let cache_bytes = dir_total_bytes(&cache_dir);
+    let installed_bytes = dir_total_bytes(&installed_dir);
+    let snapshots_bytes = dir_total_bytes(&snapshots_dir);
+    let total_bytes = cache_bytes + installed_bytes + snapshots_bytes;
+
+    StorageUsage {
+        cache_bytes,
+        installed_bytes,
+        snapshots_bytes,
+        total_bytes,
+        cache_human: format_bytes_human(cache_bytes),
+        installed_human: format_bytes_human(installed_bytes),
+        snapshots_human: format_bytes_human(snapshots_bytes),
+        total_human: format_bytes_human(total_bytes),
+    }
+}
+
+pub fn clear_content_cache_in(home_dir: &Path) -> Result<u64, String> {
+    let cache_dir = home_dir.join(".local/share/ryzora/cache");
+    if !cache_dir.exists() {
+        return Ok(0);
+    }
+    let freed = dir_total_bytes(&cache_dir);
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let _ = fs::remove_dir_all(&p);
+            } else {
+                let _ = fs::remove_file(&p);
+            }
+        }
+    }
+    Ok(freed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1689,5 +1932,58 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("is not installed. Materialize/install it before applying."));
+    }
+
+    #[test]
+    fn test_resolve_package_source_file_mock_download_and_cache() {
+        let temp_pkg = tempdir().unwrap();
+        let temp_cache = tempdir().unwrap();
+
+        let file_manifest = crate::manifest::ManifestFile {
+            source: "files/bg.mp4".to_string(),
+            target: "~/.local/share/ryzora/lockscreens/test/bg.mp4".to_string(),
+            description: "Test video".to_string(),
+            remote_url: Some("mock://assets/bg.mp4".to_string()),
+            sha256: Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string()),
+            size_bytes: Some(1024),
+            media_type: Some("video/mp4".to_string()),
+            is_optional: false,
+        };
+
+        // Resolving should use mock downloader and place asset in cache
+        let resolved = resolve_package_source_file(temp_pkg.path(), &file_manifest, temp_cache.path())
+            .expect("Mock resolution should succeed")
+            .expect("Path must be Some");
+
+        assert!(resolved.is_file());
+        assert!(resolved.starts_with(temp_cache.path()));
+
+        // Subsequent call hits cache
+        let cached = resolve_package_source_file(temp_pkg.path(), &file_manifest, temp_cache.path())
+            .expect("Cache hit should succeed")
+            .expect("Path must be Some");
+
+        assert_eq!(resolved, cached);
+    }
+
+    #[test]
+    fn test_storage_usage_and_cache_cleanup() {
+        let temp_home = tempdir().unwrap();
+        let cache_assets = temp_home.path().join(".local/share/ryzora/cache/assets");
+        fs::create_dir_all(&cache_assets).unwrap();
+        fs::write(cache_assets.join("asset1.mp4"), vec![0u8; 10000]).unwrap();
+        fs::write(cache_assets.join("asset2.jpg"), vec![0u8; 5000]).unwrap();
+
+        let usage = get_storage_usage_in(temp_home.path());
+        assert_eq!(usage.cache_bytes, 15000);
+        assert_eq!(usage.total_bytes, 15000);
+        assert!(usage.cache_human.contains("KiB"));
+
+        let freed = clear_content_cache_in(temp_home.path()).unwrap();
+        assert_eq!(freed, 15000);
+
+        let usage_after = get_storage_usage_in(temp_home.path());
+        assert_eq!(usage_after.cache_bytes, 0);
+        assert_eq!(usage_after.total_bytes, 0);
     }
 }

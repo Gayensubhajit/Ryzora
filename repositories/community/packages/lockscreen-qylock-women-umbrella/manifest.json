@@ -43,12 +43,22 @@
     {
       "source": "files/bg.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/bg.png",
-      "description": "women-umbrella files/bg.png"
+      "description": "women-umbrella files/bg.png",
+      "sha256": "8524ac4c367827143b3e2ef9e9abe5700b874ab39e81626878571b07d01c0513",
+      "size_bytes": 3025537,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-women-umbrella/files/bg.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/Itim-Regular.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/font/Itim-Regular.ttf",
-      "description": "women-umbrella files/font/Itim-Regular.ttf"
+      "description": "women-umbrella files/font/Itim-Regular.ttf",
+      "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+      "size_bytes": 362640,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-women-umbrella/files/font/Itim-Regular.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/bg.png",
-          "description": "women-umbrella bg.png (quickshell)"
+          "description": "women-umbrella bg.png (quickshell)",
+          "sha256": "8524ac4c367827143b3e2ef9e9abe5700b874ab39e81626878571b07d01c0513",
+          "size_bytes": 3025537,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-women-umbrella/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Itim-Regular.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/women-umbrella/font/Itim-Regular.ttf",
-          "description": "women-umbrella font/Itim-Regular.ttf (quickshell)"
+          "description": "women-umbrella font/Itim-Regular.ttf (quickshell)",
+          "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+          "size_bytes": 362640,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-women-umbrella/files/font/Itim-Regular.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.png",
           "target": "/usr/share/sddm/themes/ryzora-women-umbrella/bg.png",
-          "description": "women-umbrella bg.png (sddm)"
+          "description": "women-umbrella bg.png (sddm)",
+          "sha256": "8524ac4c367827143b3e2ef9e9abe5700b874ab39e81626878571b07d01c0513",
+          "size_bytes": 3025537,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-women-umbrella/files/bg.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/Itim-Regular.ttf",
           "target": "/usr/share/sddm/themes/ryzora-women-umbrella/font/Itim-Regular.ttf",
-          "description": "women-umbrella font/Itim-Regular.ttf (sddm)"
+          "description": "women-umbrella font/Itim-Regular.ttf (sddm)",
+          "sha256": "acdd351e7e72ab5e3d16cc26cda212c51482905cd83cc5bfb8c799c272e0e09a",
+          "size_bytes": 362640,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-women-umbrella/files/font/Itim-Regular.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

@@ -21,6 +21,22 @@ Item {
     property int snapshotRetentionCount: 5
     property bool snapshotAutoCleanup: true
 
+    property string storageCacheStr: "0 B"
+    property string storageInstalledStr: "0 B"
+    property string storageTotalStr: "0 B"
+
+    function refreshStorageInfo() {
+        try {
+            var raw = backend.getStorageUsage()
+            var data = JSON.parse(raw)
+            if (data["cache_human"]) storageCacheStr = data["cache_human"]
+            if (data["installed_human"]) storageInstalledStr = data["installed_human"]
+            if (data["total_human"]) storageTotalStr = data["total_human"]
+        } catch (e) {
+            console.warn("Failed to parse storage usage:", e)
+        }
+    }
+
     function syncFromBackend() {
         var s = backend.settingsData
         if (!s || Object.keys(s).length === 0) return
@@ -49,6 +65,7 @@ Item {
     Component.onCompleted: {
         backend.loadSettings()
         root.syncFromBackend()
+        root.refreshStorageInfo()
     }
 
     function saveAll() {
@@ -758,6 +775,77 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     root.launchCreatorRequested()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 94
+                    radius: theme.radiusMd
+                    color: Qt.rgba(16/255, 185/255, 129/255, 0.06)
+                    border.color: Qt.rgba(16/255, 185/255, 129/255, 0.25)
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Text {
+                                text: "Downloaded Content & Cache Storage"
+                                font.pixelSize: theme.fontBase
+                                font.bold: true
+                                color: theme.text
+                            }
+
+                            Text {
+                                text: "Local cache: " + root.storageCacheStr + " · Installed packages: " + root.storageInstalledStr + " · Total: " + root.storageTotalStr
+                                font.pixelSize: theme.fontSm
+                                color: theme.textMuted
+                            }
+
+                            Text {
+                                text: "On-demand wallpapers, lockscreen videos, and previews are cached locally. You can prune the asset cache at any time without affecting active settings."
+                                font.pixelSize: theme.fontXs
+                                color: theme.textMuted
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        Rectangle {
+                            height: 34
+                            width: 120
+                            radius: theme.radiusMd
+                            color: cleanCacheMouse.containsMouse ? Qt.rgba(16/255, 185/255, 129/255, 0.25) : theme.surfaceElevated
+                            border.color: Qt.rgba(16/255, 185/255, 129/255, 0.40)
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "🧹 Clean Cache"
+                                font.pixelSize: theme.fontSm
+                                font.bold: true
+                                color: "#34d399"
+                            }
+
+                            MouseArea {
+                                id: cleanCacheMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var res = backend.clearContentCache()
+                                    try {
+                                        var d = JSON.parse(res)
+                                        backend.postNotification(d["success"] ? "info" : "error", "Storage Management", d["message"])
+                                    } catch (e) {}
+                                    root.refreshStorageInfo()
                                 }
                             }
                         }

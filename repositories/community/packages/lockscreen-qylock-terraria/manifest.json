@@ -48,7 +48,12 @@
     {
       "source": "files/avatar.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/avatar.png",
-      "description": "terraria files/avatar.png"
+      "description": "terraria files/avatar.png",
+      "sha256": "9bcc2f0361a622aab127b55111a5a45affdb9b0eedd15bc2581944dca4ed924b",
+      "size_bytes": 9049,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/avatar.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -63,32 +68,62 @@
     {
       "source": "files/ter1.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter1.png",
-      "description": "terraria files/ter1.png"
+      "description": "terraria files/ter1.png",
+      "sha256": "03857dbd6c6d2bea59e70b41db43815b85a0500038472f71933df466cb5d8f56",
+      "size_bytes": 92262,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter1.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/ter2.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter2.png",
-      "description": "terraria files/ter2.png"
+      "description": "terraria files/ter2.png",
+      "sha256": "84cfa4c6bfa29a2b6072944e495016be3be802f2c4eb0c1658882aede9672ad3",
+      "size_bytes": 107595,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter2.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/ter3.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter3.png",
-      "description": "terraria files/ter3.png"
+      "description": "terraria files/ter3.png",
+      "sha256": "929bd9b291734aa8750540fcbf57e2aea00e67e50fb651a8d95a3866fe0f544b",
+      "size_bytes": 116189,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter3.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/ter4.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter4.png",
-      "description": "terraria files/ter4.png"
+      "description": "terraria files/ter4.png",
+      "sha256": "7c62878dc2c58b66a4bd5ed47a0b3fe28ed7be857d7575cc1c11ccc3fbfffadd",
+      "size_bytes": 85345,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter4.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/ter5.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter5.png",
-      "description": "terraria files/ter5.png"
+      "description": "terraria files/ter5.png",
+      "sha256": "74e38c4acd0b50be4809dfb62770104b211e4dc2566780902273bedaa3d1b134",
+      "size_bytes": 92888,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter5.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/terraria_logo.png",
       "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/terraria_logo.png",
-      "description": "terraria files/terraria_logo.png"
+      "description": "terraria files/terraria_logo.png",
+      "sha256": "7b8941dde02eaa5319d1a9c36e29da02fede94fcc63911d570d6d3d8e28732e9",
+      "size_bytes": 12570,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/terraria_logo.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/theme.conf",
@@ -119,7 +154,12 @@
         {
           "source": "files/avatar.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/avatar.png",
-          "description": "terraria avatar.png (quickshell)"
+          "description": "terraria avatar.png (quickshell)",
+          "sha256": "9bcc2f0361a622aab127b55111a5a45affdb9b0eedd15bc2581944dca4ed924b",
+          "size_bytes": 9049,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/avatar.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -134,32 +174,62 @@
         {
           "source": "files/ter1.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter1.png",
-          "description": "terraria ter1.png (quickshell)"
+          "description": "terraria ter1.png (quickshell)",
+          "sha256": "03857dbd6c6d2bea59e70b41db43815b85a0500038472f71933df466cb5d8f56",
+          "size_bytes": 92262,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter1.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter2.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter2.png",
-          "description": "terraria ter2.png (quickshell)"
+          "description": "terraria ter2.png (quickshell)",
+          "sha256": "84cfa4c6bfa29a2b6072944e495016be3be802f2c4eb0c1658882aede9672ad3",
+          "size_bytes": 107595,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter2.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter3.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter3.png",
-          "description": "terraria ter3.png (quickshell)"
+          "description": "terraria ter3.png (quickshell)",
+          "sha256": "929bd9b291734aa8750540fcbf57e2aea00e67e50fb651a8d95a3866fe0f544b",
+          "size_bytes": 116189,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter3.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter4.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter4.png",
-          "description": "terraria ter4.png (quickshell)"
+          "description": "terraria ter4.png (quickshell)",
+          "sha256": "7c62878dc2c58b66a4bd5ed47a0b3fe28ed7be857d7575cc1c11ccc3fbfffadd",
+          "size_bytes": 85345,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter4.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter5.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/ter5.png",
-          "description": "terraria ter5.png (quickshell)"
+          "description": "terraria ter5.png (quickshell)",
+          "sha256": "74e38c4acd0b50be4809dfb62770104b211e4dc2566780902273bedaa3d1b134",
+          "size_bytes": 92888,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter5.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/terraria_logo.png",
           "target": "~/.local/share/ryzora/lockscreens/qylock/terraria/terraria_logo.png",
-          "description": "terraria terraria_logo.png (quickshell)"
+          "description": "terraria terraria_logo.png (quickshell)",
+          "sha256": "7b8941dde02eaa5319d1a9c36e29da02fede94fcc63911d570d6d3d8e28732e9",
+          "size_bytes": 12570,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/terraria_logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/theme.conf",
@@ -189,7 +259,12 @@
         {
           "source": "files/avatar.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/avatar.png",
-          "description": "terraria avatar.png (sddm)"
+          "description": "terraria avatar.png (sddm)",
+          "sha256": "9bcc2f0361a622aab127b55111a5a45affdb9b0eedd15bc2581944dca4ed924b",
+          "size_bytes": 9049,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/avatar.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -204,32 +279,62 @@
         {
           "source": "files/ter1.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/ter1.png",
-          "description": "terraria ter1.png (sddm)"
+          "description": "terraria ter1.png (sddm)",
+          "sha256": "03857dbd6c6d2bea59e70b41db43815b85a0500038472f71933df466cb5d8f56",
+          "size_bytes": 92262,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter1.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter2.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/ter2.png",
-          "description": "terraria ter2.png (sddm)"
+          "description": "terraria ter2.png (sddm)",
+          "sha256": "84cfa4c6bfa29a2b6072944e495016be3be802f2c4eb0c1658882aede9672ad3",
+          "size_bytes": 107595,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter2.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter3.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/ter3.png",
-          "description": "terraria ter3.png (sddm)"
+          "description": "terraria ter3.png (sddm)",
+          "sha256": "929bd9b291734aa8750540fcbf57e2aea00e67e50fb651a8d95a3866fe0f544b",
+          "size_bytes": 116189,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter3.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter4.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/ter4.png",
-          "description": "terraria ter4.png (sddm)"
+          "description": "terraria ter4.png (sddm)",
+          "sha256": "7c62878dc2c58b66a4bd5ed47a0b3fe28ed7be857d7575cc1c11ccc3fbfffadd",
+          "size_bytes": 85345,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter4.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/ter5.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/ter5.png",
-          "description": "terraria ter5.png (sddm)"
+          "description": "terraria ter5.png (sddm)",
+          "sha256": "74e38c4acd0b50be4809dfb62770104b211e4dc2566780902273bedaa3d1b134",
+          "size_bytes": 92888,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/ter5.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/terraria_logo.png",
           "target": "/usr/share/sddm/themes/ryzora-terraria/terraria_logo.png",
-          "description": "terraria terraria_logo.png (sddm)"
+          "description": "terraria terraria_logo.png (sddm)",
+          "sha256": "7b8941dde02eaa5319d1a9c36e29da02fede94fcc63911d570d6d3d8e28732e9",
+          "size_bytes": 12570,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-terraria/files/terraria_logo.png",
+          "media_type": "image/png",
+          "is_optional": false
         },
         {
           "source": "files/theme.conf",

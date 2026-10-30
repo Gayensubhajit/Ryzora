@@ -52,57 +52,112 @@
     {
       "source": "files/png/Arch-3.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/Arch-3.png",
-      "description": "Fastfetch asset png/Arch-3.png"
+      "description": "Fastfetch asset png/Arch-3.png",
+      "sha256": "f957a53e6a5d5f20bcee820ff4805b67d26b9ef4f95135592ce89ec2e84a19d5",
+      "size_bytes": 42081,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/Arch-3.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/arch-4.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-4.png",
-      "description": "Fastfetch asset png/arch-4.png"
+      "description": "Fastfetch asset png/arch-4.png",
+      "sha256": "20496684715ebc026777a1343d08f2b0cf4da7ab59d0672181dbeb7a3e3f99b5",
+      "size_bytes": 13637,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/arch-4.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/arch-5.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-5.png",
-      "description": "Fastfetch asset png/arch-5.png"
+      "description": "Fastfetch asset png/arch-5.png",
+      "sha256": "e8c11a3534e379aee8b509e43d613606d34064454fa29e567f78c4ef95d1dd56",
+      "size_bytes": 138422,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/arch-5.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/arch-6.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-6.png",
-      "description": "Fastfetch asset png/arch-6.png"
+      "description": "Fastfetch asset png/arch-6.png",
+      "sha256": "1ce83d8efb388926a32eb59a0aaaffd95f804f764ef6b805320fd2511d5efc61",
+      "size_bytes": 71396,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/arch-6.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/arch-7.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch-7.png",
-      "description": "Fastfetch asset png/arch-7.png"
+      "description": "Fastfetch asset png/arch-7.png",
+      "sha256": "1e276fcc85005b84ab5b4b39c324ae92d40e5b625268a8fcba17a0a938fe27eb",
+      "size_bytes": 44364,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/arch-7.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/arch.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/arch.png",
-      "description": "Fastfetch asset png/arch.png"
+      "description": "Fastfetch asset png/arch.png",
+      "sha256": "b7d4a480db3a4537cd60d0323f64fe3284842fbf78d1328dd7dee1310417b2cb",
+      "size_bytes": 10659,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/arch.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/archlinux.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/archlinux.png",
-      "description": "Fastfetch asset png/archlinux.png"
+      "description": "Fastfetch asset png/archlinux.png",
+      "sha256": "dd18821287db7e2d7ca035fe3bb4e7e5227cbdc4327b54b8aab6480dcb26b0ea",
+      "size_bytes": 55501,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/archlinux.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/dot-face.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/dot-face.png",
-      "description": "Fastfetch asset png/dot-face.png"
+      "description": "Fastfetch asset png/dot-face.png",
+      "sha256": "4f2084e49989dc04b16bc2ab5f2d7824464ad1473b4cd5e6ebb10de201af9935",
+      "size_bytes": 271846,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/dot-face.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/nyarch.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/nyarch.png",
-      "description": "Fastfetch asset png/nyarch.png"
+      "description": "Fastfetch asset png/nyarch.png",
+      "sha256": "6d0c5385f240cb68f8898672c927701832f68696d627da6f90d6bb2d9fd35e36",
+      "size_bytes": 81078,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/nyarch.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/oie_transparent.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/oie_transparent.png",
-      "description": "Fastfetch asset png/oie_transparent.png"
+      "description": "Fastfetch asset png/oie_transparent.png",
+      "sha256": "935cb08328f92d97c5e1b397ad5a471709fb8db6bbea2a553b3e428f265a83e9",
+      "size_bytes": 23294,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/oie_transparent.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/png/penrose-sky-wp.png",
       "target": "~/.config/fastfetch/presets/fastfetch-sofijacom/png/penrose-sky-wp.png",
-      "description": "Fastfetch asset png/penrose-sky-wp.png"
+      "description": "Fastfetch asset png/penrose-sky-wp.png",
+      "sha256": "2bf1e1e6b4112f08bbad2289ed60cf38fd0e00409f14640e4cc995bd246d2e27",
+      "size_bytes": 1408631,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-sofijacom/files/png/penrose-sky-wp.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

@@ -48,7 +48,12 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/sword/bg.mp4",
-      "description": "sword files/bg.mp4"
+      "description": "sword files/bg.mp4",
+      "sha256": "3eb0621b8c71bd1b21adf75c36c6ccb698c6907aa1f602466d27ef240585563d",
+      "size_bytes": 6038096,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-sword/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/.gitkeep",
@@ -58,7 +63,12 @@
     {
       "source": "files/font/The Last Shuriken.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/The Last Shuriken.ttf",
-      "description": "sword files/font/The Last Shuriken.ttf"
+      "description": "sword files/font/The Last Shuriken.ttf",
+      "sha256": "9edd03523accde78f242620d44c450876b6450eb4dd0c7293bbc1bc821bf1f4e",
+      "size_bytes": 28716,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-sword/files/font/The Last Shuriken.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -94,7 +104,12 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/sword/bg.mp4",
-          "description": "sword bg.mp4 (quickshell)"
+          "description": "sword bg.mp4 (quickshell)",
+          "sha256": "3eb0621b8c71bd1b21adf75c36c6ccb698c6907aa1f602466d27ef240585563d",
+          "size_bytes": 6038096,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-sword/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -104,7 +119,12 @@
         {
           "source": "files/font/The Last Shuriken.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/sword/font/The Last Shuriken.ttf",
-          "description": "sword font/The Last Shuriken.ttf (quickshell)"
+          "description": "sword font/The Last Shuriken.ttf (quickshell)",
+          "sha256": "9edd03523accde78f242620d44c450876b6450eb4dd0c7293bbc1bc821bf1f4e",
+          "size_bytes": 28716,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-sword/files/font/The Last Shuriken.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -139,7 +159,12 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-sword/bg.mp4",
-          "description": "sword bg.mp4 (sddm)"
+          "description": "sword bg.mp4 (sddm)",
+          "sha256": "3eb0621b8c71bd1b21adf75c36c6ccb698c6907aa1f602466d27ef240585563d",
+          "size_bytes": 6038096,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-sword/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/.gitkeep",
@@ -149,7 +174,12 @@
         {
           "source": "files/font/The Last Shuriken.ttf",
           "target": "/usr/share/sddm/themes/ryzora-sword/font/The Last Shuriken.ttf",
-          "description": "sword font/The Last Shuriken.ttf (sddm)"
+          "description": "sword font/The Last Shuriken.ttf (sddm)",
+          "sha256": "9edd03523accde78f242620d44c450876b6450eb4dd0c7293bbc1bc821bf1f4e",
+          "size_bytes": 28716,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-sword/files/font/The Last Shuriken.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

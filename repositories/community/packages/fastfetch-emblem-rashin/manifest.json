@@ -33,7 +33,12 @@
     {
       "source": "files/rashin.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-rashin/rashin.png",
-      "description": "Fastfetch Rashin Emblem"
+      "description": "Fastfetch Rashin Emblem",
+      "sha256": "8e5773ec7d242e71f8b492136756bed01469de5949aaf6490eddc085cb5b2ffc",
+      "size_bytes": 1120542,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-rashin/files/rashin.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

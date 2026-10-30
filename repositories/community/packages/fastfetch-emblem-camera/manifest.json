@@ -33,7 +33,12 @@
     {
       "source": "files/camera.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-camera/camera.png",
-      "description": "Fastfetch Camera Emblem"
+      "description": "Fastfetch Camera Emblem",
+      "sha256": "c94efb2d2b4ea76f1ae718dbeed7cc8078191be5dec72eeb417863e5acc0b8f9",
+      "size_bytes": 300302,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-camera/files/camera.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }

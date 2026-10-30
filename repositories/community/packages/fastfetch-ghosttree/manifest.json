@@ -37,7 +37,12 @@
     {
       "source": "files/images/cat.png",
       "target": "~/.config/fastfetch/presets/fastfetch-ghosttree/images/cat.png",
-      "description": "Fastfetch asset images/cat.png"
+      "description": "Fastfetch asset images/cat.png",
+      "sha256": "4b729e445829ea674fff96ee828a9d3347f9e77269453e2f54e8ab18dbf6fc6d",
+      "size_bytes": 95724,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-ghosttree/files/images/cat.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

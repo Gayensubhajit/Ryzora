@@ -43,12 +43,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/bg.mp4",
-      "description": "last-of-us files/bg.mp4"
+      "description": "last-of-us files/bg.mp4",
+      "sha256": "1e706a6ed5886999400ba1e64a66b68ceb601915bc36a3bb9decc8acd57aa271",
+      "size_bytes": 8868867,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-last-of-us/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/Outfit-Black.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/font/Outfit-Black.ttf",
-      "description": "last-of-us files/font/Outfit-Black.ttf"
+      "description": "last-of-us files/font/Outfit-Black.ttf",
+      "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+      "size_bytes": 55372,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-last-of-us/files/font/Outfit-Black.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/bg.mp4",
-          "description": "last-of-us bg.mp4 (quickshell)"
+          "description": "last-of-us bg.mp4 (quickshell)",
+          "sha256": "1e706a6ed5886999400ba1e64a66b68ceb601915bc36a3bb9decc8acd57aa271",
+          "size_bytes": 8868867,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-last-of-us/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Outfit-Black.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/last-of-us/font/Outfit-Black.ttf",
-          "description": "last-of-us font/Outfit-Black.ttf (quickshell)"
+          "description": "last-of-us font/Outfit-Black.ttf (quickshell)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-last-of-us/files/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-last-of-us/bg.mp4",
-          "description": "last-of-us bg.mp4 (sddm)"
+          "description": "last-of-us bg.mp4 (sddm)",
+          "sha256": "1e706a6ed5886999400ba1e64a66b68ceb601915bc36a3bb9decc8acd57aa271",
+          "size_bytes": 8868867,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-last-of-us/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Outfit-Black.ttf",
           "target": "/usr/share/sddm/themes/ryzora-last-of-us/font/Outfit-Black.ttf",
-          "description": "last-of-us font/Outfit-Black.ttf (sddm)"
+          "description": "last-of-us font/Outfit-Black.ttf (sddm)",
+          "sha256": "f240e6128c31a75aa3f456ea1ff3b0fda382176681788ae3d244d08e3fa7d6cd",
+          "size_bytes": 55372,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-last-of-us/files/font/Outfit-Black.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

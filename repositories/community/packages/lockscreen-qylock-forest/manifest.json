@@ -43,12 +43,22 @@
     {
       "source": "files/bg.mp4",
       "target": "~/.local/share/ryzora/lockscreens/qylock/forest/bg.mp4",
-      "description": "forest files/bg.mp4"
+      "description": "forest files/bg.mp4",
+      "sha256": "9c92e0604383b3057392127a9db85511260498a905a68bda9138c5f6b225f82b",
+      "size_bytes": 8069798,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-forest/files/bg.mp4",
+      "media_type": "video/mp4",
+      "is_optional": false
     },
     {
       "source": "files/font/Figtree-Bold.ttf",
       "target": "~/.local/share/ryzora/lockscreens/qylock/forest/font/Figtree-Bold.ttf",
-      "description": "forest files/font/Figtree-Bold.ttf"
+      "description": "forest files/font/Figtree-Bold.ttf",
+      "sha256": "183bf1a8523731738c72be9aa8236453a21d6a3ed70bd8e5266723b212331dc4",
+      "size_bytes": 40324,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-forest/files/font/Figtree-Bold.ttf",
+      "media_type": "font/ttf",
+      "is_optional": false
     },
     {
       "source": "files/metadata.desktop",
@@ -79,12 +89,22 @@
         {
           "source": "files/bg.mp4",
           "target": "~/.local/share/ryzora/lockscreens/qylock/forest/bg.mp4",
-          "description": "forest bg.mp4 (quickshell)"
+          "description": "forest bg.mp4 (quickshell)",
+          "sha256": "9c92e0604383b3057392127a9db85511260498a905a68bda9138c5f6b225f82b",
+          "size_bytes": 8069798,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-forest/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Figtree-Bold.ttf",
           "target": "~/.local/share/ryzora/lockscreens/qylock/forest/font/Figtree-Bold.ttf",
-          "description": "forest font/Figtree-Bold.ttf (quickshell)"
+          "description": "forest font/Figtree-Bold.ttf (quickshell)",
+          "sha256": "183bf1a8523731738c72be9aa8236453a21d6a3ed70bd8e5266723b212331dc4",
+          "size_bytes": 40324,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-forest/files/font/Figtree-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",
@@ -114,12 +134,22 @@
         {
           "source": "files/bg.mp4",
           "target": "/usr/share/sddm/themes/ryzora-forest/bg.mp4",
-          "description": "forest bg.mp4 (sddm)"
+          "description": "forest bg.mp4 (sddm)",
+          "sha256": "9c92e0604383b3057392127a9db85511260498a905a68bda9138c5f6b225f82b",
+          "size_bytes": 8069798,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-forest/files/bg.mp4",
+          "media_type": "video/mp4",
+          "is_optional": false
         },
         {
           "source": "files/font/Figtree-Bold.ttf",
           "target": "/usr/share/sddm/themes/ryzora-forest/font/Figtree-Bold.ttf",
-          "description": "forest font/Figtree-Bold.ttf (sddm)"
+          "description": "forest font/Figtree-Bold.ttf (sddm)",
+          "sha256": "183bf1a8523731738c72be9aa8236453a21d6a3ed70bd8e5266723b212331dc4",
+          "size_bytes": 40324,
+          "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/lockscreen-qylock-forest/files/font/Figtree-Bold.ttf",
+          "media_type": "font/ttf",
+          "is_optional": false
         },
         {
           "source": "files/metadata.desktop",

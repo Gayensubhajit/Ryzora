@@ -57,62 +57,122 @@
     {
       "source": "files/images/arch.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/arch.png",
-      "description": "Fastfetch asset images/arch.png"
+      "description": "Fastfetch asset images/arch.png",
+      "sha256": "b7d4a480db3a4537cd60d0323f64fe3284842fbf78d1328dd7dee1310417b2cb",
+      "size_bytes": 10659,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/images/arch.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/images/archlinux.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/archlinux.png",
-      "description": "Fastfetch asset images/archlinux.png"
+      "description": "Fastfetch asset images/archlinux.png",
+      "sha256": "dd18821287db7e2d7ca035fe3bb4e7e5227cbdc4327b54b8aab6480dcb26b0ea",
+      "size_bytes": 55501,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/images/archlinux.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/images/hypr.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/hypr.png",
-      "description": "Fastfetch asset images/hypr.png"
+      "description": "Fastfetch asset images/hypr.png",
+      "sha256": "d9a6a71a1535701c60424be9ff85278927f66009e1ce630e68b71e9b8b5fc365",
+      "size_bytes": 1896262,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/images/hypr.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/images/nyarch.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/nyarch.png",
-      "description": "Fastfetch asset images/nyarch.png"
+      "description": "Fastfetch asset images/nyarch.png",
+      "sha256": "7896b192db8f6df8640ea9fe95183aec73a2a6f30e33a6d543a1b73a1d115a3e",
+      "size_bytes": 64464,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/images/nyarch.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/images/penrose-sky-wp.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/penrose-sky-wp.png",
-      "description": "Fastfetch asset images/penrose-sky-wp.png"
+      "description": "Fastfetch asset images/penrose-sky-wp.png",
+      "sha256": "2bf1e1e6b4112f08bbad2289ed60cf38fd0e00409f14640e4cc995bd246d2e27",
+      "size_bytes": 1408631,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/images/penrose-sky-wp.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/images/pusheen.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/images/pusheen.png",
-      "description": "Fastfetch asset images/pusheen.png"
+      "description": "Fastfetch asset images/pusheen.png",
+      "sha256": "0f14be1bbfe11eb3e847ca02087de2e5197be200305df66f8ed4530173680993",
+      "size_bytes": 504077,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/images/pusheen.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/pngs/aisaka.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/aisaka.png",
-      "description": "Fastfetch asset pngs/aisaka.png"
+      "description": "Fastfetch asset pngs/aisaka.png",
+      "sha256": "13054424ece57f1ab622b5b2867ec89ce785f5ccfb39362b4f21150439dbd7fc",
+      "size_bytes": 639502,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/pngs/aisaka.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/pngs/arch.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/arch.png",
-      "description": "Fastfetch asset pngs/arch.png"
+      "description": "Fastfetch asset pngs/arch.png",
+      "sha256": "b7d4a480db3a4537cd60d0323f64fe3284842fbf78d1328dd7dee1310417b2cb",
+      "size_bytes": 10659,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/pngs/arch.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/pngs/hyde.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/hyde.png",
-      "description": "Fastfetch asset pngs/hyde.png"
+      "description": "Fastfetch asset pngs/hyde.png",
+      "sha256": "4fad0c594a0de4a0453ae3d9d6583e8d7d6198cd8a21356019ad758c00e5d646",
+      "size_bytes": 177788,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/pngs/hyde.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/pngs/loli.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/loli.png",
-      "description": "Fastfetch asset pngs/loli.png"
+      "description": "Fastfetch asset pngs/loli.png",
+      "sha256": "0dc1de2ef290cd1debc47d0f7077a7892bad60704bfbec1d62081bfd250875c2",
+      "size_bytes": 444402,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/pngs/loli.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/pngs/pochita.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/pochita.png",
-      "description": "Fastfetch asset pngs/pochita.png"
+      "description": "Fastfetch asset pngs/pochita.png",
+      "sha256": "a4436b98b0f46f4545f0446f9a79b324fb3fa152a85aa159e209667a72d3782d",
+      "size_bytes": 116666,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/pngs/pochita.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/pngs/ryuzaki.png",
       "target": "~/.config/fastfetch/presets/fastfetch-aayushchalise/pngs/ryuzaki.png",
-      "description": "Fastfetch asset pngs/ryuzaki.png"
+      "description": "Fastfetch asset pngs/ryuzaki.png",
+      "sha256": "7caceb5eccab3723a18009b075fbf1fcc4cf8f294c1182873e30d88a9e02e8f7",
+      "size_bytes": 366062,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-aayushchalise/files/pngs/ryuzaki.png",
+      "media_type": "image/png",
+      "is_optional": false
     },
     {
       "source": "files/readme.md",

@@ -31,7 +31,12 @@
     {
       "source": "files/arch.png",
       "target": "~/.config/fastfetch/logos/fastfetch-emblem-arch/arch.png",
-      "description": "Fastfetch Arch Emblem"
+      "description": "Fastfetch Arch Emblem",
+      "sha256": "b7d4a480db3a4537cd60d0323f64fe3284842fbf78d1328dd7dee1310417b2cb",
+      "size_bytes": 10659,
+      "remote_url": "https://raw.githubusercontent.com/Gayensubhajit/Ryzora/main/repositories/community/packages/fastfetch-emblem-arch/files/arch.png",
+      "media_type": "image/png",
+      "is_optional": false
     }
   ]
 }
