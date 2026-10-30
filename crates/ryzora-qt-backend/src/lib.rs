@@ -308,6 +308,12 @@ pub struct SystemInfo {
 }
 
 pub fn check_binary_exists(bin: &str) -> (bool, Option<PathBuf>) {
+    if let Ok(test_bin_dir) = std::env::var("RYZORA_TEST_BIN_DIR") {
+        let p = Path::new(&test_bin_dir).join(bin);
+        if p.is_file() {
+            return (true, Some(p));
+        }
+    }
     if let Ok(path_var) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path_var) {
             let p = dir.join(bin);
@@ -489,6 +495,22 @@ pub struct RyzoraSettings {
     pub snapshot_policy: String,
     pub snapshot_retention_count: u32,
     pub snapshot_auto_cleanup: bool,
+    #[serde(default)]
+    pub setup_completed: bool,
+    #[serde(default = "default_setup_version")]
+    pub setup_version: String,
+    #[serde(default = "default_true")]
+    pub community_content_enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_storage_path: Option<String>,
+}
+
+fn default_setup_version() -> String {
+    "0.1.0".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for RyzoraSettings {
@@ -506,6 +528,10 @@ impl Default for RyzoraSettings {
             snapshot_policy: "ask".to_string(),
             snapshot_retention_count: 5,
             snapshot_auto_cleanup: true,
+            setup_completed: false,
+            setup_version: "0.1.0".to_string(),
+            community_content_enabled: true,
+            custom_storage_path: None,
         }
     }
 }
@@ -557,6 +583,29 @@ pub fn validate_settings(s: &RyzoraSettings) -> Result<(), String> {
         ));
     }
 
+    if let Some(ref path) = s.custom_storage_path {
+        let p = path.trim();
+        if p.is_empty() {
+            return Err("Custom storage path must not be empty if provided.".to_string());
+        }
+        if p.contains('\0') {
+            return Err("Custom storage path contains null byte.".to_string());
+        }
+        for segment in p.split('/') {
+            if segment == ".." {
+                return Err("Custom storage path must not contain path traversal ('..').".to_string());
+            }
+        }
+        for forbidden in [
+            "/usr", "/etc", "/bin", "/sbin", "/lib", "/lib64",
+            "/boot", "/root", "/sys", "/proc", "/dev",
+        ] {
+            if p == forbidden || p.starts_with(&format!("{}/", forbidden)) {
+                return Err(format!("System path '{}' is forbidden for user storage.", forbidden));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -590,6 +639,38 @@ pub fn set_secure_permissions(path: &Path, mode: u32) -> Result<(), String> {
         fs::set_permissions(path, perms).map_err(|e| format!("Failed to set permissions: {}", e))?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+pub fn get_available_disk_space(p: &Path) -> Option<u64> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let mut path = if p.exists() {
+        p.to_path_buf()
+    } else {
+        p.parent().unwrap_or(p).to_path_buf()
+    };
+    while !path.exists() {
+        if let Some(parent) = path.parent() {
+            path = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    unsafe {
+        let mut stat: libc::statvfs = std::mem::zeroed();
+        if libc::statvfs(c_path.as_ptr(), &mut stat) == 0 {
+            Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(unix))]
+pub fn get_available_disk_space(_: &Path) -> Option<u64> {
+    None
 }
 
 pub fn detect_system_appearance() -> String {
@@ -3868,6 +3949,271 @@ impl BackendState {
         } else {
             Err("Failed to persist default settings".to_string())
         }
+    }
+
+    pub fn is_first_run(&self) -> bool {
+        if std::env::var("RYZORA_FORCE_FIRST_RUN").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+            return true;
+        }
+        if std::env::var("RYZORA_SUPPRESS_FIRST_RUN").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+            return false;
+        }
+
+        if let Some(home) = self.resolve_home_dir() {
+            let settings_file = home.join(".local/share/ryzora/settings.json");
+            if settings_file.is_file() {
+                if let Ok(raw) = fs::read_to_string(&settings_file) {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                        if let Some(obj) = val.as_object() {
+                            if let Some(completed) = obj.get("setup_completed").and_then(|v| v.as_bool()) {
+                                return !completed;
+                            } else {
+                                // Existing settings without setup_completed indicates upgrade user
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+
+            // settings.json does not exist. Check if existing user data exists (pre-settings upgrade)
+            let installed_dir = home.join(".local/share/ryzora/installed");
+            let snapshots_dir = home.join(".local/share/ryzora/snapshots");
+            let has_installed = installed_dir.is_dir() && fs::read_dir(&installed_dir).map(|mut d| d.next().is_some()).unwrap_or(false);
+            let has_snapshots = snapshots_dir.is_dir() && fs::read_dir(&snapshots_dir).map(|mut d| d.next().is_some()).unwrap_or(false);
+            if has_installed || has_snapshots {
+                return false;
+            }
+
+            // Fresh install
+            return true;
+        }
+        false
+    }
+
+    pub fn get_system_compatibility(&self) -> serde_json::Value {
+        // 1. Pacman (native Arch / CachyOS package manager)
+        let (pacman_found, pacman_path) = check_binary_exists("pacman");
+        let pacman_info = serde_json::json!({
+            "available": pacman_found,
+            "status": if pacman_found { "available" } else { "missing" },
+            "binary": pacman_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "pacman".into()),
+            "label": if pacman_found { "Arch / CachyOS package manager" } else { "pacman not detected in PATH" },
+            "required": true
+        });
+
+        // 2. Flatpak
+        let (flatpak_found, flatpak_path) = check_binary_exists("flatpak");
+        let flatpak_info = serde_json::json!({
+            "available": flatpak_found,
+            "status": if flatpak_found { "available" } else { "optional_missing" },
+            "binary": flatpak_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "flatpak".into()),
+            "label": if flatpak_found { "Flathub & sandboxed applications" } else { "Optional (not installed)" },
+            "required": false
+        });
+
+        // 3. AUR helper (paru or yay)
+        let (paru_found, paru_path) = check_binary_exists("paru");
+        let (yay_found, yay_path) = check_binary_exists("yay");
+        let (aur_found, aur_helper, aur_path) = if paru_found {
+            (true, "paru", paru_path)
+        } else if yay_found {
+            (true, "yay", yay_path)
+        } else {
+            (false, "none", None)
+        };
+        let aur_info = serde_json::json!({
+            "available": aur_found,
+            "status": if aur_found { "available" } else { "optional_missing" },
+            "helper": aur_helper,
+            "binary": aur_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| aur_helper.into()),
+            "label": if aur_found {
+                format!("AUR build helper detected ({})", aur_helper)
+            } else {
+                "Optional (paru or yay recommended for AUR packages)".into()
+            },
+            "required": false
+        });
+
+        // 4. Privilege escalation helper (pkexec / Polkit)
+        let (polkit_found, polkit_path) = check_binary_exists("pkexec");
+        let polkit_info = serde_json::json!({
+            "available": polkit_found,
+            "status": if polkit_found { "available" } else { "warning" },
+            "binary": polkit_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "pkexec".into()),
+            "label": if polkit_found { "PolicyKit authorization available" } else { "pkexec not found in PATH" },
+            "required": false
+        });
+
+        // 5. Desktop session / display server
+        let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
+        let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| if wayland_display.is_some() { "wayland".into() } else { "x11".into() });
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "Unknown".into());
+        let is_wayland = wayland_display.is_some() || session_type.to_lowercase() == "wayland";
+        let display_server_info = serde_json::json!({
+            "is_wayland": is_wayland,
+            "session_type": session_type,
+            "desktop": desktop,
+            "label": format!("{} ({})", if is_wayland { "Wayland session" } else { "X11 session" }, desktop)
+        });
+
+        let is_compatible = pacman_found || flatpak_found;
+        let summary = if is_compatible {
+            "System is ready for Ryzora application management and customizations.".to_string()
+        } else {
+            "Neither pacman nor flatpak was detected. System management features may be limited.".to_string()
+        };
+
+        serde_json::json!({
+            "pacman": pacman_info,
+            "flatpak": flatpak_info,
+            "aur": aur_info,
+            "polkit": polkit_info,
+            "display_server": display_server_info,
+            "is_compatible": is_compatible,
+            "summary": summary
+        })
+    }
+
+    pub fn get_storage_locations(&self) -> serde_json::Value {
+        let home = self.resolve_home_dir().unwrap_or_else(|| PathBuf::from("/home/user"));
+        let xdg_data = home.join(".local/share/ryzora");
+        let xdg_config = home.join(".config/ryzora");
+        let xdg_cache = home.join(".cache/ryzora");
+        let default_content_cache = xdg_data.join("content_cache");
+
+        let settings = self.load_settings();
+        let effective_content_cache = if let Some(ref custom) = settings.custom_storage_path {
+            PathBuf::from(custom)
+        } else {
+            default_content_cache.clone()
+        };
+
+        let free_bytes = get_available_disk_space(&effective_content_cache).unwrap_or(0);
+        let free_space_human = ryzora_core::installer::format_bytes_human(free_bytes);
+
+        serde_json::json!({
+            "data_dir": xdg_data.to_string_lossy(),
+            "config_dir": xdg_config.to_string_lossy(),
+            "cache_dir": xdg_cache.to_string_lossy(),
+            "default_content_cache": default_content_cache.to_string_lossy(),
+            "effective_content_cache": effective_content_cache.to_string_lossy(),
+            "custom_storage_path": settings.custom_storage_path,
+            "community_content_enabled": settings.community_content_enabled,
+            "free_bytes": free_bytes,
+            "free_space_human": free_space_human
+        })
+    }
+
+    pub fn validate_storage_path_internal(&self, candidate: &str) -> Result<String, String> {
+        let p = candidate.trim();
+        if p.is_empty() {
+            return Err("Storage path cannot be empty.".to_string());
+        }
+        if p.contains('\0') {
+            return Err("Storage path contains invalid null characters.".to_string());
+        }
+
+        let expanded = if p == "~" {
+            if let Some(h) = self.resolve_home_dir() {
+                h
+            } else {
+                return Err("Unable to resolve user home directory.".to_string());
+            }
+        } else if let Some(stripped) = p.strip_prefix("~/") {
+            if let Some(h) = self.resolve_home_dir() {
+                h.join(stripped)
+            } else {
+                return Err("Unable to resolve user home directory.".to_string());
+            }
+        } else {
+            PathBuf::from(p)
+        };
+
+        if !expanded.is_absolute() {
+            return Err("Storage path must be an absolute path or relative to home (~/).".to_string());
+        }
+
+        let s_str = expanded.to_string_lossy().to_string();
+        for segment in s_str.split('/') {
+            if segment == ".." {
+                return Err("Storage path must not contain path traversal ('..').".to_string());
+            }
+        }
+
+        let forbidden = [
+            "/usr", "/etc", "/bin", "/sbin", "/lib", "/lib64",
+            "/boot", "/root", "/sys", "/proc", "/dev",
+        ];
+        for f in forbidden {
+            if s_str == f || s_str.starts_with(&format!("{}/", f)) {
+                return Err(format!("System location '{}' cannot be used for user storage.", f));
+            }
+        }
+
+        let mut check_ancestor = expanded.as_path();
+        while !check_ancestor.exists() {
+            if let Some(parent) = check_ancestor.parent() {
+                check_ancestor = parent;
+            } else {
+                break;
+            }
+        }
+
+        if check_ancestor.exists() {
+            let md = fs::metadata(check_ancestor)
+                .map_err(|e| format!("Cannot access directory '{}': {}", check_ancestor.display(), e))?;
+            if md.permissions().readonly() {
+                return Err(format!("Directory '{}' is read-only.", check_ancestor.display()));
+            }
+        }
+
+        Ok(expanded.to_string_lossy().to_string())
+    }
+
+    pub fn complete_setup_wizard(&self, payload_json: &str) -> Result<String, String> {
+        let val: serde_json::Value = serde_json::from_str(payload_json)
+            .map_err(|e| format!("Invalid JSON payload: {}", e))?;
+
+        let mut settings = self.load_settings();
+        settings.setup_completed = true;
+        if let Some(ver) = val.get("setup_version").and_then(|v| v.as_str()) {
+            settings.setup_version = ver.to_string();
+        }
+
+        if let Some(comm) = val.get("community_content_enabled").and_then(|v| v.as_bool()) {
+            settings.community_content_enabled = comm;
+        }
+
+        if let Some(custom_storage) = val.get("custom_storage_path") {
+            if custom_storage.is_null() {
+                settings.custom_storage_path = None;
+            } else if let Some(path_str) = custom_storage.as_str() {
+                let trimmed = path_str.trim();
+                if trimmed.is_empty() {
+                    settings.custom_storage_path = None;
+                } else {
+                    let validated = self.validate_storage_path_internal(trimmed)?;
+                    settings.custom_storage_path = Some(validated);
+                }
+            }
+        }
+
+        let serialized = serde_json::to_string_pretty(&settings)
+            .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+        if !self.save_settings(&serialized) {
+            return Err("Failed to persist setup configuration to settings.json.".to_string());
+        }
+
+        Ok(serde_json::json!({
+            "success": true,
+            "setup_completed": true,
+            "setup_version": settings.setup_version,
+            "community_content_enabled": settings.community_content_enabled,
+            "custom_storage_path": settings.custom_storage_path
+        }).to_string())
     }
 
     pub fn load_appearance(&self) -> AppearancePreferences {
@@ -7192,6 +7538,67 @@ pub extern "C" fn ryzora_reset_settings() -> *mut c_char {
 }
 
 #[no_mangle]
+pub extern "C" fn ryzora_is_first_run() -> bool {
+    get_backend().is_first_run()
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_system_compatibility() -> *mut c_char {
+    let res = get_backend().get_system_compatibility();
+    safe_to_c_string(res.to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_storage_locations() -> *mut c_char {
+    let res = get_backend().get_storage_locations();
+    safe_to_c_string(res.to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_validate_storage_path(candidate: *const c_char) -> *mut c_char {
+    if candidate.is_null() {
+        let err = serde_json::json!({ "valid": false, "error": "Null path provided" }).to_string();
+        return safe_to_c_string(err);
+    }
+    let s = unsafe {
+        match CStr::from_ptr(candidate).to_str() {
+            Ok(v) => v,
+            Err(_) => {
+                let err = serde_json::json!({ "valid": false, "error": "Invalid UTF-8 in path" }).to_string();
+                return safe_to_c_string(err);
+            }
+        }
+    };
+    let res = match get_backend().validate_storage_path_internal(s) {
+        Ok(canonical) => serde_json::json!({ "valid": true, "path": canonical }).to_string(),
+        Err(err) => serde_json::json!({ "valid": false, "error": err }).to_string(),
+    };
+    safe_to_c_string(res)
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_complete_setup_wizard(payload_json: *const c_char) -> *mut c_char {
+    if payload_json.is_null() {
+        let err = serde_json::json!({ "success": false, "error": "Null payload provided" }).to_string();
+        return safe_to_c_string(err);
+    }
+    let payload = unsafe {
+        match CStr::from_ptr(payload_json).to_str() {
+            Ok(v) => v,
+            Err(_) => {
+                let err = serde_json::json!({ "success": false, "error": "Invalid UTF-8 in payload" }).to_string();
+                return safe_to_c_string(err);
+            }
+        }
+    };
+    let res = match get_backend().complete_setup_wizard(payload) {
+        Ok(json_res) => json_res,
+        Err(err) => serde_json::json!({ "success": false, "error": err }).to_string(),
+    };
+    safe_to_c_string(res)
+}
+
+#[no_mangle]
 pub extern "C" fn ryzora_load_appearance() -> *mut c_char {
     let app = get_backend().load_appearance();
     let json = serde_json::to_string(&app).unwrap_or_else(|_| "{}".to_string());
@@ -9527,5 +9934,107 @@ hyprlock
 
         // Coordinator must remain unblocked for subsequent operations after failure
         assert_eq!(backend.coordinator.begin_request(200), Ok(()));
+    }
+
+    #[test]
+    fn test_setup_wizard_is_first_run_detection() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        // 1. Fresh installation: no settings.json and no installed data
+        let backend = BackendState::with_home_dir(home.clone());
+        assert!(backend.is_first_run(), "Fresh install without config must report first run");
+
+        // 2. Pre-settings upgrade: legacy snapshots exist
+        let legacy_snapshots = home.join(".local/share/ryzora/snapshots");
+        fs::create_dir_all(&legacy_snapshots).unwrap();
+        fs::write(legacy_snapshots.join("backup-1.json"), "{}").unwrap();
+        assert!(!backend.is_first_run(), "Pre-settings upgrade user with existing snapshots must not be forced to setup");
+        fs::remove_dir_all(legacy_snapshots).unwrap();
+
+        // 3. Settings exist with setup_completed: false
+        let share_dir = home.join(".local/share/ryzora");
+        fs::create_dir_all(&share_dir).unwrap();
+        let settings_path = share_dir.join("settings.json");
+        fs::write(&settings_path, r#"{"setup_completed": false, "auto_refresh_enabled": true}"#).unwrap();
+        assert!(backend.is_first_run(), "Explicit setup_completed: false must report first run");
+
+        // 4. Settings exist without setup_completed key (upgrade from earlier release)
+        fs::write(&settings_path, r#"{"auto_refresh_enabled": true, "default_release_channel": "stable"}"#).unwrap();
+        assert!(!backend.is_first_run(), "Existing user upgrade without setup_completed must be treated as completed");
+
+        // 5. Settings exist with setup_completed: true
+        fs::write(&settings_path, r#"{"setup_completed": true, "auto_refresh_enabled": true}"#).unwrap();
+        assert!(!backend.is_first_run(), "Completed setup must report is_first_run == false");
+
+        // 6. Test environment overrides
+        std::env::set_var("RYZORA_FORCE_FIRST_RUN", "1");
+        assert!(backend.is_first_run(), "RYZORA_FORCE_FIRST_RUN must override settings");
+        std::env::remove_var("RYZORA_FORCE_FIRST_RUN");
+
+        std::env::set_var("RYZORA_SUPPRESS_FIRST_RUN", "1");
+        assert!(!backend.is_first_run(), "RYZORA_SUPPRESS_FIRST_RUN must suppress first run");
+        std::env::remove_var("RYZORA_SUPPRESS_FIRST_RUN");
+    }
+
+    #[test]
+    fn test_setup_wizard_system_compatibility() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home);
+        let compat = backend.get_system_compatibility();
+
+        assert!(compat.get("pacman").is_some());
+        assert!(compat.get("flatpak").is_some());
+        assert!(compat.get("aur").is_some());
+        assert!(compat.get("polkit").is_some());
+        assert!(compat.get("display_server").is_some());
+        assert!(compat.get("is_compatible").is_some());
+        assert!(compat.get("summary").is_some());
+    }
+
+    #[test]
+    fn test_setup_wizard_storage_validation_and_completion() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home.clone());
+
+        // Forbidden paths
+        assert!(backend.validate_storage_path_internal("/usr/share/ryzora").is_err());
+        assert!(backend.validate_storage_path_internal("/etc/ryzora").is_err());
+        assert!(backend.validate_storage_path_internal("/root/data").is_err());
+        assert!(backend.validate_storage_path_internal("../relative/path").is_err());
+        assert!(backend.validate_storage_path_internal("~/../forbidden").is_err());
+        assert!(backend.validate_storage_path_internal("").is_err());
+
+        // Valid user path
+        let custom_dir = home.join("custom_storage");
+        let valid_res = backend.validate_storage_path_internal(&custom_dir.to_string_lossy());
+        assert!(valid_res.is_ok(), "Custom user path must be valid");
+
+        // Complete setup wizard
+        let payload = serde_json::json!({
+            "setup_version": "0.1.0",
+            "community_content_enabled": true,
+            "custom_storage_path": custom_dir.to_string_lossy()
+        });
+        let res = backend.complete_setup_wizard(&payload.to_string());
+        assert!(res.is_ok(), "Setup wizard completion must succeed");
+
+        // Verify state is saved
+        assert!(!backend.is_first_run(), "Setup must now be marked completed");
+        let settings = backend.load_settings();
+        assert!(settings.setup_completed);
+        assert_eq!(settings.setup_version, "0.1.0");
+        assert!(settings.community_content_enabled);
+        assert_eq!(settings.custom_storage_path.as_deref(), Some(custom_dir.to_string_lossy().as_ref()));
     }
 }

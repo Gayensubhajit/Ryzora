@@ -83,6 +83,11 @@ extern "C" {
     bool ryzora_is_silentsddm_engine_installed();
     char* ryzora_install_silentsddm_engine();
     char* ryzora_uninstall_silentsddm_engine();
+    bool ryzora_is_first_run();
+    char* ryzora_get_system_compatibility();
+    char* ryzora_get_storage_locations();
+    char* ryzora_validate_storage_path(const char* candidate);
+    char* ryzora_complete_setup_wizard(const char* payload_json);
 }
 
 void RyzoraBackend::updateMonotonicReqId(std::atomic<uint64_t> &target, uint64_t newId) {
@@ -140,6 +145,7 @@ RyzoraBackend::RyzoraBackend(QObject *parent) : QObject(parent) {
     loadSnapshots();
     loadUpdates();
     loadSettings();
+    m_isFirstRun = ryzora_is_first_run();
     loadSystemInfo();
     loadCompatibilityProfiles();
     loadPresets();
@@ -2142,6 +2148,62 @@ void RyzoraBackend::resetSettings() {
         }
     }
     postNotification("error", "Error", "Failed to reset settings.");
+}
+
+bool RyzoraBackend::checkIsFirstRun() {
+    bool first = ryzora_is_first_run();
+    if (m_isFirstRun != first) {
+        m_isFirstRun = first;
+        emit isFirstRunChanged();
+    }
+    return m_isFirstRun;
+}
+
+QString RyzoraBackend::getSystemCompatibility() {
+    char *raw = ryzora_get_system_compatibility();
+    if (!raw) return QStringLiteral("{}");
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
+}
+
+QString RyzoraBackend::getStorageLocations() {
+    char *raw = ryzora_get_storage_locations();
+    if (!raw) return QStringLiteral("{}");
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
+}
+
+QString RyzoraBackend::validateStoragePath(const QString &candidate) {
+    QByteArray ba = candidate.toUtf8();
+    char *raw = ryzora_validate_storage_path(ba.constData());
+    if (!raw) return QStringLiteral("{\"valid\":false,\"error\":\"Internal error\"}");
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
+}
+
+bool RyzoraBackend::completeSetupWizard(const QString &payloadJson) {
+    QByteArray ba = payloadJson.toUtf8();
+    char *raw = ryzora_complete_setup_wizard(ba.constData());
+    if (!raw) return false;
+    QString resStr = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
+    bool ok = doc.isObject() && doc.object().value(QStringLiteral("success")).toBool();
+    if (ok) {
+        m_isFirstRun = false;
+        loadSettings();
+        emit isFirstRunChanged();
+        emit setupWizardCompleted();
+        postNotification("success", "Setup Complete", "Welcome to Ryzora!");
+    }
+    return ok;
+}
+
+void RyzoraBackend::reopenSetupWizard() {
+    emit setupWizardRequested();
 }
 
 QVariantMap RyzoraBackend::loadAppearance() {

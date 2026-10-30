@@ -91,6 +91,15 @@ ApplicationWindow {
         function onAppUninstalled(appId, success, message) {
             // Backend already refreshes appsList after uninstall
         }
+        function onSetupWizardRequested() {
+            setupWizardModal.open()
+        }
+    }
+
+    Component.onCompleted: {
+        if (backend.isFirstRun) {
+            setupWizardModal.open()
+        }
     }
 
     function handlePackageAction(action, data, targetOverride) {
@@ -324,6 +333,8 @@ ApplicationWindow {
         onActivated: {
             if (aboutModal.visible) {
                 aboutModal.visible = false
+            } else if (setupWizardModal.visible) {
+                setupWizardModal.dismiss()
             } else if (detailDrawer.isOpen) {
                 detailDrawer.isOpen = false
             }
@@ -619,6 +630,18 @@ ApplicationWindow {
     AboutModal {
         id: aboutModal
         onCloseRequested: aboutModal.visible = false
+    }
+
+    // Setup Wizard Modal Dialog
+    SetupWizardModal {
+        id: setupWizardModal
+        objectName: "setupWizardModal"
+        onCompleted: {
+            console.log("[Main.qml] Setup wizard completed.")
+        }
+        onDismissed: {
+            console.log("[Main.qml] Setup wizard dismissed.")
+        }
     }
 
     // Toast Notification Banner (Floating top-right)

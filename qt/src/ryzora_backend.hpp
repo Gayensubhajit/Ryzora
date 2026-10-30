@@ -124,12 +124,14 @@ class RyzoraBackend : public QObject {
     Q_PROPERTY(QVariantList compatibilityProfiles READ compatibilityProfiles NOTIFY compatibilityProfilesChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(bool isSilentEngineInstalled READ isSilentEngineInstalled NOTIFY silentEngineInstalledChanged)
+    Q_PROPERTY(bool isFirstRun READ isFirstRun NOTIFY isFirstRunChanged)
 
 public:
     explicit RyzoraBackend(QObject *parent = nullptr);
     ~RyzoraBackend() override;
 
     // Getters
+    bool isFirstRun() const { return m_isFirstRun; }
     QVariantList catalogList() const { return m_catalogList; }
     QVariantList libraryList() const { return m_libraryList; }
     int catalogCount() const { return m_catalogList.size(); }
@@ -210,6 +212,12 @@ public:
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE void saveSettings(const QVariantMap &settings);
     Q_INVOKABLE void resetSettings();
+    Q_INVOKABLE bool checkIsFirstRun();
+    Q_INVOKABLE QString getSystemCompatibility();
+    Q_INVOKABLE QString getStorageLocations();
+    Q_INVOKABLE QString validateStoragePath(const QString &candidate);
+    Q_INVOKABLE bool completeSetupWizard(const QString &payloadJson);
+    Q_INVOKABLE void reopenSetupWizard();
     Q_INVOKABLE void saveAppearance(const QVariantMap &app);
     Q_INVOKABLE QVariantMap loadAppearance();
     Q_INVOKABLE QString detectSystemAppearance();
@@ -309,6 +317,9 @@ signals:
     void packageUninstalled(const QString &packageId, bool success, const QString &message);
     void silentEngineInstalled(bool success, const QString &message);
     void silentEngineInstalledChanged();
+    void isFirstRunChanged();
+    void setupWizardRequested();
+    void setupWizardCompleted();
 
 private:
     void updateMonotonicReqId(std::atomic<uint64_t> &target, uint64_t newId);
@@ -379,5 +390,6 @@ private:
     bool isAppOperatingLocked(const QString &clean) const;
     QString m_testHomeOverride;
     QString m_testSystemRootOverride;
+    bool m_isFirstRun{false};
     mutable PreviewConfig *m_previewConfig = nullptr;
 };

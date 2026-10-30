@@ -3530,6 +3530,185 @@ static int runPreviewSmoke(QGuiApplication &app, QQmlApplicationEngine &engine, 
     return 0;
 }
 
+int runTestSetupWizard(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-SETUP-WIZARD] Beginning setup wizard test suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: Root window not found";
+        return 1;
+    }
+
+    // 1. Verify getSystemCompatibility schema & detection
+    QString compatStr = backend->getSystemCompatibility();
+    QJsonDocument compatDoc = QJsonDocument::fromJson(compatStr.toUtf8());
+    if (!compatDoc.isObject()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: getSystemCompatibility did not return JSON object";
+        return 1;
+    }
+    QJsonObject compatObj = compatDoc.object();
+    if (!compatObj.contains("pacman") || !compatObj.contains("flatpak") ||
+        !compatObj.contains("aur") || !compatObj.contains("polkit") ||
+        !compatObj.contains("display_server") || !compatObj.contains("is_compatible")) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: getSystemCompatibility missing required fields";
+        return 1;
+    }
+    qInfo() << "[TEST-SETUP-WIZARD] System compatibility verified:" << compatObj.value("summary").toString();
+
+    // 2. Verify getStorageLocations
+    QString storageStr = backend->getStorageLocations();
+    QJsonDocument storageDoc = QJsonDocument::fromJson(storageStr.toUtf8());
+    if (!storageDoc.isObject() || !storageDoc.object().contains("data_dir") || !storageDoc.object().contains("free_space_human")) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: getStorageLocations missing required fields";
+        return 1;
+    }
+    qInfo() << "[TEST-SETUP-WIZARD] Storage locations verified. Free space:" << storageDoc.object().value("free_space_human").toString();
+
+    // 3. Verify validateStoragePath rejects forbidden system paths and accepts valid ones
+    QString rej1 = backend->validateStoragePath("/usr/share");
+    QJsonObject rej1Obj = QJsonDocument::fromJson(rej1.toUtf8()).object();
+    if (rej1Obj.value("valid").toBool()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: validateStoragePath did not reject /usr/share";
+        return 1;
+    }
+
+    QString rej2 = backend->validateStoragePath("/etc/ryzora");
+    QJsonObject rej2Obj = QJsonDocument::fromJson(rej2.toUtf8()).object();
+    if (rej2Obj.value("valid").toBool()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: validateStoragePath did not reject /etc/ryzora";
+        return 1;
+    }
+
+    QString rej3 = backend->validateStoragePath("../parent/traversal");
+    QJsonObject rej3Obj = QJsonDocument::fromJson(rej3.toUtf8()).object();
+    if (rej3Obj.value("valid").toBool()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: validateStoragePath did not reject traversal";
+        return 1;
+    }
+
+    QTemporaryDir tempStorageDir;
+    if (tempStorageDir.isValid()) {
+        QString validRes = backend->validateStoragePath(tempStorageDir.path());
+        QJsonObject validObj = QJsonDocument::fromJson(validRes.toUtf8()).object();
+        if (!validObj.value("valid").toBool()) {
+            qCritical() << "[TEST-SETUP-WIZARD] ERROR: validateStoragePath rejected valid directory:" << tempStorageDir.path();
+            return 1;
+        }
+        qInfo() << "[TEST-SETUP-WIZARD] Storage path validation safety verified.";
+    }
+
+    // 4. Locate SetupWizardModal in QML
+    QObject *modal = rootObj->findChild<QObject*>("setupWizardModal");
+    if (!modal) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: setupWizardModal not found in QML";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1240);
+    window->setHeight(820);
+    pumpEvents(10, 15000);
+
+    // Step 0: Welcome
+    QMetaObject::invokeMethod(modal, "open");
+    modal->setProperty("currentStep", 0);
+    pumpEvents(25, 20000);
+    QImage img0 = window->grabWindow();
+    img0.save(screenshotDir + "/setup_wizard_01_welcome.png");
+    img0.save(screenshotDir + "/real_desktop_setup_wizard_01_welcome.png");
+    qInfo() << "[TEST-SETUP-WIZARD] Saved setup_wizard_01_welcome.png";
+
+    // Step 1: System Check
+    modal->setProperty("currentStep", 1);
+    pumpEvents(25, 20000);
+    QImage img1 = window->grabWindow();
+    img1.save(screenshotDir + "/setup_wizard_02_system.png");
+    img1.save(screenshotDir + "/real_desktop_setup_wizard_02_system.png");
+    qInfo() << "[TEST-SETUP-WIZARD] Saved setup_wizard_02_system.png";
+
+    // Step 2: Choose Experience & Storage
+    modal->setProperty("currentStep", 2);
+    pumpEvents(25, 20000);
+    QImage img2 = window->grabWindow();
+    img2.save(screenshotDir + "/setup_wizard_03_experience.png");
+    img2.save(screenshotDir + "/real_desktop_setup_wizard_03_experience.png");
+    qInfo() << "[TEST-SETUP-WIZARD] Saved setup_wizard_03_experience.png";
+
+    // Step 3: Complete / Ready to Explore
+    modal->setProperty("currentStep", 3);
+    pumpEvents(25, 20000);
+    QImage img3 = window->grabWindow();
+    img3.save(screenshotDir + "/setup_wizard_04_completion.png");
+    img3.save(screenshotDir + "/real_desktop_setup_wizard_04_completion.png");
+    qInfo() << "[TEST-SETUP-WIZARD] Saved setup_wizard_04_completion.png";
+
+    // 5. Test completing setup wizard
+    QJsonObject payload;
+    payload["setup_version"] = "0.1.0";
+    payload["community_content_enabled"] = true;
+    payload["custom_storage_path"] = tempStorageDir.isValid() ? tempStorageDir.path() : QJsonValue(QJsonValue::Null);
+
+    bool completeOk = backend->completeSetupWizard(QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact)));
+    if (!completeOk) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: completeSetupWizard returned false";
+        return 1;
+    }
+
+    qunsetenv("RYZORA_FORCE_FIRST_RUN");
+    if (backend->checkIsFirstRun()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: checkIsFirstRun returned true after setup completion";
+        return 1;
+    }
+    qInfo() << "[TEST-SETUP-WIZARD] Setup completion persisted and isFirstRun verified as false.";
+
+    // 6. Test reopening setup wizard from Settings view
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    pumpEvents(20, 20000);
+
+    bool signalReceived = false;
+    QObject::connect(backend, &RyzoraBackend::setupWizardRequested, [&signalReceived]() {
+        signalReceived = true;
+    });
+    backend->reopenSetupWizard();
+    pumpEvents(25, 20000);
+
+    if (!signalReceived) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: setupWizardRequested signal not received upon reopenSetupWizard";
+        return 1;
+    }
+    if (!modal->property("visible").toBool()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: modal not visible after reopenSetupWizard";
+        return 1;
+    }
+    qInfo() << "[TEST-SETUP-WIZARD] Setup wizard reopen signal and visibility verified over Settings view.";
+
+    QImage imgReopen = window->grabWindow();
+    imgReopen.save(screenshotDir + "/real_desktop_setup_wizard_05_reopened_from_settings.png");
+    qInfo() << "[TEST-SETUP-WIZARD] Saved real_desktop_setup_wizard_05_reopened_from_settings.png";
+
+    // Test dismiss/skip
+    QMetaObject::invokeMethod(modal, "dismiss");
+    pumpEvents(10, 10000);
+    if (modal->property("visible").toBool()) {
+        qCritical() << "[TEST-SETUP-WIZARD] ERROR: modal still visible after dismiss";
+        return 1;
+    }
+    qInfo() << "[TEST-SETUP-WIZARD] Dismiss/skip verified.";
+
+    qInfo() << "[TEST-SETUP-WIZARD] ALL TESTS PASSED!";
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     // Preview clips are tiny (400x224); a CUDA/VAAPI context per MediaPlayer exhausts VRAM
     // (CUDA_ERROR_OUT_OF_MEMORY) and stalls the UI. Use FFmpeg software decoding unless overridden.
@@ -3588,6 +3767,10 @@ int main(int argc, char *argv[]) {
         _exit(exitCode);
     } else if (argc > 1 && QString(argv[1]) == "--test-package-actions") {
         exitCode = runTestPackageActions(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && QString(argv[1]) == "--test-setup-wizard") {
+        exitCode = runTestSetupWizard(app, engine, &backend);
         backend.shutdown();
         _exit(exitCode);
     } else if (argc > 1 && QString(argv[1]) == "--test-lifecycle") {

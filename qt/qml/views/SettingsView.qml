@@ -853,6 +853,72 @@ Item {
                 }
             }
 
+            // ── Card: Setup & First-Run Wizard ──
+            SettingsCard {
+                title: "Setup & System Configuration"
+                description: "Recheck package managers, customize on-demand community content, or review storage directories."
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 16
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Text {
+                                text: "First-Run Experience & Setup Wizard"
+                                font.pixelSize: theme.fontBase
+                                font.bold: true
+                                color: theme.text
+                            }
+
+                            Text {
+                                text: "Status: " + ((backend.settingsData && backend.settingsData.setup_completed) ? ("✓ Completed (v" + (backend.settingsData.setup_version || "0.1.0") + ")") : "Not completed") + " · Community Content: " + ((backend.settingsData && backend.settingsData.community_content_enabled !== false) ? "On-demand enabled" : "Disabled")
+                                font.pixelSize: theme.fontSm
+                                color: theme.textSecondary
+                            }
+
+                            Text {
+                                text: "Storage: " + ((backend.settingsData && backend.settingsData.custom_storage_path) ? backend.settingsData.custom_storage_path : "~/.local/share/ryzora (default)")
+                                font.pixelSize: theme.fontXs
+                                color: theme.textMuted
+                            }
+                        }
+
+                        Rectangle {
+                            height: 34
+                            width: 170
+                            radius: theme.radiusMd
+                            color: reopenWizardMouse.containsMouse ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.25) : theme.surfaceElevated
+                            border.color: theme.accent
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "↺ Reopen Setup Wizard"
+                                font.pixelSize: theme.fontSm
+                                font.bold: true
+                                color: theme.accent
+                            }
+
+                            MouseArea {
+                                id: reopenWizardMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    backend.reopenSetupWizard()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Item { height: 20 }
         }
     }

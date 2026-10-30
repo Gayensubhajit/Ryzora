@@ -12,6 +12,7 @@
         <file>qml/components/ToastNotification.qml</file>
         <file>qml/components/PackageDetailDrawer.qml</file>
         <file>qml/components/AboutModal.qml</file>
+        <file>qml/components/SetupWizardModal.qml</file>
         <file>qml/components/RyzoraIcon.qml</file>
         <file>qml/components/InstallMetricsRow.qml</file>
         <file>qml/components/InstallActivityView.qml</file>
