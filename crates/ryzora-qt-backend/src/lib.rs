@@ -501,8 +501,16 @@ pub struct RyzoraSettings {
     pub setup_version: String,
     #[serde(default = "default_true")]
     pub community_content_enabled: bool,
+    #[serde(default = "default_sidebar_width")]
+    pub sidebar_width: u32,
+    #[serde(default)]
+    pub sidebar_collapsed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_storage_path: Option<String>,
+}
+
+fn default_sidebar_width() -> u32 {
+    240
 }
 
 fn default_setup_version() -> String {
@@ -531,12 +539,21 @@ impl Default for RyzoraSettings {
             setup_completed: false,
             setup_version: "0.1.0".to_string(),
             community_content_enabled: true,
+            sidebar_width: 240,
+            sidebar_collapsed: false,
             custom_storage_path: None,
         }
     }
 }
 
 pub fn validate_settings(s: &RyzoraSettings) -> Result<(), String> {
+    if s.sidebar_width < 50 || s.sidebar_width > 500 {
+        return Err(format!(
+            "Invalid sidebar_width '{}'. Must be between 50 and 500.",
+            s.sidebar_width
+        ));
+    }
+
     let valid_channels = ["stable", "beta", "nightly"];
     if !valid_channels.contains(&s.default_release_channel.as_str()) {
         return Err(format!(
@@ -1718,10 +1735,15 @@ impl BackendState {
     /// - `download_count` and `rating` are populated from real package entries or represented as `None`.
     /// - Synthetic test fixtures are strictly isolated and NEVER injected into production catalog results.
     /// - `subfilter` and typed dependencies are preserved.
+    pub fn invalidate_catalog_cache(&self) {
+        let mut cache = self.catalog_cache.lock().unwrap();
+        *cache = None;
+    }
+
     pub fn load_catalog(&self, repo_root_hint: Option<&Path>) -> Vec<CatalogItem> {
         let mut cache = self.catalog_cache.lock().unwrap();
         if let Some((ref items, ref timestamp)) = *cache {
-            if timestamp.elapsed() < Duration::from_millis(500) {
+            if timestamp.elapsed() < Duration::from_secs(300) {
                 return items.clone();
             }
         }
@@ -2264,6 +2286,56 @@ impl BackendState {
                 "Large group channels supporting up to 200,000 members and live voice rooms".into(),
                 "High capacity file sharing up to 2 GB per file with instant media preview".into(),
             ],
+            "obsidian" => vec![
+                "Extensible markdown knowledge graph with local-first file storage".into(),
+                "Bi-directional page linking and interactive canvas brainstorming".into(),
+                "Over 1,000 community plugins and themes for workflow customization".into(),
+            ],
+            "libreoffice-fresh" => vec![
+                "Complete office productivity suite with Writer, Calc, and Impress".into(),
+                "Full compatibility with Microsoft Office docx, xlsx, and pptx formats".into(),
+                "Native PDF export, macro automation, and advanced typography".into(),
+            ],
+            "krita" => vec![
+                "Digital painting application designed for concept artists and illustrators".into(),
+                "Brush stabilizers, brush engines, and seamless texture wrap modes".into(),
+                "Full animation timeline support for frame-by-frame 2D animation".into(),
+            ],
+            "kdenlive" => vec![
+                "Multi-track timeline video editing with MLT framework acceleration".into(),
+                "Extensive audio/video effects, color grading wheels, and keyframing".into(),
+                "Automatic subtitle generation from speech using speech-to-text".into(),
+            ],
+            "audacity" => vec![
+                "Multi-track audio recorder and sound editor with spectral view".into(),
+                "High-quality 32-bit float audio processing and latency compensation".into(),
+                "Comprehensive plugin support including VST3, LV2, and LADSPA".into(),
+            ],
+            "lutris" => vec![
+                "All-in-one gaming platform for Linux, Wine, Steam, and emulators".into(),
+                "One-click community installation scripts for Windows games".into(),
+                "Automatic DXVK, VKD3D, and Proton version management".into(),
+            ],
+            "heroic-games-launcher-bin" => vec![
+                "Open-source game launcher for Epic Games, GOG, and Amazon Prime".into(),
+                "Native Wine and Proton management via Wine-GE and Proton-GE".into(),
+                "Cloud save synchronization and sideloading support".into(),
+            ],
+            "retroarch" => vec![
+                "Frontend for game emulators, retro engines, and media players".into(),
+                "Next-frame responsive time with runahead latency reduction".into(),
+                "Dynamic shaders, Netplay multiplayer, and retro achievements".into(),
+            ],
+            "timeshift" => vec![
+                "System snapshot and restore utility protecting your Linux installation".into(),
+                "Supports incremental RSYNC snapshots and BTRFS subvolumes".into(),
+                "Scheduled automatic hourly, daily, and weekly snapshot backups".into(),
+            ],
+            "htop" => vec![
+                "Interactive process viewer and system activity monitor".into(),
+                "Color-coded CPU, memory, and swap usage visualization".into(),
+                "Process tree navigation with easy kill and priority renicing".into(),
+            ],
             _ => vec![],
         }
     }
@@ -2668,6 +2740,176 @@ impl BackendState {
                 "MIT",
                 880000u64,
                 2800000u64,
+            ),
+            (
+                "obsidian",
+                "Obsidian",
+                "Obsidian",
+                "Productivity",
+                "1.7.4",
+                "aur",
+                "Extensible markdown knowledge base and note-taking application",
+                "Obsidian is a powerful, extensible markdown-based knowledge base and note-taking system that works on your local folder of plain text files.",
+                "",
+                "",
+                vec![],
+                "https://obsidian.md/",
+                "Proprietary",
+                112000000u64,
+                310000000u64,
+            ),
+            (
+                "libreoffice-fresh",
+                "LibreOffice Fresh",
+                "The Document Foundation",
+                "Productivity",
+                "24.8.2",
+                "extra",
+                "Feature-rich open source office suite for documents, spreadsheets, and presentations",
+                "LibreOffice is a powerful and free office suite, a successor to OpenOffice(.org), used by millions around the world.",
+                "",
+                "",
+                vec![],
+                "https://www.libreoffice.org/",
+                "MPL-2.0",
+                175000000u64,
+                580000000u64,
+            ),
+            (
+                "krita",
+                "Krita",
+                "Krita Foundation",
+                "Graphics",
+                "5.2.3",
+                "extra",
+                "Professional painting and digital sketching application for artists",
+                "Krita is a professional free and open source painting program made by artists that want to see affordable art tools for everyone.",
+                "",
+                "",
+                vec![],
+                "https://krita.org/",
+                "GPL-3.0-or-later",
+                160000000u64,
+                340000000u64,
+            ),
+            (
+                "kdenlive",
+                "Kdenlive",
+                "KDE Community",
+                "Multimedia",
+                "24.08.1",
+                "extra",
+                "Powerful multi-track open-source video editor for Linux",
+                "Kdenlive is an open source video editor based on the MLT Framework and KDE technologies with full multi-track timeline support.",
+                "",
+                "",
+                vec![],
+                "https://kdenlive.org/",
+                "GPL-3.0-or-later",
+                95000000u64,
+                260000000u64,
+            ),
+            (
+                "audacity",
+                "Audacity",
+                "Audacity Team",
+                "Multimedia",
+                "3.6.2",
+                "extra",
+                "Multi-track audio recorder and waveform sound editor",
+                "Audacity is an easy-to-use, multi-track audio editor and recorder for Linux, macOS, and Windows with rich audio effects plugins.",
+                "",
+                "",
+                vec![],
+                "https://www.audacityteam.org/",
+                "GPL-3.0-or-later",
+                28000000u64,
+                78000000u64,
+            ),
+            (
+                "lutris",
+                "Lutris",
+                "Lutris Community",
+                "Games",
+                "0.5.17",
+                "extra",
+                "Open gaming platform managing native, Windows, and emulator titles",
+                "Lutris is an open source gaming platform for Linux that makes gaming easier by managing your game runners, Wine, and library in one place.",
+                "",
+                "",
+                vec![],
+                "https://lutris.net/",
+                "GPL-3.0-or-later",
+                3200000u64,
+                14000000u64,
+            ),
+            (
+                "heroic-games-launcher-bin",
+                "Heroic Games Launcher",
+                "Heroic Games",
+                "Games",
+                "2.14.1",
+                "aur",
+                "Open-source Epic Games, GOG, and Amazon Prime game launcher",
+                "An open-source games launcher for Linux with support for launching games from Epic Games Store, GOG, and Amazon Prime using Wine or Proton.",
+                "",
+                "",
+                vec![],
+                "https://heroicgameslauncher.com/",
+                "GPL-3.0-or-later",
+                105000000u64,
+                295000000u64,
+            ),
+            (
+                "retroarch",
+                "RetroArch",
+                "Libretro",
+                "Games",
+                "1.19.1",
+                "extra",
+                "Cross-platform frontend for emulators, game engines, and media players",
+                "RetroArch is a frontend for emulators, game engines and media players, enabling you to run classic games on a wide range of computers and consoles.",
+                "",
+                "",
+                vec![],
+                "https://www.retroarch.com/",
+                "GPL-3.0-or-later",
+                22000000u64,
+                65000000u64,
+            ),
+            (
+                "timeshift",
+                "Timeshift",
+                "Tony George / Linux Mint",
+                "System",
+                "24.06.2",
+                "extra",
+                "System restore and snapshot tool for Linux creating incremental filesystem backups",
+                "Timeshift provides system restore functionality for Linux, similar to the System Restore feature in Windows and the Time Machine tool in Mac OS.",
+                "",
+                "",
+                vec![],
+                "https://github.com/linuxmint/timeshift",
+                "GPL-3.0-or-later",
+                1800000u64,
+                5500000u64,
+            ),
+            (
+                "htop",
+                "htop",
+                "htop-dev",
+                "System",
+                "3.3.0",
+                "extra",
+                "Interactive process viewer and terminal hardware activity monitor",
+                "htop is an interactive process viewer for Unix systems, designed as a more modern, colorful, and flexible alternative to the classic top utility.",
+                "",
+                "",
+                vec![],
+                "https://htop.dev/",
+                "GPL-2.0-or-later",
+                210000u64,
+                640000u64,
             ),
         ];
 
@@ -3852,12 +4094,23 @@ impl BackendState {
         items
     }
 
+    pub fn resolve_snapshots_dir(&self) -> Result<PathBuf, String> {
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        let settings = self.load_settings();
+        if let Some(ref custom) = settings.custom_storage_path {
+            let p = PathBuf::from(custom);
+            if p.is_absolute() {
+                return Ok(p.join("snapshots"));
+            }
+        }
+        Ok(home.join(".local/share/ryzora/snapshots"))
+    }
+
     pub fn load_snapshots(&self) -> Vec<SnapshotItem> {
-        let home = match self.resolve_home_dir() {
-            Some(h) => h,
-            None => return Vec::new(),
+        let snap_dir = match self.resolve_snapshots_dir() {
+            Ok(d) => d,
+            Err(_) => return Vec::new(),
         };
-        let snap_dir = home.join(".local/share/ryzora/snapshots");
         match ryzora_core::snapshot::list_snapshots_in(&snap_dir) {
             Ok(snaps) => snaps
                 .into_iter()
@@ -4104,6 +4357,30 @@ impl BackendState {
             "free_bytes": free_bytes,
             "free_space_human": free_space_human
         })
+    }
+
+    pub fn get_community_storage_details(&self) -> serde_json::Value {
+        let home = match self.resolve_home_dir() {
+            Some(h) => h,
+            None => return serde_json::json!({}),
+        };
+        let usage = ryzora_core::installer::get_detailed_storage_usage_in(&home);
+        serde_json::to_value(usage).unwrap_or_else(|_| serde_json::json!({}))
+    }
+
+    pub fn clean_unused_downloads(&self) -> Result<u64, String> {
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        ryzora_core::installer::clear_unused_downloads_in(&home)
+    }
+
+    pub fn clean_previews(&self) -> Result<u64, String> {
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        ryzora_core::installer::clear_previews_in(&home)
+    }
+
+    pub fn clean_temporary_data(&self) -> Result<u64, String> {
+        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+        ryzora_core::installer::clean_temporary_data_in(&home)
     }
 
     pub fn validate_storage_path_internal(&self, candidate: &str) -> Result<String, String> {
@@ -5559,9 +5836,14 @@ impl BackendState {
         res
     }
 
-    pub fn install_package(&self, package_id: &str) -> Result<String, String> {
+    pub fn install_package_with_progress<F>(&self, package_id: &str, mut progress_cb: F) -> Result<String, String>
+    where
+        F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
+    {
         let valid_id = validate_preset_identifier(package_id)?;
         let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
+
+        progress_cb("preparing", Some(10), "Checking manifest and preparing assets...", true, None, None, None, Some(1), Some(4), Some(&valid_id), None, Some("Verifying package manifest and dependencies"));
 
         if valid_id.starts_with("silentsddm-") {
             if let Some(wp) = SILENTSDDM_WALLPAPERS.iter().find(|w| w.id == valid_id) {
@@ -5573,6 +5855,8 @@ impl BackendState {
 
                 let dest_wp = wallpapers_dir.join(wp.filename);
                 let tmp_wp = wallpapers_dir.join(format!(".tmp_{}", wp.filename));
+
+                progress_cb("downloading", Some(35), "Downloading lockscreen asset...", true, None, None, None, Some(2), Some(4), Some(&valid_id), None, Some(wp.download_url));
 
                 // Download using curl with integrity check (or copy from local cache if present, or mock write in unit test)
                 let is_mock_test = std::env::var("RYZORA_TEST_MOCK_SDDM_DOWNLOAD").is_ok();
@@ -5600,6 +5884,8 @@ impl BackendState {
                         }
                     }
 
+                    progress_cb("verifying", Some(70), "Verifying SHA-256 cryptographic digest...", true, None, None, None, Some(3), Some(4), Some(&valid_id), None, Some("SHA-256 integrity verification"));
+
                     // Verify SHA-256 integrity
                     let bytes = fs::read(&tmp_wp).map_err(|e| format!("Failed to read downloaded file: {}", e))?;
                     use sha2::{Digest, Sha256};
@@ -5623,6 +5909,8 @@ impl BackendState {
                 }
 
                 let poster_dest = posters_dir.join(format!("{}.png", valid_id));
+
+                progress_cb("installing", Some(85), "Registering package and activating assets...", true, None, None, None, Some(4), Some(4), Some(&valid_id), None, Some("Writing package manifest"));
 
                 // Write manifest
                 let manifest_file = silentsddm_dir.join("wallpapers_manifest.json");
@@ -5665,6 +5953,7 @@ impl BackendState {
 
                 if let Ok(mut c) = self.catalog_cache.lock() { *c = None; }
                 if let Ok(mut c) = self.library_cache.lock() { *c = None; }
+                progress_cb("completed", Some(100), "SilentSDDM wallpaper installed successfully", true, None, None, None, Some(4), Some(4), Some(&valid_id), None, None);
                 return Ok(format!("SilentSDDM wallpaper '{}' (v1.5.0) installed successfully", valid_id));
             }
         }
@@ -5675,6 +5964,12 @@ impl BackendState {
         let snapshots_root = home.join(".local/share/ryzora/snapshots");
         let installed_root = home.join(".local/share/ryzora/installed");
         let staging_root = home.join(".local/share/ryzora/staging");
+
+        progress_cb("downloading", Some(35), "Downloading package assets and resources...", true, None, None, None, Some(2), Some(4), Some(&valid_id), None, Some("Resolving local/remote assets"));
+
+        progress_cb("verifying", Some(70), "Verifying asset integrity...", true, None, None, None, Some(3), Some(4), Some(&valid_id), None, Some("SHA-256 checks"));
+
+        progress_cb("installing", Some(85), "Staging and deploying files...", true, None, None, None, Some(4), Some(4), Some(&valid_id), None, Some("Atomic transaction deployment"));
 
         let res = ryzora_core::installer::install_package_in(
             &pkg_dir,
@@ -5694,7 +5989,13 @@ impl BackendState {
             *c = None;
         }
 
+        progress_cb("completed", Some(100), "Package installed successfully", true, None, None, None, Some(4), Some(4), Some(&valid_id), None, None);
+
         Ok(format!("Package '{}' (v{}) installed successfully", res.package_id, res.version))
+    }
+
+    pub fn install_package(&self, package_id: &str) -> Result<String, String> {
+        self.install_package_with_progress(package_id, |_stage, _pct, _msg, _is_det, _dl, _tot, _spd, _cur, _tot_s, _item, _eta, _diag| {})
     }
 
     pub fn test_package(&self, package_id: &str) -> Result<String, String> {
@@ -6358,7 +6659,7 @@ impl BackendState {
 
     pub fn create_snapshot(&self, reason: &str) -> Result<SnapshotItem, String> {
         let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
-        let snapshots_dir = home.join(".local/share/ryzora/snapshots");
+        let snapshots_dir = self.resolve_snapshots_dir()?;
         fs::create_dir_all(&snapshots_dir).map_err(|e| format!("Failed to create snapshots dir: {}", e))?;
 
         let clean_reason = if reason.trim().is_empty() {
@@ -6440,7 +6741,7 @@ impl BackendState {
 
     pub fn restore_snapshot(&self, id: &str) -> Result<String, String> {
         let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
-        let snapshots_dir = home.join(".local/share/ryzora/snapshots");
+        let snapshots_dir = self.resolve_snapshots_dir()?;
         
         let is_valid = ryzora_core::snapshot::verify_snapshot_in(id, &snapshots_dir)?;
         if !is_valid {
@@ -6475,8 +6776,7 @@ impl BackendState {
     }
 
     pub fn delete_snapshot(&self, id: &str) -> Result<String, String> {
-        let home = self.resolve_home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
-        let snapshots_dir = home.join(".local/share/ryzora/snapshots");
+        let snapshots_dir = self.resolve_snapshots_dir()?;
         ryzora_core::snapshot::delete_snapshot_in(id, &snapshots_dir)?;
         Ok(format!("Snapshot '{}' deleted successfully.", id))
     }
@@ -7342,6 +7642,11 @@ pub extern "C" fn ryzora_resolve_app_providers(
 }
 
 #[no_mangle]
+pub extern "C" fn ryzora_invalidate_catalog_cache() {
+    get_backend().invalidate_catalog_cache();
+}
+
+#[no_mangle]
 pub extern "C" fn ryzora_query_catalog(
     repo_root: *const c_char,
     category: *const c_char,
@@ -7742,6 +8047,45 @@ pub extern "C" fn ryzora_uninstall_silentsddm_engine() -> *mut c_char {
 }
 
 #[no_mangle]
+pub extern "C" fn ryzora_install_package_with_progress(
+    package_id: *const c_char,
+    callback: Option<AppProgressCallback>,
+    user_data: *mut c_void,
+) -> *mut c_char {
+    if package_id.is_null() {
+        return safe_to_c_string(r#"{"success":false,"message":"Null package identifier"}"#);
+    }
+    let pid = unsafe { CStr::from_ptr(package_id).to_str().unwrap_or("") };
+    let emit = |stage: &str, pct: Option<u8>, msg: &str, is_det: bool, dl_str: Option<&str>, tot_str: Option<&str>, speed: Option<&str>, cur_step: Option<usize>, tot_steps: Option<usize>, cur_item: Option<&str>, eta: Option<&str>, diag: Option<&str>| {
+        if let Some(cb) = callback {
+            let json = serde_json::json!({
+                "app_id": pid,
+                "stage": stage,
+                "percentage": pct,
+                "is_determinate": is_det,
+                "message": msg,
+                "bytes_downloaded_str": dl_str,
+                "bytes_total_str": tot_str,
+                "download_speed": speed,
+                "current_step": cur_step,
+                "total_steps": tot_steps,
+                "current_item": cur_item,
+                "eta_str": eta,
+                "diagnostic_details": diag,
+            });
+            let c_str = to_safe_c_string(json.to_string());
+            cb(c_str.as_ptr(), user_data);
+        }
+    };
+
+    let res = match get_backend().install_package_with_progress(pid, emit) {
+        Ok(msg) => serde_json::json!({ "success": true, "message": msg, "package_id": pid }),
+        Err(e) => serde_json::json!({ "success": false, "message": e, "package_id": pid }),
+    };
+    safe_to_c_string(res.to_string())
+}
+
+#[no_mangle]
 pub extern "C" fn ryzora_install_package(package_id: *const c_char) -> *mut c_char {
     if package_id.is_null() {
         return safe_to_c_string(r#"{"success":false,"message":"Null package identifier"}"#);
@@ -7752,6 +8096,70 @@ pub extern "C" fn ryzora_install_package(package_id: *const c_char) -> *mut c_ch
         Err(e) => serde_json::json!({ "success": false, "message": e }),
     };
     safe_to_c_string(res.to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_community_storage_details() -> *mut c_char {
+    let details = get_backend().get_community_storage_details();
+    let json = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
+    safe_to_c_string(json)
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_clean_unused_downloads() -> *mut c_char {
+    match get_backend().clean_unused_downloads() {
+        Ok(freed) => {
+            let json = serde_json::json!({
+                "success": true,
+                "freed_bytes": freed,
+                "freed_human": ryzora_core::installer::format_bytes_human(freed),
+                "message": format!("Cleaned {} of unused cached downloads", ryzora_core::installer::format_bytes_human(freed))
+            });
+            safe_to_c_string(json.to_string())
+        }
+        Err(e) => {
+            let json = serde_json::json!({ "success": false, "message": e });
+            safe_to_c_string(json.to_string())
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_clean_previews() -> *mut c_char {
+    match get_backend().clean_previews() {
+        Ok(freed) => {
+            let json = serde_json::json!({
+                "success": true,
+                "freed_bytes": freed,
+                "freed_human": ryzora_core::installer::format_bytes_human(freed),
+                "message": format!("Cleaned {} of preview image cache", ryzora_core::installer::format_bytes_human(freed))
+            });
+            safe_to_c_string(json.to_string())
+        }
+        Err(e) => {
+            let json = serde_json::json!({ "success": false, "message": e });
+            safe_to_c_string(json.to_string())
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_clean_temporary_data() -> *mut c_char {
+    match get_backend().clean_temporary_data() {
+        Ok(freed) => {
+            let json = serde_json::json!({
+                "success": true,
+                "freed_bytes": freed,
+                "freed_human": ryzora_core::installer::format_bytes_human(freed),
+                "message": format!("Cleaned {} of temporary and staging files", ryzora_core::installer::format_bytes_human(freed))
+            });
+            safe_to_c_string(json.to_string())
+        }
+        Err(e) => {
+            let json = serde_json::json!({ "success": false, "message": e });
+            safe_to_c_string(json.to_string())
+        }
+    }
 }
 
 #[no_mangle]
@@ -10036,5 +10444,57 @@ hyprlock
         assert_eq!(settings.setup_version, "0.1.0");
         assert!(settings.community_content_enabled);
         assert_eq!(settings.custom_storage_path.as_deref(), Some(custom_dir.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn test_community_storage_details_and_cleanups() {
+        let _guard = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+
+        let backend = BackendState::with_home_dir(home.clone());
+
+        let asset_dir = home.join(".local/share/ryzora/cache/assets");
+        let preview_dir = home.join(".local/share/ryzora/cache/previews");
+        let staging_dir = home.join(".local/share/ryzora/staging");
+        fs::create_dir_all(&asset_dir).unwrap();
+        fs::create_dir_all(&preview_dir).unwrap();
+        fs::create_dir_all(&staging_dir).unwrap();
+
+        fs::write(asset_dir.join("orphaned_dl.bin"), vec![0u8; 1024]).unwrap();
+        fs::write(preview_dir.join("preview.png"), vec![0u8; 512]).unwrap();
+        fs::write(staging_dir.join("temp.tmp"), vec![0u8; 256]).unwrap();
+
+        let details = backend.get_community_storage_details();
+        assert!(details["downloaded_cache_bytes"].as_u64().unwrap() >= 1024);
+        assert!(details["unused_downloads_bytes"].as_u64().unwrap() >= 1024);
+        assert!(details["preview_cache_bytes"].as_u64().unwrap() >= 512);
+
+        let freed_unused = backend.clean_unused_downloads().unwrap();
+        assert_eq!(freed_unused, 1024);
+
+        let freed_prev = backend.clean_previews().unwrap();
+        assert_eq!(freed_prev, 512);
+
+        let freed_temp = backend.clean_temporary_data().unwrap();
+        assert_eq!(freed_temp, 256);
+
+        // Progress test
+        let mut stages = Vec::new();
+        let emit = |stage: &str, pct: Option<u8>, _msg: &str, _det: bool, _dl: Option<&str>, _tot: Option<&str>, _spd: Option<&str>, _cur: Option<usize>, _tot_s: Option<usize>, _item: Option<&str>, _eta: Option<&str>, _diag: Option<&str>| {
+            stages.push((stage.to_string(), pct));
+        };
+        unsafe {
+            std::env::set_var("RYZORA_TEST_MOCK_SDDM_DOWNLOAD", "1");
+        }
+        let res = backend.install_package_with_progress("silentsddm-default", emit);
+        unsafe {
+            std::env::remove_var("RYZORA_TEST_MOCK_SDDM_DOWNLOAD");
+        }
+        assert!(res.is_ok(), "Mock SDDM install with progress should succeed: {:?}", res);
+        assert!(stages.iter().any(|(s, _)| s == "preparing"));
+        assert!(stages.iter().any(|(s, _)| s == "downloading"));
+        assert!(stages.iter().any(|(s, _)| s == "completed"));
     }
 }

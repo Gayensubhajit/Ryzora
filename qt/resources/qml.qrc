@@ -30,5 +30,6 @@
         <file>qml/views/LockScreenView.qml</file>
         <file>qml/views/StudioView.qml</file>
         <file>qml/views/PackageDetailView.qml</file>
+        <file>qml/views/StorageSettingsView.qml</file>
     </qresource>
 </RCC>

@@ -10,16 +10,62 @@ Rectangle {
 
     property string currentTab: "discover"
     property bool isCollapsed: Qt.application.arguments.indexOf("--collapsed") !== -1
+    property int compactWidth: 72
+    property int expandedWidth: 240
+    property int minExpandedWidth: 210
+    property int maxExpandedWidth: 380
+    property bool isDragging: false
+
     signal tabSelected(string tab)
     signal toggleCollapse()
     signal openAbout()
 
-    Layout.preferredWidth: isCollapsed ? 58 : 208
-    Layout.minimumWidth: isCollapsed ? 58 : 198
-    Layout.maximumWidth: isCollapsed ? 58 : 218
+    Layout.preferredWidth: isCollapsed ? compactWidth : expandedWidth
+    Layout.minimumWidth: isCollapsed ? compactWidth : minExpandedWidth
+    Layout.maximumWidth: isCollapsed ? compactWidth : maxExpandedWidth
 
     Behavior on Layout.preferredWidth {
+        enabled: !root.isDragging
         NumberAnimation { duration: theme.reduceMotion ? 0 : 150; easing.type: Easing.InOutQuad }
+    }
+
+    function persistSidebarSettings() {
+        if (typeof backend !== "undefined" && backend && backend.settingsData) {
+            var updated = Object.assign({}, backend.settingsData, {
+                "sidebar_width": Math.round(root.expandedWidth),
+                "sidebar_collapsed": root.isCollapsed
+            })
+            backend.saveSettings(updated)
+        }
+    }
+
+    function toggleSidebar() {
+        root.isCollapsed = !root.isCollapsed
+        root.persistSidebarSettings()
+    }
+
+    Component.onCompleted: {
+        if (Qt.application.arguments.indexOf("--collapsed") !== -1) {
+            root.isCollapsed = true
+        } else if (typeof backend !== "undefined" && backend && backend.settingsData) {
+            if (backend.settingsData.sidebar_collapsed !== undefined) {
+                root.isCollapsed = backend.settingsData.sidebar_collapsed
+            }
+            if (backend.settingsData.sidebar_width && backend.settingsData.sidebar_width >= root.minExpandedWidth && backend.settingsData.sidebar_width <= root.maxExpandedWidth) {
+                root.expandedWidth = backend.settingsData.sidebar_width
+            }
+        }
+    }
+
+    Connections {
+        target: backend
+        function onSettingsChanged() {
+            if (backend.settingsData && !root.isDragging) {
+                if (backend.settingsData.sidebar_width && backend.settingsData.sidebar_width >= root.minExpandedWidth && backend.settingsData.sidebar_width <= root.maxExpandedWidth) {
+                    root.expandedWidth = backend.settingsData.sidebar_width
+                }
+            }
+        }
     }
 
     ColumnLayout {
@@ -82,12 +128,16 @@ Rectangle {
                         color: theme.textMuted
                     }
 
+                    ToolTip.visible: colMouse.containsMouse
+                    ToolTip.text: "Collapse sidebar"
+                    ToolTip.delay: 300
+
                     MouseArea {
                         id: colMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.isCollapsed = true
+                        onClicked: root.toggleSidebar()
                     }
                 }
             }
@@ -215,7 +265,7 @@ Rectangle {
                     label: "Settings"
                     iconName: "settings"
                     tabId: "settings"
-                    isActive: root.currentTab === "settings"
+                    isActive: root.currentTab === "settings" || root.currentTab === "storage"
                     collapsed: root.isCollapsed
                     onClicked: root.tabSelected("settings")
                 }
@@ -343,12 +393,16 @@ Rectangle {
                         color: theme.textMuted
                     }
 
+                    ToolTip.visible: expMouse.containsMouse
+                    ToolTip.text: "Expand sidebar"
+                    ToolTip.delay: 300
+
                     MouseArea {
                         id: expMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.isCollapsed = false
+                        onClicked: root.toggleSidebar()
                     }
                 }
             }
@@ -397,8 +451,8 @@ Rectangle {
         signal clicked()
 
         Layout.fillWidth: true
-        implicitHeight: 32
-        height: 32
+        implicitHeight: 36
+        height: 36
         radius: theme.radiusMd
         color: isActive ? theme.navItemActiveBg : (btnMouse.containsMouse ? theme.surfaceHover : "transparent")
         border.color: navBtn.activeFocus ? theme.accent : "transparent"
@@ -414,11 +468,11 @@ Rectangle {
         Rectangle {
             visible: navBtn.isActive
             width: 3
-            height: 16
+            height: 20
             radius: 1.5
             color: theme.accent
             anchors.left: parent.left
-            anchors.leftMargin: 2
+            anchors.leftMargin: 3
             anchors.verticalCenter: parent.verticalCenter
             z: 2
         }
@@ -526,6 +580,48 @@ Rectangle {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: navBtn.clicked()
+        }
+    }
+
+    // ── Draggable Resize Divider (Dolphin style) ──
+    Rectangle {
+        id: resizeDividerVisual
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 2
+        color: root.isDragging ? theme.accent : (resizeMouseArea.containsMouse ? theme.borderStrong : "transparent")
+        z: 99
+    }
+
+    MouseArea {
+        id: resizeMouseArea
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 8
+        enabled: !root.isCollapsed
+        cursorShape: Qt.SplitHCursor
+        hoverEnabled: true
+        z: 100
+        property int startX: 0
+        property int startW: 0
+
+        onPressed: function(mouse) {
+            root.isDragging = true
+            startX = mouse.x
+            startW = root.expandedWidth
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed) {
+                var delta = mouse.x - startX
+                var newW = Math.max(root.minExpandedWidth, Math.min(root.maxExpandedWidth, startW + delta))
+                root.expandedWidth = newW
+            }
+        }
+        onReleased: {
+            root.isDragging = false
+            root.persistSidebarSettings()
         }
     }
 }

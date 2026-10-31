@@ -27,6 +27,7 @@ extern "C" {
     bool ryzora_is_process_active();
     uint32_t ryzora_active_pid();
     char* ryzora_query_catalog(const char* repo_root, const char* category, const char* search);
+    void ryzora_invalidate_catalog_cache();
     char* ryzora_query_applications(const char* repo_root, const char* category, const char* search);
     char* ryzora_query_applications_paged(const char* repo_root, const char* category, const char* search, const char* provider, size_t page, size_t page_size);
     char* ryzora_get_curated_applications(const char* repo_root);
@@ -65,9 +66,14 @@ extern "C" {
     char* ryzora_remove_installed_fastfetch_style(const char* preset_id);
     char* ryzora_apply_fastfetch_preset(const char* preset);
     char* ryzora_install_package(const char* package_id);
+    char* ryzora_install_package_with_progress(const char* package_id, void (*callback)(const char*, void*), void* user_data);
     char* ryzora_test_package(const char* package_id);
     char* ryzora_uninstall_package(const char* package_id);
     char* ryzora_get_storage_usage();
+    char* ryzora_get_community_storage_details();
+    char* ryzora_clean_unused_downloads();
+    char* ryzora_clean_previews();
+    char* ryzora_clean_temporary_data();
     char* ryzora_clear_content_cache();
     char* ryzora_apply_target(const char* package_id, const char* target);
     char* ryzora_deactivate_target(const char* target);
@@ -207,6 +213,10 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
             }
         });
     });
+}
+
+void RyzoraBackend::invalidateCatalogCache() {
+    ryzora_invalidate_catalog_cache();
 }
 
 void RyzoraBackend::invalidateAppsCatalogCache() {
@@ -465,6 +475,87 @@ QVariantList RyzoraBackend::getCuratedCollection(const QStringList &preferredIds
     }
 
     return res;
+}
+
+QVariantList RyzoraBackend::getCuratedCollectionsOverview() const {
+    struct CollectionDef {
+        QString id;
+        QString title;
+        QString subtitle;
+        QString category;
+        QStringList preferredIds;
+    };
+
+    static const std::vector<CollectionDef> defs = {
+        {
+            QStringLiteral("essentials"),
+            QStringLiteral("Essential Applications"),
+            QStringLiteral("Must-have software and curated desktop essentials"),
+            QStringLiteral("all"),
+            { QStringLiteral("firefox"), QStringLiteral("vlc"), QStringLiteral("obsidian"), QStringLiteral("libreoffice-fresh"), QStringLiteral("thunderbird"), QStringLiteral("gimp") }
+        },
+        {
+            QStringLiteral("development"),
+            QStringLiteral("Developer Tools"),
+            QStringLiteral("Professional code editors, terminals, and toolchains"),
+            QStringLiteral("development"),
+            { QStringLiteral("code"), QStringLiteral("visual-studio-code-bin"), QStringLiteral("cursor"), QStringLiteral("neovim"), QStringLiteral("git"), QStringLiteral("alacritty") }
+        },
+        {
+            QStringLiteral("internet"),
+            QStringLiteral("Internet & Communication"),
+            QStringLiteral("Web browsers, team messaging, and email clients"),
+            QStringLiteral("internet"),
+            { QStringLiteral("firefox"), QStringLiteral("chromium"), QStringLiteral("discord"), QStringLiteral("telegram-desktop"), QStringLiteral("thunderbird") }
+        },
+        {
+            QStringLiteral("productivity"),
+            QStringLiteral("Productivity"),
+            QStringLiteral("Note-taking, document authoring, and office utilities"),
+            QStringLiteral("productivity"),
+            { QStringLiteral("obsidian"), QStringLiteral("libreoffice-fresh"), QStringLiteral("thunderbird"), QStringLiteral("btop"), QStringLiteral("fastfetch") }
+        },
+        {
+            QStringLiteral("creative"),
+            QStringLiteral("Creative Studio"),
+            QStringLiteral("Digital painting, 3D creation, vector art, and design"),
+            QStringLiteral("graphics"),
+            { QStringLiteral("blender"), QStringLiteral("gimp"), QStringLiteral("inkscape"), QStringLiteral("krita"), QStringLiteral("kdenlive") }
+        },
+        {
+            QStringLiteral("multimedia"),
+            QStringLiteral("Multimedia"),
+            QStringLiteral("Video streaming, high-fidelity audio, and media players"),
+            QStringLiteral("multimedia"),
+            { QStringLiteral("vlc"), QStringLiteral("spotify"), QStringLiteral("obs-studio"), QStringLiteral("mpv"), QStringLiteral("audacity") }
+        },
+        {
+            QStringLiteral("gaming"),
+            QStringLiteral("Gaming"),
+            QStringLiteral("Steam, community launchers, and emulation platforms"),
+            QStringLiteral("games"),
+            { QStringLiteral("steam"), QStringLiteral("lutris"), QStringLiteral("heroic-games-launcher-bin"), QStringLiteral("retroarch"), QStringLiteral("discord") }
+        },
+        {
+            QStringLiteral("system"),
+            QStringLiteral("System & Utilities"),
+            QStringLiteral("System monitors, recovery tools, and terminal emulators"),
+            QStringLiteral("system"),
+            { QStringLiteral("btop"), QStringLiteral("fastfetch"), QStringLiteral("alacritty"), QStringLiteral("kitty"), QStringLiteral("timeshift"), QStringLiteral("htop") }
+        }
+    };
+
+    QVariantList collections;
+    for (const auto &def : defs) {
+        QVariantMap col;
+        col.insert(QStringLiteral("id"), def.id);
+        col.insert(QStringLiteral("title"), def.title);
+        col.insert(QStringLiteral("subtitle"), def.subtitle);
+        col.insert(QStringLiteral("category"), def.category);
+        col.insert(QStringLiteral("apps"), getCuratedCollection(def.preferredIds, def.category, QString(), 6));
+        collections.append(col);
+    }
+    return collections;
 }
 
 QVariantMap RyzoraBackend::getAppsCategoryCounts() const {
@@ -2425,10 +2516,32 @@ static FreshStatePayload fetchFreshStatePayload() {
 
 void RyzoraBackend::installPackage(const QString &packageId) {
     if (m_isShutdown.load()) return;
+    QString cleanId = packageId.trimmed();
+    if (cleanId.isEmpty()) return;
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        AppTransactionRecord rec;
+        rec.opId = cleanId;
+        rec.appId = cleanId;
+        rec.appName = cleanId;
+        rec.iconUrl = "";
+        rec.provider = "community";
+        rec.operation = "install";
+        rec.stage = "preparing";
+        rec.message = "Preparing installation...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+    }
+    emit activeAppOperationsChanged();
+
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, packageId]() {
-        QByteArray idBytes = packageId.toUtf8();
-        char* rawRes = ryzora_install_package(idBytes.constData());
+    m_threadPool.start([self, cleanId]() {
+        QByteArray idBytes = cleanId.toUtf8();
+        AppProgressBridgeContext ctx{self, cleanId};
+
+        char* rawRes = ryzora_install_package_with_progress(idBytes.constData(), appProgressTrampoline, &ctx);
         if (rawRes) {
             QString resStr = QString::fromUtf8(rawRes);
             ryzora_free_string(rawRes);
@@ -2441,8 +2554,26 @@ void RyzoraBackend::installPackage(const QString &packageId) {
                 fresh = fetchFreshStatePayload();
             }
 
-            QMetaObject::invokeMethod(qApp, [self, success, msg, packageId, fresh]() {
+            QMetaObject::invokeMethod(qApp, [self, success, msg, cleanId, fresh]() {
                 if (self) {
+                    AppTransactionRecord termRec;
+                    {
+                        QMutexLocker locker(&self->m_appOpMutex);
+                        if (self->m_appTransactions.contains(cleanId)) {
+                            termRec = self->m_appTransactions.take(cleanId);
+                        }
+                        termRec.isFinished = true;
+                        termRec.stage = success ? "succeeded" : "failed";
+                        termRec.success = success;
+                        termRec.message = msg;
+                        termRec.percentage = success ? 100 : 0;
+                        termRec.isDeterminate = true;
+                        termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) self->m_recentTransactions.removeLast();
+                    }
+                    emit self->activeAppOperationsChanged();
+
                     if (success) {
                         self->m_libraryList = fresh.libraryList;
                         self->m_catalogList = fresh.catalogList;
@@ -2455,7 +2586,7 @@ void RyzoraBackend::installPackage(const QString &packageId) {
                     self->postNotification(success ? "success" : "error",
                                            success ? "Installation Complete" : "Installation Failed",
                                            msg);
-                    emit self->packageInstalled(packageId, success, msg);
+                    emit self->packageInstalled(cleanId, success, msg);
                 }
             });
         }
@@ -2464,9 +2595,29 @@ void RyzoraBackend::installPackage(const QString &packageId) {
 
 void RyzoraBackend::uninstallPackage(const QString &packageId) {
     if (m_isShutdown.load()) return;
+    QString cleanId = packageId.trimmed();
+    if (cleanId.isEmpty()) return;
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        AppTransactionRecord rec;
+        rec.opId = cleanId;
+        rec.appId = cleanId;
+        rec.appName = cleanId;
+        rec.iconUrl = "";
+        rec.provider = "community";
+        rec.operation = "uninstall";
+        rec.stage = "uninstalling";
+        rec.message = "Removing package...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+    }
+    emit activeAppOperationsChanged();
+
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, packageId]() {
-        QByteArray idBytes = packageId.toUtf8();
+    m_threadPool.start([self, cleanId]() {
+        QByteArray idBytes = cleanId.toUtf8();
         char* rawRes = ryzora_uninstall_package(idBytes.constData());
         if (rawRes) {
             QString resStr = QString::fromUtf8(rawRes);
@@ -2480,8 +2631,26 @@ void RyzoraBackend::uninstallPackage(const QString &packageId) {
                 fresh = fetchFreshStatePayload();
             }
 
-            QMetaObject::invokeMethod(qApp, [self, success, msg, packageId, fresh]() {
+            QMetaObject::invokeMethod(qApp, [self, success, msg, cleanId, fresh]() {
                 if (self) {
+                    AppTransactionRecord termRec;
+                    {
+                        QMutexLocker locker(&self->m_appOpMutex);
+                        if (self->m_appTransactions.contains(cleanId)) {
+                            termRec = self->m_appTransactions.take(cleanId);
+                        }
+                        termRec.isFinished = true;
+                        termRec.stage = success ? "succeeded" : "failed";
+                        termRec.success = success;
+                        termRec.message = msg;
+                        termRec.percentage = success ? 100 : 0;
+                        termRec.isDeterminate = true;
+                        termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) self->m_recentTransactions.removeLast();
+                    }
+                    emit self->activeAppOperationsChanged();
+
                     if (success) {
                         self->m_libraryList = fresh.libraryList;
                         self->m_catalogList = fresh.catalogList;
@@ -2494,7 +2663,7 @@ void RyzoraBackend::uninstallPackage(const QString &packageId) {
                     self->postNotification(success ? "info" : "error",
                                            success ? "Uninstalled" : "Uninstall Refused",
                                            msg);
-                    emit self->packageUninstalled(packageId, success, msg);
+                    emit self->packageUninstalled(cleanId, success, msg);
                 }
             });
         }
@@ -2506,6 +2675,50 @@ QString RyzoraBackend::getStorageUsage() {
     if (!raw) return "{}";
     QString res = QString::fromUtf8(raw);
     ryzora_free_string(raw);
+    return res;
+}
+
+QString RyzoraBackend::getCommunityStorageDetails() {
+    char *raw = ryzora_get_community_storage_details();
+    if (!raw) return "{}";
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    return res;
+}
+
+QString RyzoraBackend::cleanUnusedDownloads() {
+    char *raw = ryzora_clean_unused_downloads();
+    if (!raw) return "{}";
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    QJsonDocument doc = QJsonDocument::fromJson(res.toUtf8());
+    if (doc.isObject() && doc.object().value("success").toBool()) {
+        postNotification("success", "Storage Cleaned", doc.object().value("message").toString());
+    }
+    return res;
+}
+
+QString RyzoraBackend::cleanPreviews() {
+    char *raw = ryzora_clean_previews();
+    if (!raw) return "{}";
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    QJsonDocument doc = QJsonDocument::fromJson(res.toUtf8());
+    if (doc.isObject() && doc.object().value("success").toBool()) {
+        postNotification("success", "Previews Cleaned", doc.object().value("message").toString());
+    }
+    return res;
+}
+
+QString RyzoraBackend::cleanTemporaryData() {
+    char *raw = ryzora_clean_temporary_data();
+    if (!raw) return "{}";
+    QString res = QString::fromUtf8(raw);
+    ryzora_free_string(raw);
+    QJsonDocument doc = QJsonDocument::fromJson(res.toUtf8());
+    if (doc.isObject() && doc.object().value("success").toBool()) {
+        postNotification("success", "Temporary Data Cleaned", doc.object().value("message").toString());
+    }
     return res;
 }
 
@@ -2695,8 +2908,9 @@ void RyzoraBackend::deleteSnapshot(const QString &id) {
         bool success = doc.object().value("success").toBool();
         QString msg = doc.object().value("message").toString();
 
-        QMetaObject::invokeMethod(qApp, [self, success, msg]() {
+        QMetaObject::invokeMethod(qApp, [self, id, success, msg]() {
             if (self) {
+                emit self->snapshotDeleted(id, success, msg);
                 self->postNotification(success ? "info" : "error",
                                        success ? "Snapshot Deleted" : "Deletion Failed",
                                        msg);

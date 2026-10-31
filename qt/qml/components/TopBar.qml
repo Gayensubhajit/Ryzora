@@ -19,7 +19,15 @@ Rectangle {
     signal libraryClicked()
     property string searchQuery: ""
     property string currentTab: "hub"
-    readonly property string placeholderText: currentTab === "apps" ? "Search apps, packages, Flatpaks… (Ctrl+K)" : "Search rices, themes, lockscreens… (Ctrl+K)"
+    readonly property string placeholderText: {
+        if (currentTab === "apps") return "Search applications, packages, Flatpaks… (Ctrl+K)"
+        if (currentTab === "discover") return "Search community themes, wallpapers, lockscreens… (Ctrl+K)"
+        if (currentTab === "library") return "Search installed applications… (Ctrl+K)"
+        if (currentTab === "updates") return "Search pending updates… (Ctrl+K)"
+        if (currentTab === "backups") return "Search configuration snapshots… (Ctrl+K)"
+        if (currentTab === "studio") return "Search desktop customizations… (Ctrl+K)"
+        return "Search Ryzora… (Ctrl+K)"
+    }
 
     Shortcut {
         sequences: [StandardKey.Find, "Ctrl+K"]
@@ -48,11 +56,14 @@ Rectangle {
                 border.width: 1
                 opacity: root.canGoBack ? 1.0 : 0.35
 
-                Text {
+                ToolTip.visible: backMouse.containsMouse
+                ToolTip.text: "Navigate back (Alt+Left)"
+                ToolTip.delay: 300
+
+                RyzoraIcon {
                     anchors.centerIn: parent
-                    text: "‹"
-                    font.pixelSize: 20
-                    font.bold: true
+                    name: "chevron-left"
+                    size: 14
                     color: root.canGoBack ? theme.text : theme.textMuted
                 }
 
@@ -76,11 +87,14 @@ Rectangle {
                 border.width: 1
                 opacity: root.canGoForward ? 1.0 : 0.35
 
-                Text {
+                ToolTip.visible: fwdMouse.containsMouse
+                ToolTip.text: "Navigate forward (Alt+Right)"
+                ToolTip.delay: 300
+
+                RyzoraIcon {
                     anchors.centerIn: parent
-                    text: "›"
-                    font.pixelSize: 20
-                    font.bold: true
+                    name: "chevron-right"
+                    size: 14
                     color: root.canGoForward ? theme.text : theme.textMuted
                 }
 
@@ -105,10 +119,14 @@ Rectangle {
             border.color: refMouse.containsMouse ? theme.border : "transparent"
             border.width: 1
 
-            Text {
+            ToolTip.visible: refMouse.containsMouse
+            ToolTip.text: "Refresh catalog and status"
+            ToolTip.delay: 300
+
+            RyzoraIcon {
                 anchors.centerIn: parent
-                text: "⟳"
-                font.pixelSize: 16
+                name: "refresh"
+                size: 14
                 color: refMouse.containsMouse ? theme.text : theme.textSecondary
             }
 
@@ -203,44 +221,7 @@ Rectangle {
             Layout.fillHeight: true
         }
 
-        // ── 4. Library Shortcut Button ──
-        Rectangle {
-            implicitWidth: libRow.implicitWidth + 20
-            height: 32
-            radius: theme.radiusMd
-            color: libMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-            border.color: theme.borderSubtle
-            border.width: 1
-
-            RowLayout {
-                id: libRow
-                anchors.centerIn: parent
-                spacing: 6
-
-                RyzoraIcon {
-                    name: "book"
-                    size: 13
-                    color: theme.text
-                }
-
-                Text {
-                    text: "Library"
-                    font.pixelSize: theme.fontNav
-                    font.bold: true
-                    color: theme.text
-                }
-            }
-
-            MouseArea {
-                id: libMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.libraryClicked()
-            }
-        }
-
-        // ── 4B. Active Installations Indicator & Popover ──
+        // ── 4. Active Installations Indicator & Popover ──
         Rectangle {
             id: installIndicatorBtn
             visible: Boolean(backend && backend.activeAppOperationsCount > 0)
@@ -305,14 +286,18 @@ Rectangle {
             height: 32
             radius: theme.radiusSm
             color: appMouse.containsMouse || popover.visible ? theme.surfaceHover : theme.surfaceElevated
-            border.color: theme.borderSubtle
+            border.color: popover.visible ? theme.accent : theme.borderSubtle
             border.width: 1
+
+            ToolTip.visible: appMouse.containsMouse
+            ToolTip.text: "Theme: " + (theme.appearanceMode === "light" ? "Light" : (theme.appearanceMode === "dark" ? "Dark" : "Auto (System)"))
+            ToolTip.delay: 300
 
             RyzoraIcon {
                 anchors.centerIn: parent
                 name: theme.appearanceMode === "light" ? "sun" : (theme.appearanceMode === "dark" ? "moon" : "desktop")
                 size: 14
-                color: theme.text
+                color: popover.visible ? theme.accent : theme.text
             }
 
             MouseArea {

@@ -4,7 +4,9 @@
 //! and uninstaller with snapshot-backed rollback and fail-closed state safety.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1655,6 +1657,176 @@ pub fn clear_content_cache_in(home_dir: &Path) -> Result<u64, String> {
     Ok(freed)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedStorageUsage {
+    pub installed_customizations_bytes: u64,
+    pub installed_customizations_count: usize,
+    pub downloaded_cache_bytes: u64,
+    pub unused_downloads_bytes: u64,
+    pub preview_cache_bytes: u64,
+    pub temporary_data_bytes: u64,
+    pub snapshots_bytes: u64,
+    pub total_bytes: u64,
+    pub installed_customizations_human: String,
+    pub downloaded_cache_human: String,
+    pub unused_downloads_human: String,
+    pub preview_cache_human: String,
+    pub temporary_data_human: String,
+    pub snapshots_human: String,
+    pub total_human: String,
+}
+
+pub fn get_detailed_storage_usage_in(home_dir: &Path) -> DetailedStorageUsage {
+    let installed_dir = home_dir.join(".local/share/ryzora/installed");
+    let cache_dir = home_dir.join(".local/share/ryzora/cache");
+    let assets_dir = cache_dir.join("assets");
+    let previews_dir = cache_dir.join("previews");
+    let tmp_dir = cache_dir.join("tmp");
+    let staging_dir = home_dir.join(".local/share/ryzora/staging");
+    let snapshots_dir = home_dir.join(".local/share/ryzora/snapshots");
+
+    let mut referenced_assets = HashSet::new();
+    let mut installed_count = 0;
+    let mut installed_bytes = 0u64;
+
+    if let Ok(entries) = fs::read_dir(&installed_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().map(|e| e == "json").unwrap_or(false) {
+                installed_count += 1;
+                if let Ok(content) = fs::read_to_string(&p) {
+                    if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                        if let Some(files) = val.get("installed_files").and_then(|v| v.as_array()) {
+                            for f in files {
+                                if let Some(path_str) = f.as_str() {
+                                    let target_p = PathBuf::from(path_str);
+                                    if let Ok(meta) = target_p.metadata() {
+                                        installed_bytes += meta.len();
+                                    }
+                                    if let Some(file_name) = target_p.file_name().and_then(|n| n.to_str()) {
+                                        referenced_assets.insert(file_name.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let downloaded_cache_bytes = dir_total_bytes(&assets_dir);
+    let mut unused_downloads_bytes = 0u64;
+    if let Ok(entries) = fs::read_dir(&assets_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let stem = p.file_stem().and_then(|n| n.to_str()).unwrap_or("");
+                if !referenced_assets.contains(name) && !referenced_assets.contains(stem) {
+                    if let Ok(meta) = p.metadata() {
+                        unused_downloads_bytes += meta.len();
+                    }
+                }
+            }
+        }
+    }
+
+    let preview_cache_bytes = dir_total_bytes(&previews_dir);
+    let temporary_data_bytes = dir_total_bytes(&tmp_dir) + dir_total_bytes(&staging_dir);
+    let snapshots_bytes = dir_total_bytes(&snapshots_dir);
+    let total_bytes = installed_bytes + downloaded_cache_bytes + preview_cache_bytes + temporary_data_bytes + snapshots_bytes;
+
+    DetailedStorageUsage {
+        installed_customizations_bytes: installed_bytes,
+        installed_customizations_count: installed_count,
+        downloaded_cache_bytes,
+        unused_downloads_bytes,
+        preview_cache_bytes,
+        temporary_data_bytes,
+        snapshots_bytes,
+        total_bytes,
+        installed_customizations_human: format_bytes_human(installed_bytes),
+        downloaded_cache_human: format_bytes_human(downloaded_cache_bytes),
+        unused_downloads_human: format_bytes_human(unused_downloads_bytes),
+        preview_cache_human: format_bytes_human(preview_cache_bytes),
+        temporary_data_human: format_bytes_human(temporary_data_bytes),
+        snapshots_human: format_bytes_human(snapshots_bytes),
+        total_human: format_bytes_human(total_bytes),
+    }
+}
+
+pub fn clear_unused_downloads_in(home_dir: &Path) -> Result<u64, String> {
+    let installed_dir = home_dir.join(".local/share/ryzora/installed");
+    let assets_dir = home_dir.join(".local/share/ryzora/cache/assets");
+    if !assets_dir.exists() {
+        return Ok(0);
+    }
+
+    let mut referenced_assets = HashSet::new();
+    if let Ok(entries) = fs::read_dir(&installed_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().map(|e| e == "json").unwrap_or(false) {
+                if let Ok(content) = fs::read_to_string(&p) {
+                    if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                        if let Some(files) = val.get("installed_files").and_then(|v| v.as_array()) {
+                            for f in files {
+                                if let Some(path_str) = f.as_str() {
+                                    let target_p = PathBuf::from(path_str);
+                                    if let Some(file_name) = target_p.file_name().and_then(|n| n.to_str()) {
+                                        referenced_assets.insert(file_name.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut freed = 0u64;
+    if let Ok(entries) = fs::read_dir(&assets_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let stem = p.file_stem().and_then(|n| n.to_str()).unwrap_or("");
+                if !referenced_assets.contains(name) && !referenced_assets.contains(stem) {
+                    if let Ok(meta) = p.metadata() {
+                        freed += meta.len();
+                    }
+                    let _ = fs::remove_file(&p);
+                }
+            }
+        }
+    }
+    Ok(freed)
+}
+
+pub fn clear_previews_in(home_dir: &Path) -> Result<u64, String> {
+    let previews_dir = home_dir.join(".local/share/ryzora/cache/previews");
+    let freed = dir_total_bytes(&previews_dir);
+    if previews_dir.exists() {
+        let _ = fs::remove_dir_all(&previews_dir);
+    }
+    Ok(freed)
+}
+
+pub fn clean_temporary_data_in(home_dir: &Path) -> Result<u64, String> {
+    let tmp_dir = home_dir.join(".local/share/ryzora/cache/tmp");
+    let staging_dir = home_dir.join(".local/share/ryzora/staging");
+    let freed = dir_total_bytes(&tmp_dir) + dir_total_bytes(&staging_dir);
+    if tmp_dir.exists() {
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+    if staging_dir.exists() {
+        let _ = fs::remove_dir_all(&staging_dir);
+    }
+    Ok(freed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1985,5 +2157,73 @@ mod tests {
         let usage_after = get_storage_usage_in(temp_home.path());
         assert_eq!(usage_after.cache_bytes, 0);
         assert_eq!(usage_after.total_bytes, 0);
+    }
+
+    #[test]
+    fn test_detailed_community_storage_and_cleanup() {
+        let temp_home = tempdir().unwrap();
+        let home = temp_home.path();
+
+        let installed_dir = home.join(".local/share/ryzora/installed");
+        let assets_dir = home.join(".local/share/ryzora/cache/assets");
+        let previews_dir = home.join(".local/share/ryzora/cache/previews");
+        let tmp_dir = home.join(".local/share/ryzora/cache/tmp");
+        let staging_dir = home.join(".local/share/ryzora/staging");
+
+        fs::create_dir_all(&installed_dir).unwrap();
+        fs::create_dir_all(&assets_dir).unwrap();
+        fs::create_dir_all(&previews_dir).unwrap();
+        fs::create_dir_all(&tmp_dir).unwrap();
+        fs::create_dir_all(&staging_dir).unwrap();
+
+        // 1. Write an installed package referencing "kept_asset.png"
+        let pkg_record = serde_json::json!({
+            "package_id": "test-theme",
+            "installed_files": [
+                assets_dir.join("kept_asset.png").to_string_lossy()
+            ]
+        });
+        fs::write(installed_dir.join("test-theme.json"), pkg_record.to_string()).unwrap();
+
+        // 2. Write assets: one referenced (kept), one orphaned (unused)
+        fs::write(assets_dir.join("kept_asset.png"), vec![1u8; 8000]).unwrap();
+        fs::write(assets_dir.join("orphan_asset.mp4"), vec![2u8; 12000]).unwrap();
+
+        // 3. Write preview and temporary files
+        fs::write(previews_dir.join("thumb.png"), vec![3u8; 3000]).unwrap();
+        fs::write(tmp_dir.join("download.part"), vec![4u8; 2000]).unwrap();
+        fs::write(staging_dir.join("staged.qml"), vec![5u8; 1000]).unwrap();
+
+        // Check detailed usage
+        let details = get_detailed_storage_usage_in(home);
+        assert_eq!(details.installed_customizations_count, 1);
+        assert_eq!(details.downloaded_cache_bytes, 20000);
+        assert_eq!(details.unused_downloads_bytes, 12000);
+        assert_eq!(details.preview_cache_bytes, 3000);
+        assert_eq!(details.temporary_data_bytes, 3000);
+
+        // 4. Test clearing unused downloads (must delete orphan_asset.mp4, preserve kept_asset.png)
+        let freed_unused = clear_unused_downloads_in(home).unwrap();
+        assert_eq!(freed_unused, 12000);
+        assert!(assets_dir.join("kept_asset.png").is_file());
+        assert!(!assets_dir.join("orphan_asset.mp4").is_file());
+
+        // 5. Test clearing previews
+        let freed_previews = clear_previews_in(home).unwrap();
+        assert_eq!(freed_previews, 3000);
+        assert!(!previews_dir.exists());
+
+        // 6. Test cleaning temporary staging data
+        let freed_tmp = clean_temporary_data_in(home).unwrap();
+        assert_eq!(freed_tmp, 3000);
+        assert!(!tmp_dir.exists());
+        assert!(!staging_dir.exists());
+
+        // Final usage verification
+        let after = get_detailed_storage_usage_in(home);
+        assert_eq!(after.unused_downloads_bytes, 0);
+        assert_eq!(after.preview_cache_bytes, 0);
+        assert_eq!(after.temporary_data_bytes, 0);
+        assert_eq!(after.downloaded_cache_bytes, 8000); // kept_asset.png preserved!
     }
 }

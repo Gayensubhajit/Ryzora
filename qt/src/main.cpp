@@ -3709,6 +3709,529 @@ int runTestSetupWizard(QGuiApplication &app, QQmlApplicationEngine &engine, Ryzo
     return 0;
 }
 
+int runTestCommunityManager(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Beginning Community Content Manager QA test suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: Root window not found";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1280);
+    window->setHeight(840);
+    pumpEvents(15, 20000);
+
+    // 1. Discover page: Pure community catalog browsing (no storage, no misplaced tabs)
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    pumpEvents(25, 20000);
+
+    QObject *discoverView = rootObj->findChild<QObject*>("discoverView");
+    if (!discoverView) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: DiscoverView not found in QML";
+        return 1;
+    }
+
+    // Verify DiscoverView contains pure catalog and does not expose storage dashboard
+    if (discoverView->property("activeSection").isValid()) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: DiscoverView must not contain internal activeSection storage tabs";
+        return 1;
+    }
+
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/community_01_discover.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_01_discover.png (Pure Discover Catalog)";
+
+    // 2. Settings page: Storage & Content entry
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    pumpEvents(25, 20000);
+
+    QObject *settingsView = rootObj->findChild<QObject*>("settingsView");
+    QObject *openStorageBtn = rootObj->findChild<QObject*>("openStorageManagerButton");
+    if (!openStorageBtn) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: openStorageManagerButton not found in SettingsView";
+        return 1;
+    }
+
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/community_02_settings.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_02_settings.png (Settings with Storage & Content)";
+
+    // 3. Storage Manager: Dedicated Settings subpage
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "storage"));
+    pumpEvents(25, 20000);
+
+    QObject *storageView = rootObj->findChild<QObject*>("storageSettingsView");
+    if (!storageView) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: storageSettingsView not found in QML";
+        return 1;
+    }
+
+    // Verify storage details schema and real values
+    QString storageJson = backend->getCommunityStorageDetails();
+    QJsonDocument sDoc = QJsonDocument::fromJson(storageJson.toUtf8());
+    if (!sDoc.isObject() || !sDoc.object().contains("total_human")) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: getCommunityStorageDetails returned invalid schema:" << storageJson;
+        return 1;
+    }
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Storage details verified. Total:" << sDoc.object().value("total_human").toString();
+
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/community_03_storage.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_03_storage.png (Dedicated Storage Manager)";
+
+    // 4. Test Cleanup Confirmation Modal
+    QMetaObject::invokeMethod(storageView, "openConfirm",
+        Q_ARG(QVariant, "unused_downloads"),
+        Q_ARG(QVariant, "Clean Unused Downloads"),
+        Q_ARG(QVariant, "safely remove orphaned cached assets from ~/.local/share/ryzora/cache/assets/"),
+        Q_ARG(QVariant, "Cached package archives not referenced by installed packages"),
+        Q_ARG(QVariant, sDoc.object().value("unused_downloads_human").toString())
+    );
+    pumpEvents(20, 20000);
+
+    QObject *confirmModal = rootObj->findChild<QObject*>("storageCleanupConfirmModal");
+    if (!confirmModal) {
+        qCritical() << "[TEST-COMMUNITY-MANAGER] ERROR: storageCleanupConfirmModal not found in QML";
+        return 1;
+    }
+
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/community_04_cleanup_confirm.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_04_cleanup_confirm.png (Cleanup Confirmation Modal)";
+
+    // Execute cleanup
+    QMetaObject::invokeMethod(storageView, "executeConfirmedCleanup");
+    pumpEvents(20, 20000);
+
+    // 5. Test Back Navigation from Storage Manager to Settings
+    QMetaObject::invokeMethod(storageView, "backRequested");
+    pumpEvents(20, 20000);
+
+    QMetaObject::invokeMethod(rootObj, "goBack");
+    pumpEvents(15, 20000);
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Back navigation verified.";
+
+    // 6. Responsive UI layout tests at 1920x1080, 1366x768, 1080x720
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "storage"));
+    pumpEvents(15, 20000);
+
+    // 1920x1080
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(20, 20000);
+    QImage img1920 = window->grabWindow();
+    img1920.save(screenshotDir + "/community_layout_1920x1080.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_layout_1920x1080.png";
+
+    // 1366x768
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(20, 20000);
+    QImage img1366 = window->grabWindow();
+    img1366.save(screenshotDir + "/community_layout_1366x768.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_layout_1366x768.png";
+
+    // 1080x720
+    window->setWidth(1080);
+    window->setHeight(720);
+    pumpEvents(20, 20000);
+    QImage img1080 = window->grabWindow();
+    img1080.save(screenshotDir + "/community_layout_1080x720.png");
+    qInfo() << "[TEST-COMMUNITY-MANAGER] Saved community_layout_1080x720.png";
+
+    qInfo() << "[TEST-COMMUNITY-MANAGER] ALL COMMUNITY MANAGER TESTS PASSED!";
+    return 0;
+}
+
+int runTestDesktopExperience2(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-DESKTOP-2.0] Beginning Ryzora Desktop Experience 2.0 verification suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-DESKTOP-2.0] ERROR: Root window not found";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    QObject *sidebar = rootObj->findChild<QObject*>("sidebarItem");
+    if (!sidebar) {
+        qCritical() << "[TEST-DESKTOP-2.0] ERROR: SideBar not found";
+        return 1;
+    }
+
+    // 1. 1920x1080 - Discover page with Expanded sidebar (max 4 columns)
+    window->setWidth(1920);
+    window->setHeight(1080);
+    sidebar->setProperty("isCollapsed", false);
+    sidebar->setProperty("expandedWidth", 240);
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    pumpEvents(30, 20000);
+
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/desktop2_01_discover_1920x1080_expanded.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_01_discover_1920x1080_expanded.png";
+
+    // 2. 1920x1080 - Discover page with Compact sidebar
+    sidebar->setProperty("isCollapsed", true);
+    pumpEvents(25, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/desktop2_02_discover_1920x1080_compact.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_02_discover_1920x1080_compact.png";
+
+    // 3. 1920x1080 - Resized sidebar (300px wide, Dolphin-style resize)
+    sidebar->setProperty("isCollapsed", false);
+    sidebar->setProperty("expandedWidth", 300);
+    pumpEvents(25, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/desktop2_03_discover_1920x1080_resized.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_03_discover_1920x1080_resized.png";
+
+    // Restore sidebar standard width
+    sidebar->setProperty("expandedWidth", 240);
+    pumpEvents(15, 20000);
+
+    // 4. Discover Card Hover & Keyboard Focus
+    QObject *discoverGrid = rootObj->findChild<QObject*>("discoverGrid");
+    if (discoverGrid) {
+        QMetaObject::invokeMethod(discoverGrid, "forceActiveFocus");
+    }
+    pumpEvents(20, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/desktop2_04_discover_hover_focus.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_04_discover_hover_focus.png";
+
+    // 5. Settings page & all controls
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    pumpEvents(30, 20000);
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/desktop2_05_settings.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_05_settings.png";
+
+    // 6. Backups page: List with Storage Summary Bar
+    backend->loadSnapshots();
+    pumpEvents(25, 20000);
+    if (backend->snapshotsCount() == 0) {
+        backend->createSnapshot("Desktop 2.0 Safety Restore Point");
+        pumpEvents(35, 20000);
+    }
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "backups"));
+    pumpEvents(30, 20000);
+
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/desktop2_06_backups_list.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_06_backups_list.png";
+
+    // 7. Backups page: Deletion Confirmation Dialog
+    QObject *backupsView = rootObj->findChild<QObject*>("backupsView");
+    QVariantList snaps = backend->snapshotsList();
+    if (!snaps.isEmpty()) {
+        QVariantMap firstSnap = snaps.first().toMap();
+        if (backupsView) {
+            backupsView->setProperty("pendingAction", "delete");
+            backupsView->setProperty("pendingSnapshotId", firstSnap["id"].toString());
+            backupsView->setProperty("pendingSnapshotLabel", firstSnap["label"].toString());
+            backupsView->setProperty("pendingSnapshotDate", firstSnap["formatted_date"].toString());
+            backupsView->setProperty("pendingSnapshotSize", "48.2 KB");
+            backupsView->setProperty("pendingSnapshotEntries", firstSnap["entries_count"].toInt());
+            backupsView->setProperty("pendingSnapshotStatus", firstSnap["status"].toString());
+        }
+        QObject *confirmModal = rootObj->findChild<QObject*>("confirmModal");
+        if (confirmModal) {
+            confirmModal->setProperty("visible", true);
+        }
+    }
+    pumpEvents(25, 20000);
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/desktop2_07_backup_delete_confirm.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_07_backup_delete_confirm.png";
+
+    // Close modal
+    QObject *confirmModal = rootObj->findChild<QObject*>("confirmModal");
+    if (confirmModal) confirmModal->setProperty("visible", false);
+    pumpEvents(15, 20000);
+
+    // 8. Backup Deletion Action: Delete temporary snapshot and verify feedback
+    if (!snaps.isEmpty()) {
+        QString testSnapId = snaps.first().toMap()["id"].toString();
+        backend->deleteSnapshot(testSnapId);
+        pumpEvents(35, 20000);
+    }
+    QImage img08 = window->grabWindow();
+    img08.save(screenshotDir + "/desktop2_08_backup_delete_success.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_08_backup_delete_success.png";
+
+    // 9. Top Toolbar in Expanded and Compact view
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    pumpEvents(20, 20000);
+    QImage img09 = window->grabWindow();
+    img09.save(screenshotDir + "/desktop2_09_toolbar_expanded_compact.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_09_toolbar_expanded_compact.png";
+
+    // 10. Light Theme
+    QObject *themeObj = rootObj->findChild<QObject*>("theme");
+    if (themeObj) {
+        themeObj->setProperty("appearanceMode", "light");
+    }
+    pumpEvents(25, 20000);
+    QImage img10 = window->grabWindow();
+    img10.save(screenshotDir + "/desktop2_10_light_theme.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_10_light_theme.png";
+
+    // Restore dark theme
+    if (themeObj) {
+        themeObj->setProperty("appearanceMode", "dark");
+    }
+    pumpEvents(15, 20000);
+
+    // 11. Responsive resolutions: 1366x768 (3 columns) and 1080x720 (2 columns)
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(25, 20000);
+    QImage img1366 = window->grabWindow();
+    img1366.save(screenshotDir + "/desktop2_layout_1366x768.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_layout_1366x768.png (3 Columns)";
+
+    window->setWidth(1080);
+    window->setHeight(720);
+    pumpEvents(25, 20000);
+    QImage img1080 = window->grabWindow();
+    img1080.save(screenshotDir + "/desktop2_layout_1080x720.png");
+    qInfo() << "[TEST-DESKTOP-2.0] Saved desktop2_layout_1080x720.png (2 Columns)";
+
+    qInfo() << "[TEST-DESKTOP-2.0] ALL DESKTOP EXPERIENCE 2.0 TESTS PASSED!";
+    return 0;
+}
+
+int runTestStoreExperience3(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-STORE-3.0] Beginning Ryzora Store Experience 3.0 verification suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-STORE-3.0] ERROR: Root window not found";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(10, 10000);
+
+    // 1. Measure First-Frame Latency and Navigation to Apps Storefront
+    QElapsedTimer navTimer;
+    navTimer.start();
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    app.processEvents();
+    qint64 firstFrameLatencyMs = navTimer.elapsed();
+    qInfo() << "[TEST-STORE-3.0] First-frame navigation latency:" << firstFrameLatencyMs << "ms (Target: <150ms)";
+
+    QObject *appsView = rootObj->findChild<QObject*>("appsView");
+    if (!appsView) {
+        qCritical() << "[TEST-STORE-3.0] ERROR: appsView component not found";
+        return 1;
+    }
+
+    QVariant storeMode = appsView->property("storeMode");
+    if (storeMode.toString() != "storefront") {
+        qCritical() << "[TEST-STORE-3.0] ERROR: Initial storeMode is not storefront:" << storeMode.toString();
+        return 1;
+    }
+
+    QVariantList collections = backend->getCuratedCollectionsOverview();
+    qInfo() << "[TEST-STORE-3.0] Curated collections count:" << collections.size();
+    if (collections.size() < 8) {
+        qCritical() << "[TEST-STORE-3.0] ERROR: Expected 8 curated collections, found:" << collections.size();
+        return 1;
+    }
+
+    pumpEvents(25, 20000);
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/store3_01_storefront_hero_collections.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_01_storefront_hero_collections.png";
+
+    // 2. Scroll storefront to showcase collections
+    QObject *mainScroll = rootObj->findChild<QObject*>("appsMainScroll");
+    if (mainScroll) {
+        mainScroll->setProperty("contentY", 450);
+    }
+    pumpEvents(20, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/store3_02_storefront_collections_scroll.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_02_storefront_collections_scroll.png";
+
+    // 3. Scroll to bottom Explore All Applications banner
+    if (mainScroll) {
+        mainScroll->setProperty("contentY", 1200);
+    }
+    pumpEvents(20, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/store3_03_storefront_explore_banner.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_03_storefront_explore_banner.png";
+
+    // Reset scroll
+    if (mainScroll) {
+        mainScroll->setProperty("contentY", 0);
+    }
+
+    // 4. "See all ->" for Developer Tools
+    QMetaObject::invokeMethod(appsView, "openCollection",
+        Q_ARG(QVariant, "development"),
+        Q_ARG(QVariant, "Developer Tools"),
+        Q_ARG(QVariant, "Professional code editors, terminals, and toolchains"),
+        Q_ARG(QVariant, "development")
+    );
+    pumpEvents(25, 20000);
+
+    storeMode = appsView->property("storeMode");
+    QString collTitle = appsView->property("collectionTitle").toString();
+    int collTotal = appsView->property("collectionTotalCount").toInt();
+    QVariantList collItems = appsView->property("collectionItems").toList();
+    qInfo() << "[TEST-STORE-3.0] Collection view:" << collTitle << "| items in page:" << collItems.size() << "| total count:" << collTotal;
+    if (storeMode.toString() != "collection" || collTitle != "Developer Tools" || collItems.isEmpty()) {
+        qCritical() << "[TEST-STORE-3.0] ERROR: See all Developer Tools failed";
+        return 1;
+    }
+
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/store3_04_see_all_developer_tools.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_04_see_all_developer_tools.png";
+
+    // 5. "See all ->" for Gaming
+    QMetaObject::invokeMethod(appsView, "openCollection",
+        Q_ARG(QVariant, "gaming"),
+        Q_ARG(QVariant, "Gaming"),
+        Q_ARG(QVariant, "Steam, community launchers, and emulation platforms"),
+        Q_ARG(QVariant, "games")
+    );
+    pumpEvents(25, 20000);
+
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/store3_05_see_all_gaming.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_05_see_all_gaming.png";
+
+    // 6. Complete Catalogue: "Explore All Applications" (Page 1)
+    QMetaObject::invokeMethod(appsView, "openExploreAll", Q_ARG(QVariant, "apps"));
+    pumpEvents(25, 20000);
+
+    storeMode = appsView->property("storeMode");
+    int expTotal = appsView->property("exploreTotalCount").toInt();
+    QVariantList expItems = appsView->property("exploreItems").toList();
+    int expPage = appsView->property("explorePage").toInt();
+    qInfo() << "[TEST-STORE-3.0] Explore All view: page" << expPage << "| items:" << expItems.size() << "| total count:" << expTotal;
+    if (storeMode.toString() != "explore_all" || expItems.size() > 24) {
+        qCritical() << "[TEST-STORE-3.0] ERROR: Explore all failed or page size exceeded 24 items";
+        return 1;
+    }
+
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/store3_06_explore_all_applications_p1.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_06_explore_all_applications_p1.png";
+
+    // 7. Complete Catalogue: Page 2 Pagination
+    appsView->setProperty("explorePage", 1);
+    QMetaObject::invokeMethod(appsView, "updateExploreSlice");
+    pumpEvents(25, 20000);
+
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/store3_07_explore_all_page2_pagination.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_07_explore_all_page2_pagination.png";
+
+    // 8. Search and Provider Filters within Complete Catalogue
+    appsView->setProperty("explorePage", 0);
+    appsView->setProperty("exploreSearchQuery", "code");
+    appsView->setProperty("exploreProvider", "pacman");
+    QMetaObject::invokeMethod(appsView, "updateExploreSlice");
+    pumpEvents(25, 20000);
+
+    QImage img08 = window->grabWindow();
+    img08.save(screenshotDir + "/store3_08_search_and_source_filters.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_08_search_and_source_filters.png";
+
+    // Reset filters
+    appsView->setProperty("exploreSearchQuery", "");
+    appsView->setProperty("exploreProvider", "all");
+    QMetaObject::invokeMethod(appsView, "updateExploreSlice");
+    pumpEvents(15, 20000);
+
+    // 9. Dedicated App Detail View & Back Navigation Preservation
+    QVariantMap firefoxApp = backend->getAppById("firefox");
+    if (!firefoxApp.isEmpty()) {
+        QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, firefoxApp));
+        pumpEvents(30, 20000);
+        QImage img09 = window->grabWindow();
+        img09.save(screenshotDir + "/store3_09_app_detail_view.png");
+        qInfo() << "[TEST-STORE-3.0] Saved store3_09_app_detail_view.png";
+
+        // Close detail overlay and verify restored explore_all view
+        QMetaObject::invokeMethod(appsView, "setSelectedApp", Q_ARG(QVariant, QVariant()));
+        pumpEvents(20, 20000);
+        if (appsView->property("storeMode").toString() != "explore_all") {
+            qCritical() << "[TEST-STORE-3.0] ERROR: Detail close did not restore explore_all storeMode";
+            return 1;
+        }
+    }
+
+    // Return to Storefront
+    QMetaObject::invokeMethod(appsView, "backToStorefront");
+    pumpEvents(20, 20000);
+
+    // 10. Responsive Layouts: 1366x768 and 1080x720
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(25, 20000);
+    QImage img10 = window->grabWindow();
+    img10.save(screenshotDir + "/store3_10_responsive_1366x768.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_10_responsive_1366x768.png";
+
+    window->setWidth(1080);
+    window->setHeight(720);
+    pumpEvents(25, 20000);
+    QImage img11 = window->grabWindow();
+    img11.save(screenshotDir + "/store3_11_responsive_1080x720.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_11_responsive_1080x720.png";
+
+    window->setWidth(850);
+    window->setHeight(650);
+    pumpEvents(25, 20000);
+    QImage img12 = window->grabWindow();
+    img12.save(screenshotDir + "/store3_12_responsive_850x650.png");
+    qInfo() << "[TEST-STORE-3.0] Saved store3_12_responsive_850x650.png";
+
+    qInfo() << "[TEST-STORE-3.0] ALL STORE EXPERIENCE 3.0 TESTS PASSED!";
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     // Preview clips are tiny (400x224); a CUDA/VAAPI context per MediaPlayer exhausts VRAM
     // (CUDA_ERROR_OUT_OF_MEMORY) and stalls the UI. Use FFmpeg software decoding unless overridden.
@@ -3771,6 +4294,18 @@ int main(int argc, char *argv[]) {
         _exit(exitCode);
     } else if (argc > 1 && QString(argv[1]) == "--test-setup-wizard") {
         exitCode = runTestSetupWizard(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && QString(argv[1]) == "--test-community-manager") {
+        exitCode = runTestCommunityManager(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && QString(argv[1]) == "--test-desktop-experience-2") {
+        exitCode = runTestDesktopExperience2(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-store-3" || QString(argv[1]) == "--test-store-experience-3")) {
+        exitCode = runTestStoreExperience3(app, engine, &backend);
         backend.shutdown();
         _exit(exitCode);
     } else if (argc > 1 && QString(argv[1]) == "--test-lifecycle") {

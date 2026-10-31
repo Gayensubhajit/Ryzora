@@ -38,6 +38,103 @@ Item {
     property real savedBrowseScrollY: 0
     property var masterAppsList: []
 
+    // ── STORE EXPERIENCE 3.0 STATE ──
+    property string storeMode: "storefront" // "storefront" | "collection" | "explore_all"
+    property string collectionId: ""
+    property string collectionTitle: ""
+    property string collectionSubtitle: ""
+    property string collectionCategory: "all"
+    property string collectionSearchQuery: ""
+    property string collectionProvider: "all"
+    property string collectionSortBy: "name"
+    property int collectionPage: 0
+    property int collectionTotalCount: 0
+    property var collectionItems: []
+
+    property string exploreCategory: "all"
+    property string exploreSearchQuery: ""
+    property string exploreProvider: "all"
+    property string exploreSortBy: "name"
+    property int explorePage: 0
+    property int exploreTotalCount: 0
+    property var exploreItems: []
+
+    readonly property int pageSize: 24
+    property var curatedCollections: []
+
+    function openCollection(id, title, subtitle, category) {
+        root.collectionId = id || ""
+        root.collectionTitle = title || "Applications"
+        root.collectionSubtitle = subtitle || ""
+        root.collectionCategory = category || "all"
+        root.collectionSearchQuery = ""
+        root.collectionProvider = "all"
+        root.collectionSortBy = "name"
+        root.collectionPage = 0
+        root.storeMode = "collection"
+        root.updateCollectionSlice()
+        if (typeof collectionScroll !== "undefined" && collectionScroll) collectionScroll.contentY = 0
+    }
+
+    function openExploreAll(mode) {
+        if (mode) root.catalogMode = mode
+        root.exploreCategory = "all"
+        root.exploreSearchQuery = ""
+        root.exploreProvider = "all"
+        root.exploreSortBy = "name"
+        root.explorePage = 0
+        root.storeMode = "explore_all"
+        root.updateExploreSlice()
+        if (typeof exploreScroll !== "undefined" && exploreScroll) exploreScroll.contentY = 0
+    }
+
+    function backToStorefront() {
+        root.storeMode = "storefront"
+        root.searchQuery = ""
+        root.collectionSearchQuery = ""
+        root.exploreSearchQuery = ""
+        root.clearSearchRequested()
+        if (typeof mainScroll !== "undefined" && mainScroll) mainScroll.contentY = 0
+    }
+
+    function updateCollectionSlice() {
+        if (!backend) return
+        var res = backend.queryVisibleCatalogSlice(
+            root.collectionCategory,
+            root.collectionSearchQuery,
+            root.collectionProvider,
+            root.collectionSortBy,
+            "apps",
+            [],
+            root.collectionPage * root.pageSize,
+            root.pageSize
+        )
+        root.collectionItems = res.items || []
+        root.collectionTotalCount = (res.totalCount !== undefined) ? res.totalCount : 0
+    }
+
+    function updateExploreSlice() {
+        if (!backend) return
+        var res = backend.queryVisibleCatalogSlice(
+            root.exploreCategory,
+            root.exploreSearchQuery,
+            root.exploreProvider,
+            root.exploreSortBy,
+            root.catalogMode,
+            [],
+            root.explorePage * root.pageSize,
+            root.pageSize
+        )
+        root.exploreItems = res.items || []
+        root.exploreTotalCount = (res.totalCount !== undefined) ? res.totalCount : 0
+    }
+
+    function refreshCuratedCollections() {
+        if (backend) {
+            root.curatedCollections = backend.getCuratedCollectionsOverview()
+        }
+    }
+
     onSelectedProviderChanged: {
         if (root.catalogMode === "all_packages" && backend) {
             backend.filterApps("all_packages", root.searchQuery, root.selectedProvider)
@@ -61,6 +158,13 @@ Item {
         return 6
     }
 
+    // Curated row slice: returns exactly the number of cards that fit the current responsive column count
+    function getCuratedRowSlice(apps, maxCount) {
+        if (!apps || apps.length === 0) return []
+        var n = Math.min(apps.length, Math.max(1, maxCount))
+        return apps.slice(0, n)
+    }
+
     signal appSelected(var appData)
     signal packageSelected(var appData)
     signal installRequested(string appId)
@@ -70,8 +174,39 @@ Item {
     signal clearSearchRequested()
 
     onSearchQueryChanged: {
-        if (root.searchQuery.trim().length > 0 && root.selectedApp !== null) {
-            root.setSelectedApp(null)
+        var q = root.searchQuery.trim()
+        if (q.length > 0) {
+            if (root.selectedApp !== null) {
+                root.setSelectedApp(null)
+            }
+            if (root.storeMode === "storefront") {
+                root.collectionId = "search"
+                root.collectionTitle = "Search Results"
+                root.collectionSubtitle = 'Applications matching "' + q + '"'
+                root.collectionCategory = "all"
+                root.collectionSearchQuery = q
+                root.collectionPage = 0
+                root.storeMode = "collection"
+                root.updateCollectionSlice()
+            } else if (root.storeMode === "collection") {
+                root.collectionSearchQuery = q
+                root.collectionPage = 0
+                root.updateCollectionSlice()
+            } else if (root.storeMode === "explore_all") {
+                root.exploreSearchQuery = q
+                root.explorePage = 0
+                root.updateExploreSlice()
+            }
+        } else {
+            if (root.storeMode === "collection" && root.collectionId === "search") {
+                root.backToStorefront()
+            } else if (root.storeMode === "collection") {
+                root.collectionSearchQuery = ""
+                root.updateCollectionSlice()
+            } else if (root.storeMode === "explore_all") {
+                root.exploreSearchQuery = ""
+                root.updateExploreSlice()
+            }
         }
     }
 
@@ -290,12 +425,21 @@ Item {
         if (list.length > 0) {
             root.masterAppsList = list
         }
+        root.refreshCuratedCollections()
+        root.updateCollectionSlice()
+        root.updateExploreSlice()
     }
 
     Connections {
         target: backend
         function onAppsChanged() {
             var list = backend.appsList || []
+            root.refreshCuratedCollections()
+            if (root.storeMode === "collection") {
+                root.updateCollectionSlice()
+            } else if (root.storeMode === "explore_all") {
+                root.updateExploreSlice()
+            }
             if (root.selectedCategory === "All" && root.searchQuery === "") {
                 root.masterAppsList = list
             } else if (root.masterAppsList.length === 0) {
@@ -612,14 +756,20 @@ Item {
         return res
     }
 
-    // ── REUSABLE MICROSOFT STORE-INSPIRED APP CARD (BIG 68px ICON + LARGER DESCRIPTION) ──
+    // ── REUSABLE MICROSOFT STORE-INSPIRED APP CARD (52px ICON + PROPORTIONAL ACTION BUTTON) ──
     component AppCard: Rectangle {
         id: cardRoot
         property var appData: null
+        property real cardWidth: 0
         readonly property bool isInstalled: Boolean(cardRoot.appData && cardRoot.appData.is_installed)
 
-        Layout.fillWidth: true
-        height: 200
+        width: cardWidth > 0 ? cardWidth : undefined
+        Layout.fillWidth: cardWidth <= 0
+        Layout.preferredWidth: cardWidth > 0 ? cardWidth : -1
+        Layout.minimumWidth: cardWidth > 0 ? cardWidth : 160
+        implicitWidth: cardWidth > 0 ? cardWidth : 240
+        implicitHeight: 212
+        height: 212
         radius: theme.radiusMd
         color: cardMouse.containsMouse ? theme.surfaceHover : theme.surface
         border.color: cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
@@ -642,26 +792,26 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 14
-            spacing: 8
+            spacing: 6
 
-            // Top Header: Prominent 68x68 Square App Icon + Action Pill Button
+            // Top Header: App Icon + Action Pill Button
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 8
 
-                // Big 68x68 Icon Container (as in Windows 11 Microsoft Store)
+                // 52x52 Icon Container
                 Rectangle {
-                    width: 68
-                    height: 68
-                    radius: 14
+                    width: 52
+                    height: 52
+                    radius: 12
                     color: theme.surfaceElevated
                     border.color: theme.borderSubtle
                     border.width: 1
 
                     Image {
                         anchors.centerIn: parent
-                        width: 52
-                        height: 52
+                        width: 38
+                        height: 38
                         source: (cardRoot.appData && cardRoot.appData.icon_url) ? cardRoot.appData.icon_url : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
@@ -672,7 +822,7 @@ Item {
                         anchors.centerIn: parent
                         visible: !cardRoot.appData || !cardRoot.appData.icon_url || cardRoot.appData.icon_url === ""
                         name: cardRoot.appData ? root.getCategoryIcon(cardRoot.appData.category) : "layout-grid"
-                        size: 34
+                        size: 26
                         color: theme.textMuted
                     }
                 }
@@ -683,9 +833,10 @@ Item {
                 Rectangle {
                     id: cardActionBtn
                     readonly property bool isPending: root.pendingAppId === (cardRoot.appData ? cardRoot.appData.id : "")
-                    Layout.alignment: Qt.AlignTop
+                    Layout.alignment: Qt.AlignTop | Qt.AlignRight
                     height: 28
-                    implicitWidth: cardActionBtn.isPending ? (actionBtnRow.implicitWidth + 18) : 68
+                    width: Math.max(68, actionBtnRow.width + 20)
+                    implicitWidth: width
                     radius: theme.radiusSm
                     color: cardActionBtn.isPending
                         ? theme.borderStrong
@@ -695,10 +846,10 @@ Item {
                     border.color: cardActionBtn.isPending ? theme.borderStrong : (cardRoot.isInstalled ? theme.borderStrong : theme.accent)
                     border.width: 1
 
-                    RowLayout {
+                    Row {
                         id: actionBtnRow
                         anchors.centerIn: parent
-                        spacing: 4
+                        spacing: 5
 
                         RyzoraIcon {
                             id: cardSpinIcon
@@ -744,7 +895,7 @@ Item {
             // Application Name (Clear, bold title)
             Text {
                 text: cardRoot.appData ? (cardRoot.appData.display_name || cardRoot.appData.name || "") : ""
-                font.pixelSize: 15
+                font.pixelSize: 14
                 font.bold: true
                 color: theme.text
                 elide: Text.ElideRight
@@ -760,11 +911,11 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // Description: Noticeably bigger font (12.5px) with comfortable line height
+            // Description: Clean 2-line summary with elision
             Text {
                 text: cardRoot.appData ? (cardRoot.appData.summary || cardRoot.appData.description || "") : ""
-                font.pixelSize: 13
-                lineHeight: 1.25
+                font.pixelSize: 12
+                lineHeight: 1.2
                 color: theme.textSecondary
                 maximumLineCount: 2
                 wrapMode: Text.WordWrap
@@ -774,30 +925,47 @@ Item {
 
             Item { Layout.fillHeight: true }
 
-            // Bottom Metadata Row: Repository / Installed state + Platform Tag
+            // Bottom Metadata Row: Clean status indicator on left + Size on right
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: 6
 
-                Text {
-                    text: {
-                        if (!cardRoot.appData) return ""
-                        if (cardRoot.appData.is_installed) {
-                            return "● Installed · v" + (cardRoot.appData.installed_version || cardRoot.appData.version || "1.0")
-                        }
-                        var pId = cardRoot.appData.provider_id || "pacman"
-                        if (pId === "flatpak") return "Flathub · Flatpak"
-                        if (pId === "aur") return "AUR · Community"
-                        var repo = cardRoot.appData.repository || "extra"
-                        return "Pacman · " + repo
+                // Status Indicator: Left side
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+
+                    Rectangle {
+                        width: 6
+                        height: 6
+                        radius: 3
+                        color: "#10b981"
+                        visible: cardRoot.isInstalled
+                        Layout.alignment: Qt.AlignVCenter
                     }
-                    font.pixelSize: 11
-                    font.weight: cardRoot.appData && cardRoot.appData.is_installed ? Font.Medium : Font.Normal
-                    color: cardRoot.appData && cardRoot.appData.is_installed ? "#10b981" : theme.textMuted
+
+                    Text {
+                        text: {
+                            if (!cardRoot.appData) return ""
+                            if (cardRoot.isInstalled) {
+                                return "Installed"
+                            }
+                            var pId = cardRoot.appData.provider_id || "pacman"
+                            if (pId === "flatpak") return "Flathub"
+                            if (pId === "aur") return "AUR"
+                            var repo = cardRoot.appData.repository || "extra"
+                            return repo.charAt(0).toUpperCase() + repo.slice(1)
+                        }
+                        font.pixelSize: 11
+                        font.weight: cardRoot.isInstalled ? Font.DemiBold : Font.Normal
+                        color: cardRoot.isInstalled ? "#10b981" : theme.textMuted
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                    }
                 }
 
-                Item { Layout.fillWidth: true }
-
+                // Size Badge: Right side
                 Text {
                     readonly property var szBytes: (cardRoot.appData ? (cardRoot.appData.installed_size || cardRoot.appData.download_size) : 0)
                     visible: Boolean(szBytes && szBytes > 0)
@@ -806,12 +974,7 @@ Item {
                     font.family: "monospace"
                     font.weight: Font.Medium
                     color: theme.textMuted
-                }
-
-                Text {
-                    text: (cardRoot.appData && cardRoot.appData.license) ? cardRoot.appData.license : "Native"
-                    font.pixelSize: 11
-                    color: theme.textMuted
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 }
             }
         }
@@ -824,7 +987,7 @@ Item {
         id: mainScroll
         objectName: "appsMainScroll"
         anchors.fill: parent
-        visible: root.selectedApp === null
+        visible: root.selectedApp === null && root.storeMode === "storefront"
         contentWidth: width
         contentHeight: pageCol.implicitHeight + 40
         clip: true
@@ -929,152 +1092,64 @@ Item {
                 }
             }
 
-            // ── APPLICATION CATALOGUE & SOURCE FILTER TOOLBAR ──
+            // ── STOREFRONT DISCOVERY ACTION BAR ──
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
 
-                // Left: Catalogue Mode Switcher (Applications vs All Packages)
+                Text {
+                    text: "Curated Storefront"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    color: theme.textSecondary
+                }
+
                 Rectangle {
-                    height: 32
-                    implicitWidth: modeRow.implicitWidth + 8
-                    radius: theme.radiusSm
-                    color: theme.surface
+                    height: 18
+                    implicitWidth: 80
+                    radius: 9
+                    color: theme.surfaceElevated
                     border.color: theme.borderSubtle
                     border.width: 1
 
                     RowLayout {
-                        id: modeRow
                         anchors.centerIn: parent
-                        spacing: 2
-
-                        // Applications Button
-                        Rectangle {
-                            height: 26
-                            implicitWidth: appsModeRow.implicitWidth + 14
-                            radius: theme.radiusSm - 1
-                            color: root.catalogMode === "apps" ? theme.accent : "transparent"
-
-                            RowLayout {
-                                id: appsModeRow
-                                anchors.centerIn: parent
-                                spacing: 5
-                                RyzoraIcon {
-                                    name: "layout-grid"
-                                    size: 11
-                                    color: root.catalogMode === "apps" ? "#ffffff" : theme.textSecondary
-                                }
-                                Text {
-                                    text: "Applications"
-                                    font.pixelSize: 11
-                                    font.weight: root.catalogMode === "apps" ? Font.DemiBold : Font.Medium
-                                    color: root.catalogMode === "apps" ? "#ffffff" : theme.textSecondary
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (root.catalogMode !== "apps") {
-                                        root.catalogMode = "apps"
-                                        root.selectedCategory = "All"
-                                        backend.filterApps("all", root.searchQuery, root.selectedProvider)
-                                    }
-                                }
-                            }
-                        }
-
-                        // All Packages Button
-                        Rectangle {
-                            height: 26
-                            implicitWidth: pkgsModeRow.implicitWidth + 14
-                            radius: theme.radiusSm - 1
-                            color: root.catalogMode === "all_packages" ? theme.accent : "transparent"
-
-                            RowLayout {
-                                id: pkgsModeRow
-                                anchors.centerIn: parent
-                                spacing: 5
-                                RyzoraIcon {
-                                    name: "package"
-                                    size: 11
-                                    color: root.catalogMode === "all_packages" ? "#ffffff" : theme.textSecondary
-                                }
-                                Text {
-                                    text: "All Packages (15,966+)"
-                                    font.pixelSize: 11
-                                    font.weight: root.catalogMode === "all_packages" ? Font.DemiBold : Font.Medium
-                                    color: root.catalogMode === "all_packages" ? "#ffffff" : theme.textSecondary
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (root.catalogMode !== "all_packages") {
-                                        root.catalogMode = "all_packages"
-                                        root.selectedCategory = "All"
-                                        backend.filterApps("all_packages", root.searchQuery, root.selectedProvider)
-                                    }
-                                }
-                            }
-                        }
+                        spacing: 4
+                        Rectangle { width: 6; height: 6; radius: 3; color: "#10b981" }
+                        Text { text: "Verified"; font.pixelSize: 10; color: theme.textMuted }
                     }
                 }
 
                 Item { Layout.fillWidth: true }
 
-                // Right: Source Filter Buttons (All Sources / Official Repos / AUR / Flatpak)
+                // Quick jump to Explore All Catalogue
                 Rectangle {
                     height: 32
-                    implicitWidth: provRow.implicitWidth + 8
+                    implicitWidth: expHdrRow.implicitWidth + 18
                     radius: theme.radiusSm
-                    color: theme.surface
+                    color: expHdrMouse.containsMouse ? theme.surfaceHover : theme.surface
                     border.color: theme.borderSubtle
                     border.width: 1
 
                     RowLayout {
-                        id: provRow
+                        id: expHdrRow
                         anchors.centerIn: parent
-                        spacing: 2
-
-                        Repeater {
-                            model: [
-                                { id: "all", label: "All Sources" },
-                                { id: "pacman", label: "Official Repos" },
-                                { id: "aur", label: "AUR" },
-                                { id: "flatpak", label: "Flatpak" }
-                            ]
-
-                            delegate: Rectangle {
-                                readonly property bool isCurrent: root.selectedProvider === modelData.id
-                                height: 26
-                                implicitWidth: provText.implicitWidth + 14
-                                radius: theme.radiusSm - 1
-                                color: isCurrent ? theme.accent : (provMouse.containsMouse ? theme.surfaceHover : "transparent")
-
-                                Text {
-                                    id: provText
-                                    anchors.centerIn: parent
-                                    text: modelData.label
-                                    font.pixelSize: 11
-                                    font.weight: isCurrent ? Font.DemiBold : Font.Medium
-                                    color: isCurrent ? "#ffffff" : (provMouse.containsMouse ? theme.text : theme.textSecondary)
-                                }
-
-                                MouseArea {
-                                    id: provMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.selectedProvider = modelData.id
-                                    }
-                                }
-                            }
+                        spacing: 6
+                        RyzoraIcon { name: "layout-grid"; size: 12; color: theme.accent }
+                        Text {
+                            text: "Explore Complete Catalogue →"
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: theme.accent
                         }
+                    }
+
+                    MouseArea {
+                        id: expHdrMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openExploreAll("apps")
                     }
                 }
             }
@@ -1680,9 +1755,11 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    root.selectedCategory = modelData.id
-                                    root.categorySelected(modelData.id)
-                                    backend.filterApps(modelData.id, root.searchQuery)
+                                    if (modelData.id === "All") {
+                                        root.openExploreAll("apps")
+                                    } else {
+                                        root.openCollection(modelData.id.toLowerCase(), modelData.label, "Curated and verified " + modelData.label + " applications", modelData.id.toLowerCase())
+                                    }
                                 }
                             }
                         }
@@ -1690,179 +1767,1249 @@ Item {
                 }
             }
 
-            // ── 4. CURATED ROW OF POPULAR APPLICATIONS (Responsive Row of Cards) ──
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                visible: root.popularApps.length > 0
+            // ── 4. CURATED HORIZONTAL COLLECTIONS (Store Experience 3.0) ──
+            Repeater {
+                model: root.curatedCollections
 
-                RowLayout {
+                delegate: ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 12
+                    visible: modelData.apps && modelData.apps.length > 0
 
-                    Text {
-                        text: "Popular Applications"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: theme.text
+                    // Collection Header: Title + Subtitle + Right-aligned "See all →"
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        ColumnLayout {
+                            spacing: 2
+                            Text {
+                                text: modelData.title || ""
+                                font.pixelSize: 16
+                                font.bold: true
+                                color: theme.text
+                            }
+                            Text {
+                                text: modelData.subtitle || ""
+                                font.pixelSize: 11
+                                color: theme.textMuted
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        // See all action button
+                        Rectangle {
+                            height: 26
+                            implicitWidth: seeAllRow.implicitWidth + 16
+                            radius: theme.radiusSm
+                            color: seeAllMouse.containsMouse ? theme.surfaceHover : "transparent"
+                            border.color: seeAllMouse.containsMouse ? theme.borderStrong : "transparent"
+                            border.width: 1
+
+                            RowLayout {
+                                id: seeAllRow
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Text {
+                                    text: "See all"
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    color: theme.accent
+                                }
+
+                                RyzoraIcon {
+                                    name: "chevron-right"
+                                    size: 11
+                                    color: theme.accent
+                                }
+                            }
+
+                            MouseArea {
+                                id: seeAllMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.openCollection(modelData.id, modelData.title, modelData.subtitle, modelData.category)
+                                }
+                            }
+                        }
                     }
 
-                    Text {
-                        text: "Curated desktop essentials"
-                        font.pixelSize: 11
-                        color: theme.textMuted
-                    }
+                    // Responsive Curated Cards Grid (fills row edge-to-edge with 0 half-cut cards)
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: root.responsiveColumns
+                        rowSpacing: 12
+                        columnSpacing: 12
 
-                    Item { Layout.fillWidth: true }
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: root.responsiveColumns
-                    rowSpacing: 12
-                    columnSpacing: 12
-
-                    Repeater {
-                        model: root.popularApps
-                        delegate: AppCard {
-                            appData: modelData
+                        Repeater {
+                            model: root.getCuratedRowSlice(modelData.apps, root.responsiveColumns)
+                            delegate: AppCard {
+                                Layout.fillWidth: true
+                                appData: modelData
+                            }
                         }
                     }
                 }
             }
 
-            // ── 5. MAIN APPLICATIONS GRID (All Remaining Applications) ──
-            ColumnLayout {
+            // ── 5. EXPLORE ALL APPLICATIONS ENTRY BANNER ──
+            Rectangle {
                 Layout.fillWidth: true
-                spacing: 12
+                height: 140
+                radius: theme.radiusLg
+                color: theme.surfaceElevated
+                border.color: theme.borderStrong
+                border.width: 1
+                clip: true
 
                 RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
+                    anchors.fill: parent
+                    anchors.margins: 24
+                    spacing: 20
 
-                    Text {
-                        text: (root.searchQuery === "" && root.selectedCategory === "All") ? "More Applications" : (root.selectedCategory === "All" ? "All Applications" : root.selectedCategory)
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: theme.text
-                    }
-
-                    Text {
-                        text: "(" + root.visibleCatalogApps.length + ")"
-                        font.pixelSize: 12
-                        font.family: "monospace"
-                        color: theme.textMuted
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    // Sort Control neatly aligned with grid header
                     Rectangle {
-                        height: 28
-                        implicitWidth: sortRow.implicitWidth + 16
-                        radius: theme.radiusSm
+                        width: 56
+                        height: 56
+                        radius: 14
                         color: theme.surface
-                        border.color: sortMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
+                        border.color: theme.borderSubtle
                         border.width: 1
 
-                        RowLayout {
-                            id: sortRow
+                        RyzoraIcon {
                             anchors.centerIn: parent
-                            spacing: 6
-                            RyzoraIcon { name: "filter"; size: 11; color: theme.textMuted }
-                            Text {
-                                text: "Sort: " + (root.sortBy === "status" ? "Status" : (root.sortBy === "category" ? "Category" : "Name"))
-                                font.pixelSize: 11
-                                font.weight: Font.Medium
-                                color: theme.textSecondary
-                            }
-                        }
-
-                        MouseArea {
-                            id: sortMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (root.sortBy === "name") root.sortBy = "category"
-                                else if (root.sortBy === "category") root.sortBy = "status"
-                                else root.sortBy = "name"
-                            }
+                            name: "layout-grid"
+                            size: 26
+                            color: theme.accent
                         }
                     }
-                }
-
-                GridLayout {
-                    id: catalogGrid
-                    Layout.fillWidth: true
-                    columns: root.responsiveColumns
-                    rowSpacing: 12
-                    columnSpacing: 12
-
-                    Repeater {
-                        model: root.visibleCatalogApps
-                        delegate: AppCard {
-                            appData: modelData
-                        }
-                    }
-                }
-
-                // Loading State Indicator
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 200
-                    visible: backend.isAppsLoading && root.visibleCatalogApps.length === 0
-                    color: "transparent"
 
                     ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 12
+                        Layout.fillWidth: true
+                        spacing: 4
 
-                        RyzoraIcon {
-                            id: loadingSpinIcon
-                            Layout.alignment: Qt.AlignHCenter
-                            name: "refresh"
-                            size: 22
-                            color: theme.accent
-                            RotationAnimator {
-                                target: loadingSpinIcon
-                                from: 0
-                                to: 360
-                                duration: 1000
-                                loops: Animation.Infinite
-                                running: backend.isAppsLoading
-                            }
+                        Text {
+                            text: "Explore Complete Application Catalogue"
+                            font.pixelSize: 17
+                            font.bold: true
+                            color: theme.text
                         }
 
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: "Loading software catalogue..."
-                            font.pixelSize: 13
+                            text: "Browse over 1,200 native Arch Linux, Flatpak, and AUR applications with advanced filters, category sorting, and full pagination."
+                            font.pixelSize: 12
                             color: theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
                         }
                     }
-                }
 
-                // Empty State
-                EmptyState {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 240
-                    visible: root.visibleCatalogApps.length === 0 && !backend.isAppsLoading
-                    iconName: "layout-grid"
-                    title: "No Applications Found"
-                    message: "No software applications match category '" + root.selectedCategory + "'" + (root.searchQuery ? " and query '" + root.searchQuery + "'" : "") + "."
-                    actionLabel: "Clear Search & Filter"
-                    onActionClicked: {
-                        root.selectedCategory = "All"
-                        root.searchQuery = ""
-                        root.clearSearchRequested()
-                        backend.filterApps("All", "")
+                    RowLayout {
+                        spacing: 10
+
+                        Rectangle {
+                            height: 38
+                            implicitWidth: expAllBtnRow.implicitWidth + 24
+                            radius: theme.radiusMd
+                            color: expAllBtnMouse.containsMouse ? theme.accentHover : theme.accent
+
+                            RowLayout {
+                                id: expAllBtnRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                Text {
+                                    text: "Explore All Applications →"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            MouseArea {
+                                id: expAllBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openExploreAll("apps")
+                            }
+                        }
+
+                        Rectangle {
+                            height: 38
+                            implicitWidth: expPkgBtnRow.implicitWidth + 20
+                            radius: theme.radiusSm
+                            color: expPkgBtnMouse.containsMouse ? theme.surfaceHover : theme.surface
+                            border.color: theme.borderSubtle
+                            border.width: 1
+
+                            RowLayout {
+                                id: expPkgBtnRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                RyzoraIcon {
+                                    name: "package"
+                                    size: 13
+                                    color: theme.textSecondary
+                                }
+
+                                Text {
+                                    text: "All Packages (15k+)"
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    color: theme.text
+                                }
+                            }
+
+                            MouseArea {
+                                id: expPkgBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openExploreAll("all_packages")
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // 1B. DEDICATED "SEE ALL" COLLECTION CATALOGUE VIEW (Store Experience 3.0)
+    // ──────────────────────────────────────────────────────────────────────────
+    Flickable {
+        id: collectionScroll
+        objectName: "appsCollectionScroll"
+        anchors.fill: parent
+        visible: root.selectedApp === null && root.storeMode === "collection"
+        contentWidth: width
+        contentHeight: collectionCol.implicitHeight + 40
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            width: 6
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: theme.borderStrong
+            }
+        }
+
+        ColumnLayout {
+            id: collectionCol
+            width: Math.max(300, parent.width - (root.width < 600 ? 24 : 40))
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 16
+            spacing: 20
+
+            // Header: Back button + Title + Subtitle + Count Badge
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 14
+
+                Rectangle {
+                    height: 36
+                    implicitWidth: backStoreRow.implicitWidth + 20
+                    radius: theme.radiusMd
+                    color: backStoreMouse.containsMouse ? theme.surfaceHover : theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: backStoreRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        RyzoraIcon {
+                            name: "chevron-left"
+                            size: 14
+                            color: theme.text
+                        }
+
+                        Text {
+                            text: "Back to Store"
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            color: theme.text
+                        }
+                    }
+
+                    MouseArea {
+                        id: backStoreMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.backToStorefront()
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: root.collectionTitle
+                        font.pixelSize: 22
+                        font.bold: true
+                        color: theme.text
+                    }
+
+                    Text {
+                        text: root.collectionSubtitle
+                        font.pixelSize: 12
+                        color: theme.textSecondary
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // Count Badge
+                Rectangle {
+                    height: 28
+                    implicitWidth: countBadgeRow.implicitWidth + 16
+                    radius: theme.radiusSm
+                    color: theme.surfaceElevated
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: countBadgeRow
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        RyzoraIcon {
+                            name: "package"
+                            size: 11
+                            color: theme.accent
+                        }
+
+                        Text {
+                            text: root.collectionTotalCount + " Applications"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: theme.text
+                        }
+                    }
+                }
+            }
+
+            // Filter & Search Toolbar
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                // Search Input within collection
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 400
+                    height: 34
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: collSearchInput.activeFocus ? theme.accent : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 8
+
+                        RyzoraIcon {
+                            name: "search"
+                            size: 13
+                            color: collSearchInput.activeFocus ? theme.accent : theme.textMuted
+                        }
+
+                        TextInput {
+                            id: collSearchInput
+                            Layout.fillWidth: true
+                            text: root.collectionSearchQuery
+                            font.pixelSize: 12
+                            color: theme.text
+                            clip: true
+                            onTextChanged: {
+                                if (root.collectionSearchQuery !== text) {
+                                    root.collectionSearchQuery = text
+                                    root.collectionPage = 0
+                                    root.updateCollectionSlice()
+                                }
+                            }
+
+                            Text {
+                                text: "Filter in this collection…"
+                                font.pixelSize: 12
+                                color: theme.textMuted
+                                visible: !collSearchInput.text && !collSearchInput.activeFocus
+                            }
+                        }
+
+                        Rectangle {
+                            visible: collSearchInput.text.length > 0
+                            width: 16
+                            height: 16
+                            radius: 8
+                            color: collClearMouse.containsMouse ? theme.surfaceHover : "transparent"
+
+                            RyzoraIcon {
+                                anchors.centerIn: parent
+                                name: "x"
+                                size: 10
+                                color: theme.textSecondary
+                            }
+
+                            MouseArea {
+                                id: collClearMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    collSearchInput.text = ""
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Source Provider Filter Pills (All, Pacman, AUR, Flatpak)
+                RowLayout {
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { id: "all", label: "All Sources" },
+                            { id: "pacman", label: "Pacman (Official)" },
+                            { id: "aur", label: "AUR" },
+                            { id: "flatpak", label: "Flatpak" }
+                        ]
+
+                        Rectangle {
+                            readonly property bool isSel: root.collectionProvider === modelData.id
+                            height: 30
+                            implicitWidth: provText.implicitWidth + 20
+                            radius: theme.radiusSm
+                            color: isSel ? theme.accent : (provMouse.containsMouse ? theme.surfaceHover : theme.surface)
+                            border.color: isSel ? theme.accent : theme.borderSubtle
+                            border.width: 1
+
+                            Text {
+                                id: provText
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                font.pixelSize: 11
+                                font.weight: isSel ? Font.DemiBold : Font.Medium
+                                color: isSel ? "#ffffff" : theme.textSecondary
+                            }
+
+                            MouseArea {
+                                id: provMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.collectionProvider !== modelData.id) {
+                                        root.collectionProvider = modelData.id
+                                        root.collectionPage = 0
+                                        root.updateCollectionSlice()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Sort By Button
+                Rectangle {
+                    height: 30
+                    implicitWidth: collSortRow.implicitWidth + 16
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: collSortMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: collSortRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        RyzoraIcon { name: "filter"; size: 11; color: theme.textMuted }
+                        Text {
+                            text: "Sort: " + (root.collectionSortBy === "status" ? "Status" : "Name")
+                            font.pixelSize: 11
+                            color: theme.textSecondary
+                        }
+                    }
+
+                    MouseArea {
+                        id: collSortMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.collectionSortBy = (root.collectionSortBy === "name") ? "status" : "name"
+                            root.collectionPage = 0
+                            root.updateCollectionSlice()
+                        }
+                    }
+                }
+            }
+
+            // Grid of Paginated Cards (up to 24 items)
+            GridLayout {
+                id: collGrid
+                Layout.fillWidth: true
+                columns: root.responsiveColumns
+                rowSpacing: 12
+                columnSpacing: 12
+
+                Repeater {
+                    model: root.collectionItems
+                    delegate: AppCard {
+                        appData: modelData
+                    }
+                }
+            }
+
+            // Empty State
+            EmptyState {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 240
+                visible: root.collectionItems.length === 0
+                iconName: "layout-grid"
+                title: "No Applications in Collection"
+                message: "No applications matched the current filters in " + root.collectionTitle + "."
+                actionLabel: "Reset Filters"
+                onActionClicked: {
+                    root.collectionSearchQuery = ""
+                    collSearchInput.text = ""
+                    root.collectionProvider = "all"
+                    root.collectionSortBy = "name"
+                    root.collectionPage = 0
+                    root.updateCollectionSlice()
+                }
+            }
+
+            // Pagination Controls Bar
+            Rectangle {
+                Layout.fillWidth: true
+                height: 52
+                radius: theme.radiusMd
+                color: theme.surface
+                border.color: theme.borderSubtle
+                border.width: 1
+                visible: root.collectionTotalCount > 0
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    Text {
+                        text: "Showing " + ((root.collectionPage * root.pageSize) + 1) + "–" + Math.min((root.collectionPage + 1) * root.pageSize, root.collectionTotalCount) + " of " + root.collectionTotalCount + " applications"
+                        font.pixelSize: 12
+                        color: theme.textSecondary
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Previous Page Button
+                    Rectangle {
+                        readonly property bool canPrev: root.collectionPage > 0
+                        height: 32
+                        implicitWidth: prevCollRow.implicitWidth + 18
+                        radius: theme.radiusSm
+                        color: canPrev ? (prevCollMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated) : theme.surface
+                        border.color: canPrev ? theme.borderSubtle : "transparent"
+                        opacity: canPrev ? 1.0 : 0.4
+
+                        RowLayout {
+                            id: prevCollRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            RyzoraIcon { name: "chevron-left"; size: 12; color: theme.text }
+                            Text { text: "Previous"; font.pixelSize: 11; font.weight: Font.Medium; color: theme.text }
+                        }
+
+                        MouseArea {
+                            id: prevCollMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: parent.canPrev
+                            cursorShape: parent.canPrev ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (root.collectionPage > 0) {
+                                    root.collectionPage--
+                                    root.updateCollectionSlice()
+                                    collectionScroll.contentY = 0
+                                }
+                            }
+                        }
+                    }
+
+                    // Page Indicator Chip
+                    Rectangle {
+                        height: 32
+                        implicitWidth: pageCollText.implicitWidth + 20
+                        radius: theme.radiusSm
+                        color: theme.surfaceElevated
+                        border.color: theme.borderSubtle
+
+                        Text {
+                            id: pageCollText
+                            anchors.centerIn: parent
+                            text: "Page " + (root.collectionPage + 1) + " of " + Math.max(1, Math.ceil(root.collectionTotalCount / root.pageSize))
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: theme.text
+                        }
+                    }
+
+                    // Next Page Button
+                    Rectangle {
+                        readonly property bool canNext: (root.collectionPage + 1) * root.pageSize < root.collectionTotalCount
+                        height: 32
+                        implicitWidth: nextCollRow.implicitWidth + 18
+                        radius: theme.radiusSm
+                        color: canNext ? (nextCollMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated) : theme.surface
+                        border.color: canNext ? theme.borderSubtle : "transparent"
+                        opacity: canNext ? 1.0 : 0.4
+
+                        RowLayout {
+                            id: nextCollRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Text { text: "Next"; font.pixelSize: 11; font.weight: Font.Medium; color: theme.text }
+                            RyzoraIcon { name: "chevron-right"; size: 12; color: theme.text }
+                        }
+
+                        MouseArea {
+                            id: nextCollMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: parent.canNext
+                            cursorShape: parent.canNext ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if ((root.collectionPage + 1) * root.pageSize < root.collectionTotalCount) {
+                                    root.collectionPage++
+                                    root.updateCollectionSlice()
+                                    collectionScroll.contentY = 0
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 1C. COMPLETE APPLICATION & PACKAGE CATALOGUE VIEW (Store Experience 3.0)
+    // ──────────────────────────────────────────────────────────────────────────
+    Flickable {
+        id: exploreScroll
+        objectName: "appsExploreScroll"
+        anchors.fill: parent
+        visible: root.selectedApp === null && root.storeMode === "explore_all"
+        contentWidth: width
+        contentHeight: exploreCol.implicitHeight + 40
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            width: 6
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: theme.borderStrong
+            }
+        }
+
+        ColumnLayout {
+            id: exploreCol
+            width: Math.max(300, parent.width - (root.width < 600 ? 24 : 40))
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 16
+            spacing: 16
+
+            // Header: Back button + Title + Scope Switcher + Count Badge
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 14
+
+                Rectangle {
+                    height: 36
+                    implicitWidth: backExpRow.implicitWidth + 20
+                    radius: theme.radiusMd
+                    color: backExpMouse.containsMouse ? theme.surfaceHover : theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: backExpRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        RyzoraIcon {
+                            name: "chevron-left"
+                            size: 14
+                            color: theme.text
+                        }
+
+                        Text {
+                            text: "Back to Store"
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            color: theme.text
+                        }
+                    }
+
+                    MouseArea {
+                        id: backExpMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.backToStorefront()
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: root.catalogMode === "all_packages" ? "System Package Repository" : "All Applications Catalogue"
+                        font.pixelSize: 22
+                        font.bold: true
+                        color: theme.text
+                    }
+
+                    Text {
+                        text: root.catalogMode === "all_packages"
+                            ? "Complete repository of system libraries, command-line tools, and uncurated packages."
+                            : "Browse the full catalogue of native Arch Linux, Flatpak, and AUR desktop applications."
+                        font.pixelSize: 12
+                        color: theme.textSecondary
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // Scope Switcher (Applications vs All Packages)
+                Rectangle {
+                    height: 32
+                    implicitWidth: expScopeRow.implicitWidth + 8
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: expScopeRow
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Rectangle {
+                            height: 26
+                            implicitWidth: expAppsBtn.implicitWidth + 14
+                            radius: theme.radiusSm - 1
+                            color: root.catalogMode === "apps" ? theme.accent : "transparent"
+
+                            RowLayout {
+                                id: expAppsBtn
+                                anchors.centerIn: parent
+                                spacing: 5
+                                RyzoraIcon {
+                                    name: "layout-grid"
+                                    size: 11
+                                    color: root.catalogMode === "apps" ? "#ffffff" : theme.textSecondary
+                                }
+                                Text {
+                                    text: "Applications"
+                                    font.pixelSize: 11
+                                    font.weight: root.catalogMode === "apps" ? Font.DemiBold : Font.Medium
+                                    color: root.catalogMode === "apps" ? "#ffffff" : theme.textSecondary
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.catalogMode !== "apps") {
+                                        root.catalogMode = "apps"
+                                        root.explorePage = 0
+                                        backend.filterApps("all", root.exploreSearchQuery, root.exploreProvider)
+                                        root.updateExploreSlice()
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            height: 26
+                            implicitWidth: expPkgsBtn.implicitWidth + 14
+                            radius: theme.radiusSm - 1
+                            color: root.catalogMode === "all_packages" ? theme.accent : "transparent"
+
+                            RowLayout {
+                                id: expPkgsBtn
+                                anchors.centerIn: parent
+                                spacing: 5
+                                RyzoraIcon {
+                                    name: "package"
+                                    size: 11
+                                    color: root.catalogMode === "all_packages" ? "#ffffff" : theme.textSecondary
+                                }
+                                Text {
+                                    text: "All Packages (15k+)"
+                                    font.pixelSize: 11
+                                    font.weight: root.catalogMode === "all_packages" ? Font.DemiBold : Font.Medium
+                                    color: root.catalogMode === "all_packages" ? "#ffffff" : theme.textSecondary
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.catalogMode !== "all_packages") {
+                                        root.catalogMode = "all_packages"
+                                        root.explorePage = 0
+                                        backend.filterApps("all_packages", root.exploreSearchQuery, root.exploreProvider)
+                                        root.updateExploreSlice()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Total Count Badge
+                Rectangle {
+                    height: 28
+                    implicitWidth: expCountBadgeRow.implicitWidth + 16
+                    radius: theme.radiusSm
+                    color: theme.surfaceElevated
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: expCountBadgeRow
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        RyzoraIcon {
+                            name: "layout-grid"
+                            size: 11
+                            color: theme.accent
+                        }
+
+                        Text {
+                            text: root.exploreTotalCount + " Items"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: theme.text
+                        }
+                    }
+                }
+            }
+
+            // Category Filter Pills Row (Horizontal Flickable)
+            Flickable {
+                Layout.fillWidth: true
+                height: 32
+                contentWidth: expCatRow.implicitWidth
+                contentHeight: 32
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                flickableDirection: Flickable.HorizontalFlick
+
+                RowLayout {
+                    id: expCatRow
+                    height: 32
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { label: "All items", id: "all", icon: "layout-grid" },
+                            { label: "Development", id: "development", icon: "terminal" },
+                            { label: "Internet", id: "internet", icon: "compass" },
+                            { label: "Productivity", id: "productivity", icon: "check" },
+                            { label: "Multimedia", id: "multimedia", icon: "play" },
+                            { label: "Graphics", id: "graphics", icon: "palette" },
+                            { label: "Utilities", id: "utilities", icon: "settings" },
+                            { label: "System", id: "system", icon: "activity" },
+                            { label: "Games", id: "games", icon: "zap" },
+                            { label: "Installed", id: "installed", icon: "check" }
+                        ]
+
+                        Rectangle {
+                            readonly property bool isSelected: root.exploreCategory === modelData.id
+                            height: 30
+                            implicitWidth: expCatItemRow.implicitWidth + 18
+                            radius: theme.radiusSm
+                            color: isSelected ? theme.accent : (expCatMouse.containsMouse ? theme.surfaceHover : theme.surface)
+                            border.color: isSelected ? theme.accent : theme.borderSubtle
+                            border.width: 1
+
+                            RowLayout {
+                                id: expCatItemRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                RyzoraIcon {
+                                    name: modelData.icon
+                                    size: 11
+                                    color: isSelected ? "#ffffff" : theme.textSecondary
+                                }
+
+                                Text {
+                                    text: modelData.label
+                                    font.pixelSize: 11
+                                    font.weight: isSelected ? Font.DemiBold : Font.Medium
+                                    color: isSelected ? "#ffffff" : theme.textSecondary
+                                }
+                            }
+
+                            MouseArea {
+                                id: expCatMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.exploreCategory !== modelData.id) {
+                                        root.exploreCategory = modelData.id
+                                        root.explorePage = 0
+                                        root.updateExploreSlice()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Search & Provider Source Toolbar
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                // Search Input Box
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 420
+                    height: 34
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: expSearchInput.activeFocus ? theme.accent : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 8
+
+                        RyzoraIcon {
+                            name: "search"
+                            size: 13
+                            color: expSearchInput.activeFocus ? theme.accent : theme.textMuted
+                        }
+
+                        TextInput {
+                            id: expSearchInput
+                            Layout.fillWidth: true
+                            text: root.exploreSearchQuery
+                            font.pixelSize: 12
+                            color: theme.text
+                            clip: true
+                            onTextChanged: {
+                                if (root.exploreSearchQuery !== text) {
+                                    root.exploreSearchQuery = text
+                                    root.explorePage = 0
+                                    root.updateExploreSlice()
+                                }
+                            }
+
+                            Text {
+                                text: "Search catalogue by name, package ID, keyword…"
+                                font.pixelSize: 12
+                                color: theme.textMuted
+                                visible: !expSearchInput.text && !expSearchInput.activeFocus
+                            }
+                        }
+
+                        Rectangle {
+                            visible: expSearchInput.text.length > 0
+                            width: 16
+                            height: 16
+                            radius: 8
+                            color: expClearMouse.containsMouse ? theme.surfaceHover : "transparent"
+
+                            RyzoraIcon {
+                                anchors.centerIn: parent
+                                name: "x"
+                                size: 10
+                                color: theme.textSecondary
+                            }
+
+                            MouseArea {
+                                id: expClearMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    expSearchInput.text = ""
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Source Provider Filter Pills
+                RowLayout {
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { id: "all", label: "All Sources" },
+                            { id: "pacman", label: "Pacman" },
+                            { id: "aur", label: "AUR" },
+                            { id: "flatpak", label: "Flatpak" }
+                        ]
+
+                        Rectangle {
+                            readonly property bool isSel: root.exploreProvider === modelData.id
+                            height: 30
+                            implicitWidth: expProvText.implicitWidth + 18
+                            radius: theme.radiusSm
+                            color: isSel ? theme.accent : (expProvMouse.containsMouse ? theme.surfaceHover : theme.surface)
+                            border.color: isSel ? theme.accent : theme.borderSubtle
+                            border.width: 1
+
+                            Text {
+                                id: expProvText
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                font.pixelSize: 11
+                                font.weight: isSel ? Font.DemiBold : Font.Medium
+                                color: isSel ? "#ffffff" : theme.textSecondary
+                            }
+
+                            MouseArea {
+                                id: expProvMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.exploreProvider !== modelData.id) {
+                                        root.exploreProvider = modelData.id
+                                        root.explorePage = 0
+                                        root.updateExploreSlice()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Sort By Button
+                Rectangle {
+                    height: 30
+                    implicitWidth: expSortRow.implicitWidth + 16
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: expSortMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: expSortRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        RyzoraIcon { name: "filter"; size: 11; color: theme.textMuted }
+                        Text {
+                            text: "Sort: " + (root.exploreSortBy === "status" ? "Status" : (root.exploreSortBy === "category" ? "Category" : "Name"))
+                            font.pixelSize: 11
+                            color: theme.textSecondary
+                        }
+                    }
+
+                    MouseArea {
+                        id: expSortMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (root.exploreSortBy === "name") root.exploreSortBy = "category"
+                            else if (root.exploreSortBy === "category") root.exploreSortBy = "status"
+                            else root.exploreSortBy = "name"
+                            root.explorePage = 0
+                            root.updateExploreSlice()
+                        }
+                    }
+                }
+            }
+
+            // Grid of Paginated Cards (up to 24 items)
+            GridLayout {
+                id: expGrid
+                Layout.fillWidth: true
+                columns: root.responsiveColumns
+                rowSpacing: 12
+                columnSpacing: 12
+
+                Repeater {
+                    model: root.exploreItems
+                    delegate: AppCard {
+                        appData: modelData
+                    }
+                }
+            }
+
+            // Empty State
+            EmptyState {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 240
+                visible: root.exploreItems.length === 0
+                iconName: "layout-grid"
+                title: "No Applications Found"
+                message: "No software matched category '" + root.exploreCategory + "'" + (root.exploreSearchQuery ? " and query '" + root.exploreSearchQuery + "'" : "") + "."
+                actionLabel: "Clear Search & Filters"
+                onActionClicked: {
+                    root.exploreCategory = "all"
+                    root.exploreSearchQuery = ""
+                    expSearchInput.text = ""
+                    root.exploreProvider = "all"
+                    root.exploreSortBy = "name"
+                    root.explorePage = 0
+                    root.updateExploreSlice()
+                }
+            }
+
+            // Pagination Controls Bar
+            Rectangle {
+                Layout.fillWidth: true
+                height: 52
+                radius: theme.radiusMd
+                color: theme.surface
+                border.color: theme.borderSubtle
+                border.width: 1
+                visible: root.exploreTotalCount > 0
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    Text {
+                        text: "Showing " + ((root.explorePage * root.pageSize) + 1) + "–" + Math.min((root.explorePage + 1) * root.pageSize, root.exploreTotalCount) + " of " + root.exploreTotalCount + " items"
+                        font.pixelSize: 12
+                        color: theme.textSecondary
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Previous Page Button
+                    Rectangle {
+                        readonly property bool canPrev: root.explorePage > 0
+                        height: 32
+                        implicitWidth: prevExpRow.implicitWidth + 18
+                        radius: theme.radiusSm
+                        color: canPrev ? (prevExpMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated) : theme.surface
+                        border.color: canPrev ? theme.borderSubtle : "transparent"
+                        opacity: canPrev ? 1.0 : 0.4
+
+                        RowLayout {
+                            id: prevExpRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            RyzoraIcon { name: "chevron-left"; size: 12; color: theme.text }
+                            Text { text: "Previous"; font.pixelSize: 11; font.weight: Font.Medium; color: theme.text }
+                        }
+
+                        MouseArea {
+                            id: prevExpMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: parent.canPrev
+                            cursorShape: parent.canPrev ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (root.explorePage > 0) {
+                                    root.explorePage--
+                                    root.updateExploreSlice()
+                                    exploreScroll.contentY = 0
+                                }
+                            }
+                        }
+                    }
+
+                    // Page Indicator Chip
+                    Rectangle {
+                        height: 32
+                        implicitWidth: pageExpText.implicitWidth + 20
+                        radius: theme.radiusSm
+                        color: theme.surfaceElevated
+                        border.color: theme.borderSubtle
+
+                        Text {
+                            id: pageExpText
+                            anchors.centerIn: parent
+                            text: "Page " + (root.explorePage + 1) + " of " + Math.max(1, Math.ceil(root.exploreTotalCount / root.pageSize))
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: theme.text
+                        }
+                    }
+
+                    // Next Page Button
+                    Rectangle {
+                        readonly property bool canNext: (root.explorePage + 1) * root.pageSize < root.exploreTotalCount
+                        height: 32
+                        implicitWidth: nextExpRow.implicitWidth + 18
+                        radius: theme.radiusSm
+                        color: canNext ? (nextExpMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated) : theme.surface
+                        border.color: canNext ? theme.borderSubtle : "transparent"
+                        opacity: canNext ? 1.0 : 0.4
+
+                        RowLayout {
+                            id: nextExpRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Text { text: "Next"; font.pixelSize: 11; font.weight: Font.Medium; color: theme.text }
+                            RyzoraIcon { name: "chevron-right"; size: 12; color: theme.text }
+                        }
+
+                        MouseArea {
+                            id: nextExpMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: parent.canNext
+                            cursorShape: parent.canNext ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if ((root.explorePage + 1) * root.pageSize < root.exploreTotalCount) {
+                                    root.explorePage++
+                                    root.updateExploreSlice()
+                                    exploreScroll.contentY = 0
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // 2. DEDICATED APPLICATION DETAILS PRODUCT PAGE (Classic Windows 11 Store)

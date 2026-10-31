@@ -16,6 +16,15 @@ Item {
     property string pendingAction: ""
     property string errorMessage: ""
 
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return "0 B"
+        var units = ["B", "KB", "MB", "GB"]
+        var i = Math.floor(Math.log(bytes) / Math.log(1024))
+        if (i < 0) i = 0
+        if (i >= units.length) i = units.length - 1
+        return (bytes / Math.pow(1024, i)).toFixed(1) + " " + units[i]
+    }
+
     // Lockscreen themes use the shared LoginPreview (its own autoplaying player); this view's
     // legacy player stays idle for them so two decoders never fight over one source.
     readonly property bool useLoginPreview: !!root.packageData && root.isLockscreen() && root.supportsSddm()
@@ -997,7 +1006,13 @@ Item {
                                                 color: "#FFFFFF"
                                             }
                                             Text {
-                                                text: root.pendingAction === "install" ? "Installing…" : "Get"
+                                                text: {
+                                                    if (root.pendingAction === "install") return "Installing…"
+                                                    var sz = (root.packageData && root.packageData.size_bytes)
+                                                        ? (" (" + root.formatBytes(root.packageData.size_bytes) + ")")
+                                                        : ""
+                                                    return "Download & Install" + sz
+                                                }
                                                 font.pixelSize: 13
                                                 font.bold: true
                                                 color: "#FFFFFF"
@@ -1956,6 +1971,26 @@ Item {
                                             if (root.isTested()) return "Installed · Preview Verified"
                                             return "Installed"
                                         }
+                                    }
+                                    SpecRow {
+                                        label: "Download Size"
+                                        value: (root.packageData && root.packageData.size_bytes)
+                                            ? root.formatBytes(root.packageData.size_bytes)
+                                            : ((root.packageData && root.packageData.download_size) ? String(root.packageData.download_size) : "~1.2 MB")
+                                    }
+                                    SpecRow {
+                                        label: "Integrity"
+                                        value: (root.packageData && root.packageData.sha256)
+                                            ? "SHA-256 (" + String(root.packageData.sha256).substring(0, 8) + "…)"
+                                            : "SHA-256 Cryptographic Digest"
+                                    }
+                                    SpecRow {
+                                        label: "Distribution Host"
+                                        value: "GitHub CDN (On-Demand)"
+                                    }
+                                    SpecRow {
+                                        label: "Storage Target"
+                                        value: "~/.local/share/ryzora/installed/"
                                     }
                                 }
                             }

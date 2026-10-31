@@ -110,7 +110,7 @@ QtObject {
     readonly property int fontXs: 10
     readonly property int fontMeta: 11
     readonly property int fontSm: 11
-    readonly property int fontNav: 13
+    readonly property int fontNav: 14
     readonly property int fontBase: 13
     readonly property int fontCardDesc: 13
     readonly property int fontCardTitle: 15

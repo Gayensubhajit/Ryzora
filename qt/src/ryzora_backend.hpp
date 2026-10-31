@@ -174,6 +174,7 @@ public:
 
     // Invokable Methods
     Q_INVOKABLE void filterCatalog(const QString &category, const QString &query);
+    Q_INVOKABLE void invalidateCatalogCache();
     Q_INVOKABLE void filterApps(const QString &category, const QString &query, const QString &provider = "all", int page = 0, int pageSize = 0);
     Q_INVOKABLE void installApp(const QString &appId);
     Q_INVOKABLE void cancelAppOperation(const QString &appId);
@@ -226,6 +227,10 @@ public:
     Q_INVOKABLE void installPackage(const QString &packageId);
     Q_INVOKABLE void uninstallPackage(const QString &packageId);
     Q_INVOKABLE QString getStorageUsage();
+    Q_INVOKABLE QString getCommunityStorageDetails();
+    Q_INVOKABLE QString cleanUnusedDownloads();
+    Q_INVOKABLE QString cleanPreviews();
+    Q_INVOKABLE QString cleanTemporaryData();
     Q_INVOKABLE QString clearContentCache();
     Q_INVOKABLE void testPackage(const QString &packageId);
     Q_INVOKABLE void applyTarget(const QString &packageId, const QString &target);
@@ -264,6 +269,7 @@ public:
     Q_INVOKABLE QVariantMap getAppById(const QString &appId) const;
     Q_INVOKABLE QVariantList getCuratedFeaturedApps() const;
     Q_INVOKABLE QVariantList getCuratedCollection(const QStringList &preferredIds, const QString &categoryFallback, const QString &excludeFeaturedId, int maxItems) const;
+    Q_INVOKABLE QVariantList getCuratedCollectionsOverview() const;
     Q_INVOKABLE QVariantMap getAppsCategoryCounts() const;
     Q_INVOKABLE QVariantList getFilteredApps(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy) const;
     Q_INVOKABLE QVariantMap queryVisibleCatalogSlice(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy, const QString &catalogMode, const QVariantList &excludedIds, int startIndex, int maxCount) const;
@@ -298,6 +304,7 @@ signals:
 
     void snapshotsChanged();
     void snapshotsLoadingChanged();
+    void snapshotDeleted(const QString &id, bool success, const QString &message);
 
     void updatesChanged();
     void updatesLoadingChanged();

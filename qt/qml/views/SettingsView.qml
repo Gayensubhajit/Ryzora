@@ -1,11 +1,13 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
 
 Item {
     id: root
     signal launchLabRequested()
     signal launchCreatorRequested()
+    signal launchStorageRequested()
 
     // Local copy of canonical settings (12 fields)
     property string defaultReleaseChannel: "stable"
@@ -69,7 +71,8 @@ Item {
     }
 
     function saveAll() {
-        var payload = {
+        var base = Object.assign({}, backend.settingsData || {})
+        var payload = Object.assign(base, {
             "default_release_channel": defaultReleaseChannel,
             "auto_refresh_enabled": autoRefreshEnabled,
             "auto_refresh_interval_minutes": autoRefreshIntervalMinutes,
@@ -81,8 +84,10 @@ Item {
             "compact_ui": compactUi,
             "snapshot_policy": snapshotPolicy,
             "snapshot_retention_count": snapshotRetentionCount,
-            "snapshot_auto_cleanup": snapshotAutoCleanup
-        }
+            "snapshot_auto_cleanup": snapshotAutoCleanup,
+            "sidebar_width": base.sidebar_width || 240,
+            "sidebar_collapsed": base.sidebar_collapsed || false
+        })
         backend.saveSettings(payload)
     }
 
@@ -469,6 +474,18 @@ Item {
                         checked: root.showNightlyPackages
                         onToggled: function(c) { root.showNightlyPackages = c }
                     }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                    ToggleRow {
+                        label: "Compact Sidebar (Icons Only)"
+                        subLabel: "Collapse the navigation sidebar by default to maximize content space."
+                        checked: (backend.settingsData && backend.settingsData.sidebar_collapsed) || false
+                        onToggled: function(c) {
+                            var base = Object.assign({}, backend.settingsData || {}, { "sidebar_collapsed": c })
+                            backend.saveSettings(base)
+                        }
+                    }
                 }
             }
 
@@ -780,38 +797,42 @@ Item {
                         }
                     }
                 }
+            }
 
-                Rectangle {
+            // ── Card: Storage & Content ──
+            SettingsCard {
+                id: storageContentSettingsCard
+                objectName: "storageContentSettingsCard"
+                title: "Storage & Content"
+                description: "Inspect local disk consumption, clean unreferenced downloads, and manage disposable preview cache."
+
+                ColumnLayout {
                     Layout.fillWidth: true
-                    height: 94
-                    radius: theme.radiusMd
-                    color: Qt.rgba(16/255, 185/255, 129/255, 0.06)
-                    border.color: Qt.rgba(16/255, 185/255, 129/255, 0.25)
+                    spacing: 12
 
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 12
+                        Layout.fillWidth: true
+                        spacing: 16
 
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 4
 
                             Text {
-                                text: "Downloaded Content & Cache Storage"
+                                text: "Community Storage & Cache Management"
                                 font.pixelSize: theme.fontBase
                                 font.bold: true
                                 color: theme.text
                             }
 
                             Text {
-                                text: "Local cache: " + root.storageCacheStr + " · Installed packages: " + root.storageInstalledStr + " · Total: " + root.storageTotalStr
+                                text: "Local storage footprint: " + root.storageTotalStr + " (Cache: " + root.storageCacheStr + " · Installed: " + root.storageInstalledStr + ")"
                                 font.pixelSize: theme.fontSm
-                                color: theme.textMuted
+                                color: theme.textSecondary
                             }
 
                             Text {
-                                text: "On-demand wallpapers, lockscreen videos, and previews are cached locally. You can prune the asset cache at any time without affecting active settings."
+                                text: "On-demand wallpapers, lockscreen videos, and previews are cached locally in user storage (~/.local/share/ryzora/). Inspect storage breakdown and execute granular cleanups in the dedicated Storage Manager."
                                 font.pixelSize: theme.fontXs
                                 color: theme.textMuted
                                 wrapMode: Text.WordWrap
@@ -820,33 +841,35 @@ Item {
                         }
 
                         Rectangle {
-                            height: 34
-                            width: 120
+                            id: openStorageManagerBtn
+                            objectName: "openStorageManagerButton"
+                            height: 36
+                            width: 176
                             radius: theme.radiusMd
-                            color: cleanCacheMouse.containsMouse ? Qt.rgba(16/255, 185/255, 129/255, 0.25) : theme.surfaceElevated
-                            border.color: Qt.rgba(16/255, 185/255, 129/255, 0.40)
+                            color: openStorageMouse.containsMouse ? theme.accentHover : theme.accent
 
-                            Text {
+                            RowLayout {
                                 anchors.centerIn: parent
-                                text: "🧹 Clean Cache"
-                                font.pixelSize: theme.fontSm
-                                font.bold: true
-                                color: "#34d399"
+                                spacing: 6
+                                RyzoraIcon {
+                                    name: "archive"
+                                    size: 14
+                                    color: "#ffffff"
+                                }
+                                Text {
+                                    text: "Open Storage Manager"
+                                    font.pixelSize: theme.fontSm
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
                             }
 
                             MouseArea {
-                                id: cleanCacheMouse
+                                id: openStorageMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    var res = backend.clearContentCache()
-                                    try {
-                                        var d = JSON.parse(res)
-                                        backend.postNotification(d["success"] ? "info" : "error", "Storage Management", d["message"])
-                                    } catch (e) {}
-                                    root.refreshStorageInfo()
-                                }
+                                onClicked: root.launchStorageRequested()
                             }
                         }
                     }

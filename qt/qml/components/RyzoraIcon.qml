@@ -35,7 +35,14 @@ Canvas {
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
 
-        var n = root.name;
+        var n = (root.name || "").toLowerCase().trim();
+        if (n === "refresh-cw") n = "refresh";
+        if (n === "close") n = "x";
+        if (n === "monitor" || n === "display") n = "desktop";
+        if (n === "grid-2x2" || n === "apps" || n === "grid") n = "layout-grid";
+        if (n === "database-backup" || n === "backup") n = "archive";
+        if (n === "cog" || n === "gear") n = "settings";
+        if (n === "store") n = "compass";
 
         if (n === "lock") {
             ctx.beginPath();
@@ -475,6 +482,76 @@ Canvas {
             ctx.lineTo(18, 12);
             ctx.lineTo(22, 12);
             ctx.stroke();
+        } else if (n === "spinner") {
+            ctx.beginPath();
+            ctx.arc(12, 12, 8, 0, 1.5 * Math.PI, false);
+            ctx.stroke();
+        } else if (n === "check-circle") {
+            ctx.beginPath();
+            ctx.arc(12, 12, 9, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(8, 12); ctx.lineTo(11, 15); ctx.lineTo(16, 9);
+            ctx.stroke();
+        } else if (n === "hard-drive") {
+            ctx.beginPath();
+            roundedRect(ctx, 3, 5, 18, 14, 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(3, 14); ctx.lineTo(21, 14);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(6, 16.5, 1, 0, 2 * Math.PI);
+            ctx.fill();
+        } else if (n === "gauge") {
+            ctx.beginPath();
+            ctx.arc(12, 14, 8, Math.PI * 0.8, Math.PI * 2.2, false);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(12, 14); ctx.lineTo(16, 10);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, 14, 1.5, 0, 2 * Math.PI);
+            ctx.fill();
+        } else if (n === "folder") {
+            ctx.beginPath();
+            ctx.moveTo(3, 7);
+            ctx.lineTo(9, 7);
+            ctx.lineTo(11, 9);
+            ctx.lineTo(21, 9);
+            ctx.lineTo(21, 19);
+            ctx.lineTo(3, 19);
+            ctx.closePath();
+            ctx.stroke();
+        } else if (n === "copy") {
+            ctx.beginPath();
+            roundedRect(ctx, 8, 8, 13, 13, 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(5, 15); ctx.lineTo(3, 15); ctx.lineTo(3, 4); ctx.lineTo(14, 4); ctx.lineTo(14, 6);
+            ctx.stroke();
+        } else if (n === "user") {
+            ctx.beginPath();
+            ctx.arc(12, 8, 4, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, 20, 7, Math.PI, 0, false);
+            ctx.stroke();
+        } else if (n === "maximize-2") {
+            ctx.beginPath();
+            ctx.moveTo(15, 3); ctx.lineTo(21, 3); ctx.lineTo(21, 9);
+            ctx.moveTo(9, 21); ctx.lineTo(3, 21); ctx.lineTo(3, 15);
+            ctx.moveTo(21, 3); ctx.lineTo(14, 10);
+            ctx.moveTo(3, 21); ctx.lineTo(10, 14);
+            ctx.stroke();
+        } else {
+            // Clean fallback: rounded rectangle outline with centered dot
+            ctx.beginPath();
+            roundedRect(ctx, 4, 4, 16, 16, 3);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, 12, 1.5, 0, 2 * Math.PI);
+            ctx.fill();
         }
     }
 }

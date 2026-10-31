@@ -233,12 +233,20 @@ Item {
         if (root.selectedCategory !== cat) {
             root.selectedCategory = cat
             root.selectedSubFilter = "All"
-            root.updateFilter()
+            // If catalog is not loaded, request initial load; otherwise filter in-memory instantly
+            if (!backend.catalogList || backend.catalogList.length === 0) {
+                root.updateFilter()
+            }
         }
     }
 
     function updateFilter() {
-        backend.filterCatalog(root.selectedCategory, root.searchQuery)
+        backend.filterCatalog("all", "")
+    }
+
+    function refreshCatalog() {
+        backend.invalidateCatalogCache()
+        backend.filterCatalog("all", "")
     }
 
     function resetFilters() {
@@ -248,7 +256,6 @@ Item {
         root.sortOrder = "name"
         root.searchQuery = ""
         root.searchResetRequested()
-        root.updateFilter()
     }
 
     ColumnLayout {
@@ -680,19 +687,17 @@ Item {
                     }
                 }
 
-                // Responsive columns: 4-6 columns on wide screens, scaling down smoothly
-                // Targets ~240-280px per card with no large empty space
+                // Responsive layout: maximum 4 columns on 1920px, 3 on 1366px, 2 on 1080px, 1 on narrow
+                // Enforces minimum card width ~320px with spacious artwork and readable typography
                 property int columnCount: {
                     var avail = width - 16;
-                    if (avail >= 1550) return 6;
-                    if (avail >= 1260) return 5;
-                    if (avail >= 960) return 4;
-                    if (avail >= 680) return 3;
-                    if (avail >= 440) return 2;
+                    if (avail >= 1350) return 4;
+                    if (avail >= 960) return 3;
+                    if (avail >= 600) return 2;
                     return 1;
                 }
                 cellWidth: Math.floor((width - 16) / Math.max(1, columnCount))
-                cellHeight: 250
+                cellHeight: 340
 
                 model: root.filteredPackages
                 delegate: Item {

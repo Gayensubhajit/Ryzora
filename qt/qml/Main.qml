@@ -26,7 +26,7 @@ ApplicationWindow {
     // Navigation History Stack
     property var navHistory: ["discover"]
     property int navHistoryIndex: 0
-    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen"))
+    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen")) || (stackLayout.currentTab === "storage")
     readonly property bool canGoForward: navHistoryIndex < navHistory.length - 1
 
     function showPackageDetail(pkg, originTab) {
@@ -245,6 +245,10 @@ ApplicationWindow {
     }
 
     function goBack() {
+        if (stackLayout.currentTab === "storage") {
+            navigateTo("settings");
+            return;
+        }
         if (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) {
             appsView.setSelectedPackage(null);
             return;
@@ -386,7 +390,7 @@ ApplicationWindow {
                 }
                 onRefreshClicked: {
                     if (stackLayout.currentTab === "discover") {
-                        discoverView.updateFilter()
+                        discoverView.refreshCatalog()
                     } else if (stackLayout.currentTab === "apps") {
                         backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, appsView.searchQuery, appsView.selectedProvider)
                     } else if (stackLayout.currentTab === "library") {
@@ -585,6 +589,19 @@ ApplicationWindow {
                     }
                     onLaunchCreatorRequested: {
                         window.navigateTo("author")
+                    }
+                    onLaunchStorageRequested: {
+                        window.navigateTo("storage")
+                    }
+                }
+
+                StorageSettingsView {
+                    id: storageSettingsView
+                    objectName: "storageSettingsView"
+                    anchors.fill: parent
+                    visible: stackLayout.currentTab === "storage"
+                    onBackRequested: {
+                        window.navigateTo("settings")
                     }
                 }
 

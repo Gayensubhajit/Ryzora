@@ -5,15 +5,57 @@ import "../components"
 
 Item {
     id: root
+    objectName: "backupsView"
 
     property string pendingAction: ""
     property string pendingSnapshotId: ""
     property string pendingSnapshotLabel: ""
+    property string pendingSnapshotDate: ""
+    property string pendingSnapshotSize: ""
+    property int pendingSnapshotEntries: 0
+    property string pendingSnapshotStatus: ""
+
+    property string statusBannerText: ""
+    property string statusBannerType: "info"
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return "0 B"
+        var k = 1024
+        var sizes = ["B", "KB", "MB", "GB"]
+        var i = Math.floor(Math.log(bytes) / Math.log(k))
+        if (i < 0) i = 0
+        if (i >= sizes.length) i = sizes.length - 1
+        return (bytes / Math.pow(k, i)).toFixed(1) + " " + sizes[i]
+    }
+
+    readonly property real totalStorageBytes: {
+        var total = 0
+        var list = backend.snapshotsList || []
+        for (var i = 0; i < list.length; ++i) {
+            if (list[i].total_size_bytes) total += list[i].total_size_bytes
+        }
+        return total
+    }
+
+    Connections {
+        target: backend
+        function onSnapshotDeleted(id, success, message) {
+            root.statusBannerText = message
+            root.statusBannerType = success ? "success" : "error"
+            bannerTimer.restart()
+        }
+    }
+
+    Timer {
+        id: bannerTimer
+        interval: 6000
+        onTriggered: root.statusBannerText = ""
+    }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
-        spacing: 16
+        spacing: 14
 
         // ── Header Row ──
         RowLayout {
@@ -28,7 +70,7 @@ Item {
                     color: theme.text
                 }
                 Text {
-                    text: "Real filesystem restore points stored in ~/.local/share/ryzora/snapshots/ capturing configuration state, integration drop-ins, and installed package records."
+                    text: "Filesystem restore points capturing configuration state, integration drop-ins, and installed package records."
                     font.pixelSize: theme.fontSm
                     color: theme.textMuted
                 }
@@ -51,7 +93,11 @@ Item {
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 6
-                        Text { text: "+"; font.pixelSize: 14; font.bold: true; color: "#0a0a0c" }
+                        RyzoraIcon {
+                            name: "plus"
+                            size: 13
+                            color: "#0a0a0c"
+                        }
                         Text {
                             text: "Create Snapshot"
                             font.pixelSize: theme.fontSm
@@ -83,8 +129,13 @@ Item {
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 6
+                        RyzoraIcon {
+                            name: "refresh"
+                            size: 13
+                            color: theme.textSecondary
+                        }
                         Text {
-                            text: backend.isSnapshotsLoading ? "Scanning…" : "↻ Refresh"
+                            text: backend.isSnapshotsLoading ? "Scanning…" : "Refresh"
                             font.pixelSize: theme.fontSm
                             font.bold: true
                             color: theme.text
@@ -103,6 +154,79 @@ Item {
             }
         }
 
+        // ── Storage Summary Bar ──
+        Rectangle {
+            Layout.fillWidth: true
+            height: 44
+            radius: theme.radiusMd
+            color: theme.surfaceElevated
+            border.color: theme.borderSubtle
+            border.width: 1
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 16
+
+                RyzoraIcon {
+                    name: "hard-drive"
+                    size: 15
+                    color: theme.accent
+                }
+
+                Text {
+                    text: "Total Snapshots: " + backend.snapshotsCount + "  ·  Storage Used: " + root.formatBytes(root.totalStorageBytes)
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: theme.text
+                }
+
+                Text { text: "•"; color: theme.borderStrong }
+
+                Text {
+                    text: "Path: ~/.local/share/ryzora/snapshots/"
+                    font.pixelSize: 11
+                    font.family: "monospace"
+                    color: theme.textMuted
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
+        // ── Status Banner (if active) ──
+        Rectangle {
+            visible: root.statusBannerText.length > 0
+            Layout.fillWidth: true
+            height: 36
+            radius: theme.radiusSm
+            color: root.statusBannerType === "success" ? Qt.rgba(16/255, 185/255, 129/255, 0.15) : Qt.rgba(239/255, 68/255, 68/255, 0.15)
+            border.color: root.statusBannerType === "success" ? theme.success : theme.error
+            border.width: 1
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 8
+
+                RyzoraIcon {
+                    name: root.statusBannerType === "success" ? "check-circle" : "alert"
+                    size: 14
+                    color: root.statusBannerType === "success" ? theme.success : theme.error
+                }
+
+                Text {
+                    text: root.statusBannerText
+                    font.pixelSize: 12
+                    color: theme.text
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
         // ── Snapshots List ──
         Rectangle {
             Layout.fillWidth: true
@@ -116,7 +240,7 @@ Item {
             EmptyState {
                 anchors.centerIn: parent
                 visible: backend.snapshotsCount === 0 && !backend.isSnapshotsLoading
-                iconName: "package"
+                iconName: "archive"
                 title: "No Snapshots Created"
                 message: "Create a system snapshot to preserve your active configuration, integration drop-ins, and installed packages."
                 actionLabel: "Create First Snapshot"
@@ -133,6 +257,7 @@ Item {
                 model: backend.snapshotsList
 
                 delegate: Rectangle {
+                    id: delegateRect
                     width: snapshotList.width
                     height: 78
                     radius: theme.radiusMd
@@ -140,10 +265,20 @@ Item {
                     border.color: theme.borderSubtle
                     border.width: 1
 
+                    // Background hover detector with z: 0
+                    MouseArea {
+                        id: itemMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        z: 0
+                    }
+
+                    // Content layout on top with z: 1
                     RowLayout {
                         anchors.fill: parent
                         anchors.margins: 14
                         spacing: 14
+                        z: 1
 
                         Rectangle {
                             width: 36
@@ -152,10 +287,11 @@ Item {
                             color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.12)
                             border.color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.3)
 
-                            Text {
+                            RyzoraIcon {
                                 anchors.centerIn: parent
-                                text: "📦"
-                                font.pixelSize: 16
+                                name: "archive"
+                                size: 18
+                                color: theme.accent
                             }
                         }
 
@@ -198,17 +334,17 @@ Item {
                                     color: theme.textFaint
                                     font.family: "monospace"
                                     elide: Text.ElideRight
-                                    Layout.maximumWidth: 260
+                                    Layout.maximumWidth: 240
                                 }
                                 Text { text: "•"; font.pixelSize: 10; color: theme.textFaint }
                                 Text {
-                                    text: "Date: " + modelData.formatted_date
+                                    text: modelData.formatted_date
                                     font.pixelSize: 11
                                     color: theme.textSecondary
                                 }
                                 Text { text: "•"; font.pixelSize: 10; color: theme.textFaint }
                                 Text {
-                                    text: modelData.entries_count + " files backed up"
+                                    text: modelData.entries_count + " files (" + root.formatBytes(modelData.total_size_bytes || 0) + ")"
                                     font.pixelSize: 11
                                     color: theme.textMuted
                                 }
@@ -224,12 +360,20 @@ Item {
                             border.color: restoreMouse.containsMouse ? theme.success : theme.borderStrong
                             border.width: 1
 
-                            Text {
+                            RowLayout {
                                 anchors.centerIn: parent
-                                text: "↻ Restore"
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: restoreMouse.containsMouse ? theme.success : theme.text
+                                spacing: 4
+                                RyzoraIcon {
+                                    name: "refresh"
+                                    size: 11
+                                    color: restoreMouse.containsMouse ? theme.success : theme.text
+                                }
+                                Text {
+                                    text: "Restore"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: restoreMouse.containsMouse ? theme.success : theme.text
+                                }
                             }
 
                             MouseArea {
@@ -238,9 +382,13 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    pendingAction = "restore"
-                                    pendingSnapshotId = modelData.id
-                                    pendingSnapshotLabel = modelData.label
+                                    root.pendingAction = "restore"
+                                    root.pendingSnapshotId = modelData.id
+                                    root.pendingSnapshotLabel = modelData.label
+                                    root.pendingSnapshotDate = modelData.formatted_date || ""
+                                    root.pendingSnapshotSize = root.formatBytes(modelData.total_size_bytes || 0)
+                                    root.pendingSnapshotEntries = modelData.entries_count || 0
+                                    root.pendingSnapshotStatus = modelData.status || ""
                                     confirmModal.visible = true
                                 }
                             }
@@ -255,10 +403,10 @@ Item {
                             border.color: deleteMouse.containsMouse ? theme.error : theme.border
                             border.width: 1
 
-                            Text {
+                            RyzoraIcon {
                                 anchors.centerIn: parent
-                                text: "🗑"
-                                font.pixelSize: 12
+                                name: "trash"
+                                size: 13
                                 color: deleteMouse.containsMouse ? theme.error : theme.textMuted
                             }
 
@@ -268,19 +416,17 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    pendingAction = "delete"
-                                    pendingSnapshotId = modelData.id
-                                    pendingSnapshotLabel = modelData.label
+                                    root.pendingAction = "delete"
+                                    root.pendingSnapshotId = modelData.id
+                                    root.pendingSnapshotLabel = modelData.label
+                                    root.pendingSnapshotDate = modelData.formatted_date || ""
+                                    root.pendingSnapshotSize = root.formatBytes(modelData.total_size_bytes || 0)
+                                    root.pendingSnapshotEntries = modelData.entries_count || 0
+                                    root.pendingSnapshotStatus = modelData.status || ""
                                     confirmModal.visible = true
                                 }
                             }
                         }
-                    }
-
-                    MouseArea {
-                        id: itemMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
                     }
                 }
 
@@ -292,21 +438,22 @@ Item {
     // ── Confirmation Modal Overlay ──
     Rectangle {
         id: confirmModal
+        objectName: "confirmModal"
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.70)
+        color: Qt.rgba(0, 0, 0, 0.65)
         visible: false
-        z: 100
+        z: 999
 
         MouseArea {
             anchors.fill: parent
-            // block clicks to underlay
+            onClicked: {} // Block underlying clicks
         }
 
         Rectangle {
             anchors.centerIn: parent
-            width: 460
-            height: 200
-            radius: theme.radiusMd
+            width: 440
+            height: 290
+            radius: theme.radiusLg
             color: theme.surfaceElevated
             border.color: theme.borderStrong
             border.width: 1
@@ -317,25 +464,73 @@ Item {
                 spacing: 12
 
                 RowLayout {
-                    spacing: 8
-                    Text {
-                        text: pendingAction === "restore" ? "↺" : "🗑"
-                        font.pixelSize: 18
+                    spacing: 10
+                    RyzoraIcon {
+                        name: root.pendingAction === "restore" ? "refresh" : "trash"
+                        size: 20
+                        color: root.pendingAction === "restore" ? theme.accent : theme.error
                     }
                     Text {
-                        text: pendingAction === "restore" ? "Confirm Snapshot Restoration" : "Confirm Snapshot Deletion"
+                        text: root.pendingAction === "restore" ? "Confirm Snapshot Restoration" : "Confirm Snapshot Deletion"
                         font.pixelSize: theme.fontBase
                         font.bold: true
                         color: theme.text
                     }
                 }
 
+                // Details Card Inside Modal
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 90
+                    radius: theme.radiusSm
+                    color: theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 4
+
+                        Text {
+                            text: "Snapshot: " + root.pendingSnapshotLabel
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: theme.text
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: "ID: " + root.pendingSnapshotId
+                            font.pixelSize: 10
+                            font.family: "monospace"
+                            color: theme.textMuted
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                        RowLayout {
+                            spacing: 12
+                            Text {
+                                text: "Date: " + root.pendingSnapshotDate
+                                font.pixelSize: 11
+                                color: theme.textSecondary
+                            }
+                            Text { text: "•"; color: theme.textFaint }
+                            Text {
+                                text: "Size: " + root.pendingSnapshotSize + " (" + root.pendingSnapshotEntries + " files)"
+                                font.pixelSize: 11
+                                color: theme.textSecondary
+                            }
+                        }
+                    }
+                }
+
                 Text {
-                    text: pendingAction === "restore"
-                        ? "Are you sure you want to restore snapshot '" + pendingSnapshotLabel + "'?\n\nAll stored files will be cryptographically verified with SHA-256 before restoration."
-                        : "Are you sure you want to permanently delete snapshot '" + pendingSnapshotLabel + "'?\n\nThis backup data cannot be recovered once deleted."
+                    text: root.pendingAction === "restore"
+                        ? "Restoration will cryptographically verify all stored files with SHA-256 before applying. Existing files will be staged safely before overwriting."
+                        : "Warning: Permanently deleting this snapshot removes its stored file archives and cryptographic metadata. This action cannot be undone."
                     font.pixelSize: 11
-                    color: theme.textSecondary
+                    color: root.pendingAction === "restore" ? theme.textSecondary : theme.textMuted
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -367,26 +562,36 @@ Item {
                     }
 
                     Rectangle {
-                        width: 90
+                        width: 130
                         height: 32
                         radius: theme.radiusSm
-                        color: pendingAction === "restore" ? theme.accent : theme.error
-                        Text {
+                        color: root.pendingAction === "restore" ? theme.accent : theme.error
+
+                        RowLayout {
                             anchors.centerIn: parent
-                            text: pendingAction === "restore" ? "Restore" : "Delete"
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: pendingAction === "restore" ? "#0a0a0c" : "#ffffff"
+                            spacing: 6
+                            RyzoraIcon {
+                                name: root.pendingAction === "restore" ? "refresh" : "trash"
+                                size: 12
+                                color: root.pendingAction === "restore" ? "#0a0a0c" : "#ffffff"
+                            }
+                            Text {
+                                text: root.pendingAction === "restore" ? "Restore" : "Delete"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: root.pendingAction === "restore" ? "#0a0a0c" : "#ffffff"
+                            }
                         }
+
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                confirmModal.visible = false;
-                                if (pendingAction === "restore") {
-                                    backend.restoreSnapshot(pendingSnapshotId);
-                                } else if (pendingAction === "delete") {
-                                    backend.deleteSnapshot(pendingSnapshotId);
+                                confirmModal.visible = false
+                                if (root.pendingAction === "restore") {
+                                    backend.restoreSnapshot(root.pendingSnapshotId)
+                                } else if (root.pendingAction === "delete") {
+                                    backend.deleteSnapshot(root.pendingSnapshotId)
                                 }
                             }
                         }
