@@ -5,11 +5,12 @@ import "../components"
 
 Item {
     id: root
+
     signal launchLabRequested()
     signal launchCreatorRequested()
     signal launchStorageRequested()
 
-    // Local copy of canonical settings (12 fields)
+    // Canonical settings state (12 fields tracked with backend)
     property string defaultReleaseChannel: "stable"
     property bool autoRefreshEnabled: true
     property int autoRefreshIntervalMinutes: 60
@@ -23,9 +24,34 @@ Item {
     property int snapshotRetentionCount: 5
     property bool snapshotAutoCleanup: true
 
+    property string currentSection: "preferences" // "preferences" | "about"
+
+    // Storage summary strings
     property string storageCacheStr: "0 B"
     property string storageInstalledStr: "0 B"
     property string storageTotalStr: "0 B"
+
+    // Responsive breakpoint based on actual Settings viewport width (not fixed window size)
+    readonly property bool isWide: width >= 900
+
+    // Unsaved changes tracker
+    readonly property bool hasUnsavedChanges: {
+        var s = backend ? backend.settingsData : null
+        if (!s) return false
+        if (s["default_release_channel"] !== undefined && s["default_release_channel"] !== defaultReleaseChannel) return true
+        if (s["auto_refresh_enabled"] !== undefined && s["auto_refresh_enabled"] !== autoRefreshEnabled) return true
+        if (s["auto_refresh_interval_minutes"] !== undefined && s["auto_refresh_interval_minutes"] !== autoRefreshIntervalMinutes) return true
+        if (s["notification_level"] !== undefined && s["notification_level"] !== notificationLevel) return true
+        if (s["update_notification_policy"] !== undefined && s["update_notification_policy"] !== updateNotificationPolicy) return true
+        if (s["integrity_scan_on_startup"] !== undefined && s["integrity_scan_on_startup"] !== integrityScanOnStartup) return true
+        if (s["show_unverified_packages"] !== undefined && s["show_unverified_packages"] !== showUnverifiedPackages) return true
+        if (s["show_nightly_packages"] !== undefined && s["show_nightly_packages"] !== showNightlyPackages) return true
+        if (s["compact_ui"] !== undefined && s["compact_ui"] !== compactUi) return true
+        if (s["snapshot_policy"] !== undefined && s["snapshot_policy"] !== snapshotPolicy) return true
+        if (s["snapshot_retention_count"] !== undefined && s["snapshot_retention_count"] !== snapshotRetentionCount) return true
+        if (s["snapshot_auto_cleanup"] !== undefined && s["snapshot_auto_cleanup"] !== snapshotAutoCleanup) return true
+        return false
+    }
 
     function refreshStorageInfo() {
         try {
@@ -89,28 +115,66 @@ Item {
             "sidebar_collapsed": base.sidebar_collapsed || false
         })
         backend.saveSettings(payload)
+        backend.postNotification("info", "Settings Saved", "Preferences updated and safely persisted.")
     }
 
     function resetToDefaults() {
         backend.resetSettings()
+        backend.postNotification("info", "Settings Reset", "Restored factory preferences.")
     }
 
-    ScrollView {
+    function showAbout() {
+        currentSection = "about"
+        if (settingsScroll) {
+            settingsScroll.contentY = 0
+        }
+    }
+
+    function showPreferences() {
+        currentSection = "preferences"
+    }
+
+    function scrollToY(yPos) {
+        if (settingsScroll) {
+            settingsScroll.contentY = yPos
+        }
+    }
+
+    // Main Scroll Area (full-width native desktop preferences viewport)
+    Flickable {
         id: settingsScroll
+        objectName: "settingsScroll"
         anchors.fill: parent
-        Component.onCompleted: {
-            if (Qt.application.arguments.indexOf("--scroll-bottom") !== -1) {
-                ScrollBar.vertical.position = 0.55
+        contentWidth: width
+        contentHeight: mainPageCol.implicitHeight + 52
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            width: 6
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: theme.borderStrong
             }
         }
-        contentWidth: availableWidth
-        clip: true
 
+        // Full-Width Content Column with 28px side margins (no artificial max-width cap)
         ColumnLayout {
-            width: parent.width
+            id: mainPageCol
+            objectName: "settingsMainPageCol"
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.topMargin: 24
+            anchors.leftMargin: root.width < 600 ? 16 : 28
+            anchors.rightMargin: root.width < 600 ? 16 : 28
             spacing: 24
 
-            // Header Row
+            // ══════════════════════════════════════════════════════════════════════
+            // 1. PAGE HEADER (Title, Subtitle, Actions, Unsaved State)
+            // ══════════════════════════════════════════════════════════════════════
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 16
@@ -121,1047 +185,1185 @@ Item {
 
                     Text {
                         text: "Settings"
-                        font.pixelSize: theme.font2xl
-                        font.bold: true
+                        font.family: theme.fontFamily
+                        font.pixelSize: 26
+                        font.weight: theme.weightBold
                         color: theme.text
                     }
 
                     Text {
-                        text: "Preferences for Ryzora. Security invariants are enforced by the engine and cannot be overridden here."
-                        font.pixelSize: theme.fontSm
-                        color: theme.textMuted
+                        text: "Personalize your Ryzora experience and desktop system preferences."
+                        font.family: theme.fontFamily
+                        font.pixelSize: 13
+                        color: theme.textSecondary
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
                     }
                 }
 
-                // Top Action Buttons
-                RowLayout {
-                    spacing: 8
+                // Unsaved Changes Indicator Badge
+                Rectangle {
+                    visible: root.hasUnsavedChanges && root.currentSection === "preferences"
+                    height: 28
+                    implicitWidth: unsavedRow.implicitWidth + 16
+                    radius: 14
+                    color: Qt.rgba(245/255, 158/255, 11/255, 0.15)
+                    border.color: Qt.rgba(245/255, 158/255, 11/255, 0.40)
+                    border.width: 1
 
-                    Rectangle {
-                        height: 34
-                        width: 100
-                        radius: theme.radiusMd
-                        color: defaultsMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                        border.color: theme.border
-
+                    RowLayout {
+                        id: unsavedRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Rectangle { width: 6; height: 6; radius: 3; color: "#f59e0b" }
                         Text {
-                            anchors.centerIn: parent
-                            text: "↺ Defaults"
-                            font.pixelSize: theme.fontSm
-                            font.bold: true
-                            color: theme.text
+                            text: "Unsaved Changes"
+                            font.family: theme.fontFamily
+                            font.pixelSize: 11
+                            font.weight: theme.weightMedium
+                            color: "#f59e0b"
+                        }
+                    }
+                }
+
+                // Top Header Action Buttons
+                RowLayout {
+                    spacing: 10
+                    visible: root.currentSection === "preferences"
+
+                    RyzoraButton {
+                        text: "Restore Defaults"
+                        iconName: "arrow-undo"
+                        variant: "secondary"
+                        size: "md"
+                        onClicked: root.resetToDefaults()
+                    }
+
+                    RyzoraButton {
+                        text: "Save Changes"
+                        iconName: "checkmark"
+                        variant: "primary"
+                        size: "md"
+                        onClicked: root.saveAll()
+                    }
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════════════
+            // 2. SUB-NAVIGATION BAR (Preferences vs Dedicated About)
+            // ══════════════════════════════════════════════════════════════════════
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                // Preferences Segment Button
+                Rectangle {
+                    id: prefNavBtn
+                    objectName: "prefNavBtn"
+                    height: 36
+                    implicitWidth: prefRow.implicitWidth + 24
+                    radius: theme.radiusMd
+                    color: root.currentSection === "preferences" ? theme.accent : (prefMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                    border.color: root.currentSection === "preferences" ? theme.accent : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: prefRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        RyzoraIcon {
+                            name: "settings"
+                            size: 14
+                            filled: root.currentSection === "preferences"
+                            color: root.currentSection === "preferences" ? "#ffffff" : theme.textSecondary
                         }
 
-                        MouseArea {
-                            id: defaultsMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.resetToDefaults()
+                        Text {
+                            text: "Preferences"
+                            font.family: theme.fontFamily
+                            font.pixelSize: 13
+                            font.weight: root.currentSection === "preferences" ? theme.weightSemibold : theme.weightMedium
+                            color: root.currentSection === "preferences" ? "#ffffff" : theme.text
                         }
                     }
 
-                    Rectangle {
-                        height: 34
-                        width: 90
-                        radius: theme.radiusMd
-                        color: saveMouse.containsMouse ? theme.accentHover : theme.accent
+                    MouseArea {
+                        id: prefMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showPreferences()
+                    }
+                }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✓ Save"
-                            font.pixelSize: theme.fontSm
-                            font.bold: true
-                            color: "#ffffff"
+                // About Ryzora Dedicated Destination Button
+                Rectangle {
+                    id: aboutNavBtn
+                    objectName: "aboutNavBtn"
+                    height: 36
+                    implicitWidth: aboutRow.implicitWidth + 24
+                    radius: theme.radiusMd
+                    color: root.currentSection === "about" ? theme.accent : (aboutMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
+                    border.color: root.currentSection === "about" ? theme.accent : theme.borderSubtle
+                    border.width: 1
+
+                    RowLayout {
+                        id: aboutRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        RyzoraIcon {
+                            name: "info"
+                            size: 14
+                            filled: root.currentSection === "about"
+                            color: root.currentSection === "about" ? "#ffffff" : theme.textSecondary
                         }
 
-                        MouseArea {
-                            id: saveMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.saveAll()
+                        Text {
+                            text: "About Ryzora"
+                            font.family: theme.fontFamily
+                            font.pixelSize: 13
+                            font.weight: root.currentSection === "about" ? theme.weightSemibold : theme.weightMedium
+                            color: root.currentSection === "about" ? "#ffffff" : theme.text
+                        }
+                    }
+
+                    MouseArea {
+                        id: aboutMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showAbout()
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            // ══════════════════════════════════════════════════════════════════════
+            // 3. PREFERENCES CONTENT (macOS 2-Column Responsive Layout)
+            // ══════════════════════════════════════════════════════════════════════
+            RowLayout {
+                id: prefColumnsLayout
+                objectName: "preferencesSection"
+                Layout.fillWidth: true
+                spacing: 20
+                visible: root.currentSection === "preferences"
+
+                readonly property real halfColWidth: Math.max(280, Math.floor((mainPageCol.width - spacing) / 2))
+
+                // ── LEFT COLUMN (Balanced 50% width on wide viewports, 100% on narrow) ──
+                ColumnLayout {
+                    id: leftCol
+                    objectName: "settingsLeftCol"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: root.isWide ? prefColumnsLayout.halfColWidth : mainPageCol.width
+                    Layout.minimumWidth: root.isWide ? prefColumnsLayout.halfColWidth : mainPageCol.width
+                    Layout.maximumWidth: root.isWide ? prefColumnsLayout.halfColWidth : mainPageCol.width
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 20
+
+                    // 1. Appearance Card
+                    SettingsCard {
+                        title: "Appearance"
+                        description: "Visual theme, window frame styling, and desktop system accent."
+
+                        // Theme Mode Segmented Picker
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: "Theme Mode"
+                                font.family: theme.fontFamily
+                                font.pixelSize: 14
+                                font.weight: theme.weightSemibold
+                                color: theme.text
+                            }
+
+                            Text {
+                                text: "Choose your interface theme. Independent from installed lock screens."
+                                font.family: theme.fontFamily
+                                font.pixelSize: 12
+                                color: theme.textSecondary
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                ThemeModeOption {
+                                    modeId: "system"
+                                    label: "System"
+                                    iconName: "desktop"
+                                    isSelected: theme.appearanceMode === "system"
+                                    onClicked: theme.setAppearanceMode("system")
+                                }
+
+                                ThemeModeOption {
+                                    modeId: "light"
+                                    label: "Light"
+                                    iconName: "weather-sunny"
+                                    isSelected: theme.appearanceMode === "light"
+                                    onClicked: theme.setAppearanceMode("light")
+                                }
+
+                                ThemeModeOption {
+                                    modeId: "dark"
+                                    label: "Dark"
+                                    iconName: "weather-moon"
+                                    isSelected: theme.appearanceMode === "dark"
+                                    onClicked: theme.setAppearanceMode("dark")
+                                }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        // Accent Color Swatches
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: "Accent Color"
+                                font.family: theme.fontFamily
+                                font.pixelSize: 14
+                                font.weight: theme.weightSemibold
+                                color: theme.text
+                            }
+
+                            Text {
+                                text: "Highlight color for primary buttons, active tabs, and focus rings."
+                                font.family: theme.fontFamily
+                                font.pixelSize: 12
+                                color: theme.textSecondary
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                ColorSwatch { swatchKey: "blue"; swatchColor: "#3b82f6"; swatchName: "Blue"; isSelected: theme.accentName === "blue" }
+                                ColorSwatch { swatchKey: "purple"; swatchColor: "#a855f7"; swatchName: "Purple"; isSelected: theme.accentName === "purple" }
+                                ColorSwatch { swatchKey: "emerald"; swatchColor: "#10b981"; swatchName: "Emerald"; isSelected: theme.accentName === "emerald" }
+                                ColorSwatch { swatchKey: "amber"; swatchColor: "#f59e0b"; swatchName: "Amber"; isSelected: theme.accentName === "amber" }
+                                ColorSwatch { swatchKey: "rose"; swatchColor: "#f43f5e"; swatchName: "Rose"; isSelected: theme.accentName === "rose" }
+                                ColorSwatch { swatchKey: "cyan"; swatchColor: "#06b6d4"; swatchName: "Cyan"; isSelected: theme.accentName === "cyan" }
+                            }
+                        }
+                    }
+
+                    // 2. Downloads & Storage Card
+                    SettingsCard {
+                        id: storageContentSettingsCard
+                        objectName: "storageContentSettingsCard"
+                        title: "Downloads & Storage"
+                        description: "Local disk space consumption, cache retention, and snapshot backups."
+
+                        SettingRow {
+                            label: "Disk Space Consumption"
+                            description: "Total local footprint: " + root.storageTotalStr + " (Cache: " + root.storageCacheStr + " · Installed: " + root.storageInstalledStr + ")"
+
+                            RyzoraButton {
+                                text: "Open Storage Manager"
+                                iconName: "archive"
+                                variant: "secondary"
+                                size: "sm"
+                                onClicked: root.launchStorageRequested()
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Snapshot Restore Points"
+                            description: "Automatic btrfs/timeshift snapshots created before transactions."
+
+                            SegmentedControl {
+                                options: ["Always Ask", "Auto", "Disabled"]
+                                selectedIndex: root.snapshotPolicy === "always" ? 0 : (root.snapshotPolicy === "auto" ? 1 : (root.snapshotPolicy === "disabled" ? 2 : 0))
+                                onOptionSelected: function(idx) {
+                                    if (idx === 0) root.snapshotPolicy = "always"
+                                    else if (idx === 1) root.snapshotPolicy = "auto"
+                                    else root.snapshotPolicy = "disabled"
+                                }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Automatic Snapshot Cleanup"
+                            description: "Prune oldest snapshot backups when retention count exceeds " + root.snapshotRetentionCount + "."
+
+                            SettingsSwitch {
+                                checked: root.snapshotAutoCleanup
+                                onToggled: function(c) { root.snapshotAutoCleanup = c }
+                            }
+                        }
+                    }
+
+                    // 3. Display & Behavior Card
+                    SettingsCard {
+                        title: "Display & Behavior"
+                        description: "Window density, startup integrity checks, and notification alerts."
+
+                        SettingRow {
+                            label: "Compact Layout Density"
+                            description: "Tighter spacing and compact paddings for low-resolution displays."
+
+                            SettingsSwitch {
+                                checked: root.compactUi
+                                onToggled: function(c) { root.compactUi = c }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Startup Integrity Scan"
+                            description: "Verify SHA-256 package checksums and detect local file drift on launch."
+
+                            SettingsSwitch {
+                                checked: root.integrityScanOnStartup
+                                onToggled: function(c) { root.integrityScanOnStartup = c }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Notification Alerts"
+                            description: "Desktop toast notifications for package transactions and updates."
+
+                            SegmentedControl {
+                                options: ["All", "Warnings Only", "Silent"]
+                                selectedIndex: root.notificationLevel === "all" ? 0 : (root.notificationLevel === "warning" ? 1 : 2)
+                                onOptionSelected: function(idx) {
+                                    if (idx === 0) root.notificationLevel = "all"
+                                    else if (idx === 1) root.notificationLevel = "warning"
+                                    else root.notificationLevel = "silent"
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Developer Tools & Diagnostics Card
+                    SettingsCard {
+                        title: "Developer Tools"
+                        description: "Simulated desktop environments and package manifest authoring tools."
+
+                        SettingRow {
+                            label: "Compatibility Lab"
+                            description: "Test lock screens against simulated Ubuntu, Fedora, and Arch environments."
+
+                            RyzoraButton {
+                                text: "Launch Lab"
+                                iconName: "pulse"
+                                variant: "secondary"
+                                size: "sm"
+                                onClicked: root.launchLabRequested()
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Package Creator"
+                            description: "Generate and export verified Ryzora package manifests for custom themes."
+
+                            RyzoraButton {
+                                text: "Open Creator"
+                                iconName: "wrench"
+                                variant: "secondary"
+                                size: "sm"
+                                onClicked: root.launchCreatorRequested()
+                            }
+                        }
+                    }
+                }
+
+                // ── RIGHT COLUMN (Balanced 50% width side-by-side on wide viewports) ──
+                ColumnLayout {
+                    id: rightCol
+                    objectName: "settingsRightCol"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: prefColumnsLayout.halfColWidth
+                    Layout.minimumWidth: prefColumnsLayout.halfColWidth
+                    Layout.maximumWidth: prefColumnsLayout.halfColWidth
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 20
+                    visible: root.isWide
+
+                    // 1. Accessibility Card
+                    SettingsCard {
+                        title: "Accessibility"
+                        description: "Visual comfort, motion intensity, and high-contrast outlines."
+
+                        SettingRow {
+                            label: "Reduce Transparency"
+                            description: "Replace translucent acrylic overlays with solid opaque surfaces."
+
+                            SettingsSwitch {
+                                checked: theme.reduceTransparency
+                                onToggled: theme.toggleReduceTransparency()
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Reduce Motion"
+                            description: "Disable window animations, carousel transitions, and pulse glows."
+
+                            SettingsSwitch {
+                                checked: theme.reduceMotion
+                                onToggled: theme.toggleReduceMotion()
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Increase Contrast"
+                            description: "Enhance text contrast and add sharper borders around cards and inputs."
+
+                            SettingsSwitch {
+                                checked: theme.increaseContrast
+                                onToggled: theme.toggleIncreaseContrast()
+                            }
+                        }
+                    }
+
+                    // 2. Repositories & Updates Card
+                    SettingsCard {
+                        title: "Repositories & Updates"
+                        description: "Release channels, automated package sync, and refresh frequency."
+
+                        SettingRow {
+                            label: "Default Release Channel"
+                            description: "Software release tier for newly subscribed packages and catalogs."
+
+                            SegmentedControl {
+                                options: ["Stable", "Beta", "Nightly"]
+                                selectedIndex: root.defaultReleaseChannel === "stable" ? 0 : (root.defaultReleaseChannel === "beta" ? 1 : 2)
+                                onOptionSelected: function(idx) {
+                                    if (idx === 0) root.defaultReleaseChannel = "stable"
+                                    else if (idx === 1) root.defaultReleaseChannel = "beta"
+                                    else root.defaultReleaseChannel = "nightly"
+                                }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Automatic Repository Refresh"
+                            description: "Periodically sync Arch repositories and Flathub indexes in background."
+
+                            SettingsSwitch {
+                                checked: root.autoRefreshEnabled
+                                onToggled: function(c) { root.autoRefreshEnabled = c }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Refresh Interval"
+                            description: "Background check frequency when automatic sync is enabled."
+
+                            SegmentedControl {
+                                options: ["15m", "30m", "1 hour", "2 hours"]
+                                selectedIndex: root.autoRefreshIntervalMinutes <= 15 ? 0 : (root.autoRefreshIntervalMinutes <= 30 ? 1 : (root.autoRefreshIntervalMinutes <= 60 ? 2 : 3))
+                                onOptionSelected: function(idx) {
+                                    if (idx === 0) root.autoRefreshIntervalMinutes = 15
+                                    else if (idx === 1) root.autoRefreshIntervalMinutes = 30
+                                    else if (idx === 2) root.autoRefreshIntervalMinutes = 60
+                                    else root.autoRefreshIntervalMinutes = 120
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Package Providers & Sources Card
+                    SettingsCard {
+                        title: "Package Sources & Trust"
+                        description: "Control community AUR packages, Flathub sandbox sources, and unverified repositories."
+
+                        SettingRow {
+                            label: "Show Unverified Packages"
+                            description: "Display community-contributed packages that lack an upstream maintainer key."
+
+                            SettingsSwitch {
+                                checked: root.showUnverifiedPackages
+                                onToggled: function(c) { root.showUnverifiedPackages = c }
+                            }
+                        }
+
+                        CardDivider {}
+
+                        SettingRow {
+                            label: "Show Nightly Builds"
+                            description: "Expose bleeding-edge development builds and prerelease testing versions."
+
+                            SettingsSwitch {
+                                checked: root.showNightlyPackages
+                                onToggled: function(c) { root.showNightlyPackages = c }
+                            }
+                        }
+                    }
+
+                    // 4. Setup & System Configuration Card
+                    SettingsCard {
+                        title: "Setup & System Configuration"
+                        description: "First-run onboarding wizard, package manager checks, and configuration paths."
+
+                        SettingRow {
+                            label: "First-Run Experience Wizard"
+                            description: "Status: " + ((backend.settingsData && backend.settingsData.setup_completed) ? ("✓ Completed (v" + (backend.settingsData.setup_version || "0.1.0") + ")") : "Not completed") + " · Re-run system checks."
+
+                            RyzoraButton {
+                                text: "Reopen Setup Wizard"
+                                iconName: "arrow-clockwise"
+                                variant: "secondary"
+                                size: "sm"
+                                onClicked: backend.reopenSetupWizard()
+                            }
                         }
                     }
                 }
             }
 
-            // ── Section 1: Appearance ──
-            SettingsCard {
-                title: "Appearance"
-                description: "Visual preferences, color palettes, and desktop scheme integration."
+            // ── FALLBACK FOR NARROW SCREENS: Render Right Column Cards Below Left Column Cards ──
+            ColumnLayout {
+                id: narrowFallbackCol
+                Layout.fillWidth: true
+                spacing: 20
+                visible: !root.isWide && root.currentSection === "preferences"
 
-                ColumnLayout {
+                // 1. Accessibility Card
+                SettingsCard {
+                    title: "Accessibility"
+                    description: "Visual comfort, motion intensity, and high-contrast outlines."
+
+                    SettingRow {
+                        label: "Reduce Transparency"
+                        description: "Replace translucent acrylic overlays with solid opaque surfaces."
+                        SettingsSwitch { checked: theme.reduceTransparency; onToggled: theme.toggleReduceTransparency() }
+                    }
+                    CardDivider {}
+                    SettingRow {
+                        label: "Reduce Motion"
+                        description: "Disable window animations, carousel transitions, and pulse glows."
+                        SettingsSwitch { checked: theme.reduceMotion; onToggled: theme.toggleReduceMotion() }
+                    }
+                    CardDivider {}
+                    SettingRow {
+                        label: "Increase Contrast"
+                        description: "Enhance text contrast and add sharper borders around cards and inputs."
+                        SettingsSwitch { checked: theme.increaseContrast; onToggled: theme.toggleIncreaseContrast() }
+                    }
+                }
+
+                // 2. Repositories & Updates Card
+                SettingsCard {
+                    title: "Repositories & Updates"
+                    description: "Release channels, automated package sync, and refresh frequency."
+
+                    SettingRow {
+                        label: "Default Release Channel"
+                        description: "Software release tier for newly subscribed packages and catalogs."
+                        SegmentedControl {
+                            options: ["Stable", "Beta", "Nightly"]
+                            selectedIndex: root.defaultReleaseChannel === "stable" ? 0 : (root.defaultReleaseChannel === "beta" ? 1 : 2)
+                            onOptionSelected: function(idx) {
+                                if (idx === 0) root.defaultReleaseChannel = "stable"
+                                else if (idx === 1) root.defaultReleaseChannel = "beta"
+                                else root.defaultReleaseChannel = "nightly"
+                            }
+                        }
+                    }
+                    CardDivider {}
+                    SettingRow {
+                        label: "Automatic Repository Refresh"
+                        description: "Periodically sync Arch repositories and Flathub indexes in background."
+                        SettingsSwitch { checked: root.autoRefreshEnabled; onToggled: function(c) { root.autoRefreshEnabled = c } }
+                    }
+                    CardDivider {}
+                    SettingRow {
+                        label: "Refresh Interval"
+                        description: "Background check frequency when automatic sync is enabled."
+                        SegmentedControl {
+                            options: ["15m", "30m", "1 hour", "2 hours"]
+                            selectedIndex: root.autoRefreshIntervalMinutes <= 15 ? 0 : (root.autoRefreshIntervalMinutes <= 30 ? 1 : (root.autoRefreshIntervalMinutes <= 60 ? 2 : 3))
+                            onOptionSelected: function(idx) {
+                                if (idx === 0) root.autoRefreshIntervalMinutes = 15
+                                else if (idx === 1) root.autoRefreshIntervalMinutes = 30
+                                else if (idx === 2) root.autoRefreshIntervalMinutes = 60
+                                else root.autoRefreshIntervalMinutes = 120
+                            }
+                        }
+                    }
+                }
+
+                // 3. Package Providers & Sources Card
+                SettingsCard {
+                    title: "Package Sources & Trust"
+                    description: "Control community AUR packages, Flathub sandbox sources, and unverified repositories."
+
+                    SettingRow {
+                        label: "Show Unverified Packages"
+                        description: "Display community-contributed packages that lack an upstream maintainer key."
+                        SettingsSwitch { checked: root.showUnverifiedPackages; onToggled: function(c) { root.showUnverifiedPackages = c } }
+                    }
+                    CardDivider {}
+                    SettingRow {
+                        label: "Show Nightly Builds"
+                        description: "Expose bleeding-edge development builds and prerelease testing versions."
+                        SettingsSwitch { checked: root.showNightlyPackages; onToggled: function(c) { root.showNightlyPackages = c } }
+                    }
+                }
+
+                // 4. Setup & System Configuration Card
+                SettingsCard {
+                    title: "Setup & System Configuration"
+                    description: "First-run onboarding wizard, package manager checks, and configuration paths."
+
+                    SettingRow {
+                        label: "First-Run Experience Wizard"
+                        description: "Status: " + ((backend.settingsData && backend.settingsData.setup_completed) ? ("✓ Completed (v" + (backend.settingsData.setup_version || "0.1.0") + ")") : "Not completed") + " · Re-run system checks."
+
+                        RyzoraButton {
+                            text: "Reopen Setup Wizard"
+                            iconName: "arrow-clockwise"
+                            variant: "secondary"
+                            size: "sm"
+                            onClicked: backend.reopenSetupWizard()
+                        }
+                    }
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════════════
+            // 4. DEDICATED ABOUT RYZORA DESTINATION
+            // ══════════════════════════════════════════════════════════════════════
+            ColumnLayout {
+                id: aboutSection
+                objectName: "aboutSection"
+                Layout.fillWidth: true
+                spacing: 20
+                visible: root.currentSection === "about"
+
+                // 1. Hero Brand Identity Card
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: 16
+                    implicitHeight: aboutHeroCol.implicitHeight + 48
+                    radius: theme.radiusLg
+                    color: theme.surfaceElevated
+                    border.color: theme.borderStrong
+                    border.width: 1
 
-                    // Theme Mode
+                    ColumnLayout {
+                        id: aboutHeroCol
+                        anchors.fill: parent
+                        anchors.margins: 24
+                        spacing: 20
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 20
+
+                            Image {
+                                source: "qrc:/resources/icons/ryzora_logo.svg"
+                                width: 64
+                                height: 64
+                                Layout.preferredWidth: 64
+                                Layout.preferredHeight: 64
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+
+                                RowLayout {
+                                    spacing: 10
+
+                                    Text {
+                                        text: "Ryzora"
+                                        font.family: theme.fontFamily
+                                        font.pixelSize: 24
+                                        font.weight: theme.weightBold
+                                        color: theme.text
+                                    }
+
+                                    Rectangle {
+                                        height: 22
+                                        implicitWidth: verChipText.implicitWidth + 14
+                                        radius: 11
+                                        color: theme.accent
+                                        Text {
+                                            id: verChipText
+                                            anchors.centerIn: parent
+                                            text: "v" + (backend && backend.appVersion ? backend.appVersion : "0.1.0")
+                                            font.family: theme.fontMono
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            color: "#ffffff"
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        height: 22
+                                        implicitWidth: licChipText.implicitWidth + 14
+                                        radius: 11
+                                        color: theme.surface
+                                        border.color: theme.borderSubtle
+                                        border.width: 1
+                                        Text {
+                                            id: licChipText
+                                            anchors.centerIn: parent
+                                            text: "MIT License"
+                                            font.family: theme.fontFamily
+                                            font.pixelSize: 11
+                                            font.weight: theme.weightMedium
+                                            color: theme.textSecondary
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "Unified Linux Desktop Software Store & System Experience Suite"
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 14
+                                    font.weight: theme.weightMedium
+                                    color: theme.text
+                                }
+
+                                Text {
+                                    text: "Engineered for Garuda Linux, Arch Linux, and modern Wayland desktops."
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 12
+                                    color: theme.textMuted
+                                }
+                            }
+                        }
+
+                        Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
+
+                        Text {
+                            text: "Ryzora brings an Apple/Microsoft Store discovery experience to Linux. It provides transactional package management across Arch Pacman, AUR, and Flatpak with cryptographic manifest verification, snapshot restore points, and native system customization."
+                            font.family: theme.fontFamily
+                            font.pixelSize: 13
+                            lineHeight: 1.4
+                            color: theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                    }
+                }
+
+                // 2. Specifications & Runtime Environment Card
+                SettingsCard {
+                    title: "System & Build Specifications"
+                    description: "Runtime environment, architecture, and core engine components."
+
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 6
+                        spacing: 14
 
-                        Text {
-                            text: "Theme Mode"
-                            font.pixelSize: theme.fontBase
-                            font.bold: true
-                            color: theme.text
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text { text: "CORE ENGINE"; font.family: theme.fontMono; font.pixelSize: 10; font.bold: true; color: theme.textMuted }
+                                Text { text: "ryzora-core · ryzora-qt-backend (Rust)"; font.family: theme.fontFamily; font.pixelSize: 13; font.weight: theme.weightMedium; color: theme.text }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text { text: "UI FRAMEWORK"; font.family: theme.fontMono; font.pixelSize: 10; font.bold: true; color: theme.textMuted }
+                                Text { text: "Qt 6 Quick / QML · Fluent Design System"; font.family: theme.fontFamily; font.pixelSize: 13; font.weight: theme.weightMedium; color: theme.text }
+                            }
                         }
-                        Text {
-                            text: "Separated from content packages: Ryzora UI stays readable regardless of installed desktop themes."
-                            font.pixelSize: theme.fontSm
-                            color: theme.textMuted
+
+                        CardDivider {}
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text { text: "DESKTOP SESSION"; font.family: theme.fontMono; font.pixelSize: 10; font.bold: true; color: theme.textMuted }
+                                Text {
+                                    text: (backend && backend.systemInfo && backend.systemInfo.desktop) ? backend.systemInfo.desktop : "Desktop Session"
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: theme.weightMedium
+                                    color: theme.text
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text { text: "DISPLAY PROTOCOL"; font.family: theme.fontMono; font.pixelSize: 10; font.bold: true; color: theme.textMuted }
+                                Text {
+                                    text: ((backend && backend.systemInfo && backend.systemInfo.session_type) ? backend.systemInfo.session_type.toUpperCase() : "WAYLAND") + " (ext-session-lock-v1)"
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: theme.weightMedium
+                                    color: theme.text
+                                }
+                            }
                         }
+
+                        CardDivider {}
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text { text: "APPLICATION IDENTIFIERS"; font.family: theme.fontMono; font.pixelSize: 10; font.bold: true; color: theme.textMuted }
+                                Text { text: "org.ryzora.desktop · com.ryzora.Ryzora"; font.family: theme.fontMono; font.pixelSize: 12; color: theme.textSecondary }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Project Links & Community Card
+                SettingsCard {
+                    title: "Project Links & Source Code"
+                    description: "Authoritative repository, issue tracking, and community resources."
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 14
 
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 12
 
-                            ThemeCard {
-                                Layout.fillWidth: true
-                                modeId: "system"
-                                label: "System"
-                                description: "Follows Linux desktop scheme (" + theme.systemScheme + ")"
-                                isSelected: theme.appearanceMode === "system"
-                                onClicked: theme.setAppearanceMode("system")
+                            RyzoraButton {
+                                text: "GitHub Repository"
+                                iconName: "open"
+                                variant: "primary"
+                                size: "md"
+                                onClicked: Qt.openUrlExternally("https://github.com/Gayensubhajit/Ryzora")
                             }
 
-                            ThemeCard {
-                                Layout.fillWidth: true
-                                modeId: "light"
-                                label: "Light"
-                                description: "Clean & luminous translucent Ryzora Glass"
-                                isSelected: theme.appearanceMode === "light"
-                                onClicked: theme.setAppearanceMode("light")
+                            RyzoraButton {
+                                text: "Report an Issue"
+                                iconName: "warning"
+                                variant: "secondary"
+                                size: "md"
+                                onClicked: Qt.openUrlExternally("https://github.com/Gayensubhajit/Ryzora/issues")
                             }
 
-                            ThemeCard {
-                                Layout.fillWidth: true
-                                modeId: "dark"
-                                label: "Dark"
-                                description: "Midnight glass & deep dark surfaces"
-                                isSelected: theme.appearanceMode === "dark"
-                                onClicked: theme.setAppearanceMode("dark")
+                            RyzoraButton {
+                                text: "Back to Preferences"
+                                iconName: "chevron-left"
+                                variant: "tertiary"
+                                size: "md"
+                                onClicked: root.showPreferences()
                             }
+
+                            Item { Layout.fillWidth: true }
                         }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    // Accent Color
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
 
                         Text {
-                            text: "Accent Color"
-                            font.pixelSize: theme.fontBase
-                            font.bold: true
-                            color: theme.text
-                        }
-                        Text {
-                            text: "Functional focus color for primary buttons, focus rings, links, and active navigation."
-                            font.pixelSize: theme.fontSm
+                            text: "Source code repository: https://github.com/Gayensubhajit/Ryzora"
+                            font.family: theme.fontMono
+                            font.pixelSize: 11
                             color: theme.textMuted
                         }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            AccentButton {
-                                swatchKey: "blue"
-                                swatchName: "Ocean Blue"
-                                swatchColor: "#3478e5"
-                                isSelected: theme.accentName === "blue"
-                                onClicked: theme.setAccent("blue")
-                            }
-
-                            AccentButton {
-                                swatchKey: "silver"
-                                swatchName: "Deep Silver"
-                                swatchColor: "#D9DCE2"
-                                isSelected: theme.accentName === "silver"
-                                onClicked: theme.setAccent("silver")
-                            }
-
-                            AccentButton {
-                                swatchKey: "purple"
-                                swatchName: "Amethyst"
-                                swatchColor: "#8b5cf6"
-                                isSelected: theme.accentName === "purple"
-                                onClicked: theme.setAccent("purple")
-                            }
-
-                            AccentButton {
-                                swatchKey: "green"
-                                swatchName: "Emerald"
-                                swatchColor: "#10b981"
-                                isSelected: theme.accentName === "green"
-                                onClicked: theme.setAccent("green")
-                            }
-
-                            AccentButton {
-                                swatchKey: "orange"
-                                swatchName: "Amber Fire"
-                                swatchColor: "#f97316"
-                                isSelected: theme.accentName === "orange"
-                                onClicked: theme.setAccent("orange")
-                            }
-                        }
                     }
                 }
             }
 
-            // ── Section 2: Accessibility ──
-            SettingsCard {
-                title: "Accessibility"
-                description: "Display adaptations and ergonomic controls for readability and motion sensitivity."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    ToggleRow {
-                        label: "Reduce Transparency"
-                        subLabel: "Replaces frosted translucent glass with solid high-contrast surfaces."
-                        checked: theme.reduceTransparency
-                        onToggled: theme.toggleReduceTransparency()
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Reduce Motion"
-                        subLabel: "Disables fluid animations and transitions for instant layout response."
-                        checked: theme.reduceMotion
-                        onToggled: theme.toggleReduceMotion()
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Increase Contrast"
-                        subLabel: "Sharpens border outlines and strengthens typographic contrast across all surfaces."
-                        checked: theme.increaseContrast
-                        onToggled: theme.toggleIncreaseContrast()
-                    }
-                }
-            }
-
-            // ── Section 3: Repositories ──
-            SettingsCard {
-                title: "Repositories"
-                description: "Distribution channels, index synchronization, and polling intervals."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 14
-
-                    // Release Channel
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Text { text: "Default Release Channel"; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-                        Text { text: "Applied to newly added repositories."; font.pixelSize: theme.fontSm; color: theme.textMuted }
-
-                        RowLayout {
-                            spacing: 8
-
-                            RadioPill {
-                                label: "Stable"
-                                isSelected: root.defaultReleaseChannel === "stable"
-                                onClicked: root.defaultReleaseChannel = "stable"
-                            }
-
-                            RadioPill {
-                                label: "Beta"
-                                isSelected: root.defaultReleaseChannel === "beta"
-                                onClicked: root.defaultReleaseChannel = "beta"
-                            }
-
-                            RadioPill {
-                                label: "Nightly"
-                                isSelected: root.defaultReleaseChannel === "nightly"
-                                onClicked: root.defaultReleaseChannel = "nightly"
-                            }
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    // Automatic Refresh Toggle
-                    ToggleRow {
-                        label: "Automatic Repository Refresh"
-                        subLabel: "Periodically refresh repository indexes in the background."
-                        checked: root.autoRefreshEnabled
-                        onToggled: function(c) { root.autoRefreshEnabled = c }
-                    }
-
-                    // Interval Slider
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        visible: root.autoRefreshEnabled
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text { text: "Refresh Interval"; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-                            Item { Layout.fillWidth: true }
-                            Rectangle {
-                                height: 22
-                                width: badgeText.implicitWidth + 14
-                                radius: theme.radiusSm
-                                color: theme.surfaceElevated
-                                border.color: theme.border
-                                Text {
-                                    id: badgeText
-                                    anchors.centerIn: parent
-                                    text: root.autoRefreshIntervalMinutes + " min"
-                                    font.pixelSize: theme.fontXs
-                                    font.bold: true
-                                    color: theme.accent
-                                }
-                            }
-                        }
-
-                        Text { text: "Minutes between automatic refreshes (15–1440)."; font.pixelSize: theme.fontSm; color: theme.textMuted }
-
-                        Slider {
-                            Layout.fillWidth: true
-                            from: 15
-                            to: 1440
-                            stepSize: 15
-                            value: root.autoRefreshIntervalMinutes
-                            onMoved: root.autoRefreshIntervalMinutes = value
-                        }
-                    }
-                }
-            }
-
-            // ── Section 4: Display ──
-            SettingsCard {
-                title: "Display"
-                description: "Interface density and catalog visibility preferences."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    ToggleRow {
-                        label: "Compact UI"
-                        subLabel: "Denser layout with smaller spacing."
-                        checked: root.compactUi
-                        onToggled: function(c) { root.compactUi = c }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Show Unverified Packages"
-                        subLabel: "Show Community/Unvetted packages in Discover."
-                        checked: root.showUnverifiedPackages
-                        onToggled: function(c) { root.showUnverifiedPackages = c }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Show Nightly Packages"
-                        subLabel: "Show packages on the nightly release channel."
-                        checked: root.showNightlyPackages
-                        onToggled: function(c) { root.showNightlyPackages = c }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Compact Sidebar (Icons Only)"
-                        subLabel: "Collapse the navigation sidebar by default to maximize content space."
-                        checked: (backend.settingsData && backend.settingsData.sidebar_collapsed) || false
-                        onToggled: function(c) {
-                            var base = Object.assign({}, backend.settingsData || {}, { "sidebar_collapsed": c })
-                            backend.saveSettings(base)
-                        }
-                    }
-                }
-            }
-
-            // ── Section 5: Notifications ──
-            SettingsCard {
-                title: "Notifications"
-                description: "System alerts, update advisories, and status toasts."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 14
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Text { text: "Notification Level"; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-                        Text { text: "Security alerts are always shown regardless of this setting."; font.pixelSize: theme.fontSm; color: theme.textMuted }
-
-                        RowLayout {
-                            spacing: 8
-
-                            RadioPill {
-                                label: "All"
-                                isSelected: root.notificationLevel === "all"
-                                onClicked: root.notificationLevel = "all"
-                            }
-
-                            RadioPill {
-                                label: "Security only"
-                                isSelected: root.notificationLevel === "security_only"
-                                onClicked: root.notificationLevel = "security_only"
-                            }
-
-                            RadioPill {
-                                label: "None"
-                                isSelected: root.notificationLevel === "none"
-                                onClicked: root.notificationLevel = "none"
-                            }
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Text { text: "Update Notifications"; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-
-                        RowLayout {
-                            spacing: 8
-
-                            RadioPill {
-                                label: "Show in activity log"
-                                isSelected: root.updateNotificationPolicy === "notify"
-                                onClicked: root.updateNotificationPolicy = "notify"
-                            }
-
-                            RadioPill {
-                                label: "Silent"
-                                isSelected: root.updateNotificationPolicy === "silent"
-                                onClicked: root.updateNotificationPolicy = "silent"
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Section 6: Safety & Recovery ──
-            SettingsCard {
-                title: "Safety & Recovery"
-                description: "Transactional snapshots, state rollback, and startup integrity verification."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 14
-
-                    // Snapshot Policy
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Text { text: "Snapshot Policy"; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-                        Text { text: "Control when full system recovery snapshots are created before applying changes."; font.pixelSize: theme.fontSm; color: theme.textMuted }
-
-                        RowLayout {
-                            spacing: 8
-
-                            RadioPill {
-                                label: "Never"
-                                isSelected: root.snapshotPolicy === "never"
-                                onClicked: root.snapshotPolicy = "never"
-                            }
-
-                            RadioPill {
-                                label: "Ask every time (Default)"
-                                isSelected: root.snapshotPolicy === "ask"
-                                onClicked: root.snapshotPolicy = "ask"
-                            }
-
-                            RadioPill {
-                                label: "Always"
-                                isSelected: root.snapshotPolicy === "always"
-                                onClicked: root.snapshotPolicy = "always"
-                            }
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    // Snapshot Retention Limit
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text { text: "Snapshot Retention Limit"; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-                            Item { Layout.fillWidth: true }
-                            Rectangle {
-                                height: 22
-                                width: snapBadge.implicitWidth + 14
-                                radius: theme.radiusSm
-                                color: theme.surfaceElevated
-                                border.color: theme.border
-                                Text {
-                                    id: snapBadge
-                                    anchors.centerIn: parent
-                                    text: root.snapshotRetentionCount + " snapshots"
-                                    font.pixelSize: theme.fontXs
-                                    font.bold: true
-                                    color: theme.accent
-                                }
-                            }
-                        }
-
-                        Text { text: "Maximum number of recovery snapshots to retain (1–20)."; font.pixelSize: theme.fontSm; color: theme.textMuted }
-
-                        Slider {
-                            Layout.fillWidth: true
-                            from: 1
-                            to: 20
-                            stepSize: 1
-                            value: root.snapshotRetentionCount
-                            onMoved: root.snapshotRetentionCount = value
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Automatic Snapshot Cleanup"
-                        subLabel: "Automatically prune older snapshots exceeding the retention limit."
-                        checked: root.snapshotAutoCleanup
-                        onToggled: function(c) { root.snapshotAutoCleanup = c }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    ToggleRow {
-                        label: "Startup Integrity Scan"
-                        subLabel: "Run a read-only integrity scan on application start. Off by default to avoid startup latency."
-                        checked: root.integrityScanOnStartup
-                        onToggled: function(c) { root.integrityScanOnStartup = c }
-                    }
-
-                    // Security invariant notice
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: noteCol.implicitHeight + 20
-                        radius: theme.radiusMd
-                        color: theme.surfaceElevated
-                        border.color: theme.borderSubtle
-
-                        RowLayout {
-                            id: noteCol
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 10
-
-                            Text {
-                                text: "🛡️"
-                                font.pixelSize: 16
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: "Transactional backups of directly modified files are always created to guarantee safe rollback, even when full system snapshots are disabled. Signature verification and trust enforcement remain strictly mandatory."
-                                font.pixelSize: theme.fontSm
-                                color: theme.textSecondary
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Section 7: Developer Diagnostics ──
-            SettingsCard {
-                title: "Developer Diagnostics"
-                description: "Hardware adapter simulation and desktop environment verification."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 16
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 16
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            Text {
-                                text: "Universal Linux Compatibility Lab"
-                                font.pixelSize: theme.fontBase
-                                font.bold: true
-                                color: theme.text
-                            }
-
-                            Text {
-                                text: "Inspect live hardware capabilities and simulate reference Linux environments (Ubuntu GNOME/GDM, Fedora KDE/SDDM, Arch, Debian) against concrete runtime adapters."
-                                font.pixelSize: theme.fontSm
-                                color: theme.textMuted
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        Rectangle {
-                            height: 34
-                            width: 120
-                            radius: theme.radiusMd
-                            color: labMouse.containsMouse ? Qt.rgba(139/255, 92/255, 246/255, 0.25) : theme.surfaceElevated
-                            border.color: Qt.rgba(139/255, 92/255, 246/255, 0.40)
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "⚗ Launch Lab"
-                                font.pixelSize: theme.fontSm
-                                font.bold: true
-                                color: "#a78bfa"
-                            }
-
-                            MouseArea {
-                                id: labMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.launchLabRequested()
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 16
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            Text {
-                                text: "Developer Package Creator"
-                                font.pixelSize: theme.fontBase
-                                font.bold: true
-                                color: theme.text
-                            }
-
-                            Text {
-                                text: "Generate, validate, and export Ryzora package manifests for lock screens, fastfetch configs, and desktop customization suites."
-                                font.pixelSize: theme.fontSm
-                                color: theme.textMuted
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        Rectangle {
-                            height: 34
-                            width: 130
-                            radius: theme.radiusMd
-                            color: creatorMouse.containsMouse ? Qt.rgba(245/255, 158/255, 11/255, 0.25) : theme.surfaceElevated
-                            border.color: Qt.rgba(245/255, 158/255, 11/255, 0.40)
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "📦 Open Creator"
-                                font.pixelSize: theme.fontSm
-                                font.bold: true
-                                color: "#fbbf24"
-                            }
-
-                            MouseArea {
-                                id: creatorMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.launchCreatorRequested()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Card: Storage & Content ──
-            SettingsCard {
-                id: storageContentSettingsCard
-                objectName: "storageContentSettingsCard"
-                title: "Storage & Content"
-                description: "Inspect local disk consumption, clean unreferenced downloads, and manage disposable preview cache."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 16
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
-
-                            Text {
-                                text: "Community Storage & Cache Management"
-                                font.pixelSize: theme.fontBase
-                                font.bold: true
-                                color: theme.text
-                            }
-
-                            Text {
-                                text: "Local storage footprint: " + root.storageTotalStr + " (Cache: " + root.storageCacheStr + " · Installed: " + root.storageInstalledStr + ")"
-                                font.pixelSize: theme.fontSm
-                                color: theme.textSecondary
-                            }
-
-                            Text {
-                                text: "On-demand wallpapers, lockscreen videos, and previews are cached locally in user storage (~/.local/share/ryzora/). Inspect storage breakdown and execute granular cleanups in the dedicated Storage Manager."
-                                font.pixelSize: theme.fontXs
-                                color: theme.textMuted
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        Rectangle {
-                            id: openStorageManagerBtn
-                            objectName: "openStorageManagerButton"
-                            height: 36
-                            width: 176
-                            radius: theme.radiusMd
-                            color: openStorageMouse.containsMouse ? theme.accentHover : theme.accent
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 6
-                                RyzoraIcon {
-                                    name: "archive"
-                                    size: 14
-                                    color: "#ffffff"
-                                }
-                                Text {
-                                    text: "Open Storage Manager"
-                                    font.pixelSize: theme.fontSm
-                                    font.bold: true
-                                    color: "#ffffff"
-                                }
-                            }
-
-                            MouseArea {
-                                id: openStorageMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.launchStorageRequested()
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Card: Setup & First-Run Wizard ──
-            SettingsCard {
-                title: "Setup & System Configuration"
-                description: "Recheck package managers, customize on-demand community content, or review storage directories."
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 16
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
-
-                            Text {
-                                text: "First-Run Experience & Setup Wizard"
-                                font.pixelSize: theme.fontBase
-                                font.bold: true
-                                color: theme.text
-                            }
-
-                            Text {
-                                text: "Status: " + ((backend.settingsData && backend.settingsData.setup_completed) ? ("✓ Completed (v" + (backend.settingsData.setup_version || "0.1.0") + ")") : "Not completed") + " · Community Content: " + ((backend.settingsData && backend.settingsData.community_content_enabled !== false) ? "On-demand enabled" : "Disabled")
-                                font.pixelSize: theme.fontSm
-                                color: theme.textSecondary
-                            }
-
-                            Text {
-                                text: "Storage: " + ((backend.settingsData && backend.settingsData.custom_storage_path) ? backend.settingsData.custom_storage_path : "~/.local/share/ryzora (default)")
-                                font.pixelSize: theme.fontXs
-                                color: theme.textMuted
-                            }
-                        }
-
-                        Rectangle {
-                            height: 34
-                            width: 170
-                            radius: theme.radiusMd
-                            color: reopenWizardMouse.containsMouse ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.25) : theme.surfaceElevated
-                            border.color: theme.accent
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "↺ Reopen Setup Wizard"
-                                font.pixelSize: theme.fontSm
-                                font.bold: true
-                                color: theme.accent
-                            }
-
-                            MouseArea {
-                                id: reopenWizardMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    backend.reopenSetupWizard()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Item { height: 20 }
+            Item { height: 28 } // Bottom padding
         }
     }
 
-    // ── Reusable Component Definitions ──
+    // ══════════════════════════════════════════════════════════════════════
+    // REUSABLE macOS PREFERENCES DESIGN SYSTEM COMPONENTS
+    // ══════════════════════════════════════════════════════════════════════
 
+    // 1. SettingsCard: 22px padding, 14px radius, clean title/description header
     component SettingsCard : Rectangle {
         property string title: ""
         property string description: ""
         default property alias content: cardLayout.children
 
         Layout.fillWidth: true
-        height: cardCol.implicitHeight + 28
-        radius: theme.radiusMd
-        color: theme.surface
-        border.color: theme.border
+        implicitHeight: cardCol.implicitHeight + 44
+        radius: 14
+        color: theme.surfaceElevated
+        border.color: theme.borderSubtle
+        border.width: 1
 
         ColumnLayout {
             id: cardCol
             anchors.fill: parent
-            anchors.margins: 16
+            anchors.margins: 22
             spacing: 14
 
             ColumnLayout {
-                spacing: 2
-                Text { text: title; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-                Text { text: description; font.pixelSize: theme.fontSm; color: theme.textMuted }
+                spacing: 4
+                Layout.fillWidth: true
+                Text {
+                    text: title
+                    font.family: theme.fontFamily
+                    font.pixelSize: 16
+                    font.weight: theme.weightSemibold
+                    color: theme.text
+                }
+                Text {
+                    text: description
+                    font.family: theme.fontFamily
+                    font.pixelSize: 12
+                    color: theme.textSecondary
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    visible: description.length > 0
+                }
             }
 
-            Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-            Item {
+            ColumnLayout {
                 id: cardLayout
                 Layout.fillWidth: true
-                implicitHeight: childrenRect.height
+                spacing: 12
             }
         }
     }
 
-    component ThemeCard : Rectangle {
-        property string modeId: ""
+    // 2. SettingRow: Left title + subLabel, Right aligned interactive control
+    component SettingRow : RowLayout {
         property string label: ""
         property string description: ""
-        property bool isSelected: false
-        signal clicked()
-
-        height: 72
-        radius: theme.radiusMd
-        color: isSelected ? theme.surfaceElevated : theme.surface
-        border.color: isSelected ? theme.accent : theme.borderSubtle
-        border.width: isSelected ? 1.5 : 1
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 2
-
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    text: label
-                    font.pixelSize: theme.fontBase
-                    font.bold: true
-                    color: isSelected ? theme.accent : theme.text
-                }
-                Item { Layout.fillWidth: true }
-                Rectangle {
-                    visible: isSelected
-                    width: 16
-                    height: 16
-                    radius: 8
-                    color: theme.accent
-                    Text {
-                        anchors.centerIn: parent
-                        text: "✓"
-                        font.pixelSize: 10
-                        font.bold: true
-                        color: "#ffffff"
-                    }
-                }
-            }
-
-            Text {
-                text: description
-                font.pixelSize: theme.fontXs
-                color: theme.textMuted
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
-    component AccentButton : Rectangle {
-        property string swatchKey: ""
-        property string swatchName: ""
-        property color swatchColor: "#ffffff"
-        property bool isSelected: false
-        signal clicked()
-
-        width: 130
-        height: 36
-        radius: theme.radiusMd
-        color: isSelected ? theme.surfaceElevated : theme.surface
-        border.color: isSelected ? theme.accent : theme.borderSubtle
-        border.width: isSelected ? 1.5 : 1
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            spacing: 8
-
-            Rectangle {
-                width: 14
-                height: 14
-                radius: 7
-                color: swatchColor
-                border.color: Qt.rgba(255, 255, 255, 0.2)
-
-                Text {
-                    anchors.centerIn: parent
-                    visible: isSelected
-                    text: "✓"
-                    font.pixelSize: 9
-                    font.bold: true
-                    color: (swatchKey === "silver" && theme.resolvedTheme === "dark") ? "#050608" : "#ffffff"
-                }
-            }
-
-            Text {
-                text: swatchName
-                font.pixelSize: theme.fontSm
-                font.bold: isSelected
-                color: isSelected ? theme.text : theme.textSecondary
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
-    component RadioPill : Rectangle {
-        property string label: ""
-        property bool isSelected: false
-        signal clicked()
-
-        height: 32
-        width: pillText.implicitWidth + 24
-        radius: theme.radiusSm
-        color: isSelected ? theme.accent : theme.surfaceElevated
-        border.color: isSelected ? theme.accent : theme.border
-
-        Text {
-            id: pillText
-            anchors.centerIn: parent
-            text: label
-            font.pixelSize: theme.fontSm
-            font.bold: isSelected
-            color: isSelected ? "#ffffff" : theme.text
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
-    component ToggleRow : RowLayout {
-        property string label: ""
-        property string subLabel: ""
-        property bool checked: false
-        signal toggled(bool checked)
+        default property alias rightControl: controlSlot.children
 
         Layout.fillWidth: true
         spacing: 16
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 2
-            Text { text: label; font.pixelSize: theme.fontBase; font.bold: true; color: theme.text }
-            Text { text: subLabel; font.pixelSize: theme.fontSm; color: theme.textMuted }
+            spacing: 3
+            Text {
+                text: label
+                font.family: theme.fontFamily
+                font.pixelSize: 14
+                font.weight: theme.weightMedium
+                color: theme.text
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            Text {
+                text: description
+                font.family: theme.fontFamily
+                font.pixelSize: 12
+                color: theme.textSecondary
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                visible: description.length > 0
+            }
         }
 
+        Item {
+            id: controlSlot
+            implicitWidth: childrenRect.width
+            implicitHeight: childrenRect.height
+            Layout.preferredWidth: childrenRect.width
+            Layout.minimumWidth: childrenRect.width
+            Layout.fillWidth: false
+            Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+        }
+    }
+
+    // 3. CardDivider: Fine subtle line between settings rows
+    component CardDivider : Rectangle {
+        Layout.fillWidth: true
+        height: 1
+        color: theme.borderSubtle
+        opacity: 0.7
+    }
+
+    // 4. SettingsSwitch: Native-style smooth sliding switch (42x24)
+    component SettingsSwitch : Rectangle {
+        id: switchRoot
+        property bool checked: false
+        signal toggled(bool checked)
+
+        width: 42
+        height: 24
+        radius: 12
+        color: checked ? theme.accent : (switchMouse.containsMouse ? theme.surfaceActive : theme.surfaceElevated)
+        border.color: checked ? theme.accent : theme.borderStrong
+        border.width: 1
+
+        Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
+        Behavior on border.color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
+
         Rectangle {
-            width: 44
-            height: 24
-            radius: 12
-            color: checked ? theme.accent : theme.surfaceElevated
-            border.color: checked ? theme.accent : theme.borderStrong
+            id: thumb
+            width: 18
+            height: 18
+            radius: 9
+            color: "#ffffff"
+            anchors.verticalCenter: parent.verticalCenter
+            x: switchRoot.checked ? parent.width - width - 3 : 3
 
-            Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
+            Behavior on x { NumberAnimation { duration: theme.reduceMotion ? 0 : 120; easing.type: Easing.InOutQuad } }
+        }
 
-            Rectangle {
-                width: 18
-                height: 18
-                radius: 9
-                color: checked ? "#ffffff" : theme.textSecondary
-                anchors.verticalCenter: parent.verticalCenter
-                x: checked ? parent.width - width - 3 : 3
+        MouseArea {
+            id: switchMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: switchRoot.toggled(!switchRoot.checked)
+        }
+    }
 
-                Behavior on x { NumberAnimation { duration: theme.reduceMotion ? 0 : 120 } }
+    // 5. SegmentedControl: macOS-style mutually exclusive segmented button pill
+    component SegmentedControl : Rectangle {
+        id: segRoot
+        property var options: []
+        property int selectedIndex: 0
+        signal optionSelected(int index)
+
+        height: 32
+        implicitWidth: segRow.implicitWidth + 4
+        radius: 8
+        color: theme.surface
+        border.color: theme.borderSubtle
+        border.width: 1
+
+        RowLayout {
+            id: segRow
+            anchors.centerIn: parent
+            spacing: 2
+
+            Repeater {
+                model: segRoot.options
+                delegate: Rectangle {
+                    readonly property bool isCur: index === segRoot.selectedIndex
+                    height: 28
+                    implicitWidth: segItemText.implicitWidth + 16
+                    radius: 6
+                    color: isCur ? theme.surfaceElevated : (segItemMouse.containsMouse ? theme.surfaceHover : "transparent")
+                    border.color: isCur ? theme.borderSubtle : "transparent"
+                    border.width: 1
+
+                    Text {
+                        id: segItemText
+                        anchors.centerIn: parent
+                        text: modelData
+                        font.family: theme.fontFamily
+                        font.pixelSize: 12
+                        font.weight: isCur ? theme.weightSemibold : theme.weightMedium
+                        color: isCur ? theme.text : theme.textSecondary
+                    }
+
+                    MouseArea {
+                        id: segItemMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: segRoot.optionSelected(index)
+                    }
+                }
+            }
+        }
+    }
+
+    // 6. ThemeModeOption: macOS large segmented cards for System / Light / Dark
+    component ThemeModeOption : Rectangle {
+        property string modeId: ""
+        property string label: ""
+        property string iconName: ""
+        property bool isSelected: false
+        signal clicked()
+
+        Layout.fillWidth: true
+        height: 52
+        radius: 10
+        color: isSelected ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.12) : (themeMouse.containsMouse ? theme.surfaceHover : theme.surface)
+        border.color: isSelected ? theme.accent : (themeMouse.containsMouse ? theme.borderStrong : theme.borderSubtle)
+        border.width: isSelected ? 2 : 1
+
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 8
+
+            RyzoraIcon {
+                name: iconName
+                size: 16
+                color: isSelected ? theme.accent : theme.textSecondary
             }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: toggled(!checked)
+            Text {
+                text: label
+                font.family: theme.fontFamily
+                font.pixelSize: 13
+                font.weight: isSelected ? theme.weightSemibold : theme.weightMedium
+                color: isSelected ? theme.accent : theme.text
             }
+        }
+
+        MouseArea {
+            id: themeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: parent.clicked()
+        }
+    }
+
+    // 7. ColorSwatch: 32x32 color circle with checkmark
+    component ColorSwatch : Rectangle {
+        property string swatchKey: ""
+        property string swatchName: ""
+        property color swatchColor: "#ffffff"
+        property bool isSelected: false
+
+        width: 32
+        height: 32
+        radius: 16
+        color: swatchColor
+        border.color: isSelected ? "#ffffff" : "transparent"
+        border.width: isSelected ? 2 : 0
+
+        ToolTip.visible: swatchMouse.containsMouse
+        ToolTip.text: swatchName
+        ToolTip.delay: 300
+
+        RyzoraIcon {
+            anchors.centerIn: parent
+            name: "checkmark"
+            size: 12
+            color: "#ffffff"
+            visible: parent.isSelected
+        }
+
+        MouseArea {
+            id: swatchMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: theme.setAccent(swatchKey)
         }
     }
 }

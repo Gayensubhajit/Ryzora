@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="ryzoraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="facetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+  </defs>
+  <!-- App Icon Background -->
+  <rect width="48" height="48" rx="11" fill="url(#ryzoraGrad)"/>
+  <rect x="0.5" y="0.5" width="47" height="47" rx="10.5" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+  <!-- Geometric 'R' Stem -->
+  <path d="M13 11 C13 9.895 13.895 9 15 9 H19 C20.105 9 21 9.895 21 11 V37 C21 38.105 20.105 39 19 39 H15 C13.895 39 13 38.105 13 37 Z" fill="url(#facetGrad)"/>
+  <!-- Geometric 'R' Upper Loop -->
+  <path d="M19 9 H27 C32.523 9 37 13.029 37 18 C37 22.971 32.523 27 27 27 H19 V21 H27 C28.933 21 30.5 19.657 30.5 18 C30.5 16.343 28.933 15 27 15 H19 Z" fill="#ffffff"/>
+  <!-- Geometric 'R' Modern Dynamic Leg -->
+  <path d="M23 24.5 L31.5 37.2 C32.1 38.1 33.1 38.8 34.3 38.8 H35.5 C36.5 38.8 37.1 37.6 36.4 36.8 L28.2 24.5 Z" fill="url(#facetGrad)"/>
+</svg>

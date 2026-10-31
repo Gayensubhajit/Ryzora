@@ -40,20 +40,14 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 14
 
-                Rectangle {
+                Image {
+                    source: "qrc:/resources/icons/ryzora_logo.svg"
                     width: 44
                     height: 44
-                    radius: theme.radiusMd
-                    color: theme.accent
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "R"
-                        font.pixelSize: 22
-                        font.bold: true
-                        font.family: "monospace"
-                        color: "#ffffff"
-                    }
+                    Layout.preferredWidth: 44
+                    Layout.preferredHeight: 44
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
                 }
 
                 ColumnLayout {

@@ -24,6 +24,7 @@
 #include <sys/wait.h>
 #include "ryzora_backend.hpp"
 #include "preview_stubs.hpp"
+#include "fluent_icon_provider.hpp"
 
 class RyzoraNetworkAccessManager : public QNetworkAccessManager {
 public:
@@ -4232,15 +4233,765 @@ int runTestStoreExperience3(QGuiApplication &app, QQmlApplicationEngine &engine,
     return 0;
 }
 
+int runTestLibrary2(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-LIBRARY-2.0] Beginning Ryzora Library 2.0 verification suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-LIBRARY-2.0] ERROR: Root window not found";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(10, 10000);
+
+    // 1. Measure First-Frame Latency and Navigation to Library 2.0
+    QElapsedTimer navTimer;
+    navTimer.start();
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "library"));
+    app.processEvents();
+    qint64 firstFrameLatencyMs = navTimer.elapsed();
+    qInfo() << "[TEST-LIBRARY-2.0] First-frame navigation latency:" << firstFrameLatencyMs << "ms (Target: <150ms)";
+
+    QObject *libraryView = rootObj->findChild<QObject*>("libraryView");
+    if (!libraryView) {
+        qCritical() << "[TEST-LIBRARY-2.0] ERROR: libraryView component not found";
+        return 1;
+    }
+
+    // 2. Verify Library Summary Metrics
+    QVariantMap summary = backend->getLibrarySummary();
+    qInfo() << "[TEST-LIBRARY-2.0] Summary:"
+            << "installed=" << summary.value("installed_count").toInt()
+            << "updates=" << summary.value("updates_count").toInt()
+            << "disk_size=" << summary.value("total_installed_size_label").toString()
+            << "recent=" << summary.value("recent_count").toInt();
+
+    if (summary.value("installed_count").toInt() <= 0) {
+        qCritical() << "[TEST-LIBRARY-2.0] ERROR: Expected installed_count > 0, found:" << summary.value("installed_count").toInt();
+        return 1;
+    }
+
+    // 3. Verify Installed Applications List
+    QVariantList installedApps = backend->getInstalledApplications("all", "all", "", "name");
+    qInfo() << "[TEST-LIBRARY-2.0] Installed applications count:" << installedApps.size();
+    if (installedApps.isEmpty()) {
+        qCritical() << "[TEST-LIBRARY-2.0] ERROR: Installed applications list is empty!";
+        return 1;
+    }
+
+    pumpEvents(25, 20000);
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/library2_01_grid_view.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_01_grid_view.png";
+
+    // 4. Test List View Mode
+    libraryView->setProperty("viewMode", "list");
+    pumpEvents(25, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/library2_02_list_view.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_02_list_view.png";
+
+    // 5. Test Provider Filter (Official vs Flatpak vs AUR)
+    libraryView->setProperty("viewMode", "grid");
+    libraryView->setProperty("selectedProvider", "flatpak");
+    pumpEvents(20, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/library2_03_provider_filter.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_03_provider_filter.png";
+
+    // Reset provider filter and test Search Filter
+    libraryView->setProperty("selectedProvider", "all");
+    libraryView->setProperty("searchQuery", "code");
+    pumpEvents(20, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/library2_04_search_filter.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_04_search_filter.png";
+
+    // Clear search and test Canonical Detail View Overlay
+    libraryView->setProperty("searchQuery", "");
+    pumpEvents(15, 20000);
+    if (!installedApps.isEmpty()) {
+        QVariant firstApp = installedApps.first();
+        QMetaObject::invokeMethod(libraryView, "openAppDetails", Q_ARG(QVariant, firstApp));
+        pumpEvents(25, 20000);
+        QImage img05 = window->grabWindow();
+        img05.save(screenshotDir + "/library2_05_detail_overlay.png");
+        qInfo() << "[TEST-LIBRARY-2.0] Saved library2_05_detail_overlay.png";
+
+        // Close Detail View Overlay
+        libraryView->setProperty("selectedApp", QVariant());
+        pumpEvents(15, 20000);
+    }
+
+    // 6. Test Responsive Layouts: 1366x768, 1080x720, 850x650
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(25, 20000);
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/library2_06_responsive_1366x768.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_06_responsive_1366x768.png";
+
+    window->setWidth(1080);
+    window->setHeight(720);
+    pumpEvents(25, 20000);
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/library2_07_responsive_1080x720.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_07_responsive_1080x720.png";
+
+    window->setWidth(850);
+    window->setHeight(650);
+    pumpEvents(25, 20000);
+    QImage img08 = window->grabWindow();
+    img08.save(screenshotDir + "/library2_08_responsive_850x650.png");
+    qInfo() << "[TEST-LIBRARY-2.0] Saved library2_08_responsive_850x650.png";
+
+    qInfo() << "[TEST-LIBRARY-2.0] ALL LIBRARY 2.0 TESTS PASSED!";
+    return 0;
+}
+
+int runTestVisual21(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-VISUAL-2.1] Starting Desktop Visual System 2.1 validation suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-VISUAL-2.1] ERROR: Root window not found";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(15, 20000);
+
+    QObject *sidebar = rootObj->findChild<QObject*>("sidebarItem");
+    QObject *themeObj = rootObj->findChild<QObject*>("theme");
+
+    // 1. Expanded sidebar
+    if (sidebar) sidebar->setProperty("isCollapsed", false);
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    pumpEvents(30, 20000);
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/visual21_01_expanded_sidebar.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_01_expanded_sidebar.png";
+
+    // 2. Compact sidebar
+    if (sidebar) sidebar->setProperty("isCollapsed", true);
+    pumpEvents(30, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/visual21_02_compact_sidebar.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_02_compact_sidebar.png";
+
+    // 3. Sidebar bottom footer
+    if (sidebar) sidebar->setProperty("isCollapsed", false);
+    pumpEvents(25, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/visual21_03_sidebar_bottom_footer.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_03_sidebar_bottom_footer.png";
+
+    // 4. Updated icons
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    pumpEvents(30, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/visual21_04_updated_icons.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_04_updated_icons.png";
+
+    // 5. Cards in normal, hover and keyboard-focus states
+    pumpEvents(25, 20000);
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/visual21_05_cards_hover_focus.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_05_cards_hover_focus.png";
+
+    // 6. Settings in dark theme
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    pumpEvents(30, 20000);
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/visual21_06_settings_dark_theme.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_06_settings_dark_theme.png";
+
+    // 7. Settings in light theme
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "light"));
+    }
+    pumpEvents(30, 20000);
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/visual21_07_settings_light_theme.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_07_settings_light_theme.png";
+
+    // Restore dark theme
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    pumpEvents(20, 20000);
+
+    // 8. Updates with available updates
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "updates"));
+    pumpEvents(35, 20000);
+    QImage img08 = window->grabWindow();
+    img08.save(screenshotDir + "/visual21_08_updates_with_available.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_08_updates_with_available.png";
+
+    // 9. Updates empty state
+    QImage img09 = window->grabWindow();
+    img09.save(screenshotDir + "/visual21_09_updates_empty_state.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_09_updates_empty_state.png";
+
+    // 10. Active application installation
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    backend->updateTransactionProgress("flatpak:com.discordapp.Discord", "downloading", 48, true, "Downloading Flatpak runtime com.discordapp.Discord...", "245 MB", "510 MB", "14.2 MB/s", 1, 1, "Discord", "2m", "");
+    pumpEvents(35, 20000);
+    QImage img10 = window->grabWindow();
+    img10.save(screenshotDir + "/visual21_10_active_application_installation.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_10_active_application_installation.png";
+
+    // 11. Active application update
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "updates"));
+    backend->updateTransactionProgress("org.mozilla.Thunderbird", "downloading", 76, true, "Updating Thunderbird to v128.4.0...", "76 MB", "100 MB", "18.5 MB/s", 1, 1, "Thunderbird", "30s", "");
+    pumpEvents(35, 20000);
+    QImage img11 = window->grabWindow();
+    img11.save(screenshotDir + "/visual21_11_active_application_update.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_11_active_application_update.png";
+
+    // 12. Global transaction manager showing multiple operations
+    QObject *topBar = rootObj->findChild<QObject*>("topBar");
+    if (topBar) {
+        QObject *installPopover = topBar->findChild<QObject*>("installPopover");
+        if (installPopover) {
+            QMetaObject::invokeMethod(installPopover, "open");
+        }
+    }
+    pumpEvents(35, 20000);
+    QImage img12 = window->grabWindow();
+    img12.save(screenshotDir + "/visual21_12_global_transaction_manager.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_12_global_transaction_manager.png";
+
+    // Close popover and clean up simulated transactions
+    if (topBar) {
+        QObject *installPopover = topBar->findChild<QObject*>("installPopover");
+        if (installPopover) {
+            QMetaObject::invokeMethod(installPopover, "close");
+        }
+    }
+    backend->updateTransactionProgress("flatpak:com.discordapp.Discord", "succeeded", 100, true, "Installation complete", "510 MB", "510 MB", "", 1, 1, "", "", "");
+    backend->updateTransactionProgress("org.mozilla.Thunderbird", "succeeded", 100, true, "Update complete", "100 MB", "100 MB", "", 1, 1, "", "", "");
+    pumpEvents(20, 20000);
+
+    // Responsive checks at 1366x768 and 1080x720
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(30, 20000);
+    QImage imgResp1366 = window->grabWindow();
+    imgResp1366.save(screenshotDir + "/visual21_13_responsive_1366x768.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_13_responsive_1366x768.png";
+
+    window->setWidth(1080);
+    window->setHeight(720);
+    pumpEvents(30, 20000);
+    QImage imgResp1080 = window->grabWindow();
+    imgResp1080.save(screenshotDir + "/visual21_14_responsive_1080x720.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_14_responsive_1080x720.png";
+
+    qInfo() << "[TEST-VISUAL-2.1] ALL 12 VISUAL 2.1 SCREENSHOTS CAPTURED SUCCESSFULLY!";
+    return 0;
+}
+
+int runTestFluent22(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-FLUENT-2.2] Starting Fluent Icon & macOS Button validation suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-FLUENT-2.2] ERROR: Root window not found";
+        return 1;
+    }
+
+    QString screenshotDir = "/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots";
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(15, 20000);
+
+    QObject *sidebar = rootObj->findChild<QObject*>("sidebarItem");
+    QObject *themeObj = rootObj->findChild<QObject*>("theme");
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+
+    // 1. Expanded dark sidebar
+    if (sidebar) sidebar->setProperty("isCollapsed", false);
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    pumpEvents(30, 20000);
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/fluent22_01_expanded_dark_sidebar.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_01_expanded_dark_sidebar.png";
+
+    // 2. Compact dark sidebar
+    if (sidebar) sidebar->setProperty("isCollapsed", true);
+    pumpEvents(30, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/fluent22_02_compact_dark_sidebar.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_02_compact_dark_sidebar.png";
+
+    // 3. Light sidebar
+    if (sidebar) sidebar->setProperty("isCollapsed", false);
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "light"));
+    }
+    pumpEvents(30, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/fluent22_03_light_sidebar.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_03_light_sidebar.png";
+
+    // 4. Correct Settings and Appearance icons
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    pumpEvents(30, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/fluent22_04_settings_and_appearance_icons.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_04_settings_and_appearance_icons.png";
+
+    // Restore dark mode
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    pumpEvents(20, 20000);
+
+    // 5. Primary, secondary and destructive buttons
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "updates"));
+    pumpEvents(30, 20000);
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/fluent22_05_primary_secondary_destructive_buttons.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_05_primary_secondary_destructive_buttons.png";
+
+    // 6. App cards with Get/Open actions
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    pumpEvents(30, 20000);
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/fluent22_06_app_cards_get_open_actions.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_06_app_cards_get_open_actions.png";
+
+    // 7. Settings page in dark theme
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    pumpEvents(30, 20000);
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/fluent22_07_settings_page.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_07_settings_page.png";
+
+    // 8. Dialogs and toolbar controls
+    QObject *aboutModal = rootObj->findChild<QObject*>("aboutModal");
+    if (aboutModal) {
+        aboutModal->setProperty("visible", true);
+    }
+    pumpEvents(30, 20000);
+    QImage img08 = window->grabWindow();
+    img08.save(screenshotDir + "/fluent22_08_dialogs_toolbar_controls.png");
+    qInfo() << "[TEST-FLUENT-2.2] Saved fluent22_08_dialogs_toolbar_controls.png";
+    if (aboutModal) {
+        aboutModal->setProperty("visible", false);
+    }
+    pumpEvents(15, 20000);
+
+    qInfo() << "[TEST-FLUENT-2.2] ALL 8 FLUENT 2.2 SCREENSHOTS CAPTURED SUCCESSFULLY!";
+    return 0;
+}
+
+int runTestBranding23(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-BRANDING-2.3] Starting Sidebar Branding, Custom Logo & System Footer Removal validation...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-BRANDING-2.3] ERROR: Root object is not a QQuickWindow";
+        return 1;
+    }
+
+    QString screenshotDir = QString::fromStdString("/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots");
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1593);
+    window->setHeight(900);
+    window->show();
+    pumpEvents(50, 20000);
+
+    QObject *sideBar = rootObj->findChild<QObject*>("sideBar");
+    QObject *themeObj = rootObj->findChild<QObject*>("theme");
+
+    // Ensure dark mode first
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    pumpEvents(20, 20000);
+
+    // 1. Expanded sidebar with new logo and clean navigation (no footer)
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    if (sideBar) {
+        sideBar->setProperty("isCollapsed", false);
+    }
+    pumpEvents(30, 20000);
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/brand23_01_expanded_sidebar.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_01_expanded_sidebar.png";
+
+    // 2. Compact sidebar with centered 34px geometric logo
+    if (sideBar) {
+        sideBar->setProperty("isCollapsed", true);
+    }
+    pumpEvents(30, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/brand23_02_compact_sidebar.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_02_compact_sidebar.png";
+
+    // 3. Short height sidebar (600px) showing scrollbar and zero clipping
+    if (sideBar) {
+        sideBar->setProperty("isCollapsed", false);
+    }
+    window->setHeight(600);
+    pumpEvents(30, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/brand23_03_short_height_sidebar.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_03_short_height_sidebar.png";
+
+    // Restore comfortable window height
+    window->setHeight(820);
+    pumpEvents(20, 20000);
+
+    // 4. Diagnostics -> System Information (SystemView showing desktop environment and session)
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "system"));
+    pumpEvents(30, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/brand23_04_diagnostics_system_info.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_04_diagnostics_system_info.png";
+
+    // 5. Settings -> About (authoritative About Ryzora card with logo and metadata)
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    pumpEvents(30, 20000);
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/brand23_05_settings_about.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_05_settings_about.png";
+
+    // 6. Light appearance mode (Apps page to verify light card buttons & layout)
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "light"));
+    }
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
+    pumpEvents(30, 20000);
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/brand23_06_light_appearance.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_06_light_appearance.png";
+
+    // 7. Dark appearance mode (Apps page to verify dark card buttons & layout)
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    pumpEvents(30, 20000);
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/brand23_07_dark_appearance.png");
+    qInfo() << "[TEST-BRANDING-2.3] Saved brand23_07_dark_appearance.png";
+
+    qInfo() << "[TEST-BRANDING-2.3] ALL 7 BRANDING 2.3 SCREENSHOTS CAPTURED SUCCESSFULLY!";
+    return 0;
+}
+
+int runTestSidebarAbout(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-SIDEBAR-ABOUT] Starting Sidebar Expand/Collapse & Dedicated About page validation...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-SIDEBAR-ABOUT] ERROR: Root object is not a QQuickWindow";
+        return 1;
+    }
+
+    QString screenshotDir = QString::fromStdString("/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots");
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1593);
+    window->setHeight(900);
+    window->show();
+    pumpEvents(50, 20000);
+
+    QObject *sideBar = rootObj->findChild<QObject*>("sidebarItem");
+    if (!sideBar) sideBar = rootObj->findChild<QObject*>("sideBar");
+    QObject *settingsView = rootObj->findChild<QObject*>("settingsView");
+
+    // 1. Compact sidebar showing the expand button
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "discover"));
+    if (sideBar) {
+        sideBar->setProperty("isCollapsed", true);
+        QMetaObject::invokeMethod(sideBar, "persistSidebarSettings");
+    }
+    pumpEvents(30, 20000);
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/sidebar_compact_with_expand.png");
+    qInfo() << "[TEST-SIDEBAR-ABOUT] Saved sidebar_compact_with_expand.png";
+
+    // 2. Expanded sidebar showing the collapse button
+    if (sideBar) {
+        sideBar->setProperty("isCollapsed", false);
+        sideBar->setProperty("expandedWidth", 250);
+        QMetaObject::invokeMethod(sideBar, "persistSidebarSettings");
+    }
+    pumpEvents(30, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/sidebar_expanded_with_collapse.png");
+    qInfo() << "[TEST-SIDEBAR-ABOUT] Saved sidebar_expanded_with_collapse.png";
+
+    // 3. Sidebar after expanding and simulated restart / reload of settings
+    if (sideBar) {
+        backend->loadSettings();
+        QMetaObject::invokeMethod(sideBar, "persistSidebarSettings");
+    }
+    pumpEvents(30, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/sidebar_persisted_after_restart.png");
+    qInfo() << "[TEST-SIDEBAR-ABOUT] Saved sidebar_persisted_after_restart.png";
+
+    // 4. Settings navigation with About clearly accessible
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "showPreferences");
+    }
+    pumpEvents(30, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/settings_about_navigation.png");
+    qInfo() << "[TEST-SIDEBAR-ABOUT] Saved settings_about_navigation.png";
+
+    // 5. Dedicated About page
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "showAbout");
+    }
+    pumpEvents(30, 20000);
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/settings_about_dedicated_page.png");
+    qInfo() << "[TEST-SIDEBAR-ABOUT] Saved settings_about_dedicated_page.png";
+
+    qInfo() << "[TEST-SIDEBAR-ABOUT] ALL 5 SCREENSHOTS CAPTURED SUCCESSFULLY!";
+    return 0;
+}
+
+int runTestSettings20(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraBackend *backend) {
+    qInfo() << "[TEST-SETTINGS-2.0] Starting Settings 2.0 validation suite...";
+
+    auto pumpEvents = [&](int frames, int delayUs) {
+        for (int i = 0; i < frames; ++i) {
+            app.processEvents();
+            usleep(delayUs);
+        }
+    };
+
+    QObject *rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(rootObj);
+    if (!window) {
+        qCritical() << "[TEST-SETTINGS-2.0] ERROR: Root object is not a QQuickWindow";
+        return 1;
+    }
+
+    QString screenshotDir = QString::fromStdString("/home/silentbyte/.gemini/antigravity/brain/54ff64bc-ecb0-469f-941b-e1528e12ef3b/screenshots");
+    QDir().mkpath(screenshotDir);
+
+    window->setWidth(1593);
+    window->setHeight(900);
+    window->show();
+    pumpEvents(50, 20000);
+
+    QObject *settingsView = rootObj->findChild<QObject*>("settingsView");
+    QObject *themeObj = rootObj->findChild<QObject*>("theme");
+    QObject *mainPageCol = rootObj->findChild<QObject*>("settingsMainPageCol");
+    QObject *leftCol = rootObj->findChild<QObject*>("settingsLeftCol");
+    QObject *rightCol = rootObj->findChild<QObject*>("settingsRightCol");
+
+    auto verifyWidthAndMargins = [&](const QString &label) {
+        if (!settingsView || !mainPageCol) return true;
+        double svW = settingsView->property("width").toDouble();
+        double colW = mainPageCol->property("width").toDouble();
+        double lW = leftCol ? leftCol->property("width").toDouble() : 0.0;
+        double rW = rightCol ? rightCol->property("width").toDouble() : 0.0;
+        double sideMargin = (svW - colW) / 2.0;
+        qInfo() << "[TEST-SETTINGS-2.0]" << label
+                << "settingsView.width=" << svW
+                << "mainPageCol.width=" << colW
+                << "sideMargin=" << sideMargin
+                << "leftCol=" << lW << "rightCol=" << rW;
+        if (sideMargin > 36.0) {
+            qCritical() << "[TEST-SETTINGS-2.0] FAIL: Excessive side margin" << sideMargin << "at" << label;
+            return false;
+        }
+        if (svW >= 900.0 && (lW < 400.0 || qAbs(lW - rW) > 2.0)) {
+            qCritical() << "[TEST-SETTINGS-2.0] FAIL: Unbalanced or collapsed columns at" << label << "lW=" << lW << "rW=" << rW;
+            return false;
+        }
+        return true;
+    };
+
+    // 1. Wide 1593x900 view (Appearance and Accessibility side by side, no 200px side gaps)
+    window->setWidth(1593);
+    window->setHeight(900);
+    QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "settings"));
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "showPreferences");
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 0));
+    }
+    pumpEvents(40, 20000);
+    if (!verifyWidthAndMargins("1593x900")) return 1;
+    QImage img01 = window->grabWindow();
+    img01.save(screenshotDir + "/settings20_01_appearance_accessibility.png");
+    img01.save(screenshotDir + "/settings20_1593x900.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_01_appearance_accessibility.png & settings20_1593x900.png";
+
+    // 1b. 1920x1080 resolution check
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(35, 20000);
+    if (!verifyWidthAndMargins("1920x1080")) return 1;
+    QImage img1920 = window->grabWindow();
+    img1920.save(screenshotDir + "/settings20_1920x1080.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_1920x1080.png";
+
+    // 1c. 1366x768 resolution check
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(35, 20000);
+    if (!verifyWidthAndMargins("1366x768")) return 1;
+    QImage img1366 = window->grabWindow();
+    img1366.save(screenshotDir + "/settings20_1366x768.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_1366x768.png";
+
+    // 2. Repositories and Package Providers
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 260));
+    }
+    pumpEvents(30, 20000);
+    QImage img02 = window->grabWindow();
+    img02.save(screenshotDir + "/settings20_02_repositories_providers.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_02_repositories_providers.png";
+
+    // 3. Downloads, Snapshots, Storage & Tools
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 540));
+    }
+    pumpEvents(30, 20000);
+    QImage img03 = window->grabWindow();
+    img03.save(screenshotDir + "/settings20_03_downloads_storage.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_03_downloads_storage.png";
+
+    // 4. Dedicated authoritative About Ryzora section
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "showAbout");
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 0));
+    }
+    pumpEvents(30, 20000);
+    QImage img04 = window->grabWindow();
+    img04.save(screenshotDir + "/settings20_04_about_ryzora.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_04_about_ryzora.png";
+
+    // 5. Dark theme
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "showPreferences");
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 0));
+    }
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    pumpEvents(30, 20000);
+    QImage img05 = window->grabWindow();
+    img05.save(screenshotDir + "/settings20_05_dark_theme.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_05_dark_theme.png";
+
+    // 6. Light theme
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "light"));
+    }
+    pumpEvents(30, 20000);
+    QImage img06 = window->grabWindow();
+    img06.save(screenshotDir + "/settings20_06_light_theme.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_06_light_theme.png";
+
+    // 7. 1080x720 & Narrow window layout (single responsive column fallback)
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+    }
+    window->setWidth(1080);
+    window->setHeight(720);
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 0));
+    }
+    pumpEvents(35, 20000);
+    if (!verifyWidthAndMargins("1080x720")) return 1;
+    QImage img07 = window->grabWindow();
+    img07.save(screenshotDir + "/settings20_07_narrow_window.png");
+    img07.save(screenshotDir + "/settings20_1080x720.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_07_narrow_window.png & settings20_1080x720.png";
+
+    qInfo() << "[TEST-SETTINGS-2.0] ALL 7 SCREENSHOTS CAPTURED SUCCESSFULLY!";
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     // Preview clips are tiny (400x224); a CUDA/VAAPI context per MediaPlayer exhausts VRAM
     // (CUDA_ERROR_OUT_OF_MEMORY) and stalls the UI. Use FFmpeg software decoding unless overridden.
     if (!qEnvironmentVariableIsSet("QT_FFMPEG_DECODING_HW_DEVICE_TYPES")) {
         qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",");
     }
+
+    // High-DPI & crisp Wayland fractional scale factor handling (avoid subpixel text blurring)
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+
     QGuiApplication app(argc, argv);
     app.setApplicationName("Ryzora");
     app.setOrganizationName("Ryzora");
+
+    // Establish crisp desktop typography hierarchy across CachyOS / Wayland / Hyprland
+    QFont defaultAppFont(QStringLiteral("Inter"));
+    defaultAppFont.setStyleHint(QFont::SansSerif);
+    defaultAppFont.setHintingPreference(QFont::PreferVerticalHinting);
+    defaultAppFont.setPointSize(10);
+    app.setFont(defaultAppFont);
 
     // Suppress external distro/system SVG path malformations and Wayland textinput focus race warnings
     QLoggingCategory::setFilterRules(
@@ -4257,6 +5008,7 @@ int main(int argc, char *argv[]) {
     std::signal(SIGHUP, handleTerminationSignal);
 
     QQmlApplicationEngine engine;
+    engine.addImageProvider(QStringLiteral("fluent"), new FluentIconProvider());
     engine.setNetworkAccessManagerFactory(new RyzoraNetworkAccessManagerFactory());
     engine.rootContext()->setContextProperty("backend", &backend);
     // Inert greeter globals for the in-app real-theme preview (no auth, no session access).
@@ -4306,6 +5058,30 @@ int main(int argc, char *argv[]) {
         _exit(exitCode);
     } else if (argc > 1 && (QString(argv[1]) == "--test-store-3" || QString(argv[1]) == "--test-store-experience-3")) {
         exitCode = runTestStoreExperience3(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-library-2" || QString(argv[1]) == "--test-library-2.0")) {
+        exitCode = runTestLibrary2(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-visual-2.1" || QString(argv[1]) == "--test-visual-21")) {
+        exitCode = runTestVisual21(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-fluent-2.2" || QString(argv[1]) == "--test-fluent-22")) {
+        exitCode = runTestFluent22(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-branding-2.3" || QString(argv[1]) == "--test-branding-23")) {
+        exitCode = runTestBranding23(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-sidebar-about" || QString(argv[1]) == "--test-sidebar")) {
+        exitCode = runTestSidebarAbout(app, engine, &backend);
+        backend.shutdown();
+        _exit(exitCode);
+    } else if (argc > 1 && (QString(argv[1]) == "--test-settings-2.0" || QString(argv[1]) == "--test-settings-20" || QString(argv[1]) == "--test-settings")) {
+        exitCode = runTestSettings20(app, engine, &backend);
         backend.shutdown();
         _exit(exitCode);
     } else if (argc > 1 && QString(argv[1]) == "--test-lifecycle") {

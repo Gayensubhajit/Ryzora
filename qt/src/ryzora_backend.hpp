@@ -273,6 +273,9 @@ public:
     Q_INVOKABLE QVariantMap getAppsCategoryCounts() const;
     Q_INVOKABLE QVariantList getFilteredApps(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy) const;
     Q_INVOKABLE QVariantMap queryVisibleCatalogSlice(const QString &category, const QString &searchQuery, const QString &provider, const QString &sortBy, const QString &catalogMode, const QVariantList &excludedIds, int startIndex, int maxCount) const;
+    Q_INVOKABLE QVariantMap getLibrarySummary() const;
+    Q_INVOKABLE QVariantList getInstalledApplications(const QString &provider = "all", const QString &typeFilter = "all", const QString &searchQuery = "", const QString &sortBy = "name") const;
+    Q_INVOKABLE void refreshLibraryState();
 
 signals:
     void catalogChanged();

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Qml Concurrent QuickControls2 Network Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Qml Concurrent QuickControls2 Network Multimedia Svg)
 
 qt_standard_project_setup()
 
@@ -41,6 +41,7 @@ target_link_libraries(ryzora PRIVATE
     Qt6::QuickControls2
     Qt6::Network
     Qt6::Multimedia
+    Qt6::Svg
     "${RUST_LIB_PATH}"
     pthread
     dl

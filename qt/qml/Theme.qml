@@ -72,8 +72,19 @@ QtObject {
     // Dedicated Card Tokens
     readonly property color cardBg: surface
     readonly property color cardBorder: borderSubtle
-    readonly property color cardBorderHover: borderStrong
+    readonly property color cardBorderHover: Qt.rgba(accent.r, accent.g, accent.b, 0.45)
+    readonly property color cardBorderFocused: accent
     readonly property color cardHoverBg: surfaceHover
+    readonly property int cardRadius: 14
+
+    // Typography Fonts & Weights
+    readonly property string fontFamily: "Inter, Cantarell, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    readonly property string fontMono: "'Maple Mono NF', 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace"
+
+    readonly property int weightRegular: Font.Normal
+    readonly property int weightMedium: Font.Medium
+    readonly property int weightSemibold: Font.DemiBold
+    readonly property int weightBold: Font.Bold
 
     // Typography
     readonly property color text: resolvedTheme === "light" ? "#111827" : "#F1F3F7"

@@ -44,6 +44,16 @@ Rectangle {
         root.persistSidebarSettings()
     }
 
+    Shortcut {
+        sequence: "Ctrl+B"
+        onActivated: root.toggleSidebar()
+    }
+
+    Shortcut {
+        sequence: "F9"
+        onActivated: root.toggleSidebar()
+    }
+
     Component.onCompleted: {
         if (Qt.application.arguments.indexOf("--collapsed") !== -1) {
             root.isCollapsed = true
@@ -75,61 +85,91 @@ Rectangle {
         // ── 1. Brand Header ──
         Rectangle {
             Layout.fillWidth: true
-            height: 52
+            height: 56
             color: "transparent"
             border.color: theme.borderSubtle
             border.width: 1
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: root.isCollapsed ? 12 : 16
-                anchors.rightMargin: root.isCollapsed ? 12 : 12
-                spacing: 10
+                anchors.leftMargin: root.isCollapsed ? 8 : 14
+                anchors.rightMargin: root.isCollapsed ? 6 : 12
+                spacing: root.isCollapsed ? 4 : 8
 
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: theme.radiusMd
-                    color: theme.accent
+                // Clickable Logo + Wordmark Area
+                Item {
+                    Layout.fillWidth: !root.isCollapsed
+                    Layout.fillHeight: true
+                    implicitWidth: root.isCollapsed ? 30 : logoRow.implicitWidth
+                    implicitHeight: 34
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "R"
-                        font.pixelSize: 13
-                        font.bold: true
-                        font.family: "monospace"
-                        color: "#ffffff"
+                    RowLayout {
+                        id: logoRow
+                        anchors.fill: parent
+                        spacing: 10
+
+                        Image {
+                            id: logoImg
+                            source: "qrc:/resources/icons/ryzora_logo.svg"
+                            width: root.isCollapsed ? 30 : 34
+                            height: root.isCollapsed ? 30 : 34
+                            Layout.preferredWidth: root.isCollapsed ? 30 : 34
+                            Layout.preferredHeight: root.isCollapsed ? 30 : 34
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        Text {
+                            visible: !root.isCollapsed
+                            text: "RYZORA"
+                            font.family: theme.fontFamily
+                            font.pixelSize: 13
+                            font.weight: theme.weightSemibold
+                            font.letterSpacing: 1.0
+                            color: theme.text
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                    }
+
+                    ToolTip.visible: brandMouse.containsMouse
+                    ToolTip.text: "Ryzora · Discover"
+                    ToolTip.delay: 400
+
+                    MouseArea {
+                        id: brandMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.tabSelected("discover")
                     }
                 }
 
-                Text {
-                    visible: !root.isCollapsed
-                    text: "RYZORA"
-                    font.pixelSize: 12
-                    font.bold: true
-                    font.letterSpacing: 1.5
-                    color: theme.text
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                // Collapse Button
+                // Collapse / Expand Toggle Button (ALWAYS visible in BOTH expanded and compact modes)
                 Rectangle {
-                    visible: !root.isCollapsed
-                    width: 26
-                    height: 26
+                    id: toggleBtn
+                    objectName: "sidebarToggleBtn"
+                    width: root.isCollapsed ? 24 : 26
+                    height: root.isCollapsed ? 24 : 26
+                    Layout.preferredWidth: root.isCollapsed ? 24 : 26
+                    Layout.preferredHeight: root.isCollapsed ? 24 : 26
                     radius: theme.radiusSm
                     color: colMouse.containsMouse ? theme.surfaceHover : "transparent"
+                    border.color: colMouse.containsMouse ? theme.borderSubtle : "transparent"
+                    border.width: 1
+                    Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
 
                     RyzoraIcon {
                         anchors.centerIn: parent
-                        name: "chevron-left"
-                        size: 10
-                        color: theme.textMuted
+                        name: root.isCollapsed ? "chevron-right" : "chevron-left"
+                        size: 11
+                        color: colMouse.containsMouse ? theme.text : theme.textMuted
                     }
 
                     ToolTip.visible: colMouse.containsMouse
-                    ToolTip.text: "Collapse sidebar"
+                    ToolTip.text: root.isCollapsed ? "Expand sidebar (Ctrl+B / F9)" : "Collapse sidebar (Ctrl+B / F9)"
                     ToolTip.delay: 300
 
                     MouseArea {
@@ -199,7 +239,7 @@ Rectangle {
 
                 NavButton {
                     label: "Apps"
-                    iconName: "layout-grid"
+                    iconName: "apps"
                     tabId: "apps"
                     badgeCount: backend ? backend.activeAppOperationsCount : 0
                     isActive: root.currentTab === "apps"
@@ -219,7 +259,7 @@ Rectangle {
 
                 NavButton {
                     label: "Updates"
-                    iconName: "arrow-up-circle"
+                    iconName: "arrow_sync"
                     tabId: "updates"
                     badgeCount: backend.updatesCount
                     isActive: root.currentTab === "updates"
@@ -232,7 +272,7 @@ Rectangle {
 
                 NavButton {
                     label: "Studio"
-                    iconName: "sliders-horizontal"
+                    iconName: "sliders"
                     tabId: "studio"
                     isActive: root.currentTab === "studio" || root.currentTab === "lockscreens" || root.currentTab === "fastfetch"
                     collapsed: root.isCollapsed
@@ -254,7 +294,7 @@ Rectangle {
 
                 NavButton {
                     label: "Diagnostics"
-                    iconName: "activity"
+                    iconName: "pulse"
                     tabId: "system"
                     isActive: root.currentTab === "system" || root.currentTab === "compat_lab" || root.currentTab === "integrity" || root.currentTab === "activity" || root.currentTab === "author"
                     collapsed: root.isCollapsed
@@ -271,149 +311,13 @@ Rectangle {
                 }
             }
         }
-
-        // ── 3. Footer System Card & About ──
-        Rectangle {
-            Layout.fillWidth: true
-            height: root.isCollapsed ? 64 : 68
-            color: "transparent"
-            border.color: theme.borderSubtle
-            border.width: 1
-
-            // Expanded Footer
-            ColumnLayout {
-                visible: !root.isCollapsed
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 4
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 42
-                    radius: theme.radiusSm
-                    color: sysMouse.containsMouse ? theme.surfaceHover : "transparent"
-
-                    MouseArea {
-                        id: sysMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.tabSelected("system")
-                    }
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 1
-
-                        Text {
-                            text: (backend.systemInfo && backend.systemInfo.desktop) ? backend.systemInfo.desktop : "Hyprland"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: theme.text
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            text: "wayland · Connected"
-                            font.pixelSize: 10
-                            color: theme.textMuted
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 24
-                    radius: theme.radiusSm
-                    color: aboutMouse.containsMouse ? theme.surfaceHover : "transparent"
-
-                    Text {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "About Ryzora"
-                        font.pixelSize: 11
-                        color: aboutMouse.containsMouse ? theme.text : theme.textMuted
-                    }
-
-                    MouseArea {
-                        id: aboutMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.openAbout()
-                    }
-                }
-            }
-
-            // Collapsed Footer
-            ColumnLayout {
-                visible: root.isCollapsed
-                anchors.fill: parent
-                anchors.margins: 6
-                spacing: 4
-
-                Rectangle {
-                    width: 38
-                    height: 34
-                    radius: theme.radiusSm
-                    color: sysIconMouse.containsMouse ? theme.surfaceHover : "transparent"
-
-                    RyzoraIcon {
-                        anchors.centerIn: parent
-                        name: "desktop"
-                        size: 14
-                        color: theme.textMuted
-                    }
-
-                    MouseArea {
-                        id: sysIconMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.tabSelected("system")
-                    }
-                }
-
-                Rectangle {
-                    width: 38
-                    height: 28
-                    radius: theme.radiusSm
-                    color: expMouse.containsMouse ? theme.surfaceHover : "transparent"
-
-                    RyzoraIcon {
-                        anchors.centerIn: parent
-                        name: "chevron-right"
-                        size: 10
-                        color: theme.textMuted
-                    }
-
-                    ToolTip.visible: expMouse.containsMouse
-                    ToolTip.text: "Expand sidebar"
-                    ToolTip.delay: 300
-
-                    MouseArea {
-                        id: expMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.toggleSidebar()
-                    }
-                }
-            }
-        }
     }
 
     component SectionHeader : Item {
         property string label: ""
         property bool collapsed: false
         Layout.fillWidth: true
-        height: collapsed ? 10 : 20
+        height: collapsed ? 10 : 22
 
         // Divider in collapsed mode
         Rectangle {
@@ -428,12 +332,13 @@ Rectangle {
         Text {
             visible: !collapsed
             text: label
-            font.pixelSize: 10
-            font.bold: true
+            font.family: theme.fontFamily
+            font.pixelSize: 11
+            font.weight: theme.weightMedium
             font.letterSpacing: 1.0
             color: theme.navSectionLabel
             anchors.left: parent.left
-            anchors.leftMargin: 10
+            anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
         }
     }
@@ -468,7 +373,7 @@ Rectangle {
         Rectangle {
             visible: navBtn.isActive
             width: 3
-            height: 20
+            height: 18
             radius: 1.5
             color: theme.accent
             anchors.left: parent.left
@@ -485,21 +390,23 @@ Rectangle {
         RowLayout {
             visible: !navBtn.collapsed
             anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            spacing: 10
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 12
 
             RyzoraIcon {
                 name: (navBtn.iconName && navBtn.iconName.length > 0) ? navBtn.iconName : "compass"
-                size: 16
+                size: 20
+                filled: isActive
                 color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textSecondary)
                 Layout.alignment: Qt.AlignVCenter
             }
 
             Text {
                 text: navBtn.label
+                font.family: theme.fontFamily
                 font.pixelSize: theme.fontNav
-                font.bold: isActive
+                font.weight: isActive ? theme.weightSemibold : (btnMouse.containsMouse ? theme.weightMedium : theme.weightRegular)
                 color: isActive ? theme.navItemActiveText : (btnMouse.containsMouse ? theme.navItemHover : theme.navItem)
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
@@ -557,7 +464,8 @@ Rectangle {
             RyzoraIcon {
                 anchors.centerIn: parent
                 name: (navBtn.iconName && navBtn.iconName.length > 0) ? navBtn.iconName : "compass"
-                size: 16
+                size: 20
+                filled: isActive
                 color: isActive ? theme.accent : (btnMouse.containsMouse ? theme.text : theme.textSecondary)
             }
 

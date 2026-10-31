@@ -11,7 +11,8 @@ Item {
     property string speedHelper: "Based on real byte transfer"
     property string etaValue: "Estimating…"
     property string etaHelper: "Updated during download"
-    property string stepValue: "Step 1 of 1"
+    property string stepTitle: "Component"
+    property string stepValue: "Component 1 of 1"
     property string stepHelper: "In progress"
 
     implicitHeight: metricsGrid.implicitHeight
@@ -162,7 +163,7 @@ Item {
                 spacing: 2
 
                 Text {
-                    text: "Installation step"
+                    text: root.stepTitle
                     font.pixelSize: 11
                     font.weight: Font.Medium
                     color: theme.textMuted

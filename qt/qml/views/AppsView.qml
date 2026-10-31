@@ -147,15 +147,14 @@ Item {
         return 350
     }
 
-    // Dynamic responsive column count (cards stay between 220px and 270px wide)
+    // Dynamic responsive column count: guarantees zero horizontal overflow and comfortable card widths
     readonly property int responsiveColumns: {
         var w = root.width - (root.width < 600 ? 24 : 40)
-        if (w < 440) return 1
-        if (w < 680) return 2
-        if (w < 960) return 3
-        if (w < 1240) return 4
-        if (w < 1520) return 5
-        return 6
+        var spacing = 12
+        var minCardWidth = 240
+        var cols = Math.floor((w + spacing) / (minCardWidth + spacing))
+        var maxCols = (w >= 1800) ? 6 : ((w >= 1400) ? 5 : 4)
+        return Math.max(1, Math.min(maxCols, cols))
     }
 
     // Curated row slice: returns exactly the number of cards that fit the current responsive column count
@@ -414,10 +413,14 @@ Item {
             root.actionErrorMessage = "Another package operation is currently in progress. Please wait for it to finish."
             return
         }
-        root.actionErrorMessage = ""
-        root.pendingAppId = appId
-        root.pendingAction = "uninstall"
-        root.uninstallRequested(appId)
+        if (root.selectedApp) {
+            uninstallConfirmationDialog.openForApp(root.selectedApp)
+        } else {
+            root.actionErrorMessage = ""
+            root.pendingAppId = appId
+            root.pendingAction = "uninstall"
+            root.uninstallRequested(appId)
+        }
     }
 
     Component.onCompleted: {
@@ -488,7 +491,10 @@ Item {
             }
         }
         function onAppInstalled(appId, success, message) {
-            if (root.pendingAppId === appId || root.isSelectedAppPending()) {
+            var curAppId = root.selectedApp ? root.selectedApp.id : ""
+            var cleanId = appId ? appId.replace(/^(pacman|aur|flatpak):/, "") : ""
+            var isCur = (root.pendingAppId === appId || root.isSelectedAppPending() || curAppId === appId || curAppId === cleanId)
+            if (isCur) {
                 root.pendingAppId = ""
                 root.pendingAction = ""
                 root.installStage = ""
@@ -508,18 +514,39 @@ Item {
                     root.actionErrorMessage = message || "Installation failed. Please try again."
                 } else {
                     root.actionErrorMessage = ""
+                    if (root.selectedApp) {
+                        var updated = Object.assign({}, root.selectedApp)
+                        updated.is_installed = true
+                        root.selectedApp = updated
+                    }
                 }
+            }
+            if (backend) {
+                backend.refreshCatalog()
             }
         }
         function onAppUninstalled(appId, success, message) {
-            if (root.pendingAppId === appId || root.isSelectedAppPending()) {
+            var curAppId = root.selectedApp ? root.selectedApp.id : ""
+            var cleanId = appId ? appId.replace(/^(pacman|aur|flatpak):/, "") : ""
+            var isCur = (root.pendingAppId === appId || root.isSelectedAppPending() || curAppId === appId || curAppId === cleanId)
+            if (isCur) {
                 root.pendingAppId = ""
                 root.pendingAction = ""
                 if (!success) {
                     root.actionErrorMessage = message || "Removal failed. Please try again."
                 } else {
                     root.actionErrorMessage = ""
+                    if (root.selectedApp) {
+                        var updatedUninst = Object.assign({}, root.selectedApp)
+                        updatedUninst.is_installed = false
+                        updatedUninst.installed_provider = ""
+                        updatedUninst.installed_version = ""
+                        root.selectedApp = updatedUninst
+                    }
                 }
+            }
+            if (backend) {
+                backend.refreshCatalog()
             }
         }
         function onAppLaunched(appId, success, message) {
@@ -756,7 +783,7 @@ Item {
         return res
     }
 
-    // ── REUSABLE MICROSOFT STORE-INSPIRED APP CARD (52px ICON + PROPORTIONAL ACTION BUTTON) ──
+    // ── REUSABLE MICROSOFT STORE-INSPIRED APP CARD (48px ICON + PROPORTIONAL ACTION BUTTON) ──
     component AppCard: Rectangle {
         id: cardRoot
         property var appData: null
@@ -765,16 +792,34 @@ Item {
 
         width: cardWidth > 0 ? cardWidth : undefined
         Layout.fillWidth: cardWidth <= 0
-        Layout.preferredWidth: cardWidth > 0 ? cardWidth : -1
-        Layout.minimumWidth: cardWidth > 0 ? cardWidth : 160
-        implicitWidth: cardWidth > 0 ? cardWidth : 240
-        implicitHeight: 212
-        height: 212
-        radius: theme.radiusMd
+        Layout.preferredWidth: cardWidth > 0 ? cardWidth : 220
+        Layout.minimumWidth: 200
+        implicitWidth: cardWidth > 0 ? cardWidth : 220
+        implicitHeight: 216
+        Layout.preferredHeight: 216
+        height: 216
+        radius: theme.cardRadius
         color: cardMouse.containsMouse ? theme.surfaceHover : theme.surface
-        border.color: cardMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
-        border.width: 1
-        clip: true
+        border.color: cardRoot.activeFocus ? theme.accent : (cardMouse.containsMouse ? theme.cardBorderHover : theme.cardBorder)
+        border.width: cardRoot.activeFocus ? 2 : 1
+        activeFocusOnTab: true
+        clip: false
+
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+
+        Keys.onReturnPressed: {
+            if (cardRoot.appData) {
+                root.setSelectedApp(cardRoot.appData)
+                root.appSelected(cardRoot.appData)
+            }
+        }
+        Keys.onSpacePressed: {
+            if (cardRoot.appData) {
+                root.setSelectedApp(cardRoot.appData)
+                root.appSelected(cardRoot.appData)
+            }
+        }
 
         MouseArea {
             id: cardMouse
@@ -799,10 +844,14 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
 
-                // 52x52 Icon Container
+                // 48x48 Icon Container
                 Rectangle {
-                    width: 52
-                    height: 52
+                    width: 48
+                    height: 48
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 48
+                    Layout.fillWidth: false
+                    Layout.fillHeight: false
                     radius: 12
                     color: theme.surfaceElevated
                     border.color: theme.borderSubtle
@@ -810,8 +859,8 @@ Item {
 
                     Image {
                         anchors.centerIn: parent
-                        width: 38
-                        height: 38
+                        width: 34
+                        height: 34
                         source: (cardRoot.appData && cardRoot.appData.icon_url) ? cardRoot.appData.icon_url : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
@@ -822,71 +871,33 @@ Item {
                         anchors.centerIn: parent
                         visible: !cardRoot.appData || !cardRoot.appData.icon_url || cardRoot.appData.icon_url === ""
                         name: cardRoot.appData ? root.getCategoryIcon(cardRoot.appData.category) : "layout-grid"
-                        size: 26
+                        size: 24
                         color: theme.textMuted
                     }
                 }
 
                 Item { Layout.fillWidth: true }
 
-                // Action Pill Button (Get / Open / Installing)
-                Rectangle {
+                // Action Button using RyzoraButton system
+                RyzoraButton {
                     id: cardActionBtn
                     readonly property bool isPending: root.pendingAppId === (cardRoot.appData ? cardRoot.appData.id : "")
                     Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                    height: 28
-                    width: Math.max(68, actionBtnRow.width + 20)
-                    implicitWidth: width
-                    radius: theme.radiusSm
-                    color: cardActionBtn.isPending
-                        ? theme.borderStrong
-                        : (cardRoot.isInstalled
-                            ? (actionBtnMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated)
-                            : (actionBtnMouse.containsMouse ? theme.accentHover : theme.accent))
-                    border.color: cardActionBtn.isPending ? theme.borderStrong : (cardRoot.isInstalled ? theme.borderStrong : theme.accent)
-                    border.width: 1
-
-                    Row {
-                        id: actionBtnRow
-                        anchors.centerIn: parent
-                        spacing: 5
-
-                        RyzoraIcon {
-                            id: cardSpinIcon
-                            name: cardActionBtn.isPending ? "refresh" : (cardRoot.isInstalled ? "play" : "download")
-                            size: 10
-                            color: cardActionBtn.isPending ? "#ffffff" : (cardRoot.isInstalled ? "#10b981" : "#ffffff")
-                            RotationAnimator {
-                                target: cardSpinIcon
-                                from: 0
-                                to: 360
-                                duration: 1000
-                                loops: Animation.Infinite
-                                running: cardActionBtn.isPending
-                            }
-                        }
-
-                        Text {
-                            text: cardActionBtn.isPending ? "Wait..." : (cardRoot.isInstalled ? "Open" : "Get")
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: (cardActionBtn.isPending || !cardRoot.isInstalled) ? "#ffffff" : theme.text
-                        }
-                    }
-
-                    MouseArea {
-                        id: actionBtnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        enabled: !cardActionBtn.isPending
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: {
-                            if (!cardRoot.appData) return
-                            if (cardRoot.isInstalled) {
-                                root.launchRequested(cardRoot.appData.id)
-                            } else {
-                                root.requestInstall(cardRoot.appData.id)
-                            }
+                    Layout.preferredWidth: cardActionBtn.implicitWidth
+                    Layout.minimumWidth: cardActionBtn.implicitWidth
+                    Layout.preferredHeight: cardActionBtn.implicitHeight
+                    size: "sm"
+                    variant: cardRoot.isInstalled ? "secondary" : "primary"
+                    text: isPending ? "Wait..." : (cardRoot.isInstalled ? "Open" : "Get")
+                    iconName: isPending ? "arrow-clockwise" : (cardRoot.isInstalled ? "play" : "arrow-download")
+                    iconFilled: cardRoot.isInstalled
+                    loading: isPending
+                    onClicked: {
+                        if (!cardRoot.appData) return
+                        if (cardRoot.isInstalled) {
+                            root.launchRequested(cardRoot.appData.id)
+                        } else {
+                            root.requestInstall(cardRoot.appData.id)
                         }
                     }
                 }
@@ -895,8 +906,9 @@ Item {
             // Application Name (Clear, bold title)
             Text {
                 text: cardRoot.appData ? (cardRoot.appData.display_name || cardRoot.appData.name || "") : ""
+                font.family: theme.fontFamily
                 font.pixelSize: 14
-                font.bold: true
+                font.weight: theme.weightSemibold
                 color: theme.text
                 elide: Text.ElideRight
                 Layout.fillWidth: true
@@ -905,7 +917,9 @@ Item {
             // Category & Publisher
             Text {
                 text: cardRoot.appData ? ((cardRoot.appData.publisher ? cardRoot.appData.publisher + " · " : "") + (cardRoot.appData.category || "App")) : ""
+                font.family: theme.fontFamily
                 font.pixelSize: 11
+                font.weight: theme.weightRegular
                 color: theme.textMuted
                 elide: Text.ElideRight
                 Layout.fillWidth: true
@@ -914,7 +928,9 @@ Item {
             // Description: Clean 2-line summary with elision
             Text {
                 text: cardRoot.appData ? (cardRoot.appData.summary || cardRoot.appData.description || "") : ""
+                font.family: theme.fontFamily
                 font.pixelSize: 12
+                font.weight: theme.weightRegular
                 lineHeight: 1.2
                 color: theme.textSecondary
                 maximumLineCount: 2
@@ -942,6 +958,7 @@ Item {
                         color: "#10b981"
                         visible: cardRoot.isInstalled
                         Layout.alignment: Qt.AlignVCenter
+                        Layout.fillWidth: false
                     }
 
                     Text {
@@ -956,8 +973,9 @@ Item {
                             var repo = cardRoot.appData.repository || "extra"
                             return repo.charAt(0).toUpperCase() + repo.slice(1)
                         }
+                        font.family: theme.fontFamily
                         font.pixelSize: 11
-                        font.weight: cardRoot.isInstalled ? Font.DemiBold : Font.Normal
+                        font.weight: cardRoot.isInstalled ? theme.weightMedium : theme.weightRegular
                         color: cardRoot.isInstalled ? "#10b981" : theme.textMuted
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -967,13 +985,16 @@ Item {
 
                 // Size Badge: Right side
                 Text {
+                    id: cardSizeText
                     readonly property var szBytes: (cardRoot.appData ? (cardRoot.appData.installed_size || cardRoot.appData.download_size) : 0)
                     visible: Boolean(szBytes && szBytes > 0)
                     text: root.formatAppBytes(szBytes)
+                    font.family: theme.fontMono
                     font.pixelSize: 10
-                    font.family: "monospace"
-                    font.weight: Font.Medium
+                    font.weight: theme.weightMedium
                     color: theme.textMuted
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: implicitWidth
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 }
             }
@@ -2272,6 +2293,7 @@ Item {
                 Repeater {
                     model: root.collectionItems
                     delegate: AppCard {
+                        Layout.fillWidth: true
                         appData: modelData
                     }
                 }
@@ -2872,6 +2894,7 @@ Item {
                 Repeater {
                     model: root.exploreItems
                     delegate: AppCard {
+                        Layout.fillWidth: true
                         appData: modelData
                     }
                 }
@@ -4717,6 +4740,18 @@ Item {
                 font.bold: true
                 color: "#FFFFFF"
             }
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 6. PROVIDER-AWARE UNINSTALL CONFIRMATION MODAL
+    // ──────────────────────────────────────────────────────────────────────────
+    UninstallConfirmationDialog {
+        id: uninstallConfirmationDialog
+        onConfirmed: function(req) {
+            root.actionErrorMessage = ""
+            root.pendingAppId = root.currentActionAppId()
+            root.pendingAction = "uninstall"
         }
     }
 }

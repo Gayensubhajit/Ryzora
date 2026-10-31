@@ -957,6 +957,8 @@ pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
         std::fs::remove_dir_all(&app_dir)
             .map_err(|e| format!("Failed to remove sandbox flatpak dir: {}", e))?;
         invalidate_flatpak_cache();
+        crate::app_adapters::invalidate_app_provider_cache(app_id);
+        let _ = crate::app_adapters::catalog::refresh_installed_state_internal();
         return Ok(format!("Successfully uninstalled Flatpak application '{}' (test mode)", app_id));
     }
 
@@ -973,6 +975,8 @@ pub fn uninstall_flatpak_app(app_id: &str) -> Result<String, String> {
     }
 
     invalidate_flatpak_cache();
+    crate::app_adapters::invalidate_app_provider_cache(app_id);
+    let _ = crate::app_adapters::catalog::refresh_installed_state_internal();
     Ok(format!("Successfully uninstalled Flatpak application '{}'", app_id))
 }
 

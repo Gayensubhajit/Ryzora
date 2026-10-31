@@ -323,6 +323,20 @@ pub fn calculate_eta_string(bytes_dl_str: Option<&str>, bytes_tot_str: Option<&s
     }
 }
 
+/// Classifies a Flatpak ref into a human-friendly component kind.
+pub fn classify_flatpak_component(ref_name: &str) -> &'static str {
+    let lower = ref_name.to_ascii_lowercase();
+    if lower.contains(".locale") || lower.contains("/locale") {
+        "Translations"
+    } else if lower.contains(".gl.") || lower.contains(".vaapi.") || lower.contains(".codecs-") || lower.contains(".openh264") || lower.contains(".features.") {
+        "Driver Extension"
+    } else if lower.contains(".platform") || lower.contains(".sdk") || lower.contains("freedesktop") || lower.contains("gnome") || lower.contains("kde") {
+        "Base Runtime"
+    } else {
+        "Application"
+    }
+}
+
 /// Parses a single *actual* Flatpak CLI progress/status update.  The CLI does
 /// not promise a stable machine progress protocol, so unknown lines are kept
 /// as logs and reported as indeterminate rather than guessed percentages.
@@ -470,6 +484,13 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
     };
 
     let cur_pkg = state.current_package.as_deref().unwrap_or(&state.target_package);
+    let comp_kind = classify_flatpak_component(cur_pkg);
+    let comp_str = match (state.current_package_index, state.total_packages) {
+        (Some(cur), Some(tot)) => format!("Component {} of {}: {} ({})", cur, tot, cur_pkg, comp_kind),
+        (Some(cur), None) => format!("Component {}: {} ({})", cur, cur_pkg, comp_kind),
+        _ => format!("Component: {} ({})", cur_pkg, comp_kind),
+    };
+
     let bottleneck = if cur_pkg.contains("Platform") || cur_pkg.contains("Sdk") || cur_pkg.contains("Locale") || cur_pkg.contains("GL") || (cur_pkg != state.target_package && !cur_pkg.starts_with(&state.target_package)) {
         format!(
             "Downloading shared Flatpak runtime dependency ({}). Runtimes provide isolated base OS libraries and are shared across all Flatpak applications.",
@@ -485,9 +506,15 @@ pub fn parse_flatpak_line(line: &str, state: &mut FlatpakTransactionParserState)
         format!("Processing Flatpak operation for {}.", cur_pkg)
     };
 
-    state.diagnostic_details = Some(format!("Elapsed: {} | {}", elapsed_str, bottleneck));
+    state.diagnostic_details = Some(format!("Elapsed: {} | {} | {}", elapsed_str, comp_str, bottleneck));
 
-    Some(state.event(&stage_owned, percentage, clean.to_string(), clean.to_string()))
+    let display_msg = if state.current_package_index.is_some() && state.total_packages.is_some() {
+        format!("{}: {}", if stage_owned == "downloading" { "Downloading" } else { "Installing" }, comp_str)
+    } else {
+        clean.to_string()
+    };
+
+    Some(state.event(&stage_owned, percentage, display_msg, clean.to_string()))
 }
 
 /// State for the AUR helper (paru/yay/makepkg) progress adapter.
@@ -1158,6 +1185,22 @@ mod tests {
         assert_eq!(ev.bytes_total_str, Some("85.0 MB".to_string()));
         assert_eq!(ev.download_speed, Some("2.4 MB/s".to_string()));
         assert_eq!(state.eta_str, Some("~21 sec".to_string()));
+    }
+
+    #[test]
+    fn test_flatpak_component_classification_and_wording() {
+        assert_eq!(classify_flatpak_component("org.freedesktop.Platform"), "Base Runtime");
+        assert_eq!(classify_flatpak_component("org.freedesktop.Platform.GL.default"), "Driver Extension");
+        assert_eq!(classify_flatpak_component("org.freedesktop.Platform.Locale"), "Translations");
+        assert_eq!(classify_flatpak_component("com.discordapp.Discord"), "Application");
+
+        let mut state = FlatpakTransactionParserState::new("txn-discord".into(), "install".into(), "com.discordapp.Discord".into());
+        let step_line = "Installing 9/9 com.discordapp.Discord stable";
+        let ev = parse_flatpak_line(step_line, &mut state).unwrap();
+        assert_eq!(ev.current_package_index, Some(9));
+        assert_eq!(ev.total_packages, Some(9));
+        assert!(ev.message.contains("Component 9 of 9: com.discordapp.Discord stable (Application)"));
+        assert!(state.diagnostic_details.as_ref().unwrap().contains("Component 9 of 9"));
     }
 
     #[test]

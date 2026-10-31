@@ -272,14 +272,14 @@ Item {
                         }
 
                         Text {
-                            text: backend.systemInfo.desktop || "Hyprland"
+                            text: (backend.systemInfo && backend.systemInfo.desktop && backend.systemInfo.desktop.length > 0) ? backend.systemInfo.desktop : "Desktop Session"
                             font.pixelSize: theme.fontLg
                             font.bold: true
                             color: theme.accent
                         }
 
                         Text {
-                            text: "Wayland Display: " + (backend.systemInfo.wayland_display || "wayland-1")
+                            text: "Display Server: " + ((backend.systemInfo && backend.systemInfo.session_type && backend.systemInfo.session_type.length > 0) ? backend.systemInfo.session_type.toUpperCase() : "WAYLAND") + (backend.systemInfo && backend.systemInfo.wayland_display ? " (" + backend.systemInfo.wayland_display + ")" : "")
                             font.pixelSize: theme.fontSm
                             color: theme.textSecondary
                         }

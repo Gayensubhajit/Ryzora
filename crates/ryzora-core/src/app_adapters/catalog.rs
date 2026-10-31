@@ -57,6 +57,8 @@ pub struct CatalogItem {
     pub screenshots: Vec<String>,
     pub developer: Option<String>,
     pub metadata_source: String, // "appstream" | "desktop_entry" | "pacman_sync"
+    #[serde(default)]
+    pub install_date: Option<u64>,
 }
 
 /// Status summary of the catalog engine.
@@ -484,6 +486,30 @@ pub fn parse_system_desktop_entries(desktop_dir: &Path) -> HashMap<String, RawDe
         }
     }
 
+    // Also include user desktop entries from ~/.local/share/applications if reading system dir
+    if desktop_dir == Path::new(DEFAULT_DESKTOP_DIR) {
+        if let Ok(home) = std::env::var("HOME") {
+            let user_dir = PathBuf::from(home).join(".local/share/applications");
+            if user_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&user_dir) {
+                    for entry_res in entries.flatten() {
+                        let path = entry_res.path();
+                        if path.is_file() && path.extension().map_or(false, |ext| ext == "desktop") {
+                            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                            if let Ok(content) = fs::read_to_string(&path) {
+                                if let Some(parsed) = parse_single_desktop_file(&content) {
+                                    if !parsed.no_display {
+                                        entries_map.entry(stem.to_lowercase()).or_insert(parsed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     entries_map
 }
 
@@ -787,8 +813,21 @@ fn parse_alpm_desc_to_sync_pkg(content: &str, repo_name: &str) -> Option<RawSync
 // Local Installed State
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Scans `/var/lib/pacman/local/` and builds a map of installed package names -> version.
-pub fn scan_alpm_installed_packages(local_dir: &Path) -> HashMap<String, String> {
+/// Detailed ALPM installed record containing version, installed footprint, install timestamp, description, and packager provenance.
+#[derive(Debug, Clone, Default)]
+pub struct AlpmInstalledRecord {
+    pub name: String,
+    pub version: String,
+    pub installed_size: Option<u64>,
+    pub install_date: Option<u64>,
+    pub desc: String,
+    pub url: Option<String>,
+    pub license: Option<String>,
+    pub packager: Option<String>,
+}
+
+/// Scans `/var/lib/pacman/local/` and builds a rich map of package name -> AlpmInstalledRecord.
+pub fn scan_alpm_installed_detailed(local_dir: &Path) -> HashMap<String, AlpmInstalledRecord> {
     let mut installed = HashMap::new();
     if !local_dir.exists() {
         return installed;
@@ -804,7 +843,14 @@ pub fn scan_alpm_installed_packages(local_dir: &Path) -> HashMap<String, String>
                     if let Ok(content) = fs::read_to_string(&desc_path) {
                         let mut name = String::new();
                         let mut version = String::new();
+                        let mut desc = String::new();
+                        let mut url = None;
+                        let mut license = None;
+                        let mut packager = None;
+                        let mut installed_size = None;
+                        let mut install_date = None;
                         let mut current_key = "";
+
                         for line in content.lines() {
                             let trimmed = line.trim();
                             if trimmed.starts_with('%') && trimmed.ends_with('%') {
@@ -817,14 +863,30 @@ pub fn scan_alpm_installed_packages(local_dir: &Path) -> HashMap<String, String>
                             match current_key {
                                 "NAME" if name.is_empty() => name = trimmed.to_string(),
                                 "VERSION" if version.is_empty() => version = trimmed.to_string(),
+                                "DESC" if desc.is_empty() => desc = trimmed.to_string(),
+                                "URL" if url.is_none() => url = Some(trimmed.to_string()),
+                                "LICENSE" if license.is_none() => license = Some(trimmed.to_string()),
+                                "PACKAGER" if packager.is_none() => packager = Some(trimmed.to_string()),
+                                "SIZE" | "ISIZE" if installed_size.is_none() => {
+                                    installed_size = trimmed.parse::<u64>().ok();
+                                }
+                                "INSTALLDATE" if install_date.is_none() => {
+                                    install_date = trimmed.parse::<u64>().ok();
+                                }
                                 _ => {}
-                            }
-                            if !name.is_empty() && !version.is_empty() {
-                                break;
                             }
                         }
                         if !name.is_empty() && !version.is_empty() {
-                            installed.insert(name.to_lowercase(), version);
+                            installed.insert(name.to_lowercase(), AlpmInstalledRecord {
+                                name,
+                                version,
+                                installed_size,
+                                install_date,
+                                desc,
+                                url,
+                                license,
+                                packager,
+                            });
                             continue;
                         }
                     }
@@ -835,7 +897,16 @@ pub fn scan_alpm_installed_packages(local_dir: &Path) -> HashMap<String, String>
                         let pkg = &dir_name[..second_last_dash];
                         let ver = &dir_name[second_last_dash + 1..];
                         if !pkg.is_empty() {
-                            installed.insert(pkg.to_lowercase(), ver.to_string());
+                            installed.insert(pkg.to_lowercase(), AlpmInstalledRecord {
+                                name: pkg.to_string(),
+                                version: ver.to_string(),
+                                installed_size: None,
+                                install_date: None,
+                                desc: String::new(),
+                                url: None,
+                                license: None,
+                                packager: None,
+                            });
                         }
                     }
                 }
@@ -844,6 +915,14 @@ pub fn scan_alpm_installed_packages(local_dir: &Path) -> HashMap<String, String>
     }
 
     installed
+}
+
+/// Scans `/var/lib/pacman/local/` and builds a map of installed package names -> version.
+pub fn scan_alpm_installed_packages(local_dir: &Path) -> HashMap<String, String> {
+    scan_alpm_installed_detailed(local_dir)
+        .into_iter()
+        .map(|(k, v)| (k, v.version))
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -958,6 +1037,7 @@ pub fn build_dynamic_catalog(
                 screenshots: appstream.screenshots.clone(),
                 developer: appstream.developer.clone(),
                 metadata_source: "appstream".to_string(),
+                install_date: None,
             });
             continue;
         }
@@ -994,6 +1074,7 @@ pub fn build_dynamic_catalog(
                 screenshots: Vec::new(),
                 developer: None,
                 metadata_source: "desktop_entry".to_string(),
+                install_date: None,
             });
             continue;
         }
@@ -1023,6 +1104,7 @@ pub fn build_dynamic_catalog(
             screenshots: Vec::new(),
             developer: None,
             metadata_source: "pacman_sync".to_string(),
+            install_date: None,
         });
     }
 
@@ -1091,6 +1173,7 @@ pub fn build_dynamic_catalog(
                 screenshots: Vec::new(),
                 developer: None,
                 metadata_source: "desktop_entry".to_string(),
+                install_date: None,
             });
         } else if let Some(appstream) = appstream_map.get(inst_pkg) {
             total_apps += 1;
@@ -1119,6 +1202,7 @@ pub fn build_dynamic_catalog(
                 screenshots: appstream.screenshots.clone(),
                 developer: appstream.developer.clone(),
                 metadata_source: "appstream".to_string(),
+                install_date: None,
             });
         } else {
             let generic_cat = classify_generic_package(inst_pkg, &desc_text, &[]);
@@ -1145,6 +1229,7 @@ pub fn build_dynamic_catalog(
                 screenshots: Vec::new(),
                 developer: None,
                 metadata_source: "pacman_local".to_string(),
+                install_date: None,
             });
         }
     }
@@ -1229,7 +1314,7 @@ pub fn get_catalog_store() -> Arc<RwLock<CatalogStore>> {
 pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
     let store_arc = get_catalog_store();
     let local_dir = resolve_local_dir(None);
-    let installed_map = scan_alpm_installed_packages(&local_dir);
+    let installed_records = scan_alpm_installed_detailed(&local_dir);
 
     let mut store = store_arc.write().map_err(|e| e.to_string())?;
     let mut total_installed_apps = 0;
@@ -1237,9 +1322,13 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
 
     for item in store.items.iter_mut() {
         let pkg_lower = item.id.to_lowercase();
-        if let Some(ver) = installed_map.get(&pkg_lower) {
+        if let Some(rec) = installed_records.get(&pkg_lower) {
             item.is_installed = true;
-            item.installed_version = Some(ver.clone());
+            item.installed_version = Some(rec.version.clone());
+            if item.installed_size.is_none() {
+                item.installed_size = rec.installed_size;
+            }
+            item.install_date = rec.install_date;
             if item.is_application {
                 total_installed_apps += 1;
             }
@@ -1254,7 +1343,7 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
     let desktop_dir = resolve_desktop_dir(None);
     let desktop_map = parse_system_desktop_entries(&desktop_dir);
 
-    for (inst_pkg, inst_ver) in &installed_map {
+    for (inst_pkg, rec) in &installed_records {
         let pkg_lower = inst_pkg.to_lowercase();
         if !store.by_id.contains_key(&pkg_lower) {
             let (is_app, display_name, category, subcats, icon_name) = if let Some(d) = desktop_map.get(&pkg_lower) {
@@ -1264,29 +1353,43 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
                 (false, inst_pkg.clone(), "Other Packages".to_string(), Vec::new(), None)
             };
 
+            // Honest provenance classification: official Arch/CachyOS packager, AUR, or local system
+            let repository = if let Some(ref p) = rec.packager {
+                if p.contains("archlinux.org") || p.contains("cachyos.org") {
+                    "extra".to_string()
+                } else if p.contains("Unknown") || p.is_empty() {
+                    "aur".to_string()
+                } else {
+                    "local".to_string()
+                }
+            } else {
+                "local".to_string()
+            };
+
             let new_item = CatalogItem {
                 id: inst_pkg.clone(),
                 display_name,
-                summary: format!("Installed package {}", inst_pkg),
-                description: String::new(),
-                repository: "aur".to_string(),
-                version: inst_ver.clone(),
+                summary: if !rec.desc.is_empty() { rec.desc.clone() } else { format!("Installed package {}", inst_pkg) },
+                description: rec.desc.clone(),
+                repository,
+                version: rec.version.clone(),
                 is_installed: true,
-                installed_version: Some(inst_ver.clone()),
+                installed_version: Some(rec.version.clone()),
                 is_application: is_app,
                 category,
                 subcategories: subcats,
                 icon_name,
                 icon_path: None,
                 launchable: if is_app { Some(format!("{}.desktop", pkg_lower)) } else { None },
-                homepage: None,
-                license: None,
+                homepage: rec.url.clone(),
+                license: rec.license.clone(),
                 download_size: None,
-                installed_size: None,
+                installed_size: rec.installed_size,
                 dependencies: Vec::new(),
                 screenshots: Vec::new(),
-                developer: None,
-                metadata_source: "aur".to_string(),
+                developer: rec.packager.clone(),
+                metadata_source: "pacman_local".to_string(),
+                install_date: rec.install_date,
             };
 
             let new_idx = store.items.len();
@@ -1303,9 +1406,13 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
     if let Ok(flatpaks) = crate::app_adapters::flatpak::list_installed_flatpak_apps() {
         for fp in flatpaks {
             let fp_lower = fp.id.to_lowercase();
+            let fp_bytes = fp.installed_size.as_deref().and_then(crate::app_adapters::parse_size_str_to_bytes);
             if let Some(&idx) = store.by_id.get(&fp_lower) {
                 store.items[idx].is_installed = true;
                 store.items[idx].installed_version = Some(fp.version.clone());
+                if store.items[idx].installed_size.is_none() {
+                    store.items[idx].installed_size = fp_bytes;
+                }
             } else {
                 let display_name = if !fp.name.is_empty() { fp.name } else { fp.id.clone() };
                 let new_item = CatalogItem {
@@ -1326,11 +1433,12 @@ pub fn refresh_installed_state_internal() -> Result<CatalogStatus, String> {
                     homepage: None,
                     license: None,
                     download_size: None,
-                    installed_size: None,
+                    installed_size: fp_bytes,
                     dependencies: Vec::new(),
                     screenshots: Vec::new(),
                     developer: None,
                     metadata_source: "flatpak".to_string(),
+                    install_date: None,
                 };
                 let new_idx = store.items.len();
                 store.by_id.insert(fp_lower, new_idx);
@@ -1663,6 +1771,7 @@ Include = /etc/pacman.d/mirrorlist
                     screenshots: Vec::new(),
                     developer: None,
                     metadata_source: "appstream".to_string(),
+                    install_date: None,
                 },
                 CatalogItem {
                     id: "blender".to_string(),
@@ -1687,6 +1796,7 @@ Include = /etc/pacman.d/mirrorlist
                     screenshots: Vec::new(),
                     developer: None,
                     metadata_source: "appstream".to_string(),
+                    install_date: None,
                 },
             ];
             store.by_id.clear();

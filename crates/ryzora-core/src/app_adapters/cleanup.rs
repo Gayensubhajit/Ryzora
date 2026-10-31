@@ -693,6 +693,11 @@ pub fn execute_app_cleanup(request: AppCleanupExecutionRequest) -> Result<AppCle
         Vec::new()
     };
 
+    if package_removed {
+        crate::app_adapters::invalidate_app_provider_cache(trimmed);
+        let _ = crate::app_adapters::catalog::refresh_installed_state_internal();
+    }
+
     Ok(AppCleanupExecutionResult {
         success,
         message,

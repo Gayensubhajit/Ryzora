@@ -295,8 +295,9 @@ Rectangle {
 
             RyzoraIcon {
                 anchors.centerIn: parent
-                name: theme.appearanceMode === "light" ? "sun" : (theme.appearanceMode === "dark" ? "moon" : "desktop")
-                size: 14
+                name: theme.appearanceMode === "light" ? "weather-sunny" : (theme.appearanceMode === "dark" ? "weather-moon" : "desktop")
+                size: 15
+                filled: theme.appearanceMode !== "system"
                 color: popover.visible ? theme.accent : theme.text
             }
 
@@ -344,8 +345,8 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { id: "dark", label: "Dark", icon: "moon" },
-                        { id: "light", label: "Light", icon: "sun" },
+                        { id: "dark", label: "Dark", icon: "weather-moon" },
+                        { id: "light", label: "Light", icon: "weather-sunny" },
                         { id: "system", label: "Auto", icon: "desktop" }
                     ]
                     delegate: Rectangle {

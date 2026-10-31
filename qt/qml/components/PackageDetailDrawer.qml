@@ -488,32 +488,20 @@ Item {
                     spacing: 10
 
                     // 1. Not installed -> Install button
-                    Rectangle {
+                    RyzoraButton {
                         visible: Boolean(root.packageData && !root.packageData.is_installed)
                         Layout.fillWidth: true
-                        height: 36
-                        radius: 8
-                        color: installMouse.containsMouse ? theme.accentHover : theme.accent
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.pendingAction === "install" ? "Installing…" : "Install Package"
-                            font.pixelSize: 13
-                            font.bold: true
-                            color: "#FFFFFF"
-                        }
-
-                        MouseArea {
-                            id: installMouse
-                            anchors.fill: parent
-                            hoverEnabled: root.pendingAction === ""
-                            enabled: root.pendingAction === ""
-                            cursorShape: root.pendingAction === "" ? Qt.PointingHandCursor : Qt.WaitCursor
-                            onClicked: {
-                                if (root.packageData && root.pendingAction === "") {
-                                    root.pendingAction = "install"
-                                    root.actionRequested("install", root.packageData)
-                                }
+                        variant: "primary"
+                        size: "md"
+                        iconName: "arrow-download"
+                        iconFilled: true
+                        text: "Install Package"
+                        loading: root.pendingAction === "install"
+                        loadingText: "Installing…"
+                        onClicked: {
+                            if (root.packageData && root.pendingAction === "") {
+                                root.pendingAction = "install"
+                                root.actionRequested("install", root.packageData)
                             }
                         }
                     }
@@ -634,34 +622,20 @@ Item {
                     }
 
                     // 4. Uninstall Button (Visible when installed)
-                    Rectangle {
+                    // 4. Uninstall Button (Destructive variant with Fluent trash icon)
+                    RyzoraButton {
                         visible: Boolean(root.packageData && root.packageData.is_installed)
-                        width: 90
-                        height: 36
-                        radius: 8
-                        color: uninstMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#FEE2E2" : "#3b1219") : theme.surface
-                        border.color: uninstMouse.containsMouse ? "#EF4444" : theme.borderSubtle
-                        border.width: 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.pendingAction === "uninstall" ? "Uninstalling…" : "Uninstall"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: (root.packageData && root.packageData.is_active) ? theme.textFaint : (uninstMouse.containsMouse ? "#DC2626" : theme.textSecondary)
-                        }
-
-                        MouseArea {
-                            id: uninstMouse
-                            anchors.fill: parent
-                            hoverEnabled: root.pendingAction === ""
-                            enabled: root.pendingAction === ""
-                            cursorShape: (root.packageData && root.packageData.is_active) ? Qt.ForbiddenCursor : (root.pendingAction === "" ? Qt.PointingHandCursor : Qt.WaitCursor)
-                            onClicked: {
-                                if (root.packageData && root.pendingAction === "") {
-                                    root.pendingAction = "uninstall"
-                                    root.actionRequested("uninstall", root.packageData)
-                                }
+                        variant: "destructive"
+                        size: "md"
+                        iconName: "delete"
+                        text: "Uninstall"
+                        loading: root.pendingAction === "uninstall"
+                        loadingText: "Uninstalling…"
+                        enabled: Boolean(root.packageData && !root.packageData.is_active && root.pendingAction === "")
+                        onClicked: {
+                            if (root.packageData && root.pendingAction === "") {
+                                root.pendingAction = "uninstall"
+                                root.actionRequested("uninstall", root.packageData)
                             }
                         }
                     }

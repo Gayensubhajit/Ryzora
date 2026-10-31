@@ -123,6 +123,12 @@ pub struct ApplicationItem {
     pub installed_size: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_date: Option<u64>,
+    #[serde(default)]
+    pub has_update: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_version: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -3077,6 +3083,9 @@ impl BackendState {
                 download_size: item_dl_size,
                 installed_size: item_inst_size,
                 size_label: item_size_label,
+                install_date: None,
+                has_update: false,
+                update_version: None,
             });
         }
 
@@ -3228,6 +3237,20 @@ impl BackendState {
                         String::new()
                     };
 
+                    let (eff_provider_id, eff_publisher) = if item.repository == "flathub" {
+                        ("flatpak".to_string(), "Flathub".to_string())
+                    } else if item.repository == "aur" {
+                        ("aur".to_string(), "AUR Community".to_string())
+                    } else if item.repository == "local" {
+                        ("local".to_string(), "Local / System".to_string())
+                    } else {
+                        ("pacman".to_string(), format!("{} Repository", item.repository))
+                    };
+
+                    if !prov_trimmed.is_empty() && prov_trimmed != "all" && eff_provider_id != prov_trimmed {
+                        continue;
+                    }
+
                     filtered.push(ApplicationItem {
                         id: item.id.clone(),
                         name: item.id.clone(),
@@ -3236,11 +3259,11 @@ impl BackendState {
                         description: if item.description.trim().is_empty() { item.summary.clone() } else { item.description.clone() },
                         category: item.category.clone(),
                         version: item.version.clone(),
-                        publisher: format!("{} Repository", item.repository),
+                        publisher: eff_publisher,
                         repository: item.repository.clone(),
-                        provider_id: "pacman".to_string(),
+                        provider_id: eff_provider_id.clone(),
                         target_id: item.id.clone(),
-                        installed_provider: if item.is_installed { Some("pacman".to_string()) } else { None },
+                        installed_provider: if item.is_installed { Some(eff_provider_id) } else { None },
                         available_providers,
                         icon_url,
                         banner_url: String::new(),
@@ -3260,6 +3283,9 @@ impl BackendState {
                         download_size: item.download_size,
                         installed_size: item.installed_size,
                         size_label: pac_size_label,
+                        install_date: item.install_date,
+                        has_update: false,
+                        update_version: None,
                     });
                 }
             };
@@ -3391,6 +3417,9 @@ impl BackendState {
                             download_size: None,
                             installed_size: inst_sz,
                             size_label,
+                            install_date: None,
+                            has_update: false,
+                            update_version: None,
                         });
                         if filtered.len() >= 400 {
                             break;
@@ -3589,6 +3618,9 @@ impl BackendState {
                         download_size: fp_dl_bytes,
                         installed_size: fp_inst_bytes,
                         size_label: fp_size_label,
+                        install_date: None,
+                        has_update: false,
+                        update_version: None,
                     });
                     if filtered.len() >= 600 {
                         break;
@@ -3605,6 +3637,62 @@ impl BackendState {
         } else {
             filtered
         }
+    }
+
+    pub fn get_library_summary(&self, repo_root_hint: Option<&Path>) -> serde_json::Value {
+        let apps = self.query_applications_filtered(repo_root_hint, "installed", "", "all", 0, 0);
+        let mut installed_apps_count = 0;
+        let mut total_packages_count = 0;
+        let mut total_bytes: u64 = 0;
+        let mut recent_count = 0;
+        let mut updates_count = 0;
+
+        let now_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let thirty_days_sec = 30 * 86400;
+
+        for a in &apps {
+            if a.is_installed {
+                total_packages_count += 1;
+                if a.is_application {
+                    installed_apps_count += 1;
+                }
+                if let Some(sz) = a.installed_size {
+                    total_bytes += sz;
+                }
+                if a.has_update {
+                    updates_count += 1;
+                }
+                if let Some(idate) = a.install_date {
+                    if now_sec > idate && (now_sec - idate) <= thirty_days_sec {
+                        recent_count += 1;
+                    }
+                }
+            }
+        }
+
+        if updates_count == 0 {
+            let updates = ryzora_core::app_adapters::updates::discover_all_updates(false);
+            updates_count = updates.len();
+        }
+
+        let size_label = if total_bytes > 0 {
+            ryzora_core::app_adapters::format_size_summary(None, Some(total_bytes))
+                .unwrap_or_else(|| "—".to_string())
+        } else {
+            "—".to_string()
+        };
+
+        serde_json::json!({
+            "installed_count": installed_apps_count,
+            "packages_count": total_packages_count,
+            "updates_count": updates_count,
+            "total_installed_bytes": total_bytes,
+            "total_installed_size_label": size_label,
+            "recent_count": if recent_count > 0 { recent_count } else { std::cmp::min(12, installed_apps_count) },
+        })
     }
 
     pub fn resolve_app_providers(
@@ -3872,6 +3960,8 @@ impl BackendState {
         let _ = self.app_coordinator.finish_request(req_id);
         let res = res?;
         *self.library_cache.lock().unwrap() = None;
+        ryzora_core::app_adapters::invalidate_app_provider_cache(&canonical);
+        let _ = ryzora_core::app_adapters::catalog::refresh_installed_state_internal();
         Ok(res.message)
     }
 
@@ -3895,6 +3985,8 @@ impl BackendState {
             set.remove(&canonical);
         }
         *self.library_cache.lock().unwrap() = None;
+        ryzora_core::app_adapters::invalidate_app_provider_cache(&canonical);
+        let _ = ryzora_core::app_adapters::catalog::refresh_installed_state_internal();
 
         serde_json::to_string(&res).map_err(|e| e.to_string())
     }
@@ -6791,9 +6883,21 @@ impl BackendState {
         }
 
         let updates = self.load_updates();
-        let target_update = updates.iter().find(|u| u.package_id == trimmed)
-            .cloned()
-            .ok_or_else(|| format!("Package '{}' is not eligible for an update or is already at the latest version", trimmed))?;
+        let clean_trimmed = trimmed.strip_prefix("flatpak:")
+            .or_else(|| trimmed.strip_prefix("aur:"))
+            .or_else(|| trimmed.strip_prefix("pacman:"))
+            .unwrap_or(trimmed);
+
+        let target_update = updates.iter().find(|u| {
+            if u.package_id == trimmed { return true; }
+            let u_clean = u.package_id.strip_prefix("flatpak:")
+                .or_else(|| u.package_id.strip_prefix("aur:"))
+                .or_else(|| u.package_id.strip_prefix("pacman:"))
+                .unwrap_or(&u.package_id);
+            u_clean == clean_trimmed || u.name.eq_ignore_ascii_case(clean_trimmed)
+        })
+        .cloned()
+        .ok_or_else(|| format!("Package '{}' is not eligible for an update or is already at the latest version", trimmed))?;
 
         progress_cb("preparing", Some(10), &format!("Preparing update for {}...", target_update.name), true, None, None, None, Some(1), Some(4), Some(&target_update.name), None, Some("Resolving dependencies and verifying integrity"));
 
@@ -6857,6 +6961,7 @@ impl BackendState {
             return match stream_res {
                 Ok(msg) => {
                     *self.library_cache.lock().unwrap() = None;
+                    ryzora_core::app_adapters::updates::invalidate_updates_cache();
                     Ok(msg)
                 }
                 Err(e) => Err(e),
@@ -6871,7 +6976,11 @@ impl BackendState {
                 &target_update.package_id
             };
 
-            return self.install_application_with_progress(&format!("aur:{}", aur_id), progress_cb);
+            let res = self.install_application_with_progress(&format!("aur:{}", aur_id), progress_cb);
+            if res.is_ok() {
+                ryzora_core::app_adapters::updates::invalidate_updates_cache();
+            }
+            return res;
         }
 
         // Case 4: Pacman system update
@@ -6889,7 +6998,11 @@ impl BackendState {
                 ));
             }
 
-            return self.install_application_with_progress(&format!("pacman:{}", pkg_name), progress_cb);
+            let res = self.install_application_with_progress(&format!("pacman:{}", pkg_name), progress_cb);
+            if res.is_ok() {
+                ryzora_core::app_adapters::updates::invalidate_updates_cache();
+            }
+            return res;
         }
 
         Err(format!("Unsupported update provider for package '{}'", trimmed))
@@ -7493,6 +7606,21 @@ pub extern "C" fn ryzora_get_curated_applications(repo_root: *const c_char) -> *
     let items = get_backend().get_curated_applications_instant(root_opt);
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
     safe_to_c_string(json)
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_get_library_summary(repo_root: *const c_char) -> *mut c_char {
+    let root_opt = unsafe {
+        if repo_root.is_null() { None }
+        else { CStr::from_ptr(repo_root).to_str().ok().map(Path::new) }
+    };
+    let val = get_backend().get_library_summary(root_opt);
+    safe_to_c_string(val.to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_refresh_installed_state() {
+    let _ = ryzora_core::app_adapters::catalog::refresh_installed_state_internal();
 }
 
 #[no_mangle]
@@ -9651,7 +9779,7 @@ mod tests {
 
     #[test]
     fn test_sddm_helper_non_executable_and_missing_policy() {
-        let _env_lock = TEST_ENV_LOCK.lock().unwrap();
+        let _env_lock = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp_sys = tempfile::tempdir().unwrap();
         let helper_path = temp_sys.path().join("usr/lib/ryzora/ryzora-sddm-helper");
         fs::create_dir_all(helper_path.parent().unwrap()).unwrap();

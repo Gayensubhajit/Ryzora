@@ -39,6 +39,8 @@ extern "C" {
     char* ryzora_launch_application(const char* app_id);
     char* ryzora_resolve_app_providers(const char* app_id, const char* display_name);
     char* ryzora_load_library(bool force_refresh);
+    char* ryzora_get_library_summary(const char* repo_root);
+    void ryzora_refresh_installed_state();
     char* ryzora_run_fastfetch(const char* preset, uint64_t req_id);
     bool ryzora_cancel_fastfetch();
     bool ryzora_cancel_app_operation();
@@ -750,6 +752,87 @@ QVariantMap RyzoraBackend::queryVisibleCatalogSlice(const QString &category, con
     result.insert(QStringLiteral("totalCount"), visibleTotal);
     result.insert(QStringLiteral("items"), slice);
     return result;
+}
+
+QVariantMap RyzoraBackend::getLibrarySummary() const {
+    if (m_isShutdown.load()) return QVariantMap();
+    QString repoRoot = resolveRepoRoot();
+    QByteArray bRoot = repoRoot.toUtf8();
+    char* rawJson = ryzora_get_library_summary(bRoot.constData());
+    if (!rawJson) return QVariantMap();
+    QString jsonStr = QString::fromUtf8(rawJson);
+    ryzora_free_string(rawJson);
+
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    if (doc.isObject()) {
+        return doc.object().toVariantMap();
+    }
+    return QVariantMap();
+}
+
+QVariantList RyzoraBackend::getInstalledApplications(const QString &provider, const QString &typeFilter, const QString &searchQuery, const QString &sortBy) const {
+    const QString normType = typeFilter.trimmed().toLower();
+    const QString normCat = (normType == QLatin1String("packages") || normType == QLatin1String("other"))
+        ? QStringLiteral("all_packages")
+        : QStringLiteral("installed");
+
+    QVariantList apps = getFilteredApps(normCat, searchQuery, provider, sortBy);
+    if (normType == QLatin1String("updates")) {
+        QVariantList filtered;
+        for (const QVariant &v : apps) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("has_update")).toBool()) {
+                filtered.append(v);
+            }
+        }
+        return filtered;
+    }
+    if (normType == QLatin1String("recent")) {
+        std::vector<QVariantMap> vec;
+        vec.reserve(static_cast<size_t>(apps.size()));
+        for (const QVariant &v : apps) vec.push_back(v.toMap());
+        std::sort(vec.begin(), vec.end(), [](const QVariantMap &a, const QVariantMap &b) {
+            return a.value(QStringLiteral("install_date")).toULongLong() > b.value(QStringLiteral("install_date")).toULongLong();
+        });
+        QVariantList res;
+        for (const auto &m : vec) res.append(m);
+        return res;
+    }
+    if (normType == QLatin1String("packages") || normType == QLatin1String("other")) {
+        QVariantList filtered;
+        for (const QVariant &v : apps) {
+            const QVariantMap m = v.toMap();
+            if (!m.value(QStringLiteral("is_application")).toBool()) {
+                filtered.append(v);
+            }
+        }
+        return filtered;
+    }
+    // Default: genuine desktop applications
+    QVariantList filtered;
+    for (const QVariant &v : apps) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("is_application")).toBool()) {
+            filtered.append(v);
+        }
+    }
+    return filtered;
+}
+
+void RyzoraBackend::refreshLibraryState() {
+    if (m_isShutdown.load()) return;
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self]() {
+        ryzora_refresh_installed_state();
+        QMetaObject::invokeMethod(qApp, [self]() {
+            if (self) {
+                self->invalidateAppsCatalogCache();
+                self->filterApps(self->m_currentAppsCategory, self->m_currentAppsQuery, self->m_currentAppsProvider);
+                emit self->libraryChanged();
+                emit self->appsChanged();
+            }
+        });
+    });
 }
 
 struct AppProgressBridgeContext {
@@ -2983,15 +3066,10 @@ void RyzoraBackend::applyUpdate(const QString &packageId) {
 
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, baseAppId, appName, opId]() {
-        struct ProgressCtx {
-            QPointer<RyzoraBackend> backend;
-            QString appId;
-        };
-        auto ctx = new ProgressCtx{self, cleanId};
+        AppProgressBridgeContext ctx{self, cleanId};
 
         QByteArray idBa = cleanId.toUtf8();
-        char *rawRes = ryzora_apply_update_with_progress(idBa.constData(), appProgressTrampoline, ctx);
-        delete ctx;
+        char *rawRes = ryzora_apply_update_with_progress(idBa.constData(), appProgressTrampoline, &ctx);
 
         bool success = false;
         QString message = "No response from backend";
@@ -3092,14 +3170,9 @@ void RyzoraBackend::applyAllUpdates() {
 
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, opId]() {
-        struct ProgressCtx {
-            QPointer<RyzoraBackend> backend;
-            QString appId;
-        };
-        auto ctx = new ProgressCtx{self, cleanId};
+        AppProgressBridgeContext ctx{self, cleanId};
 
-        char *rawRes = ryzora_apply_all_updates_with_progress(appProgressTrampoline, ctx);
-        delete ctx;
+        char *rawRes = ryzora_apply_all_updates_with_progress(appProgressTrampoline, &ctx);
 
         bool success = false;
         QString message = "No response from backend";

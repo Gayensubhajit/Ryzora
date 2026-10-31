@@ -11,7 +11,9 @@
         <file>qml/components/ToastNotification.qml</file>
         <file>qml/components/PackageDetailDrawer.qml</file>
         <file>qml/components/AboutModal.qml</file>
+        <file>qml/components/UninstallConfirmationDialog.qml</file>
         <file>qml/components/RyzoraIcon.qml</file>
+        <file>qml/components/RyzoraButton.qml</file>
         <file>qml/views/HubView.qml</file>
         <file>qml/views/DiscoverView.qml</file>
         <file>qml/views/AppsView.qml</file>
@@ -31,5 +33,80 @@
         <file>qml/views/StudioView.qml</file>
         <file>qml/views/PackageDetailView.qml</file>
         <file>qml/views/StorageSettingsView.qml</file>
+        <file>resources/icons/ryzora_logo.svg</file>
+        <file>resources/icons/fluent/add_filled.svg</file>
+        <file>resources/icons/fluent/add_regular.svg</file>
+        <file>resources/icons/fluent/apps_filled.svg</file>
+        <file>resources/icons/fluent/apps_regular.svg</file>
+        <file>resources/icons/fluent/archive_filled.svg</file>
+        <file>resources/icons/fluent/archive_regular.svg</file>
+        <file>resources/icons/fluent/arrow_clockwise_filled.svg</file>
+        <file>resources/icons/fluent/arrow_clockwise_regular.svg</file>
+        <file>resources/icons/fluent/arrow_download_filled.svg</file>
+        <file>resources/icons/fluent/arrow_download_regular.svg</file>
+        <file>resources/icons/fluent/arrow_sync_filled.svg</file>
+        <file>resources/icons/fluent/arrow_sync_regular.svg</file>
+        <file>resources/icons/fluent/arrow_undo_filled.svg</file>
+        <file>resources/icons/fluent/arrow_undo_regular.svg</file>
+        <file>resources/icons/fluent/checkmark_circle_filled.svg</file>
+        <file>resources/icons/fluent/checkmark_circle_regular.svg</file>
+        <file>resources/icons/fluent/checkmark_filled.svg</file>
+        <file>resources/icons/fluent/checkmark_regular.svg</file>
+        <file>resources/icons/fluent/chevron_down_filled.svg</file>
+        <file>resources/icons/fluent/chevron_down_regular.svg</file>
+        <file>resources/icons/fluent/chevron_left_filled.svg</file>
+        <file>resources/icons/fluent/chevron_left_regular.svg</file>
+        <file>resources/icons/fluent/chevron_right_filled.svg</file>
+        <file>resources/icons/fluent/chevron_right_regular.svg</file>
+        <file>resources/icons/fluent/chevron_up_filled.svg</file>
+        <file>resources/icons/fluent/chevron_up_regular.svg</file>
+        <file>resources/icons/fluent/code_filled.svg</file>
+        <file>resources/icons/fluent/code_regular.svg</file>
+        <file>resources/icons/fluent/color_filled.svg</file>
+        <file>resources/icons/fluent/color_regular.svg</file>
+        <file>resources/icons/fluent/compass_filled.svg</file>
+        <file>resources/icons/fluent/compass_regular.svg</file>
+        <file>resources/icons/fluent/delete_filled.svg</file>
+        <file>resources/icons/fluent/delete_regular.svg</file>
+        <file>resources/icons/fluent/desktop_filled.svg</file>
+        <file>resources/icons/fluent/desktop_regular.svg</file>
+        <file>resources/icons/fluent/dismiss_filled.svg</file>
+        <file>resources/icons/fluent/dismiss_regular.svg</file>
+        <file>resources/icons/fluent/filter_filled.svg</file>
+        <file>resources/icons/fluent/filter_regular.svg</file>
+        <file>resources/icons/fluent/folder_filled.svg</file>
+        <file>resources/icons/fluent/folder_regular.svg</file>
+        <file>resources/icons/fluent/info_filled.svg</file>
+        <file>resources/icons/fluent/info_regular.svg</file>
+        <file>resources/icons/fluent/library_filled.svg</file>
+        <file>resources/icons/fluent/library_regular.svg</file>
+        <file>resources/icons/fluent/lock_closed_filled.svg</file>
+        <file>resources/icons/fluent/lock_closed_regular.svg</file>
+        <file>resources/icons/fluent/more_horizontal_filled.svg</file>
+        <file>resources/icons/fluent/more_horizontal_regular.svg</file>
+        <file>resources/icons/fluent/more_vertical_filled.svg</file>
+        <file>resources/icons/fluent/more_vertical_regular.svg</file>
+        <file>resources/icons/fluent/open_filled.svg</file>
+        <file>resources/icons/fluent/open_regular.svg</file>
+        <file>resources/icons/fluent/play_filled.svg</file>
+        <file>resources/icons/fluent/play_regular.svg</file>
+        <file>resources/icons/fluent/pulse_filled.svg</file>
+        <file>resources/icons/fluent/pulse_regular.svg</file>
+        <file>resources/icons/fluent/search_filled.svg</file>
+        <file>resources/icons/fluent/search_regular.svg</file>
+        <file>resources/icons/fluent/settings_filled.svg</file>
+        <file>resources/icons/fluent/settings_regular.svg</file>
+        <file>resources/icons/fluent/shield_filled.svg</file>
+        <file>resources/icons/fluent/shield_regular.svg</file>
+        <file>resources/icons/fluent/sliders_filled.svg</file>
+        <file>resources/icons/fluent/sliders_regular.svg</file>
+        <file>resources/icons/fluent/warning_filled.svg</file>
+        <file>resources/icons/fluent/warning_regular.svg</file>
+        <file>resources/icons/fluent/weather_moon_filled.svg</file>
+        <file>resources/icons/fluent/weather_moon_regular.svg</file>
+        <file>resources/icons/fluent/weather_sunny_filled.svg</file>
+        <file>resources/icons/fluent/weather_sunny_regular.svg</file>
+        <file>resources/icons/fluent/wrench_filled.svg</file>
+        <file>resources/icons/fluent/wrench_regular.svg</file>
     </qresource>
 </RCC>

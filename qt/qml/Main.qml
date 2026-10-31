@@ -26,7 +26,7 @@ ApplicationWindow {
     // Navigation History Stack
     property var navHistory: ["discover"]
     property int navHistoryIndex: 0
-    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen")) || (stackLayout.currentTab === "storage")
+    readonly property bool canGoBack: navHistoryIndex > 0 || (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) || (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) || (stackLayout.currentTab === "library" && libraryView.selectedApp !== null) || (stackLayout.currentTab === "lockscreens" && lockscreenView.selectedPackage !== null) || (stackLayout.currentTab === "studio" && studioView && (studioView.activeDetailTheme !== null || studioView.currentSubpage !== "lockscreen")) || (stackLayout.currentTab === "storage")
     readonly property bool canGoForward: navHistoryIndex < navHistory.length - 1
 
     function showPackageDetail(pkg, originTab) {
@@ -214,6 +214,11 @@ ApplicationWindow {
         } else if (tab === "repositories") {
             discoverView.secondaryMode = "repositories";
             tab = "discover";
+        } else if (tab === "about") {
+            tab = "settings";
+            if (settingsView) {
+                settingsView.showAbout();
+            }
         }
 
         if (tab === "studio") {
@@ -251,6 +256,10 @@ ApplicationWindow {
         }
         if (stackLayout.currentTab === "apps" && appsView.selectedPackage !== null) {
             appsView.setSelectedPackage(null);
+            return;
+        }
+        if (stackLayout.currentTab === "library" && libraryView.selectedApp !== null) {
+            libraryView.selectedApp = null;
             return;
         }
         if (stackLayout.currentTab === "discover" && discoverView.selectedPackage !== null) {
@@ -359,7 +368,10 @@ ApplicationWindow {
                 navigateTo(tab)
             }
             onOpenAbout: {
-                aboutModal.visible = true
+                navigateTo("settings")
+                if (settingsView) {
+                    settingsView.showAbout()
+                }
             }
         }
 
@@ -372,6 +384,7 @@ ApplicationWindow {
             // Polished Application Header
             TopBar {
                 id: topBar
+                objectName: "topBar"
                 Layout.fillWidth: true
                 currentTab: stackLayout.currentTab
                 canGoBack: window.canGoBack
@@ -386,6 +399,8 @@ ApplicationWindow {
                     } else if (stackLayout.currentTab === "apps") {
                         appsView.searchQuery = q
                         backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, q, appsView.selectedProvider)
+                    } else if (stackLayout.currentTab === "library") {
+                        libraryView.searchQuery = q
                     }
                 }
                 onRefreshClicked: {
@@ -394,7 +409,7 @@ ApplicationWindow {
                     } else if (stackLayout.currentTab === "apps") {
                         backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, appsView.searchQuery, appsView.selectedProvider)
                     } else if (stackLayout.currentTab === "library") {
-                        backend.loadLibrary(true)
+                        backend.refreshLibraryState()
                     } else if (stackLayout.currentTab === "backups") {
                         backend.loadSnapshots()
                     } else if (stackLayout.currentTab === "updates") {
@@ -582,6 +597,7 @@ ApplicationWindow {
 
                 SettingsView {
                     id: settingsView
+                    objectName: "settingsView"
                     anchors.fill: parent
                     visible: stackLayout.currentTab === "settings"
                     onLaunchLabRequested: {
@@ -646,6 +662,7 @@ ApplicationWindow {
     // About Ryzora Modal Dialog
     AboutModal {
         id: aboutModal
+        objectName: "aboutModal"
         onCloseRequested: aboutModal.visible = false
     }
 

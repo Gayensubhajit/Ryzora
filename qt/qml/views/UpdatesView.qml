@@ -11,6 +11,20 @@ Item {
     property string selectedFilter: "all"
     property string searchQuery: ""
     property var expandedDetails: ({})
+    property int updateRev: 0
+
+    Connections {
+        target: typeof backend !== "undefined" ? backend : null
+        function onAppInstallProgress(appId, stage, pct, isDet, msg, dl, tot, spd, curStep, totSteps, curItem, eta, diag) {
+            root.updateRev++
+        }
+        function onActiveAppOperationsChanged() {
+            root.updateRev++
+        }
+        function onUpdatesChanged() {
+            root.updateRev++
+        }
+    }
 
     function isExpanded(pkgId) {
         return Boolean(expandedDetails[pkgId])
@@ -115,95 +129,26 @@ Item {
                 }
 
                 // Check for updates
-                Rectangle {
-                    implicitWidth: checkRow.implicitWidth + 24
-                    height: 36
-                    radius: theme.radiusMd
-                    color: checkMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                    border.color: theme.border
-                    border.width: 1
-
-                    RowLayout {
-                        id: checkRow
-                        anchors.centerIn: parent
-                        spacing: 8
-
-                        RyzoraIcon {
-                            name: "refresh-cw"
-                            size: 14
-                            color: theme.text
-                            RotationAnimation on rotation {
-                                from: 0
-                                to: 360
-                                duration: 1000
-                                loops: Animation.Infinite
-                                running: backend ? backend.isUpdatesLoading : false
-                            }
-                        }
-
-                        Text {
-                            text: backend && backend.isUpdatesLoading ? "Checking…" : "Check for updates"
-                            font.pixelSize: theme.fontSm
-                            font.bold: true
-                            color: theme.text
-                        }
-                    }
-
-                    MouseArea {
-                        id: checkMouse
-                        anchors.fill: parent
-                        enabled: backend ? !backend.isUpdatesLoading : true
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (backend) backend.checkForUpdates()
-                        }
+                RyzoraButton {
+                    variant: "secondary"
+                    iconName: "arrow-sync"
+                    text: "Check for updates"
+                    loading: Boolean(backend && backend.isUpdatesLoading)
+                    loadingText: "Checking…"
+                    onClicked: {
+                        if (backend) backend.checkForUpdates()
                     }
                 }
 
                 // Update All Button
-                Rectangle {
-                    implicitWidth: updateAllRow.implicitWidth + 24
-                    height: 36
-                    radius: theme.radiusMd
-                    color: {
-                        if (!backend || backend.updatesCount === 0 || backend.activeAppOperationsCount > 0) {
-                            return theme.surfaceElevated
-                        }
-                        return updateAllMouse.containsMouse ? Qt.darker(theme.accent, 1.1) : theme.accent
-                    }
-                    border.color: (!backend || backend.updatesCount === 0) ? theme.border : "transparent"
-                    border.width: 1
-                    opacity: (!backend || backend.updatesCount === 0 || backend.activeAppOperationsCount > 0) ? 0.6 : 1.0
-
-                    RowLayout {
-                        id: updateAllRow
-                        anchors.centerIn: parent
-                        spacing: 8
-
-                        RyzoraIcon {
-                            name: "download"
-                            size: 14
-                            color: (!backend || backend.updatesCount === 0) ? theme.textSecondary : "#FFFFFF"
-                        }
-
-                        Text {
-                            text: (!backend || backend.updatesCount === 0) ? "Up to date" : "Update all (" + backend.updatesCount + ")"
-                            font.pixelSize: theme.fontSm
-                            font.bold: true
-                            color: (!backend || backend.updatesCount === 0) ? theme.textSecondary : "#FFFFFF"
-                        }
-                    }
-
-                    MouseArea {
-                        id: updateAllMouse
-                        anchors.fill: parent
-                        enabled: Boolean(backend && backend.updatesCount > 0 && backend.activeAppOperationsCount === 0)
-                        hoverEnabled: true
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: {
-                            if (backend) backend.applyAllUpdates()
-                        }
+                RyzoraButton {
+                    variant: "primary"
+                    iconName: "arrow-download"
+                    iconFilled: true
+                    text: (!backend || backend.updatesCount === 0) ? "Up to date" : "Update all (" + backend.updatesCount + ")"
+                    enabled: Boolean(backend && backend.updatesCount > 0 && backend.activeAppOperationsCount === 0)
+                    onClicked: {
+                        if (backend) backend.applyAllUpdates()
                     }
                 }
             }
@@ -374,15 +319,18 @@ Item {
 
                 Text {
                     text: "You're up to date"
+                    font.family: theme.fontFamily
                     font.pixelSize: 18
-                    font.bold: true
+                    font.weight: theme.weightSemibold
                     color: theme.text
                     Layout.alignment: Qt.AlignHCenter
                 }
 
                 Text {
                     text: "No updates detected for installed packages or presets."
+                    font.family: theme.fontFamily
                     font.pixelSize: 13
+                    font.weight: theme.weightRegular
                     color: theme.textMuted
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -431,10 +379,24 @@ Item {
                     id: updateRowDelegate
                     width: updateListView.width
                     implicitHeight: rowCol.implicitHeight + 20
-                    radius: theme.radiusMd
+                    radius: theme.cardRadius
                     color: itemMouseArea.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                    border.color: theme.borderSubtle
+                    border.color: itemMouseArea.containsMouse ? theme.cardBorderHover : theme.cardBorder
                     border.width: 1
+
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                    readonly property var activeTxn: {
+                        var dummy = root.updateRev
+                        if (!backend) return null
+                        var t = backend.getTransactionForApp(modelData.package_id)
+                        if ((!t || !t.op_id) && modelData.package_id.indexOf(':') !== -1) {
+                            t = backend.getTransactionForApp(modelData.package_id.split(':')[1])
+                        }
+                        return t
+                    }
+                    readonly property bool isOperating: Boolean(backend && (backend.isAppOperating(modelData.package_id) || (modelData.package_id.indexOf(':') !== -1 && backend.isAppOperating(modelData.package_id.split(':')[1]))))
 
                     ColumnLayout {
                         id: rowCol
@@ -616,101 +578,111 @@ Item {
                             }
 
                             // Update Action Button
-                            Rectangle {
-                                id: updateBtnRect
-                                property bool isOperating: Boolean(backend && (backend.isAppOperating(modelData.package_id) || (modelData.package_id.indexOf(':') !== -1 && backend.isAppOperating(modelData.package_id.split(':')[1]))))
-                                width: 110
-                                height: 32
-                                radius: theme.radiusSm
-                                color: {
-                                    if (isOperating) return theme.surfaceHover
-                                    if (!modelData.can_update_individually) return theme.surfaceElevated
-                                    return btnMouse.containsMouse ? Qt.darker(theme.accent, 1.1) : theme.accent
-                                }
-                                border.color: !modelData.can_update_individually ? theme.border : "transparent"
-                                border.width: 1
-
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-
-                                    RyzoraIcon {
-                                        name: "spinner"
-                                        size: 12
-                                        color: theme.accent
-                                        visible: updateBtnRect.isOperating
-                                        RotationAnimation on rotation {
-                                            from: 0
-                                            to: 360
-                                            duration: 1000
-                                            loops: Animation.Infinite
-                                            running: updateBtnRect.isOperating
-                                        }
-                                    }
-
-                                    Text {
-                                        text: {
-                                            if (updateBtnRect.isOperating) return "Updating…"
-                                            if (!modelData.can_update_individually) return "System Sync"
-                                            return "Update"
-                                        }
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        color: {
-                                            if (updateBtnRect.isOperating) return theme.accent
-                                            if (!modelData.can_update_individually) return theme.textSecondary
-                                            return "#FFFFFF"
-                                        }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: btnMouse
-                                    anchors.fill: parent
-                                    enabled: !parent.isOperating
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (modelData.can_update_individually) {
-                                            if (backend) backend.applyUpdate(modelData.package_id)
-                                        } else {
-                                            // Explain Arch Linux partial upgrade policy or invoke Update All
-                                            if (backend) {
-                                                backend.postNotification(
-                                                    "info",
-                                                    "System Upgrade Recommended",
-                                                    "Arch Linux packages share system libraries and should be updated together. Use 'Update All' for a coordinated system upgrade."
-                                                )
-                                            }
+                            RyzoraButton {
+                                size: "sm"
+                                variant: modelData.can_update_individually ? "primary" : "secondary"
+                                loading: updateRowDelegate.isOperating
+                                loadingText: "Updating…"
+                                text: !modelData.can_update_individually ? "System Sync" : "Update"
+                                iconName: "arrow-download"
+                                iconFilled: true
+                                onClicked: {
+                                    if (modelData.can_update_individually) {
+                                        if (backend) backend.applyUpdate(modelData.package_id)
+                                    } else {
+                                        if (backend) {
+                                            backend.postNotification(
+                                                "info",
+                                                "System Upgrade Recommended",
+                                                "Arch Linux packages share system libraries and should be updated together. Use 'Update All' for a coordinated system upgrade."
+                                            )
                                         }
                                     }
                                 }
                             }
                         }
 
+                        // Live Progress Detail Text (Visible while actively updating)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: updateRowDelegate.isOperating
+                            spacing: 8
+
+                            Text {
+                                text: updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.message ? updateRowDelegate.activeTxn.message : "Updating package..."
+                                font.family: theme.fontFamily
+                                font.pixelSize: 11
+                                color: theme.accent
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+
+                            Text {
+                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.bytes_downloaded && updateRowDelegate.activeTxn.bytes_total)
+                                text: updateRowDelegate.activeTxn ? (updateRowDelegate.activeTxn.bytes_downloaded + " / " + updateRowDelegate.activeTxn.bytes_total) : ""
+                                font.family: theme.fontMono
+                                font.pixelSize: 10
+                                color: theme.textMuted
+                            }
+
+                            Text {
+                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.download_speed)
+                                text: (updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.download_speed) ? String(updateRowDelegate.activeTxn.download_speed) : ""
+                                font.family: theme.fontMono
+                                font.pixelSize: 10
+                                color: theme.textMuted
+                            }
+
+                            Text {
+                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.percentage >= 0)
+                                text: updateRowDelegate.activeTxn ? (updateRowDelegate.activeTxn.percentage + "%") : ""
+                                font.family: theme.fontFamily
+                                font.pixelSize: 11
+                                font.weight: theme.weightSemibold
+                                color: theme.accent
+                            }
+                        }
+
                         // Progress Bar (Visible while this item is actively operating)
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 4
-                            radius: 2
+                            height: 6
+                            radius: 3
                             color: theme.borderSubtle
-                            visible: Boolean(backend && (backend.isAppOperating(modelData.package_id) || (modelData.package_id.indexOf(':') !== -1 && backend.isAppOperating(modelData.package_id.split(':')[1]))))
+                            clip: true
+                            visible: updateRowDelegate.isOperating
 
+                            // Determinate Progress
                             Rectangle {
-                                id: inlineProgFill
+                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.is_determinate && updateRowDelegate.activeTxn.percentage >= 0)
                                 height: parent.height
-                                radius: 2
+                                radius: 3
                                 color: theme.accent
                                 width: {
-                                    if (!parent.visible || !backend) return 0
-                                    var txn = backend.getTransactionForApp(modelData.package_id)
-                                    if (!txn || !txn.op_id && modelData.package_id.indexOf(':') !== -1) {
-                                        txn = backend.getTransactionForApp(modelData.package_id.split(':')[1])
+                                    if (!parent.visible || !updateRowDelegate.activeTxn) return 0
+                                    return parent.width * Math.max(0, Math.min(100, updateRowDelegate.activeTxn.percentage)) / 100
+                                }
+                                Behavior on width { NumberAnimation { duration: 150 } }
+                            }
+
+                            // Indeterminate Slide
+                            Rectangle {
+                                id: indetBar
+                                visible: !Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.is_determinate && updateRowDelegate.activeTxn.percentage >= 0)
+                                height: parent.height
+                                width: Math.max(40, parent.width * 0.28)
+                                radius: 3
+                                color: theme.accent
+
+                                SequentialAnimation on x {
+                                    loops: Animation.Infinite
+                                    running: indetBar.visible && updateRowDelegate.isOperating
+                                    PropertyAnimation {
+                                        from: -indetBar.width
+                                        to: parent.width
+                                        duration: 1000
+                                        easing.type: Easing.InOutQuad
                                     }
-                                    if (txn && txn.percentage >= 0) {
-                                        return parent.width * (txn.percentage / 100.0)
-                                    }
-                                    return parent.width * 0.4
                                 }
                             }
                         }

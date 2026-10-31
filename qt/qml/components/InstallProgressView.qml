@@ -91,6 +91,11 @@ Rectangle {
                 Text {
                     text: {
                         if (root.stage === "cancelling") return "Cancelling installation..."
+                        if (root.totalSteps > 1 && root.currentStep > 0) {
+                            var itemLabel = root.currentItem !== "" ? root.currentItem : root.appName
+                            var action = (root.stage === "downloading" ? "Downloading" : (root.stage === "installing" ? "Deploying" : "Processing"))
+                            return action + " component " + root.currentStep + " of " + root.totalSteps + ": " + itemLabel
+                        }
                         if (root.currentItem !== "" && root.currentItem.indexOf(".") !== -1) {
                             return "Downloading application and required runtime (" + root.currentItem + ")"
                         }
@@ -109,13 +114,27 @@ Rectangle {
                 }
             }
 
-            // Large Percentage Indicator
-            Text {
-                text: root.isDeterminate && root.percentage >= 0 ? (root.percentage + "%") : ""
-                font.pixelSize: 24
-                font.weight: Font.Bold
-                color: theme.accent
-                visible: text !== ""
+            // Percentage Indicator (Distinguishes component progress from overall transaction)
+            ColumnLayout {
+                spacing: 1
+                visible: root.percentage >= 0
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+
+                Text {
+                    text: root.totalSteps > 1 ? ("Component: " + root.percentage + "%") : (root.percentage + "%")
+                    font.pixelSize: root.totalSteps > 1 ? 16 : 24
+                    font.weight: Font.Bold
+                    color: theme.accent
+                    Layout.alignment: Qt.AlignRight
+                }
+
+                Text {
+                    visible: root.totalSteps > 1
+                    text: "Component " + root.currentStep + " of " + root.totalSteps
+                    font.pixelSize: 11
+                    color: theme.textMuted
+                    Layout.alignment: Qt.AlignRight
+                }
             }
 
             // Prominent Cancel Button
@@ -239,9 +258,10 @@ Rectangle {
                 return "—"
             }
             etaHelper: root.etaStr !== "" ? "Estimated remaining time" : (root.stage === "downloading" ? "Updated during download" : "Indeterminate phase")
+            stepTitle: root.totalSteps > 1 ? "Component" : "Step"
             stepValue: {
                 if (root.currentStep > 0 && root.totalSteps > 0) {
-                    return "Step " + root.currentStep + " of " + root.totalSteps
+                    return "Component " + root.currentStep + " of " + root.totalSteps
                 }
                 if (root.stage === "resolving") return "Step 1 of 4"
                 if (root.stage === "downloading") return "Step 2 of 4"

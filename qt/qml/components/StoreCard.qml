@@ -5,12 +5,12 @@ import QtMultimedia
 
 Rectangle {
     id: card
-    radius: 12
+    radius: theme.cardRadius
     clip: true
     implicitWidth: 320
     implicitHeight: 330
     color: mouseArea.containsMouse ? theme.surfaceHover : theme.surface
-    border.color: card.activeFocus ? theme.accent : (mouseArea.containsMouse ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.7) : theme.borderSubtle)
+    border.color: card.activeFocus ? theme.accent : (mouseArea.containsMouse ? theme.cardBorderHover : theme.cardBorder)
     border.width: card.activeFocus ? 2 : 1
     activeFocusOnTab: true
 
@@ -490,8 +490,9 @@ Rectangle {
 
                     Text {
                         text: card.itemData ? String(card.itemData.name) : ""
+                        font.family: theme.fontFamily
                         font.pixelSize: 15
-                        font.bold: true
+                        font.weight: theme.weightSemibold
                         color: mouseArea.containsMouse ? theme.accent : theme.text
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -505,7 +506,9 @@ Rectangle {
                         var author = card.itemData.author ? (typeof card.itemData.author === "object" ? (card.itemData.author.name || "Community") : String(card.itemData.author)) : "Community"
                         return cat + " · " + author
                     }
+                    font.family: theme.fontFamily
                     font.pixelSize: 12
+                    font.weight: theme.weightRegular
                     color: theme.textSecondary
                     elide: Text.ElideRight
                     Layout.fillWidth: true
@@ -519,7 +522,9 @@ Rectangle {
                         if (card.itemData.summary) return String(card.itemData.summary)
                         return "Community desktop customization for your Ryzora workspace."
                     }
+                    font.family: theme.fontFamily
                     font.pixelSize: 11
+                    font.weight: theme.weightRegular
                     color: theme.textMuted
                     elide: Text.ElideRight
                     maximumLineCount: 2
@@ -561,43 +566,28 @@ Rectangle {
                     Item { Layout.fillWidth: true }
 
                     // Contextual Action Button
-                    Rectangle {
+                    RyzoraButton {
                         visible: !card.hideActionButton && (card.actionLabel !== "NONE")
-                        height: 26
-                        width: Math.max(68, cardActionText.implicitWidth + 18)
-                        radius: 13
-                        color: pillMouse.containsMouse ? theme.accentHover : theme.accent
-                        border.color: theme.accent
-                        border.width: 1
-
-                        Text {
-                            id: cardActionText
-                            anchors.centerIn: parent
-                            text: {
-                                if (!card.itemData) return ""
-                                if (card.actionLabel !== "") return card.actionLabel
-                                if (card.itemData.is_installed) return "Open"
-                                return "Get"
-                            }
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: "#0a0a0c"
+                        size: "sm"
+                        variant: (card.itemData && card.itemData.is_installed) ? "secondary" : "primary"
+                        text: {
+                            if (!card.itemData) return ""
+                            if (card.actionLabel !== "") return card.actionLabel
+                            if (card.itemData.is_installed) return "Open"
+                            return "Get"
                         }
-
-                        MouseArea {
-                            id: pillMouse
-                            objectName: "storeCardPillMouse"
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            z: 2
-                            onClicked: {
-                                if (!card.itemData) return;
-                                if (!card.itemData.is_installed) {
-                                    card.actionClicked("install", card.itemData);
-                                } else {
-                                    card.cardClicked(card.itemData);
-                                }
+                        iconName: {
+                            if (!card.itemData) return ""
+                            if (card.itemData.is_installed) return "play"
+                            return "arrow-download"
+                        }
+                        iconFilled: Boolean(card.itemData && card.itemData.is_installed)
+                        onClicked: {
+                            if (!card.itemData) return;
+                            if (!card.itemData.is_installed) {
+                                card.actionClicked("install", card.itemData);
+                            } else {
+                                card.cardClicked(card.itemData);
                             }
                         }
                     }
