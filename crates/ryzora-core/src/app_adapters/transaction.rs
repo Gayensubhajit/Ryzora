@@ -730,13 +730,12 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
     // 3. Dependency resolution stage
     if line_lower.starts_with("resolving dependencies") {
         state.current_stage = "resolving".to_string();
-        let overall = state.compute_overall_percentage("resolving");
         return Some(TransactionProgressEvent {
             transaction_id: state.transaction_id.clone(),
             operation: state.operation.clone(),
             target_package: state.target_package.clone(),
             stage: "resolving".to_string(),
-            percentage: overall,
+            percentage: None,
             download_percentage: None,
             install_percentage: None,
             current_package: state.current_package.clone(),
@@ -761,7 +760,7 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
             operation: state.operation.clone(),
             target_package: state.target_package.clone(),
             stage: "resolving".to_string(),
-            percentage: state.compute_overall_percentage("resolving"),
+            percentage: None,
             download_percentage: None,
             install_percentage: None,
             current_package: state.current_package.clone(),
@@ -791,7 +790,7 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
                         operation: state.operation.clone(),
                         target_package: state.target_package.clone(),
                         stage: "resolving".to_string(),
-                        percentage: state.compute_overall_percentage("resolving"),
+                        percentage: None,
                         download_percentage: None,
                         install_percentage: None,
                         current_package: state.current_package.clone(),
@@ -805,7 +804,7 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
                         error: None,
                         is_db_locked: false,
                         is_auth_cancelled: false,
-            is_cached: state.is_cached,
+                        is_cached: state.is_cached,
                     });
                 }
             }
@@ -823,7 +822,7 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
                 operation: state.operation.clone(),
                 target_package: state.target_package.clone(),
                 stage: "resolving".to_string(),
-                percentage: state.compute_overall_percentage("resolving"),
+                percentage: None,
                 download_percentage: None,
                 install_percentage: None,
                 current_package: state.current_package.clone(),
@@ -837,7 +836,7 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
                 error: None,
                 is_db_locked: false,
                 is_auth_cancelled: false,
-            is_cached: state.is_cached,
+                is_cached: state.is_cached,
             });
         }
     }
@@ -861,7 +860,7 @@ pub fn parse_pacman_line(line: &str, state: &mut TransactionParserState) -> Opti
             operation: state.operation.clone(),
             target_package: state.target_package.clone(),
             stage: "preparing".to_string(),
-            percentage: state.compute_overall_percentage("preparing"),
+            percentage: None,
             download_percentage: None,
             install_percentage: None,
             current_package: state.current_package.clone(),

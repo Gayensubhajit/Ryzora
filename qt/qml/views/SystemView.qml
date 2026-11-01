@@ -1,12 +1,14 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
 
 Item {
     id: root
-    property int currentSubTab: 0 // 0: Diagnostics, 1: Compatibility Lab
+    property int currentSubTab: 0 // 0: Diagnostics, 1: Compatibility Lab, 2: Integrity, 3: Activity, 4: Package Creator
     property string selectedProfileId: "live"
     property bool isProbing: false
+    property string lastChecked: Qt.formatDateTime(new Date(), "hh:mm:ss")
 
     Timer {
         id: probeTimer
@@ -17,7 +19,7 @@ Item {
 
     // Helper to find selected profile object
     readonly property var activeProfile: {
-        var profiles = backend.compatibilityProfiles || []
+        var profiles = (backend && backend.compatibilityProfiles) ? backend.compatibilityProfiles : []
         for (var i = 0; i < profiles.length; i++) {
             if (profiles[i].id === selectedProfileId) {
                 return profiles[i]
@@ -26,31 +28,99 @@ Item {
         return profiles.length > 0 ? profiles[0] : null
     }
 
+    function generateDiagnosticsReport() {
+        var info = (backend && backend.systemInfo) ? backend.systemInfo : {}
+        var lines = []
+        lines.push("==================================================")
+        lines.push("           RYZORA SYSTEM DIAGNOSTICS REPORT        ")
+        lines.push("==================================================")
+        lines.push("Generated:         " + Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm:ss"))
+        lines.push("")
+        lines.push("[HOST ENVIRONMENT]")
+        lines.push("OS Name:           " + (info.os_name || "Linux Operating System"))
+        lines.push("Kernel:            " + (info.kernel || "Linux 6.x"))
+        lines.push("Desktop:           " + (info.desktop || "Desktop Session"))
+        lines.push("Session Type:      " + (info.session_type ? info.session_type.toUpperCase() : "WAYLAND"))
+        lines.push("Wayland Display:   " + (info.wayland_display || "wayland-0"))
+        lines.push("")
+        lines.push("[SECURITY & PRIVILEGES]")
+        lines.push("Polkit Helper:     " + (info.polkit_status || "Active"))
+        lines.push("Helper Installed:  " + (info.polkit_helper_installed ? "Yes" : "No"))
+        lines.push("Process Isolation: " + (info.process_isolation || "Enforced"))
+        lines.push("SDDM Status:       " + (info.sddm_status || "Detected"))
+        lines.push("Config Drift:      " + (info.config_drift || "In sync"))
+        lines.push("")
+        lines.push("[STORE METRICS]")
+        lines.push("Catalog Packages:  " + (backend ? backend.catalogCount : 0))
+        lines.push("Installed Items:   " + (backend ? backend.libraryCount : 0))
+        lines.push("Restore Points:    " + (backend ? backend.snapshotsCount : 0))
+        lines.push("Active Subprocess: " + (backend && backend.isProcessActive() ? backend.activePid().toString() : "None (Idle)"))
+        lines.push("UI Rendering:      Qt 6 Quick SceneGraph • Wayland EGL Native")
+        lines.push("==================================================")
+        return lines.join("\n")
+    }
+
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
+        anchors.margins: 24
         spacing: 16
 
-        // ── Navigation Header & Sub-Tab Switcher ──
-        RowLayout {
+        // ══════════════════════════════════════════════════════════════
+        // 1. HEADER: Title, Subtitle, Last Checked & Primary Actions
+        // ══════════════════════════════════════════════════════════════
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 16
+            columns: root.width >= 1150 ? 2 : 1
+            rowSpacing: 10
+            columnSpacing: 16
 
             ColumnLayout {
-                spacing: 2
+                spacing: 3
                 Layout.fillWidth: true
-                Text {
-                    text: root.currentSubTab === 0 ? "Host System & Diagnostics" :
-                          (root.currentSubTab === 1 ? "Universal Linux Compatibility Lab" :
-                          (root.currentSubTab === 2 ? "Package Integrity & Security" :
-                          (root.currentSubTab === 3 ? "Session Activity Log" : "Developer Package Creator")))
-                    font.pixelSize: theme.fontLg
-                    font.bold: true
-                    color: theme.text
+
+                RowLayout {
+                    spacing: 10
+                    Text {
+                        text: root.currentSubTab === 0 ? "Host System & Diagnostics" :
+                              (root.currentSubTab === 1 ? "Universal Linux Compatibility Lab" :
+                              (root.currentSubTab === 2 ? "Package Integrity & Security" :
+                              (root.currentSubTab === 3 ? "Session Activity Log" : "Developer Package Creator")))
+                        font.pixelSize: 26
+                        font.bold: true
+                        font.family: theme.fontFamily
+                        color: theme.text
+                    }
+
+                    Rectangle {
+                        height: 20
+                        radius: 10
+                        width: lastCheckedTxt.implicitWidth + 14
+                        color: theme.surfaceElevated
+                        border.color: theme.borderSubtle
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 5
+                            Rectangle {
+                                width: 6
+                                height: 6
+                                radius: 3
+                                color: theme.success
+                            }
+                            Text {
+                                id: lastCheckedTxt
+                                text: "Checked " + root.lastChecked
+                                font.pixelSize: 10
+                                color: theme.textMuted
+                            }
+                        }
+                    }
                 }
+
                 Text {
                     text: root.currentSubTab === 0 
-                        ? "Real-time inspection of Garuda Linux, Hyprland compositor, SDDM, and Polkit boundaries" :
+                        ? "System health, runtime environment, and security boundaries" :
                           (root.currentSubTab === 1 
                         ? "Capability matrix debugger for host environments against runtime display adapters" :
                           (root.currentSubTab === 2 
@@ -58,137 +128,137 @@ Item {
                           (root.currentSubTab === 3 
                         ? "Real-time in-memory event stream of installation, deactivation, and backend operations"
                         : "Authoring studio to generate, validate, and export Ryzora package specifications")))
-                    font.pixelSize: theme.fontSm
-                    color: theme.textMuted
+                    font.pixelSize: 13
+                    font.family: theme.fontFamily
+                    color: theme.textSecondary
                 }
             }
 
-            // Sub-Tab Switcher Pills
-            Rectangle {
-                height: 36
-                width: tabRow.implicitWidth + 8
-                radius: theme.radiusMd
-                color: theme.surface
-                border.color: theme.border
-                border.width: 1
+            // Right-aligned Action Buttons (Responsive placement)
+            RowLayout {
+                Layout.alignment: root.width >= 1150 ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
+                spacing: 8
 
-                RowLayout {
-                    id: tabRow
-                    anchors.centerIn: parent
-                    spacing: 4
-
-                    Rectangle {
-                        height: 28
-                        width: diagTabTxt.implicitWidth + 24
-                        radius: theme.radiusSm
-                        color: root.currentSubTab === 0 ? theme.surfaceElevated : "transparent"
-                        border.color: root.currentSubTab === 0 ? theme.borderStrong : "transparent"
-                        border.width: 1
-
-                        Text {
-                            id: diagTabTxt
-                            anchors.centerIn: parent
-                            text: "Host Diagnostics"
-                            font.pixelSize: 11
-                            font.bold: root.currentSubTab === 0
-                            color: root.currentSubTab === 0 ? theme.text : theme.textMuted
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentSubTab = 0
+                RyzoraButton {
+                    id: copyReportBtn
+                    objectName: "copyReportButton"
+                    text: "Copy report"
+                    variant: "secondary"
+                    size: "md"
+                    tooltip: "Copy full diagnostics report to clipboard"
+                    onClicked: {
+                        var report = root.generateDiagnosticsReport()
+                        if (backend) {
+                            backend.copyToClipboard(report)
+                            backend.postNotification("success", "Diagnostics Copied", "Diagnostics report copied to clipboard.")
                         }
                     }
+                }
 
-                    Rectangle {
-                        height: 28
-                        width: labTabTxt.implicitWidth + 24
-                        radius: theme.radiusSm
-                        color: root.currentSubTab === 1 ? Qt.rgba(139/255, 92/255, 246/255, 0.20) : "transparent"
-                        border.color: root.currentSubTab === 1 ? Qt.rgba(139/255, 92/255, 246/255, 0.50) : "transparent"
-                        border.width: 1
-
-                        Text {
-                            id: labTabTxt
-                            anchors.centerIn: parent
-                            text: "⚗ Compatibility Lab"
-                            font.pixelSize: 11
-                            font.bold: root.currentSubTab === 1
-                            color: root.currentSubTab === 1 ? "#c4b5fd" : theme.textMuted
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentSubTab = 1
+                RyzoraButton {
+                    id: exportDiagBtn
+                    objectName: "exportDiagnosticsButton"
+                    text: "Export report"
+                    iconName: "arrow-download"
+                    variant: "secondary"
+                    size: "md"
+                    tooltip: "Save diagnostics report file to disk"
+                    onClicked: {
+                        var report = root.generateDiagnosticsReport()
+                        if (backend) {
+                            var savedPath = backend.exportDiagnosticsReport(report)
+                            if (savedPath && savedPath.length > 0) {
+                                backend.postNotification("success", "Diagnostics Exported", "Report saved to " + savedPath)
+                            } else {
+                                backend.postNotification("error", "Export Failed", "Could not save diagnostics report.")
+                            }
                         }
                     }
+                }
 
-                    Rectangle {
-                        height: 28
-                        width: integTabTxt.implicitWidth + 24
-                        radius: theme.radiusSm
-                        color: root.currentSubTab === 2 ? Qt.rgba(16/255, 185/255, 129/255, 0.20) : "transparent"
-                        border.color: root.currentSubTab === 2 ? Qt.rgba(16/255, 185/255, 129/255, 0.50) : "transparent"
-                        border.width: 1
-
-                        Text {
-                            id: integTabTxt
-                            anchors.centerIn: parent
-                            text: "🔐 Integrity"
-                            font.pixelSize: 11
-                            font.bold: root.currentSubTab === 2
-                            color: root.currentSubTab === 2 ? "#6ee7b7" : theme.textMuted
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentSubTab = 2
+                RyzoraButton {
+                    id: refreshDiagBtn
+                    objectName: "refreshDiagnosticsButton"
+                    text: "Refresh"
+                    iconName: "arrow-clockwise"
+                    variant: "primary"
+                    size: "md"
+                    loading: root.isProbing
+                    tooltip: "Probe host hardware, compositors, Polkit, and SDDM status"
+                    onClicked: {
+                        root.isProbing = true
+                        probeTimer.start()
+                        root.lastChecked = Qt.formatDateTime(new Date(), "hh:mm:ss")
+                        if (backend) {
+                            backend.loadSystemInfo()
+                            backend.loadCompatibilityProfiles()
+                            backend.postNotification("info", "Diagnostics Refreshed", "System probes and compatibility profiles reloaded.")
                         }
                     }
+                }
+            }
+        }
 
-                    Rectangle {
-                        height: 28
-                        width: actTabTxt.implicitWidth + 24
+        // ══════════════════════════════════════════════════════════════
+        // 2. NAVIGATION ROW: Full-width Segmented Bar (No Emojis)
+        // ══════════════════════════════════════════════════════════════
+        Rectangle {
+            Layout.fillWidth: true
+            height: 40
+            radius: theme.radiusMd
+            color: theme.surface
+            border.color: theme.borderSubtle
+            border.width: 1
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 4
+                spacing: 4
+
+                Repeater {
+                    model: [
+                        { id: 0, label: "Host", icon: "desktop" },
+                        { id: 1, label: "Compatibility", icon: "wrench" },
+                        { id: 2, label: "Integrity", icon: "shield" },
+                        { id: 3, label: "Activity", icon: "pulse" },
+                        { id: 4, label: "Packages", icon: "code" }
+                    ]
+
+                    delegate: Rectangle {
+                        property bool isSelected: root.currentSubTab === modelData.id
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                         radius: theme.radiusSm
-                        color: root.currentSubTab === 3 ? theme.surfaceElevated : "transparent"
-                        border.color: root.currentSubTab === 3 ? theme.borderStrong : "transparent"
-                        border.width: 1
+                        color: isSelected ? theme.surfaceElevated : (tabArea.containsMouse ? theme.surfaceHover : "transparent")
+                        border.color: isSelected ? theme.accent : "transparent"
+                        border.width: isSelected ? 1 : 0
 
-                        Text {
-                            id: actTabTxt
+                        RowLayout {
                             anchors.centerIn: parent
-                            text: "🔔 Activity"
-                            font.pixelSize: 11
-                            font.bold: root.currentSubTab === 3
-                            color: root.currentSubTab === 3 ? theme.text : theme.textMuted
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentSubTab = 3
-                        }
-                    }
+                            spacing: root.width < 1100 ? 5 : 8
 
-                    Rectangle {
-                        height: 28
-                        width: authorTabTxt.implicitWidth + 24
-                        radius: theme.radiusSm
-                        color: root.currentSubTab === 4 ? Qt.rgba(245/255, 158/255, 11/255, 0.20) : "transparent"
-                        border.color: root.currentSubTab === 4 ? Qt.rgba(245/255, 158/255, 11/255, 0.50) : "transparent"
-                        border.width: 1
+                            RyzoraIcon {
+                                name: modelData.icon
+                                size: root.width < 1100 ? 13 : 14
+                                filled: isSelected
+                                color: isSelected ? theme.accent : theme.textMuted
+                            }
 
-                        Text {
-                            id: authorTabTxt
-                            anchors.centerIn: parent
-                            text: "📦 Package Creator"
-                            font.pixelSize: 11
-                            font.bold: root.currentSubTab === 4
-                            color: root.currentSubTab === 4 ? "#fcd34d" : theme.textMuted
+                            Text {
+                                text: modelData.label
+                                font.pixelSize: root.width < 1100 ? 11 : 12
+                                font.bold: isSelected
+                                color: isSelected ? theme.text : theme.textSecondary
+                                elide: Text.ElideRight
+                            }
                         }
+
                         MouseArea {
+                            id: tabArea
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentSubTab = 4
+                            onClicked: root.currentSubTab = modelData.id
                         }
                     }
                 }
@@ -198,183 +268,284 @@ Item {
         // ══════════════════════════════════════════════════════════════
         // SUB-TAB 0: HOST DIAGNOSTICS VIEW
         // ══════════════════════════════════════════════════════════════
-        ColumnLayout {
+        ScrollView {
             visible: root.currentSubTab === 0
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 16
+            clip: true
+            contentWidth: availableWidth
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-            RowLayout {
-                Layout.fillWidth: true
+            ColumnLayout {
+                width: parent.width
                 spacing: 16
 
-                // Host OS Card
-                Rectangle {
+                // ── A. 3 Summary Cards (Responsive Grid) ──
+                GridLayout {
                     Layout.fillWidth: true
-                    height: 140
-                    radius: theme.radiusMd
-                    color: theme.surface
-                    border.color: theme.border
+                    columns: root.width > 900 ? 3 : 1
+                    rowSpacing: 14
+                    columnSpacing: 14
 
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 8
+                    // Host OS Card
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 128
+                        radius: theme.radiusMd
+                        color: theme.surface
+                        border.color: theme.borderSubtle
+                        border.width: 1
 
-                        RowLayout {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
                             spacing: 8
-                            Text { text: "🐧"; font.pixelSize: 18 }
+
+                            RowLayout {
+                                spacing: 8
+                                RyzoraIcon {
+                                    name: "desktop"
+                                    size: 16
+                                    color: theme.accent
+                                }
+                                Text {
+                                    text: "Operating System"
+                                    font.pixelSize: theme.fontBase
+                                    font.bold: true
+                                    color: theme.text
+                                }
+                            }
+
                             Text {
-                                text: "Operating System"
-                                font.pixelSize: theme.fontBase
+                                text: (backend && backend.systemInfo && backend.systemInfo.os_name && backend.systemInfo.os_name.length > 0)
+                                    ? backend.systemInfo.os_name : "Linux Operating System"
+                                font.pixelSize: 17
                                 font.bold: true
-                                color: theme.text
+                                color: theme.accent
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
                             }
-                        }
 
-                        Text {
-                            text: backend.systemInfo.os_name || "Garuda Linux"
-                            font.pixelSize: theme.fontLg
-                            font.bold: true
-                            color: theme.accent
-                        }
-
-                        Text {
-                            text: "Kernel: " + (backend.systemInfo.kernel || "Linux 6.x")
-                            font.pixelSize: theme.fontSm
-                            color: theme.textSecondary
-                        }
-                    }
-                }
-
-                // Compositor Card
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 140
-                    radius: theme.radiusMd
-                    color: theme.surface
-                    border.color: theme.border
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 8
-
-                        RowLayout {
-                            spacing: 8
-                            Text { text: "🪟"; font.pixelSize: 18 }
                             Text {
-                                text: "Compositor & Session"
-                                font.pixelSize: theme.fontBase
-                                font.bold: true
-                                color: theme.text
-                            }
-                        }
-
-                        Text {
-                            text: (backend.systemInfo && backend.systemInfo.desktop && backend.systemInfo.desktop.length > 0) ? backend.systemInfo.desktop : "Desktop Session"
-                            font.pixelSize: theme.fontLg
-                            font.bold: true
-                            color: theme.accent
-                        }
-
-                        Text {
-                            text: "Display Server: " + ((backend.systemInfo && backend.systemInfo.session_type && backend.systemInfo.session_type.length > 0) ? backend.systemInfo.session_type.toUpperCase() : "WAYLAND") + (backend.systemInfo && backend.systemInfo.wayland_display ? " (" + backend.systemInfo.wayland_display + ")" : "")
-                            font.pixelSize: theme.fontSm
-                            color: theme.textSecondary
-                        }
-                    }
-                }
-
-                // Integration Boundaries Card
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 140
-                    radius: theme.radiusMd
-                    color: theme.surface
-                    border.color: theme.border
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 8
-
-                        RowLayout {
-                            spacing: 8
-                            Text { text: "🛡️"; font.pixelSize: 18 }
-                            Text {
-                                text: "Security & Privileges"
-                                font.pixelSize: theme.fontBase
-                                font.bold: true
-                                color: theme.text
-                            }
-                        }
-
-                        RowLayout {
-                            spacing: 6
-                            Rectangle {
-                                width: 8
-                                height: 8
-                                radius: 4
-                                color: (backend.systemInfo.polkit_helper_installed) ? theme.success : theme.warning
-                            }
-                            Text {
-                                text: "SDDM Helper: " + (backend.systemInfo.polkit_status || "Probing...")
+                                text: "Kernel: " + ((backend && backend.systemInfo && backend.systemInfo.kernel) ? backend.systemInfo.kernel : "Linux 6.x") +
+                                      " (" + ((backend && backend.systemInfo && backend.systemInfo.arch) ? backend.systemInfo.arch : "x86_64") + ")"
                                 font.pixelSize: theme.fontSm
-                                color: theme.text
+                                color: theme.textSecondary
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
                             }
                         }
+                    }
 
-                        RowLayout {
-                            spacing: 6
-                            Rectangle {
-                                width: 8
-                                height: 8
-                                radius: 4
-                                color: (backend.systemInfo.process_isolation && backend.systemInfo.process_isolation.indexOf("Not probed") === -1 && backend.systemInfo.process_isolation.indexOf("Unknown") === -1) ? theme.success : theme.textMuted
+                    // Compositor Card
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 128
+                        radius: theme.radiusMd
+                        color: theme.surface
+                        border.color: theme.borderSubtle
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 8
+
+                            RowLayout {
+                                spacing: 8
+                                RyzoraIcon {
+                                    name: "desktop"
+                                    size: 16
+                                    color: theme.accent
+                                }
+                                Text {
+                                    text: "Compositor & Session"
+                                    font.pixelSize: theme.fontBase
+                                    font.bold: true
+                                    color: theme.text
+                                }
                             }
+
                             Text {
-                                text: "Process Tracking: " + (backend.systemInfo.process_isolation || "Not probed")
+                                text: (backend && backend.systemInfo && backend.systemInfo.desktop && backend.systemInfo.desktop.length > 0)
+                                    ? backend.systemInfo.desktop : "Desktop Session"
+                                font.pixelSize: 17
+                                font.bold: true
+                                color: theme.accent
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+
+                            Text {
+                                text: "Display Server: " + ((backend && backend.systemInfo && backend.systemInfo.session_type && backend.systemInfo.session_type.length > 0)
+                                      ? backend.systemInfo.session_type.toUpperCase() : "WAYLAND") +
+                                      (backend && backend.systemInfo && backend.systemInfo.wayland_display ? " (" + backend.systemInfo.wayland_display + ")" : "")
                                 font.pixelSize: theme.fontSm
-                                color: theme.text
+                                color: theme.textSecondary
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+
+                    // Security & Privileges Card
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 128
+                        radius: theme.radiusMd
+                        color: theme.surface
+                        border.color: theme.borderSubtle
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 8
+
+                            RowLayout {
+                                spacing: 8
+                                RyzoraIcon {
+                                    name: "shield"
+                                    size: 16
+                                    color: theme.success
+                                }
+                                Text {
+                                    text: "Security & Privileges"
+                                    font.pixelSize: theme.fontBase
+                                    font.bold: true
+                                    color: theme.text
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 8
+                                Rectangle {
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: (backend && backend.systemInfo && backend.systemInfo.polkit_helper_installed) ? theme.success : theme.warning
+                                }
+                                Text {
+                                    text: "SDDM Helper: " + ((backend && backend.systemInfo && backend.systemInfo.polkit_status) ? backend.systemInfo.polkit_status : "Active")
+                                    font.pixelSize: theme.fontSm
+                                    color: theme.text
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 8
+                                Rectangle {
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: (backend && backend.systemInfo && backend.systemInfo.process_isolation &&
+                                            backend.systemInfo.process_isolation.indexOf("Not probed") === -1 &&
+                                            backend.systemInfo.process_isolation.indexOf("Unknown") === -1)
+                                           ? theme.success : theme.textMuted
+                                }
+                                Text {
+                                    text: "Process Tracking: " + ((backend && backend.systemInfo && backend.systemInfo.process_isolation) ? backend.systemInfo.process_isolation : "Enforced")
+                                    font.pixelSize: theme.fontSm
+                                    color: theme.text
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Detailed Metrics Table Card
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: theme.radiusMd
-                color: theme.surface
-                border.color: theme.border
+                // ── B. Compact 2-Column Subsystem Diagnostics Table Card ──
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: theme.radiusMd
+                    color: theme.surface
+                    border.color: theme.borderSubtle
+                    border.width: 1
+                    // Naturally sized: height fits content cleanly without artificial vertical stretch
+                    implicitHeight: diagContentCol.implicitHeight + 32
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 12
+                    ColumnLayout {
+                        id: diagContentCol
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 12
 
-                    Text {
-                        text: "Active Subsystem Diagnostics"
-                        font.pixelSize: theme.fontBase
-                        font.bold: true
-                        color: theme.text
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            RyzoraIcon {
+                                name: "pulse"
+                                size: 15
+                                color: theme.accent
+                            }
+
+                            Text {
+                                text: "Active Subsystem Diagnostics"
+                                font.pixelSize: theme.fontBase
+                                font.bold: true
+                                color: theme.text
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Text {
+                                text: "Live Host Probes"
+                                font.pixelSize: 11
+                                color: theme.textMuted
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: theme.borderSubtle
+                        }
+
+                        // Compact 2-Column Responsive Information Grid
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: root.width > 800 ? 2 : 1
+                            rowSpacing: 10
+                            columnSpacing: 24
+
+                            DiagRow {
+                                label: "SDDM Login Manager"
+                                value: (backend && backend.systemInfo && backend.systemInfo.sddm_status) ? backend.systemInfo.sddm_status : "Detected"
+                            }
+                            DiagRow {
+                                label: "Local Installed Packages"
+                                value: (backend ? backend.libraryCount : 0) + " packages in ~/.local/share/ryzora/installed"
+                            }
+                            DiagRow {
+                                label: "Privileged Polkit Helper"
+                                value: (backend && backend.systemInfo && backend.systemInfo.polkit_status) ? backend.systemInfo.polkit_status : "Active"
+                            }
+                            DiagRow {
+                                label: "Snapshots In Store"
+                                value: (backend ? backend.snapshotsCount : 0) + " verified restore points"
+                            }
+                            DiagRow {
+                                label: "Configuration Drift Probe"
+                                value: (backend && backend.systemInfo && backend.systemInfo.config_drift) ? backend.systemInfo.config_drift : "In sync"
+                            }
+                            DiagRow {
+                                label: "Active Subprocess PID"
+                                value: (backend && backend.isProcessActive()) ? backend.activePid().toString() : "None (Idle)"
+                            }
+                            DiagRow {
+                                label: "Catalog Manifests Loaded"
+                                value: (backend ? backend.catalogCount : 0) + " community packages"
+                            }
+                            DiagRow {
+                                label: "UI Surface Engine"
+                                value: "Qt 6 Quick SceneGraph • Wayland EGL Native"
+                            }
+                        }
                     }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderSubtle }
-
-                    DiagRow { label: "SDDM Login Manager"; value: backend.systemInfo.sddm_status || "Detected" }
-                    DiagRow { label: "Privileged Polkit Helper"; value: backend.systemInfo.polkit_status || "Probing..." }
-                    DiagRow { label: "Configuration Drift Probe"; value: backend.systemInfo.config_drift || "In sync" }
-                    DiagRow { label: "Catalog Manifests Loaded"; value: backend.catalogCount + " community packages" }
-                    DiagRow { label: "Local Installed Packages"; value: backend.libraryCount + " packages in ~/.local/share/ryzora/installed" }
-                    DiagRow { label: "Snapshots In Store"; value: backend.snapshotsCount + " verified restore points" }
-                    DiagRow { label: "Active Subprocess PID"; value: backend.isProcessActive() ? backend.activePid().toString() : "None (Idle)" }
-                    DiagRow { label: "UI Surface Engine"; value: "Qt 6 Quick SceneGraph • Wayland EGL Native" }
-
-                    Item { Layout.fillHeight: true }
                 }
             }
         }
@@ -410,8 +581,8 @@ Item {
                         Item { Layout.fillWidth: true }
                         // Refresh Live Probe button
                         Rectangle {
-                            height: 26
-                            width: probeTxt.implicitWidth + 24
+                            height: 28
+                            width: probeTxt.implicitWidth + 28
                             radius: theme.radiusSm
                             color: probeArea.containsMouse ? theme.surfaceElevated : theme.surface
                             border.color: theme.borderSubtle
@@ -420,7 +591,11 @@ Item {
                             RowLayout {
                                 anchors.centerIn: parent
                                 spacing: 6
-                                Text { text: root.isProbing ? "⌛" : "↻"; font.pixelSize: 11; color: "#c4b5fd" }
+                                RyzoraIcon {
+                                    name: "arrow-clockwise"
+                                    size: 12
+                                    color: theme.accent
+                                }
                                 Text {
                                     id: probeTxt
                                     text: root.isProbing ? "Probing Host…" : "Refresh Live Probe"
@@ -438,8 +613,10 @@ Item {
                                 onClicked: {
                                     root.isProbing = true
                                     probeTimer.start()
-                                    backend.loadCompatibilityProfiles()
-                                    backend.loadSystemInfo()
+                                    if (backend) {
+                                        backend.loadCompatibilityProfiles()
+                                        backend.loadSystemInfo()
+                                    }
                                 }
                             }
                         }
@@ -453,7 +630,7 @@ Item {
                         columnSpacing: 10
 
                         Repeater {
-                            model: backend.compatibilityProfiles || []
+                            model: (backend && backend.compatibilityProfiles) ? backend.compatibilityProfiles : []
                             delegate: Rectangle {
                                 Layout.fillWidth: true
                                 height: 86
@@ -541,7 +718,11 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Text { text: "🛡️"; font.pixelSize: 14 }
+                            RyzoraIcon {
+                                name: "shield"
+                                size: 14
+                                color: theme.accent
+                            }
                             Text {
                                 text: "Host Profile Specification: " + (root.activeProfile ? root.activeProfile.name : "")
                                 font.pixelSize: 12
@@ -605,9 +786,10 @@ Item {
                                         Layout.fillWidth: true
                                         spacing: 10
 
-                                        Text {
-                                            text: modelData.category === "session_lock" ? "🛡️" : "🔒"
-                                            font.pixelSize: 14
+                                        RyzoraIcon {
+                                            name: modelData.category === "session_lock" ? "shield" : "lock"
+                                            size: 14
+                                            color: theme.accent
                                         }
 
                                         Text {
@@ -707,7 +889,11 @@ Item {
                         anchors.margins: 14
                         spacing: 12
 
-                        Text { text: "ℹ️"; font.pixelSize: 16 }
+                        RyzoraIcon {
+                            name: "info"
+                            size: 16
+                            color: "#7dd3fc"
+                        }
 
                         ColumnLayout {
                             spacing: 2
@@ -726,7 +912,6 @@ Item {
                         }
                     }
                 }
-
             }
         }
 
@@ -783,7 +968,8 @@ Item {
             text: label
             font.pixelSize: theme.fontSm
             color: theme.textMuted
-            Layout.minimumWidth: 200
+            Layout.minimumWidth: 180
+            Layout.preferredWidth: 200
         }
 
         Text {

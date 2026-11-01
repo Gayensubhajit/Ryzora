@@ -514,7 +514,7 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 48
+        height: 52
         z: 10
         color: theme.surface
         border.color: theme.borderSubtle
@@ -564,9 +564,9 @@ Item {
             // Subtle inline active greeter status badge on the right
             Rectangle {
                 property bool isSddmAct: Boolean(backend.activeConfiguration && backend.activeConfiguration.sddm_login_active)
-                height: 24
-                radius: 12
-                implicitWidth: quickSddmRow.implicitWidth + 16
+                height: 28
+                radius: 14
+                implicitWidth: quickSddmRow.implicitWidth + 20
                 color: isSddmAct ? Qt.rgba(16/255, 185/255, 129/255, 0.12) : Qt.rgba(100/255, 116/255, 139/255, 0.12)
                 border.color: isSddmAct ? "#10B981" : theme.borderSubtle
                 border.width: 1
@@ -574,7 +574,7 @@ Item {
                 RowLayout {
                     id: quickSddmRow
                     anchors.centerIn: parent
-                    spacing: 6
+                    spacing: 7
                     Rectangle {
                         width: 6; height: 6; radius: 3
                         color: parent.parent.isSddmAct ? "#10B981" : "#64748B"
@@ -583,9 +583,10 @@ Item {
                         text: parent.parent.isSddmAct
                             ? "SDDM: " + (backend.activeConfiguration.active_title || "Active Theme")
                             : "SDDM: Default"
-                        font.pixelSize: 10
-                        font.bold: true
-                        color: parent.parent.isSddmAct ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399") : theme.textMuted
+                        font.family: theme.fontFamily
+                        font.pixelSize: 11
+                        font.weight: theme.weightSemibold
+                        color: parent.parent.isSddmAct ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399") : theme.textSecondary
                     }
                 }
             }
@@ -802,7 +803,7 @@ Item {
 
             ColumnLayout {
                 x: 24
-                width: Math.max(300, studioScroll.availableWidth - 48)
+                width: Math.max(300, (studioScroll.width > 0 ? studioScroll.width : (root.width > 0 ? root.width : 1200)) - 48)
                 spacing: 22
 
                 // Global Action Error Banner
@@ -851,34 +852,38 @@ Item {
                         Layout.fillWidth: true
                         spacing: 18
 
-                        // 1. Compact Header Row (macOS System Settings style)
+                        // 1. Header Row
                         RowLayout {
                             Layout.fillWidth: true
+                            Layout.topMargin: 4
                             spacing: 16
 
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 2
+                                spacing: 4
 
                                 Text {
-                                    text: "Lockscreen"
-                                    font.pixelSize: 22
-                                    font.bold: true
+                                    text: "Lockscreen Studio"
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 24
+                                    font.weight: theme.weightBold
                                     color: theme.text
                                 }
 
                                 Text {
                                     text: "Installed SDDM login greeter themes and animated lockscreen skins."
-                                    font.pixelSize: 12
-                                    color: theme.textMuted
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: theme.weightRegular
+                                    color: theme.textSecondary
                                 }
                             }
 
                             // Single Browse Store action pill
                             Rectangle {
-                                height: 32
+                                height: 34
                                 radius: theme.radiusSm
-                                implicitWidth: browseStoreRow.implicitWidth + 20
+                                implicitWidth: browseStoreRow.implicitWidth + 24
                                 color: browseStoreMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
                                 border.color: browseStoreMouse.containsMouse ? theme.borderStrong : theme.borderSubtle
                                 border.width: 1
@@ -886,12 +891,13 @@ Item {
                                 RowLayout {
                                     id: browseStoreRow
                                     anchors.centerIn: parent
-                                    spacing: 6
-                                    RyzoraIcon { name: "store"; size: 12; color: theme.text }
+                                    spacing: 8
+                                    RyzoraIcon { name: "store"; size: 14; color: theme.text }
                                     Text {
                                         text: "Browse Store"
-                                        font.pixelSize: 11
-                                        font.weight: Font.Medium
+                                        font.family: theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: theme.weightMedium
                                         color: theme.text
                                     }
                                 }
@@ -906,25 +912,31 @@ Item {
                             }
                         }
 
-                        // 3. Responsive Gallery of Installed SDDM Theme Cards (Full Width Grid & Hover Effects)
+                        // 3. Responsive Gallery of Installed SDDM Theme Cards (Spacious Grid & Large Video Preview)
                         GridLayout {
                             id: galleryGrid
                             Layout.fillWidth: true
                             rowSpacing: 18
                             columnSpacing: 18
-                            columns: Math.max(1, Math.floor((width + 18) / 320))
+                            columns: {
+                                var avail = (galleryGrid.width > 0 ? galleryGrid.width : (root.width > 0 ? root.width : 1200)) - 48
+                                if (avail >= 1350) return 4
+                                if (avail >= 960) return 3
+                                if (avail >= 580) return 2
+                                return 1
+                            }
                             visible: root.installedThemes.length > 0
 
                             Repeater {
                                 model: root.installedThemes
                                 StoreCard {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 230
-                                    Layout.minimumHeight: 210
-                                    Layout.minimumWidth: 260
-                                    itemData: modelData
+                                    Layout.preferredHeight: 250
+                                    Layout.minimumHeight: 230
+                                    compactLayout: true
                                     hideActionButton: true
                                     hideCategoryBadge: true
+                                    itemData: modelData
                                     isPageVisible: root.visible && root.currentSubpage === "lockscreen" && root.activeDetailTheme === null
                                     allowAutoplay: true
                                     onCardClicked: (pkg) => root.openThemeDetail(pkg)
@@ -1788,30 +1800,31 @@ Item {
         property bool isActive: false
         signal clicked()
 
-        height: 32
+        height: 34
         implicitWidth: tabRow.implicitWidth + 24
-        radius: 6
+        radius: theme.radiusSm
         color: isActive
-            ? (theme.resolvedTheme === "light" ? theme.surfaceElevated : Qt.rgba(255, 255, 255, 0.10))
-            : (tabMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#F1F5F9" : Qt.rgba(255, 255, 255, 0.05)) : "transparent")
+            ? (theme.resolvedTheme === "light" ? theme.surfaceElevated : Qt.rgba(255, 255, 255, 0.12))
+            : (tabMouse.containsMouse ? (theme.resolvedTheme === "light" ? "#F1F5F9" : Qt.rgba(255, 255, 255, 0.06)) : "transparent")
         border.color: isActive ? theme.borderSubtle : "transparent"
         border.width: isActive ? 1 : 0
 
         RowLayout {
             id: tabRow
             anchors.centerIn: parent
-            spacing: 6
+            spacing: 7
 
             RyzoraIcon {
                 name: tabBtn.iconName
-                size: 13
+                size: 14
                 color: tabBtn.isActive ? theme.accent : (tabMouse.containsMouse ? theme.text : theme.textSecondary)
             }
 
             Text {
                 text: tabBtn.label
-                font.pixelSize: 12
-                font.weight: tabBtn.isActive ? Font.DemiBold : Font.Normal
+                font.family: theme.fontFamily
+                font.pixelSize: 13
+                font.weight: tabBtn.isActive ? theme.weightSemibold : theme.weightMedium
                 color: tabBtn.isActive ? theme.text : (tabMouse.containsMouse ? theme.text : theme.textSecondary)
             }
         }

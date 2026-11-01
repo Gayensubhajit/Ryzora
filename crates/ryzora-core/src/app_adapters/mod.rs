@@ -492,14 +492,14 @@ where
     if std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
         progress_cb(
             "resolving",
-            Some(10),
+            None,
             "Resolving dependencies...",
-            true,
+            false,
             None,
             None,
             None,
-            Some(1),
-            Some(3),
+            None,
+            None,
             Some(package_name),
             None,
             Some("Phase: Resolving dependencies"),
@@ -512,8 +512,8 @@ where
             Some("24.0 MB"),
             Some("54.2 MB"),
             Some("18.5 MB/s"),
-            Some(2),
-            Some(3),
+            Some(1),
+            Some(1),
             Some(package_name),
             Some("~2 sec"),
             Some("Phase: Downloading package"),
@@ -526,8 +526,8 @@ where
             None,
             None,
             None,
-            Some(3),
-            Some(3),
+            Some(1),
+            Some(1),
             Some(package_name),
             None,
             Some("Phase: Installing package"),
@@ -541,14 +541,30 @@ where
             None,
             None,
             None,
-            Some(3),
-            Some(3),
+            Some(1),
+            Some(1),
             Some(package_name),
             None,
             Some("Phase: Complete"),
         );
         return Ok(res);
     }
+
+    // Immediate initial preparation progress emission to eliminate any UI delay
+    progress_cb(
+        "preparing",
+        None,
+        "Preparing installation...",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(package_name),
+        None,
+        Some(&format!("Target: {} | Preparing pacman transaction", package_name)),
+    );
 
     let (has_pacman, _) = check_binary("pacman");
     if !has_pacman {
@@ -577,14 +593,14 @@ where
 
     progress_cb(
         "resolving",
-        Some(5),
+        None,
         "Authorizing and resolving package dependencies...",
-        true,
+        false,
         None,
-        expected_total_str.as_deref(),
         None,
-        Some(1),
-        Some(3),
+        None,
+        None,
+        None,
         Some(package_name),
         None,
         Some(&format!("Target: {} | Waiting for authorization / dependency check", package_name)),
@@ -752,13 +768,14 @@ where
                             current_pct = p;
                         }
                     }
-                    let (step, tot_steps) = match ev.stage.as_str() {
-                        "preparing" | "resolving" => (Some(1), Some(3)),
-                        "downloading" => (Some(2), Some(3)),
-                        "installing" | "finalizing" => (Some(3), Some(3)),
-                        _ => (None, None),
+                    let is_determinate = ev.stage != "preparing" && ev.stage != "resolving" && ev.percentage.is_some();
+                    let step = ev.current_package_index;
+                    let tot_steps = ev.total_packages;
+                    let tot_str = if ev.stage == "downloading" {
+                        ev.bytes_total_str.as_deref().or(expected_total_str.as_deref())
+                    } else {
+                        None
                     };
-                    let tot_str = ev.bytes_total_str.as_deref().or(expected_total_str.as_deref());
                     let eta = crate::app_adapters::transaction::calculate_eta_string(
                         ev.bytes_downloaded_str.as_deref(),
                         tot_str,
@@ -768,9 +785,9 @@ where
                     let diag = format!("Elapsed: {}s | {}", elapsed, line);
                     progress_cb(
                         &ev.stage,
-                        Some(current_pct),
+                        if is_determinate { Some(current_pct) } else { None },
                         &ev.message,
-                        true,
+                        is_determinate,
                         ev.bytes_downloaded_str.as_deref(),
                         tot_str,
                         ev.download_speed.as_deref(),
@@ -841,8 +858,8 @@ where
                         Some(&dl_str),
                         expected_total_str.as_deref(),
                         speed_str.as_deref(),
-                        Some(2),
-                        Some(3),
+                        state.current_package_index,
+                        state.total_packages,
                         Some(package_name),
                         eta.as_deref(),
                         Some(&diag),
@@ -863,8 +880,8 @@ where
                         expected_total_str.as_deref(),
                         expected_total_str.as_deref(),
                         None,
-                        Some(3),
-                        Some(3),
+                        state.current_package_index,
+                        state.total_packages,
                         Some(package_name),
                         None,
                         Some(&diag),
@@ -882,8 +899,8 @@ where
                             None,
                             expected_total_str.as_deref(),
                             None,
-                            Some(3),
-                            Some(3),
+                            state.current_package_index,
+                            state.total_packages,
                             Some(package_name),
                             None,
                             Some(&diag),
@@ -937,8 +954,8 @@ where
         expected_total_str.as_deref(),
         expected_total_str.as_deref(),
         None,
-        Some(3),
-        Some(3),
+        state.total_packages.or(Some(1)),
+        state.total_packages.or(Some(1)),
         Some(package_name),
         None,
         Some("Phase: Complete"),

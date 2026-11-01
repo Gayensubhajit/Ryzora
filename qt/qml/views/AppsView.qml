@@ -521,7 +521,7 @@ Item {
                     }
                 }
             }
-            if (backend) {
+            if (backend && typeof backend.refreshCatalog === "function") {
                 backend.refreshCatalog()
             }
         }
@@ -545,7 +545,7 @@ Item {
                     }
                 }
             }
-            if (backend) {
+            if (backend && typeof backend.refreshCatalog === "function") {
                 backend.refreshCatalog()
             }
         }

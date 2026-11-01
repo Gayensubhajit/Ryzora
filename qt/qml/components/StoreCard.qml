@@ -2,10 +2,11 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtMultimedia
+import QtQuick.Effects
 
 Rectangle {
     id: card
-    radius: theme.cardRadius
+    radius: 14
     clip: true
     implicitWidth: 320
     implicitHeight: 330
@@ -61,6 +62,7 @@ Rectangle {
     property string actionLabel: ""
     property bool hideActionButton: false
     property bool hideCategoryBadge: false
+    property bool compactLayout: false
 
     property bool inViewport: true
     property bool allowAutoplay: true
@@ -262,9 +264,15 @@ Rectangle {
 
         // ── 1. Image Preview Section (Dominant Landscape Area) ──
         Item {
+            id: previewSection
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: cardTopMask
+            }
 
             // Clean Fallback Graphic when artwork is loading or unavailable
             Rectangle {
@@ -296,13 +304,13 @@ Rectangle {
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: {
-                            if (previewImg.status === Image.Loading && Boolean(card.itemData && card.itemData.preview_url)) return "LOADING…"
-                            return card.itemData ? (card.itemData.category ? String(card.itemData.category).toUpperCase() : "PACKAGE") : "PACKAGE"
+                            if (previewImg.status === Image.Loading && Boolean(card.itemData && card.itemData.preview_url)) return "Loading preview…"
+                            return card.itemData ? (card.itemData.name || "") : ""
                         }
-                        font.pixelSize: 10
-                        font.letterSpacing: 1.0
-                        font.bold: true
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
                         color: theme.textMuted
+                        elide: Text.ElideRight
                     }
                 }
             }
@@ -429,33 +437,6 @@ Rectangle {
                 }
             }
 
-            // Category Badge Pill (Top-Left)
-            Rectangle {
-                visible: !card.hideCategoryBadge && Boolean(card.itemData && card.itemData.category)
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.margins: 8
-                height: 18
-                width: catBadgeText.implicitWidth + 12
-                radius: 4
-                color: Qt.rgba(0, 0, 0, 0.55)
-                border.color: Qt.rgba(255, 255, 255, 0.12)
-                border.width: 1
-
-                Text {
-                    id: catBadgeText
-                    anchors.centerIn: parent
-                    text: {
-                        if (!card.itemData || !card.itemData.category) return "PACKAGE"
-                        return String(card.itemData.category).toUpperCase()
-                    }
-                    font.pixelSize: 9
-                    font.letterSpacing: 0.5
-                    font.bold: true
-                    color: "#FFFFFF"
-                }
-            }
-
             // Subtle divider line separating image from metadata
             Rectangle {
                 anchors.bottom: parent.bottom
@@ -471,11 +452,57 @@ Rectangle {
         // ── 2. Metadata & Contextual Action Section ──
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 115
-            Layout.minimumHeight: 110
+            Layout.preferredHeight: card.compactLayout ? 46 : 115
+            Layout.minimumHeight: card.compactLayout ? 44 : 110
             color: "transparent"
 
+            // A. Compact Mode (Studio Lockscreen): Title + Status Pill side-by-side, no extra words, maximum preview area
+            RowLayout {
+                visible: card.compactLayout
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                spacing: 10
+
+                Text {
+                    text: card.itemData ? String(card.itemData.name) : ""
+                    font.family: theme.fontFamily
+                    font.pixelSize: 14
+                    font.weight: theme.weightSemibold
+                    color: mouseArea.containsMouse ? theme.accent : theme.text
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                // Active / Status Badge
+                Rectangle {
+                    property bool isSddm: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.sddm_login)
+                    property bool isLock: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.session_lock)
+                    property bool isAct: Boolean(card.itemData && (card.itemData.is_active || isSddm || isLock))
+                    property bool isInst: Boolean(card.itemData && card.itemData.is_installed)
+                    visible: isAct || isInst
+                    height: 22
+                    width: compactStatusText.implicitWidth + 14
+                    radius: 11
+                    color: isAct ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B") : (theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E3A8A")
+                    border.color: isAct ? "#10B981" : "#3B82F6"
+                    border.width: 1
+
+                    Text {
+                        id: compactStatusText
+                        anchors.centerIn: parent
+                        text: parent.isSddm ? "ACTIVE SDDM" : (parent.isLock ? "ACTIVE LOCK" : (parent.isAct ? "ACTIVE" : "INSTALLED"))
+                        font.family: theme.fontFamily
+                        font.pixelSize: 10
+                        font.weight: theme.weightBold
+                        color: parent.isAct ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399") : (theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD")
+                    }
+                }
+            }
+
+            // B. Full Store Mode: Category, Author, Description, and Action Buttons
             ColumnLayout {
+                visible: !card.compactLayout
                 anchors.fill: parent
                 anchors.leftMargin: 14
                 anchors.rightMargin: 14
@@ -594,5 +621,26 @@ Rectangle {
                 }
             }
         }
+    }
+
+    // Top-rounded mask for the media preview
+    Rectangle {
+        id: cardTopMask
+        width: Math.max(1, card.width)
+        height: Math.max(1, previewSection.height + card.radius)
+        radius: card.radius
+        color: "#FFFFFF"
+        visible: false
+        layer.enabled: true
+    }
+
+    // Crisp rounded border overlay (ensures border is always visible above media corners)
+    Rectangle {
+        anchors.fill: parent
+        radius: card.radius
+        color: "transparent"
+        border.color: card.border.color
+        border.width: card.border.width
+        z: 3
     }
 }

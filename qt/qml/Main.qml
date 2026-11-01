@@ -354,6 +354,18 @@ ApplicationWindow {
         }
     }
 
+    // Dismiss search focus on tapping outside topbar without eating child clicks
+    TapHandler {
+        onTapped: function(eventPoint) {
+            if (topBar && topBar.isSearchFocused) {
+                var pos = eventPoint.position
+                if (pos.y > topBar.height) {
+                    topBar.unfocusSearch()
+                }
+            }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -401,6 +413,24 @@ ApplicationWindow {
                         backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, q, appsView.selectedProvider)
                     } else if (stackLayout.currentTab === "library") {
                         libraryView.searchQuery = q
+                    }
+                }
+                onCancelSearchRequested: {
+                    if (stackLayout.currentTab === "discover") {
+                        discoverView.searchQuery = ""
+                        discoverView.updateFilter()
+                    } else if (stackLayout.currentTab === "apps") {
+                        appsView.searchQuery = ""
+                        backend.cancelSearch()
+                        backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, "", appsView.selectedProvider)
+                    } else if (stackLayout.currentTab === "library") {
+                        libraryView.searchQuery = ""
+                    }
+                }
+                onSearchSubmitted: function(q) {
+                    if (stackLayout.currentTab === "apps") {
+                        appsView.searchQuery = q
+                        backend.filterApps(appsView.catalogMode === "all" ? "all_packages" : appsView.selectedCategory, q, appsView.selectedProvider)
                     }
                 }
                 onRefreshClicked: {
@@ -678,11 +708,11 @@ ApplicationWindow {
         }
     }
 
-    // Toast Notification Banner (Floating top-right)
+    // Toast Notification Banner (Floating bottom-right to never overlap topbar or popovers)
     ToastNotification {
         id: toast
-        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.margins: 20
+        anchors.margins: 24
     }
 }

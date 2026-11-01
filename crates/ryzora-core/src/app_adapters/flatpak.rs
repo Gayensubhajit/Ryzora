@@ -569,16 +569,16 @@ where
     if let Ok(sys_root) = std::env::var("RYZORA_SYSTEM_ROOT") {
         progress_cb(
             "resolving",
-            Some(10),
+            None,
             "Resolving Flathub remotes and runtime dependencies...",
-            true,
+            false,
             None,
             None,
             None,
             Some(1),
-            Some(3),
+            Some(2),
             Some("org.freedesktop.Platform"),
-            Some("~45 sec"),
+            None,
             Some("Elapsed: 1s | Resolving remote dependencies"),
         );
         progress_cb(

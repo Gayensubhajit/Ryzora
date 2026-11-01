@@ -15,6 +15,8 @@
 #include <QJsonObject>
 #include <QMetaObject>
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QClipboard>
 #include <QDir>
 #include <QDebug>
 
@@ -219,6 +221,28 @@ void RyzoraBackend::filterCatalog(const QString &category, const QString &query)
 
 void RyzoraBackend::invalidateCatalogCache() {
     ryzora_invalidate_catalog_cache();
+}
+
+void RyzoraBackend::cancelSearch() {
+    uint64_t reqId = ryzora_allocate_request_id();
+    updateMonotonicReqId(m_currentAppsReqId, reqId);
+    updateMonotonicReqId(m_currentCatalogReqId, reqId);
+    m_currentAppsQuery.clear();
+
+    if (m_hasFullAppsCatalog && !m_cachedAppsCatalog.isEmpty()) {
+        m_appsList = m_cachedAppsCatalog;
+        m_activeCatalogScope = QStringLiteral("apps");
+        emit appsChanged();
+    }
+
+    if (m_isAppsLoading) {
+        m_isAppsLoading = false;
+        emit appsLoadingChanged();
+    }
+    if (m_isCatalogLoading) {
+        m_isCatalogLoading = false;
+        emit catalogLoadingChanged();
+    }
 }
 
 void RyzoraBackend::invalidateAppsCatalogCache() {
@@ -1123,7 +1147,7 @@ void RyzoraBackend::installApp(const QString &appId) {
         }
     }
     emit activeAppOperationsChanged();
-
+    emit appInstallProgress(cleanId, QStringLiteral("preparing"), -1, false, QStringLiteral("Preparing installation..."), QString(), QString(), QString(), 0, 0, appName, QString(), QStringLiteral("Preparing transaction"));
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, baseAppId, logicalId, provId]() {
         QByteArray bId = cleanId.toUtf8();
@@ -1314,7 +1338,7 @@ void RyzoraBackend::uninstallApp(const QString &appId) {
         }
     }
     emit activeAppOperationsChanged();
-
+    emit appInstallProgress(cleanId, QStringLiteral("preparing"), -1, false, QStringLiteral("Preparing installation..."), QString(), QString(), QString(), 0, 0, appName, QString(), QStringLiteral("Preparing transaction"));
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, baseAppId, logicalId, provId]() {
         QByteArray bId = cleanId.toUtf8();
@@ -1521,7 +1545,7 @@ void RyzoraBackend::executeAppCleanup(const QString &requestJson) {
         }
     }
     emit activeAppOperationsChanged();
-
+    emit appInstallProgress(cleanId, QStringLiteral("preparing"), -1, false, QStringLiteral("Preparing installation..."), QString(), QString(), QString(), 0, 0, appName, QString(), QStringLiteral("Preparing transaction"));
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, baseAppId, logicalId, provId, requestJson]() {
         QByteArray bReq = requestJson.toUtf8();
@@ -2281,7 +2305,7 @@ void RyzoraBackend::loadSettings() {
     });
 }
 
-void RyzoraBackend::saveSettings(const QVariantMap &settings) {
+void RyzoraBackend::saveSettings(const QVariantMap &settings, bool notify) {
     if (m_isShutdown.load()) return;
     m_settingsData = settings;
     emit settingsChanged();
@@ -2290,7 +2314,7 @@ void RyzoraBackend::saveSettings(const QVariantMap &settings) {
     QByteArray jsonBytes = doc.toJson(QJsonDocument::Indented);
 
     QPointer<RyzoraBackend> self = this;
-    m_threadPool.start([self, jsonBytes]() {
+    m_threadPool.start([self, jsonBytes, notify]() {
         char* rawRes = ryzora_save_settings(jsonBytes.constData());
         bool success = false;
         QString errorMsg = QStringLiteral("Unknown persistence error");
@@ -2311,15 +2335,17 @@ void RyzoraBackend::saveSettings(const QVariantMap &settings) {
             }
         }
 
-        QMetaObject::invokeMethod(qApp, [self, success, errorMsg, savedMap]() {
+        QMetaObject::invokeMethod(qApp, [self, success, errorMsg, savedMap, notify]() {
             if (self) {
                 if (success) {
                     if (!savedMap.isEmpty()) {
                         self->m_settingsData = savedMap;
                         emit self->settingsChanged();
                     }
-                    self->postNotification("success", "Settings Saved", "Your application preferences have been persisted to disk.");
-                } else {
+                    if (notify) {
+                        self->postNotification("success", "Settings Saved", "Your application preferences have been persisted to disk.");
+                    }
+                } else if (notify) {
                     self->postNotification("error", "Failed to Save Settings", errorMsg);
                 }
             }
@@ -2542,6 +2568,37 @@ void RyzoraBackend::setTestSystemRootOverride(const QString &path) {
     }
 }
 
+void RyzoraBackend::copyToClipboard(const QString &text) {
+    QClipboard *cb = QGuiApplication::clipboard();
+    if (cb) {
+        cb->setText(text);
+    }
+}
+
+QString RyzoraBackend::exportDiagnosticsReport(const QString &reportText) {
+    QString home = resolveHomePath();
+    QString exportDir = home + "/Documents";
+    if (!QDir(exportDir).exists()) {
+        exportDir = home;
+    }
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+    QString filePath = exportDir + QString("/ryzora-diagnostics-%1.txt").arg(timestamp);
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(reportText.toUtf8());
+        file.close();
+        return filePath;
+    }
+    filePath = home + "/ryzora-diagnostics.txt";
+    QFile fileFallback(filePath);
+    if (fileFallback.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        fileFallback.write(reportText.toUtf8());
+        fileFallback.close();
+        return filePath;
+    }
+    return QString();
+}
+
 QString RyzoraBackend::resolveHomePath() const {
     if (!m_testHomeOverride.isEmpty()) return m_testHomeOverride;
     QString envHome = qEnvironmentVariable("RYZORA_HOME");
@@ -2641,7 +2698,6 @@ void RyzoraBackend::installPackage(const QString &packageId) {
         m_appTransactions.insert(cleanId, rec);
     }
     emit activeAppOperationsChanged();
-
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId]() {
         QByteArray idBytes = cleanId.toUtf8();
@@ -2720,7 +2776,6 @@ void RyzoraBackend::uninstallPackage(const QString &packageId) {
         m_appTransactions.insert(cleanId, rec);
     }
     emit activeAppOperationsChanged();
-
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId]() {
         QByteArray idBytes = cleanId.toUtf8();
@@ -3086,7 +3141,6 @@ void RyzoraBackend::applyUpdate(const QString &packageId) {
         }
     }
     emit activeAppOperationsChanged();
-
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, baseAppId, appName, opId]() {
         AppProgressBridgeContext ctx{self, cleanId};
@@ -3190,7 +3244,6 @@ void RyzoraBackend::applyAllUpdates() {
         m_appTransactions.insert(cleanId, rec);
     }
     emit activeAppOperationsChanged();
-
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, cleanId, opId]() {
         AppProgressBridgeContext ctx{self, cleanId};

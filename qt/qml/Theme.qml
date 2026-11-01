@@ -194,6 +194,10 @@ QtObject {
                 "reduce_motion": reduceMotion,
                 "increase_contrast": increaseContrast
             })
+            if (typeof backend !== "undefined" && backend && backend.settingsData) {
+                backend.settingsData["appearance_mode"] = appearanceMode
+                backend.settingsData["accent_name"] = accentName
+            }
         } catch (e) {
             console.log("[Theme] Failed to save appearance:", e)
         }

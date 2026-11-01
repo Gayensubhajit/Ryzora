@@ -175,6 +175,7 @@ public:
     // Invokable Methods
     Q_INVOKABLE void filterCatalog(const QString &category, const QString &query);
     Q_INVOKABLE void invalidateCatalogCache();
+    Q_INVOKABLE void cancelSearch();
     Q_INVOKABLE void filterApps(const QString &category, const QString &query, const QString &provider = "all", int page = 0, int pageSize = 0);
     Q_INVOKABLE void installApp(const QString &appId);
     Q_INVOKABLE void cancelAppOperation(const QString &appId);
@@ -211,7 +212,7 @@ public:
     Q_INVOKABLE void loadUpdates();
     Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void loadSettings();
-    Q_INVOKABLE void saveSettings(const QVariantMap &settings);
+    Q_INVOKABLE void saveSettings(const QVariantMap &settings, bool notify = true);
     Q_INVOKABLE void resetSettings();
     Q_INVOKABLE bool checkIsFirstRun();
     Q_INVOKABLE QString getSystemCompatibility();
@@ -224,6 +225,8 @@ public:
     Q_INVOKABLE QString detectSystemAppearance();
     Q_INVOKABLE void loadSystemInfo();
     Q_INVOKABLE void loadCompatibilityProfiles();
+    Q_INVOKABLE void copyToClipboard(const QString &text);
+    Q_INVOKABLE QString exportDiagnosticsReport(const QString &reportText);
     Q_INVOKABLE void installPackage(const QString &packageId);
     Q_INVOKABLE void uninstallPackage(const QString &packageId);
     Q_INVOKABLE QString getStorageUsage();

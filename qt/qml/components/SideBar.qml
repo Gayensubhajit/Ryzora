@@ -35,7 +35,7 @@ Rectangle {
                 "sidebar_width": Math.round(root.expandedWidth),
                 "sidebar_collapsed": root.isCollapsed
             })
-            backend.saveSettings(updated)
+            backend.saveSettings(updated, false)
         }
     }
 

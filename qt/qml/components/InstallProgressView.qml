@@ -117,7 +117,7 @@ Rectangle {
             // Percentage Indicator (Distinguishes component progress from overall transaction)
             ColumnLayout {
                 spacing: 1
-                visible: root.percentage >= 0
+                visible: root.isDeterminate && root.percentage >= 0
                 Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
 
                 Text {
@@ -129,7 +129,7 @@ Rectangle {
                 }
 
                 Text {
-                    visible: root.totalSteps > 1
+                    visible: root.totalSteps > 1 && root.currentStep > 0
                     text: "Component " + root.currentStep + " of " + root.totalSteps
                     font.pixelSize: 11
                     color: theme.textMuted
@@ -224,57 +224,63 @@ Rectangle {
                 if (root.bytesDownloaded !== "" && root.bytesTotal !== "") {
                     return root.bytesDownloaded + " / " + root.bytesTotal
                 }
-                if (root.stage === "resolving") return "Checking deps"
-                if (root.stage === "building") return "Compiling source"
-                if (root.stage === "authenticating") return "Authorizing"
-                if (root.stage === "installing") return "Deploying files"
-                if (root.stage === "downloading") return root.isDeterminate ? "Calculating…" : "Retrieving…"
-                return "—"
+                if (root.stage === "downloading") {
+                    return root.isDeterminate ? "Calculating…" : "Retrieving…"
+                }
+                if (root.stage === "installing" || root.stage === "finalizing" || root.stage === "completed") {
+                    return root.bytesTotal !== "" ? root.bytesTotal : "Downloaded"
+                }
+                return "Not started"
             }
             downloadedHelper: {
                 if (root.bytesTotal !== "") return "Total package & runtime size"
-                if (root.stage === "resolving") return "Package dependency resolution"
+                if (root.stage === "resolving") return "Waiting for dependency resolution"
+                if (root.stage === "preparing") return "Waiting for package-manager access"
                 if (root.stage === "building") return "makepkg compilation phase"
-                if (root.stage === "authenticating") return "Administrator privilege check"
-                if (root.stage === "installing") return "Pacman package deployment"
-                return "Current phase status"
+                if (root.stage === "installing") return "Package deployment phase"
+                return "Transfer status"
             }
             speedValue: {
                 if (root.downloadSpeed !== "") return root.downloadSpeed
                 if (root.stage === "downloading") return "Measuring…"
-                if (root.stage === "building") return "Active build"
-                if (root.stage === "resolving") return "Resolving"
-                return "—"
+                return "Not downloading"
             }
             speedHelper: {
                 if (root.downloadSpeed !== "") return "Based on real byte transfer"
-                if (root.stage === "building") return "Compiling binary objects"
-                if (root.stage === "resolving") return "Repository metadata query"
-                return "Transfer rate"
+                if (root.stage === "downloading") return "Transfer rate"
+                return "Network idle"
             }
             etaValue: {
                 if (root.etaStr !== "") return root.etaStr
                 if (root.stage === "downloading" && root.downloadSpeed !== "") return "Estimating…"
-                return "—"
+                return "Not available"
             }
-            etaHelper: root.etaStr !== "" ? "Estimated remaining time" : (root.stage === "downloading" ? "Updated during download" : "Indeterminate phase")
-            stepTitle: root.totalSteps > 1 ? "Component" : "Step"
+            etaHelper: {
+                if (root.etaStr !== "") return "Estimated remaining time"
+                if (root.stage === "downloading") return "Updated during download"
+                return "Indeterminate phase"
+            }
+            stepTitle: root.totalSteps > 1 ? "Component" : "Installation step"
             stepValue: {
-                if (root.currentStep > 0 && root.totalSteps > 0) {
+                if (root.totalSteps > 1 && root.currentStep > 0) {
                     return "Component " + root.currentStep + " of " + root.totalSteps
                 }
-                if (root.stage === "resolving") return "Step 1 of 4"
-                if (root.stage === "downloading") return "Step 2 of 4"
-                if (root.stage === "building") return "Step 3 of 4"
-                if (root.stage === "installing") return "Step 4 of 4"
-                if (root.stage === "finalizing") return "Finalizing"
+                if (root.stage === "preparing") return "Preparing installation"
+                if (root.stage === "resolving") return "Waiting for dependency resolution"
+                if (root.stage === "downloading") return "Downloading package"
+                if (root.stage === "building") return "Compiling package from source"
+                if (root.stage === "installing") return "Deploying files and running hooks"
+                if (root.stage === "finalizing") return "Finalizing configuration"
+                if (root.stage === "completed") return "Installation complete"
+                if (root.stage === "cancelling") return "Cancelling operation"
                 return "In progress"
             }
             stepHelper: {
                 if (root.currentItem !== "") return root.currentItem
+                if (root.stage === "resolving") return "Dependency analysis"
                 if (root.stage === "building") return "Source compilation"
-                if (root.stage === "downloading") return "Downloading application"
-                if (root.stage === "installing") return "Deploying files"
+                if (root.stage === "downloading") return "Retrieving archive"
+                if (root.stage === "installing") return "Extracting and configuring"
                 return "Current operation phase"
             }
         }

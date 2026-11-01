@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    height: 52
+    height: 50
     color: theme.bg
     border.color: theme.borderSubtle
     border.width: 1
@@ -14,11 +14,14 @@ Rectangle {
     signal navigateForward()
     property bool canGoBack: false
     property bool canGoForward: false
-    signal refreshClicked()
     signal searchChanged(string text)
+    signal searchSubmitted(string text)
+    signal cancelSearchRequested()
+    signal refreshClicked()
     signal libraryClicked()
     property string searchQuery: ""
     property string currentTab: "hub"
+
     readonly property string placeholderText: {
         if (currentTab === "apps") return "Search applications, packages, Flatpaks… (Ctrl+K)"
         if (currentTab === "discover") return "Search community themes, wallpapers, lockscreens… (Ctrl+K)"
@@ -26,7 +29,13 @@ Rectangle {
         if (currentTab === "updates") return "Search pending updates… (Ctrl+K)"
         if (currentTab === "backups") return "Search configuration snapshots… (Ctrl+K)"
         if (currentTab === "studio") return "Search desktop customizations… (Ctrl+K)"
+        if (currentTab === "system") return "Search diagnostics, probes, and logs… (Ctrl+K)"
         return "Search Ryzora… (Ctrl+K)"
+    }
+
+    readonly property bool isSearchFocused: searchInput.activeFocus
+    function unfocusSearch() {
+        searchInput.focus = false
     }
 
     Shortcut {
@@ -37,191 +46,219 @@ Rectangle {
         }
     }
 
-    RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        spacing: 10
-
-        // ── 1. History Navigation (Back / Forward) ──
-        RowLayout {
-            spacing: 4
-
-            Rectangle {
-                width: 32
-                height: 32
-                radius: theme.radiusSm
-                color: backMouse.containsMouse && root.canGoBack ? theme.surfaceHover : "transparent"
-                border.color: backMouse.containsMouse && root.canGoBack ? theme.border : "transparent"
-                border.width: 1
-                opacity: root.canGoBack ? 1.0 : 0.35
-
-                ToolTip.visible: backMouse.containsMouse
-                ToolTip.text: "Navigate back (Alt+Left)"
-                ToolTip.delay: 300
-
-                RyzoraIcon {
-                    anchors.centerIn: parent
-                    name: "chevron-left"
-                    size: 14
-                    color: root.canGoBack ? theme.text : theme.textMuted
-                }
-
-                MouseArea {
-                    id: backMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: root.canGoBack ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (root.canGoBack) root.navigateBack()
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 32
-                height: 32
-                radius: theme.radiusSm
-                color: fwdMouse.containsMouse && root.canGoForward ? theme.surfaceHover : "transparent"
-                border.color: fwdMouse.containsMouse && root.canGoForward ? theme.border : "transparent"
-                border.width: 1
-                opacity: root.canGoForward ? 1.0 : 0.35
-
-                ToolTip.visible: fwdMouse.containsMouse
-                ToolTip.text: "Navigate forward (Alt+Right)"
-                ToolTip.delay: 300
-
-                RyzoraIcon {
-                    anchors.centerIn: parent
-                    name: "chevron-right"
-                    size: 14
-                    color: root.canGoForward ? theme.text : theme.textMuted
-                }
-
-                MouseArea {
-                    id: fwdMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: root.canGoForward ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (root.canGoForward) root.navigateForward()
-                    }
-                }
+    // Dismiss search focus on tapping outside searchContainer in TopBar without swallowing clicks
+    TapHandler {
+        onTapped: function(eventPoint) {
+            if (!searchInput.activeFocus) return
+            var pt = eventPoint.position
+            var sX = searchContainer.x
+            var sY = searchContainer.y
+            var sW = searchContainer.width
+            var sH = searchContainer.height
+            if (pt.x < sX || pt.x > sX + sW || pt.y < sY || pt.y > sY + sH) {
+                searchInput.focus = false
             }
         }
+    }
 
-        // ── 2. Refresh Button ──
+    // ── 1. Leading Group: Back & Forward Navigation ──
+    RowLayout {
+        id: leadingRow
+        anchors.left: parent.left
+        anchors.leftMargin: 16
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 4
+        z: 30
+
         Rectangle {
             width: 32
             height: 32
             radius: theme.radiusSm
-            color: refMouse.containsMouse ? theme.surfaceHover : "transparent"
-            border.color: refMouse.containsMouse ? theme.border : "transparent"
+            color: backMouse.containsMouse && root.canGoBack ? theme.surfaceHover : "transparent"
+            border.color: backMouse.containsMouse && root.canGoBack ? theme.border : "transparent"
             border.width: 1
+            opacity: root.canGoBack ? 1.0 : 0.35
 
-            ToolTip.visible: refMouse.containsMouse
-            ToolTip.text: "Refresh catalog and status"
+            ToolTip.visible: backMouse.containsMouse
+            ToolTip.text: "Navigate back (Alt+Left)"
             ToolTip.delay: 300
 
             RyzoraIcon {
                 anchors.centerIn: parent
-                name: "refresh"
+                name: "chevron-left"
                 size: 14
-                color: refMouse.containsMouse ? theme.text : theme.textSecondary
+                color: root.canGoBack ? theme.text : theme.textMuted
             }
 
             MouseArea {
-                id: refMouse
+                id: backMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.refreshClicked()
+                cursorShape: root.canGoBack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    if (root.canGoBack) root.navigateBack()
+                }
             }
         }
 
-        // Left Flexible Spacer (Centers search box)
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-        }
-
-        // ── 3. Centered Search Bar ──
         Rectangle {
-            Layout.preferredWidth: Math.min(480, Math.max(220, root.width * 0.36))
-            Layout.fillWidth: false
-            height: 34
-            radius: theme.radiusMd
-            color: theme.surface
-            border.color: searchInput.activeFocus ? theme.accent : theme.borderSubtle
+            width: 32
+            height: 32
+            radius: theme.radiusSm
+            color: fwdMouse.containsMouse && root.canGoForward ? theme.surfaceHover : "transparent"
+            border.color: fwdMouse.containsMouse && root.canGoForward ? theme.border : "transparent"
             border.width: 1
+            opacity: root.canGoForward ? 1.0 : 0.35
 
-            Behavior on border.color { ColorAnimation { duration: 100 } }
+            ToolTip.visible: fwdMouse.containsMouse
+            ToolTip.text: "Navigate forward (Alt+Right)"
+            ToolTip.delay: 300
 
-            RowLayout {
+            RyzoraIcon {
+                anchors.centerIn: parent
+                name: "chevron-right"
+                size: 14
+                color: root.canGoForward ? theme.text : theme.textMuted
+            }
+
+            MouseArea {
+                id: fwdMouse
                 anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                spacing: 8
+                hoverEnabled: true
+                cursorShape: root.canGoForward ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    if (root.canGoForward) root.navigateForward()
+                }
+            }
+        }
+    }
+
+    // ── 2. Center Group: Visually Centered Global Search ──
+    Rectangle {
+        id: searchContainer
+        objectName: "searchContainer"
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        // Mathematically centered while clamping to avoid overlapping leading or trailing groups
+        width: Math.min(540, Math.max(200, root.width - (leadingRow.width + trailingRow.width + 48)))
+        height: 36
+        radius: theme.radiusMd
+        color: theme.surface
+        border.color: searchInput.activeFocus ? theme.accent : theme.borderSubtle
+        border.width: searchInput.activeFocus ? 1.5 : 1
+        z: 30
+
+        Behavior on border.color { ColorAnimation { duration: 100 } }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 11
+            anchors.rightMargin: 6
+            spacing: 8
+
+            RyzoraIcon {
+                name: "search"
+                size: 14
+                color: searchInput.activeFocus ? theme.accent : theme.textMuted
+            }
+
+            TextInput {
+                id: searchInput
+                objectName: "globalSearchInput"
+                Layout.fillWidth: true
+                text: root.searchQuery
+                font.pixelSize: 13
+                font.family: theme.fontFamily
+                color: theme.text
+                selectByMouse: true
+                clip: true
+                activeFocusOnTab: true
+
+                Text {
+                    anchors.fill: parent
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.placeholderText
+                    font.pixelSize: 13
+                    font.family: theme.fontFamily
+                    color: theme.textMuted
+                    visible: !searchInput.text && !searchInput.activeFocus
+                    elide: Text.ElideRight
+                }
+
+                Keys.onEscapePressed: {
+                    if (searchInput.text.length > 0) {
+                        searchInput.text = ""
+                        root.searchQuery = ""
+                        root.cancelSearchRequested()
+                        if (backend) backend.cancelSearch()
+                    }
+                    searchInput.focus = false
+                }
+
+                Keys.onReturnPressed: {
+                    root.searchSubmitted(searchInput.text)
+                }
+
+                Keys.onEnterPressed: {
+                    root.searchSubmitted(searchInput.text)
+                }
+
+                onTextChanged: {
+                    root.searchQuery = text
+                    root.searchChanged(text)
+                }
+            }
+
+            // Real Interactive Clear/Cancel X Button
+            Rectangle {
+                id: clearBtn
+                objectName: "clearSearchButton"
+                visible: searchInput.text.length > 0
+                width: 24
+                height: 24
+                radius: 12
+                color: clearMouse.containsMouse ? theme.surfaceHover : "transparent"
+                border.color: clearMouse.containsMouse ? theme.borderSubtle : "transparent"
+                border.width: 1
+
+                ToolTip.visible: clearMouse.containsMouse
+                ToolTip.text: "Clear search (Escape)"
+                ToolTip.delay: 300
 
                 RyzoraIcon {
-                    name: "search"
-                    size: 13
-                    color: theme.textMuted
+                    anchors.centerIn: parent
+                    name: "dismiss"
+                    size: 11
+                    color: clearMouse.containsMouse ? theme.text : theme.textMuted
                 }
 
-                TextInput {
-                    id: searchInput
-                    Layout.fillWidth: true
-                    text: root.searchQuery
-                    font.pixelSize: theme.fontNav
-                    color: theme.text
-                    selectByMouse: true
-                    clip: true
-
-                    Text {
-                        anchors.fill: parent
-                        text: root.placeholderText
-                        font.pixelSize: theme.fontNav
-                        color: theme.textMuted
-                        visible: !searchInput.text && !searchInput.activeFocus
-                    }
-
-                    onTextChanged: {
-                        root.searchQuery = text
-                        root.searchChanged(text)
-                    }
-                }
-
-                Item {
-                    visible: searchInput.text.length > 0
-                    width: 14; height: 14
-                    RyzoraIcon {
-                        anchors.centerIn: parent
-                        name: "x"
-                        size: 9
-                        color: clearMouse.containsMouse ? theme.text : theme.textMuted
-                    }
-                    MouseArea {
-                        id: clearMouse
-                        anchors.fill: parent
-                        anchors.margins: -4
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            searchInput.text = ""
-                        }
+                MouseArea {
+                    id: clearMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        searchInput.text = ""
+                        root.searchQuery = ""
+                        root.cancelSearchRequested()
+                        if (backend) backend.cancelSearch()
+                        searchInput.forceActiveFocus()
                     }
                 }
             }
         }
+    }
 
-        // Draggable Window Spacer
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-        }
+    // ── 3. Trailing Group: Active Transactions & Appearance ──
+    RowLayout {
+        id: trailingRow
+        anchors.right: parent.right
+        anchors.rightMargin: 16
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 8
+        z: 30
 
-        // ── 4. Active Installations Indicator & Popover ──
+        // Active Installations Indicator & Popover
         Rectangle {
             id: installIndicatorBtn
             visible: Boolean(backend && backend.activeAppOperationsCount > 0)
@@ -240,7 +277,7 @@ Rectangle {
                 spacing: 6
 
                 RyzoraIcon {
-                    name: "spinner"
+                    name: "arrow-clockwise"
                     size: 13
                     color: theme.accent
                     RotationAnimation on rotation {
@@ -279,9 +316,10 @@ Rectangle {
             }
         }
 
-        // ── 5. Appearance Popover Quick Switch ──
+        // Appearance Popover Quick Switch
         Rectangle {
             id: appBtn
+            objectName: "appearanceButton"
             width: 32
             height: 32
             radius: theme.radiusSm
@@ -289,7 +327,7 @@ Rectangle {
             border.color: popover.visible ? theme.accent : theme.borderSubtle
             border.width: 1
 
-            ToolTip.visible: appMouse.containsMouse
+            ToolTip.visible: appMouse.containsMouse && !popover.visible
             ToolTip.text: "Theme: " + (theme.appearanceMode === "light" ? "Light" : (theme.appearanceMode === "dark" ? "Dark" : "Auto (System)"))
             ToolTip.delay: 300
 
@@ -311,12 +349,28 @@ Rectangle {
         }
     }
 
-    // Appearance Popover Menu
+    // Dismiss overlay for outside clicks
+    MouseArea {
+        anchors.fill: parent
+        z: 90
+        visible: popover.visible
+        onClicked: popover.visible = false
+    }
+
+    // Dismiss popover on Escape
+    Shortcut {
+        sequence: "Escape"
+        enabled: popover.visible
+        onActivated: popover.visible = false
+    }
+
+    // Appearance Popover Menu (Directly anchored to appBtn, closes on selection)
     Rectangle {
         id: popover
+        objectName: "appearancePopover"
         visible: false
-        width: 210
-        height: 220
+        width: 220
+        height: 224
         anchors.top: parent.bottom
         anchors.right: parent.right
         anchors.margins: 6
@@ -324,7 +378,7 @@ Rectangle {
         color: theme.surfaceElevated
         border.color: theme.borderStrong
         border.width: 1
-        z: 100
+        z: 1000
 
         ColumnLayout {
             anchors.fill: parent
@@ -352,7 +406,7 @@ Rectangle {
                     delegate: Rectangle {
                         property bool isCur: theme.appearanceMode === modelData.id
                         Layout.fillWidth: true
-                        height: 30
+                        height: 28
                         radius: theme.radiusSm
                         color: isCur ? theme.navItemActiveBg : (pm.containsMouse ? theme.surfaceHover : "transparent")
                         border.color: isCur ? theme.accent : theme.borderSubtle
@@ -360,7 +414,7 @@ Rectangle {
 
                         RowLayout {
                             anchors.centerIn: parent
-                            spacing: 6
+                            spacing: 5
                             RyzoraIcon {
                                 name: modelData.icon
                                 size: 12
@@ -379,7 +433,10 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: theme.setAppearanceMode(modelData.id)
+                            onClicked: {
+                                theme.setAppearanceMode(modelData.id)
+                                popover.visible = false
+                            }
                         }
                     }
                 }
@@ -401,31 +458,34 @@ Rectangle {
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: 5
 
                 Repeater {
-                    model: ["blue", "silver", "purple", "green", "orange"]
+                    model: ["blue", "silver", "purple", "green", "orange", "rose", "cyan"]
                     delegate: Rectangle {
                         property bool isSel: theme.accentName === modelData
-                        width: 24
-                        height: 24
-                        radius: 12
-                        color: theme.swatches[modelData]
+                        width: 22
+                        height: 22
+                        radius: 11
+                        color: theme.swatches[modelData] || "#3b82f6"
                         border.color: isSel ? "#ffffff" : "transparent"
                         border.width: isSel ? 2 : 0
 
                         RyzoraIcon {
                             visible: isSel
                             anchors.centerIn: parent
-                            name: "check"
-                            size: 11
+                            name: "checkmark"
+                            size: 10
                             color: "#ffffff"
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: theme.setAccent(modelData)
+                            onClicked: {
+                                theme.setAccent(modelData)
+                                popover.visible = false
+                            }
                         }
                     }
                 }
@@ -438,7 +498,7 @@ Rectangle {
             }
 
             Text {
-                text: "Active: " + theme.swatchNames[theme.accentName]
+                text: "Active: " + (theme.swatchNames[theme.accentName] || theme.accentName)
                 font.pixelSize: 10
                 color: theme.textMuted
             }

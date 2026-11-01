@@ -6,8 +6,8 @@ import QtQuick.Layouts
 Rectangle {
     id: card
     width: 250
-    height: 268
-    radius: theme.radiusLg
+    height: 280
+    radius: 14
     color: mouseArea.containsMouse ? theme.surfaceElevated : theme.surface
     border.color: mouseArea.containsMouse ? theme.borderStrong : theme.borderSubtle
     border.width: 1
@@ -134,7 +134,7 @@ Rectangle {
         // ── 1. 16:9 Aspect Video Media Preview ──
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(135, Math.round(card.width * 9 / 16))
+            Layout.preferredHeight: Math.round(card.width * 9 / 16)
             color: "#0a0c10"
             clip: true
 
@@ -225,32 +225,7 @@ Rectangle {
                 }
             }
 
-            // Top-Left Badges
-            RowLayout {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.margins: 6
-                spacing: 4
-                z: 10
-
-                // Emblem
-                Rectangle {
-                    visible: card.itemData && (String(card.itemData.subfilter || "").toLowerCase().indexOf("emblem") !== -1 || String(card.itemData.id || "").indexOf("emblem") !== -1 || (card.itemData.tags && card.itemData.tags.some(function(t) { return String(t).toLowerCase() === "emblem" })))
-                    height: 20; width: embTxt.width + 10; radius: 4
-                    color: "#33ef4444"; border.color: "#66ef4444"
-                    Text { id: embTxt; anchors.centerIn: parent; text: "EMBLEM"; font.pixelSize: theme.fontBadge; font.bold: true; color: "#fca5a5" }
-                }
-
-                // Official
-                Rectangle {
-                    visible: card.itemData && (card.itemData.author === "Darkkal44" || card.itemData.author === "Ryzora")
-                    height: 20; width: offTxt.width + 10; radius: 4
-                    color: "#33f59e0b"; border.color: "#66f59e0b"
-                    Text { id: offTxt; anchors.centerIn: parent; text: "OFFICIAL"; font.pixelSize: theme.fontBadge; font.bold: true; color: "#fde68a" }
-                }
-            }
-
-            // Top-Right Badges
+            // Top-Right Status Badges (Active / Installed)
             RowLayout {
                 anchors.top: parent.top
                 anchors.right: parent.right

@@ -50,11 +50,6 @@ Item {
         if (s["snapshot_policy"] !== undefined && s["snapshot_policy"] !== snapshotPolicy) return true
         if (s["snapshot_retention_count"] !== undefined && s["snapshot_retention_count"] !== snapshotRetentionCount) return true
         if (s["snapshot_auto_cleanup"] !== undefined && s["snapshot_auto_cleanup"] !== snapshotAutoCleanup) return true
-        if (s["appearance_mode"] !== undefined && s["appearance_mode"] !== theme.appearanceMode) return true
-        if (s["accent_name"] !== undefined && s["accent_name"] !== theme.accentName) return true
-        if (s["reduce_transparency"] !== undefined && s["reduce_transparency"] !== theme.reduceTransparency) return true
-        if (s["reduce_motion"] !== undefined && s["reduce_motion"] !== theme.reduceMotion) return true
-        if (s["increase_contrast"] !== undefined && s["increase_contrast"] !== theme.increaseContrast) return true
         return false
     }
 
@@ -86,21 +81,6 @@ Item {
         if (s["snapshot_policy"] !== undefined) snapshotPolicy = s["snapshot_policy"]
         if (s["snapshot_retention_count"] !== undefined) snapshotRetentionCount = s["snapshot_retention_count"]
         if (s["snapshot_auto_cleanup"] !== undefined) snapshotAutoCleanup = s["snapshot_auto_cleanup"]
-        if (s["appearance_mode"] !== undefined && theme.appearanceMode !== s["appearance_mode"]) {
-            theme.setAppearanceMode(s["appearance_mode"])
-        }
-        if (s["accent_name"] !== undefined && theme.accentName !== s["accent_name"]) {
-            theme.setAccent(s["accent_name"])
-        }
-        if (s["reduce_transparency"] !== undefined && theme.reduceTransparency !== s["reduce_transparency"]) {
-            theme.reduceTransparency = s["reduce_transparency"]
-        }
-        if (s["reduce_motion"] !== undefined && theme.reduceMotion !== s["reduce_motion"]) {
-            theme.reduceMotion = s["reduce_motion"]
-        }
-        if (s["increase_contrast"] !== undefined && theme.increaseContrast !== s["increase_contrast"]) {
-            theme.increaseContrast = s["increase_contrast"]
-        }
     }
 
     Connections {
@@ -492,6 +472,7 @@ Item {
                             description: "Total local footprint: " + root.storageTotalStr + " (Cache: " + root.storageCacheStr + " · Installed: " + root.storageInstalledStr + ")"
 
                             RyzoraButton {
+                                objectName: "openStorageManagerButton"
                                 text: "Open Storage Manager"
                                 iconName: "archive"
                                 variant: "secondary"
