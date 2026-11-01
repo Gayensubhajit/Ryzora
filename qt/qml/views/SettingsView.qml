@@ -50,6 +50,11 @@ Item {
         if (s["snapshot_policy"] !== undefined && s["snapshot_policy"] !== snapshotPolicy) return true
         if (s["snapshot_retention_count"] !== undefined && s["snapshot_retention_count"] !== snapshotRetentionCount) return true
         if (s["snapshot_auto_cleanup"] !== undefined && s["snapshot_auto_cleanup"] !== snapshotAutoCleanup) return true
+        if (s["appearance_mode"] !== undefined && s["appearance_mode"] !== theme.appearanceMode) return true
+        if (s["accent_name"] !== undefined && s["accent_name"] !== theme.accentName) return true
+        if (s["reduce_transparency"] !== undefined && s["reduce_transparency"] !== theme.reduceTransparency) return true
+        if (s["reduce_motion"] !== undefined && s["reduce_motion"] !== theme.reduceMotion) return true
+        if (s["increase_contrast"] !== undefined && s["increase_contrast"] !== theme.increaseContrast) return true
         return false
     }
 
@@ -81,6 +86,21 @@ Item {
         if (s["snapshot_policy"] !== undefined) snapshotPolicy = s["snapshot_policy"]
         if (s["snapshot_retention_count"] !== undefined) snapshotRetentionCount = s["snapshot_retention_count"]
         if (s["snapshot_auto_cleanup"] !== undefined) snapshotAutoCleanup = s["snapshot_auto_cleanup"]
+        if (s["appearance_mode"] !== undefined && theme.appearanceMode !== s["appearance_mode"]) {
+            theme.setAppearanceMode(s["appearance_mode"])
+        }
+        if (s["accent_name"] !== undefined && theme.accentName !== s["accent_name"]) {
+            theme.setAccent(s["accent_name"])
+        }
+        if (s["reduce_transparency"] !== undefined && theme.reduceTransparency !== s["reduce_transparency"]) {
+            theme.reduceTransparency = s["reduce_transparency"]
+        }
+        if (s["reduce_motion"] !== undefined && theme.reduceMotion !== s["reduce_motion"]) {
+            theme.reduceMotion = s["reduce_motion"]
+        }
+        if (s["increase_contrast"] !== undefined && theme.increaseContrast !== s["increase_contrast"]) {
+            theme.increaseContrast = s["increase_contrast"]
+        }
     }
 
     Connections {
@@ -112,15 +132,18 @@ Item {
             "snapshot_retention_count": snapshotRetentionCount,
             "snapshot_auto_cleanup": snapshotAutoCleanup,
             "sidebar_width": base.sidebar_width || 240,
-            "sidebar_collapsed": base.sidebar_collapsed || false
+            "sidebar_collapsed": base.sidebar_collapsed || false,
+            "appearance_mode": theme.appearanceMode,
+            "accent_name": theme.accentName,
+            "reduce_transparency": theme.reduceTransparency,
+            "reduce_motion": theme.reduceMotion,
+            "increase_contrast": theme.increaseContrast
         })
         backend.saveSettings(payload)
-        backend.postNotification("info", "Settings Saved", "Preferences updated and safely persisted.")
     }
 
     function resetToDefaults() {
         backend.resetSettings()
-        backend.postNotification("info", "Settings Reset", "Restored factory preferences.")
     }
 
     function showAbout() {
@@ -243,6 +266,8 @@ Item {
                         iconName: "checkmark"
                         variant: "primary"
                         size: "md"
+                        enabled: root.hasUnsavedChanges
+                        opacity: root.hasUnsavedChanges ? 1.0 : 0.6
                         onClicked: root.saveAll()
                     }
                 }
@@ -444,10 +469,11 @@ Item {
                                 Layout.fillWidth: true
                                 spacing: 10
 
-                                ColorSwatch { swatchKey: "blue"; swatchColor: "#3b82f6"; swatchName: "Blue"; isSelected: theme.accentName === "blue" }
-                                ColorSwatch { swatchKey: "purple"; swatchColor: "#a855f7"; swatchName: "Purple"; isSelected: theme.accentName === "purple" }
-                                ColorSwatch { swatchKey: "emerald"; swatchColor: "#10b981"; swatchName: "Emerald"; isSelected: theme.accentName === "emerald" }
-                                ColorSwatch { swatchKey: "amber"; swatchColor: "#f59e0b"; swatchName: "Amber"; isSelected: theme.accentName === "amber" }
+                                ColorSwatch { swatchKey: "blue"; swatchColor: "#6488E8"; swatchName: "Ocean Blue"; isSelected: theme.accentName === "blue" }
+                                ColorSwatch { swatchKey: "silver"; swatchColor: "#94A3B8"; swatchName: "Deep Silver"; isSelected: theme.accentName === "silver" }
+                                ColorSwatch { swatchKey: "purple"; swatchColor: "#8b5cf6"; swatchName: "Amethyst"; isSelected: theme.accentName === "purple" }
+                                ColorSwatch { swatchKey: "green"; swatchColor: "#10b981"; swatchName: "Emerald"; isSelected: theme.accentName === "green" }
+                                ColorSwatch { swatchKey: "orange"; swatchColor: "#f97316"; swatchName: "Amber Fire"; isSelected: theme.accentName === "orange" }
                                 ColorSwatch { swatchKey: "rose"; swatchColor: "#f43f5e"; swatchName: "Rose"; isSelected: theme.accentName === "rose" }
                                 ColorSwatch { swatchKey: "cyan"; swatchColor: "#06b6d4"; swatchName: "Cyan"; isSelected: theme.accentName === "cyan" }
                             }
@@ -478,15 +504,15 @@ Item {
 
                         SettingRow {
                             label: "Snapshot Restore Points"
-                            description: "Automatic btrfs/timeshift snapshots created before transactions."
+                            description: "Automatic rollback restore points created before transactions."
 
                             SegmentedControl {
-                                options: ["Always Ask", "Auto", "Disabled"]
-                                selectedIndex: root.snapshotPolicy === "always" ? 0 : (root.snapshotPolicy === "auto" ? 1 : (root.snapshotPolicy === "disabled" ? 2 : 0))
+                                options: ["Ask Before", "Always Create", "Never"]
+                                selectedIndex: root.snapshotPolicy === "always" ? 1 : (root.snapshotPolicy === "never" ? 2 : 0)
                                 onOptionSelected: function(idx) {
-                                    if (idx === 0) root.snapshotPolicy = "always"
-                                    else if (idx === 1) root.snapshotPolicy = "auto"
-                                    else root.snapshotPolicy = "disabled"
+                                    if (idx === 0) root.snapshotPolicy = "ask"
+                                    else if (idx === 1) root.snapshotPolicy = "always"
+                                    else root.snapshotPolicy = "never"
                                 }
                             }
                         }
@@ -535,15 +561,15 @@ Item {
 
                         SettingRow {
                             label: "Notification Alerts"
-                            description: "Desktop toast notifications for package transactions and updates."
+                            description: "Desktop toast notifications for package transactions and critical security alerts."
 
                             SegmentedControl {
-                                options: ["All", "Warnings Only", "Silent"]
-                                selectedIndex: root.notificationLevel === "all" ? 0 : (root.notificationLevel === "warning" ? 1 : 2)
+                                options: ["All", "Security Only", "None"]
+                                selectedIndex: root.notificationLevel === "all" ? 0 : (root.notificationLevel === "security_only" ? 1 : 2)
                                 onOptionSelected: function(idx) {
                                     if (idx === 0) root.notificationLevel = "all"
-                                    else if (idx === 1) root.notificationLevel = "warning"
-                                    else root.notificationLevel = "silent"
+                                    else if (idx === 1) root.notificationLevel = "security_only"
+                                    else root.notificationLevel = "none"
                                 }
                             }
                         }
@@ -1200,18 +1226,22 @@ Item {
         opacity: 0.7
     }
 
-    // 4. SettingsSwitch: Native-style smooth sliding switch (42x24)
+    // 4. SettingsSwitch: High-contrast native-style switch (44x24) with clearly visible OFF/ON states
     component SettingsSwitch : Rectangle {
         id: switchRoot
         property bool checked: false
         signal toggled(bool checked)
 
-        width: 42
+        width: 44
         height: 24
         radius: 12
-        color: checked ? theme.accent : (switchMouse.containsMouse ? theme.surfaceActive : theme.surfaceElevated)
-        border.color: checked ? theme.accent : theme.borderStrong
-        border.width: 1
+        activeFocusOnTab: true
+        color: checked ? theme.accent : (switchMouse.containsMouse ? theme.switchTrackOffHover : theme.switchTrackOff)
+        border.color: switchRoot.activeFocus ? theme.accent : (checked ? theme.accent : theme.switchTrackOffBorder)
+        border.width: switchRoot.activeFocus ? 2 : (checked ? 1 : 1.5)
+
+        Keys.onSpacePressed: switchRoot.toggled(!switchRoot.checked)
+        Keys.onReturnPressed: switchRoot.toggled(!switchRoot.checked)
 
         Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
         Behavior on border.color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
@@ -1221,11 +1251,14 @@ Item {
             width: 18
             height: 18
             radius: 9
-            color: "#ffffff"
+            color: switchRoot.checked ? theme.switchThumbOn : theme.switchThumbOff
+            border.color: switchRoot.checked ? "transparent" : theme.switchThumbOffBorder
+            border.width: switchRoot.checked ? 0 : 1
             anchors.verticalCenter: parent.verticalCenter
             x: switchRoot.checked ? parent.width - width - 3 : 3
 
             Behavior on x { NumberAnimation { duration: theme.reduceMotion ? 0 : 120; easing.type: Easing.InOutQuad } }
+            Behavior on color { ColorAnimation { duration: theme.reduceMotion ? 0 : 120 } }
         }
 
         MouseArea {
@@ -1343,18 +1376,18 @@ Item {
         height: 32
         radius: 16
         color: swatchColor
-        border.color: isSelected ? "#ffffff" : "transparent"
-        border.width: isSelected ? 2 : 0
+        border.color: isSelected ? (theme.resolvedTheme === "light" ? "#0f172a" : "#ffffff") : (swatchMouse.containsMouse ? theme.borderStrong : "transparent")
+        border.width: isSelected ? 2.5 : 1
 
         ToolTip.visible: swatchMouse.containsMouse
         ToolTip.text: swatchName
-        ToolTip.delay: 300
+        ToolTip.delay: 200
 
         RyzoraIcon {
             anchors.centerIn: parent
             name: "checkmark"
-            size: 12
-            color: "#ffffff"
+            size: 14
+            color: swatchKey === "silver" ? (theme.resolvedTheme === "light" ? "#0f172a" : "#1e293b") : "#ffffff"
             visible: parent.isSelected
         }
 

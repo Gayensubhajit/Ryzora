@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::fs;
 use std::os::raw::{c_char, c_void};
@@ -487,7 +487,6 @@ impl ProcessCoordinator {
 
 /// Validated, persisted user preferences (matching Tauri settings.rs).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
 pub struct RyzoraSettings {
     pub default_release_channel: String,
     pub auto_refresh_enabled: bool,
@@ -513,6 +512,32 @@ pub struct RyzoraSettings {
     pub sidebar_collapsed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_storage_path: Option<String>,
+    #[serde(default = "default_appearance_mode")]
+    pub appearance_mode: String,
+    #[serde(default = "default_accent_name")]
+    pub accent_name: String,
+    #[serde(default)]
+    pub reduce_transparency: bool,
+    #[serde(default)]
+    pub reduce_motion: bool,
+    #[serde(default)]
+    pub increase_contrast: bool,
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
+    #[serde(flatten)]
+    pub extra_fields: BTreeMap<String, serde_json::Value>,
+}
+
+fn default_schema_version() -> u32 {
+    1
+}
+
+fn default_appearance_mode() -> String {
+    "dark".to_string()
+}
+
+fn default_accent_name() -> String {
+    "blue".to_string()
 }
 
 fn default_sidebar_width() -> u32 {
@@ -548,6 +573,13 @@ impl Default for RyzoraSettings {
             sidebar_width: 240,
             sidebar_collapsed: false,
             custom_storage_path: None,
+            appearance_mode: "dark".to_string(),
+            accent_name: "blue".to_string(),
+            reduce_transparency: false,
+            reduce_motion: false,
+            increase_contrast: false,
+            schema_version: 1,
+            extra_fields: BTreeMap::new(),
         }
     }
 }
@@ -575,7 +607,7 @@ pub fn validate_settings(s: &RyzoraSettings) -> Result<(), String> {
         ));
     }
 
-    let valid_notif = ["all", "security_only", "none"];
+    let valid_notif = ["all", "security_only", "none", "warning", "silent"];
     if !valid_notif.contains(&s.notification_level.as_str()) {
         return Err(format!(
             "Invalid notification_level '{}'. Must be one of: all, security_only, none.",
@@ -591,7 +623,7 @@ pub fn validate_settings(s: &RyzoraSettings) -> Result<(), String> {
         ));
     }
 
-    let valid_snapshot_policies = ["never", "ask", "always"];
+    let valid_snapshot_policies = ["never", "ask", "always", "auto", "disabled"];
     if !valid_snapshot_policies.contains(&s.snapshot_policy.as_str()) {
         return Err(format!(
             "Invalid snapshot_policy '{}'. Must be one of: never, ask, always.",
@@ -603,6 +635,24 @@ pub fn validate_settings(s: &RyzoraSettings) -> Result<(), String> {
         return Err(format!(
             "snapshot_retention_count must be between 1 and 50, got {}.",
             s.snapshot_retention_count
+        ));
+    }
+
+    let valid_modes = ["system", "light", "dark"];
+    if !valid_modes.contains(&s.appearance_mode.as_str()) {
+        return Err(format!(
+            "Invalid appearance_mode '{}'. Must be one of: system, light, dark.",
+            s.appearance_mode
+        ));
+    }
+
+    let valid_accents = [
+        "blue", "silver", "purple", "green", "orange", "rose", "cyan", "emerald", "amber"
+    ];
+    if !valid_accents.contains(&s.accent_name.as_str()) {
+        return Err(format!(
+            "Invalid accent_name '{}'. Must be a supported accent color.",
+            s.accent_name
         ));
     }
 
@@ -4229,11 +4279,71 @@ impl BackendState {
 
     pub fn load_settings(&self) -> RyzoraSettings {
         if let Some(home) = self.resolve_home_dir() {
-            let settings_file = home.join(".local/share/ryzora/settings.json");
-            if settings_file.is_file() {
-                if let Ok(raw) = fs::read_to_string(&settings_file) {
+            let config_dir = home.join(".config/ryzora");
+            let config_file = config_dir.join("settings.json");
+            let bak_file = config_dir.join("settings.json.bak");
+            let share_dir = home.join(".local/share/ryzora");
+            let share_file = share_dir.join("settings.json");
+
+            // 1. Authoritative: ~/.config/ryzora/settings.json
+            if config_file.is_file() {
+                if let Ok(raw) = fs::read_to_string(&config_file) {
                     if let Ok(val) = serde_json::from_str::<RyzoraSettings>(&raw) {
                         if validate_settings(&val).is_ok() {
+                            return val;
+                        } else {
+                            eprintln!("[ryzora-backend] Authoritative settings failed validation. Checking backup...");
+                        }
+                    } else {
+                        eprintln!("[ryzora-backend] Authoritative settings corrupted. Checking backup...");
+                    }
+                }
+
+                // If config_file exists but is invalid/corrupt, attempt recovery from backup
+                if bak_file.is_file() {
+                    if let Ok(raw_bak) = fs::read_to_string(&bak_file) {
+                        if let Ok(val_bak) = serde_json::from_str::<RyzoraSettings>(&raw_bak) {
+                            if validate_settings(&val_bak).is_ok() {
+                                eprintln!("[ryzora-backend] Recovered settings from {}", bak_file.display());
+                                return val_bak;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback to legacy share_file if backup is unavailable
+                if share_file.is_file() {
+                    if let Ok(raw_share) = fs::read_to_string(&share_file) {
+                        if let Ok(val_share) = serde_json::from_str::<RyzoraSettings>(&raw_share) {
+                            if validate_settings(&val_share).is_ok() {
+                                eprintln!("[ryzora-backend] Recovered settings from legacy {}", share_file.display());
+                                return val_share;
+                            }
+                        }
+                    }
+                }
+            } else if share_file.is_file() {
+                // 2. Only legacy ~/.local/share/ryzora/settings.json exists: migrate once
+                if let Ok(raw) = fs::read_to_string(&share_file) {
+                    if let Ok(val) = serde_json::from_str::<RyzoraSettings>(&raw) {
+                        if validate_settings(&val).is_ok() {
+                            // Preserve safe backup before retiring legacy active file
+                            let share_bak = share_dir.join("settings.json.migrated.bak");
+                            let _ = fs::copy(&share_file, &share_bak);
+
+                            if self.save_settings_struct(&val).is_ok() {
+                                // Confirm new file is readable and verified before retiring legacy file
+                                if config_file.is_file() {
+                                    if let Ok(read_back) = fs::read_to_string(&config_file) {
+                                        if let Ok(verified) = serde_json::from_str::<RyzoraSettings>(&read_back) {
+                                            if validate_settings(&verified).is_ok() {
+                                                let _ = fs::remove_file(&share_file);
+                                                return verified;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             return val;
                         }
                     }
@@ -4243,57 +4353,144 @@ impl BackendState {
         RyzoraSettings::default()
     }
 
-    pub fn save_settings(&self, settings_json: &str) -> bool {
-        let s = match serde_json::from_str::<RyzoraSettings>(settings_json) {
+    pub fn save_settings_struct(&self, settings: &RyzoraSettings) -> Result<RyzoraSettings, String> {
+        let json = serde_json::to_string(settings).map_err(|e| format!("Serialization error: {}", e))?;
+        self.save_settings_detailed(&json)
+    }
+
+    pub fn save_settings_detailed(&self, settings_json: &str) -> Result<RyzoraSettings, String> {
+        let mut s = match serde_json::from_str::<RyzoraSettings>(settings_json) {
             Ok(val) => val,
             Err(e) => {
-                eprintln!("[ryzora-backend] Failed to parse settings: {}", e);
-                return false;
+                let msg = format!("Failed to parse settings JSON: {}", e);
+                eprintln!("[ryzora-backend] {}", msg);
+                return Err(msg);
             }
         };
 
+        // Normalize aliases
+        if s.snapshot_policy == "auto" {
+            s.snapshot_policy = "always".to_string();
+        } else if s.snapshot_policy == "disabled" {
+            s.snapshot_policy = "never".to_string();
+        }
+
+        if s.notification_level == "warning" {
+            s.notification_level = "security_only".to_string();
+        } else if s.notification_level == "silent" {
+            s.notification_level = "none".to_string();
+        }
+
+        if s.accent_name == "emerald" {
+            s.accent_name = "green".to_string();
+        } else if s.accent_name == "amber" {
+            s.accent_name = "orange".to_string();
+        }
+
         if let Err(e) = validate_settings(&s) {
-            eprintln!("[ryzora-backend] Settings validation error: {}", e);
-            return false;
+            let msg = format!("Settings validation error: {}", e);
+            eprintln!("[ryzora-backend] {}", msg);
+            return Err(msg);
         }
 
-        if let Some(home) = self.resolve_home_dir() {
-            let share_dir = home.join(".local/share/ryzora");
-            if fs::create_dir_all(&share_dir).is_err() {
-                return false;
+        let home = match self.resolve_home_dir() {
+            Some(h) => h,
+            None => {
+                return Err("Failed to resolve user home directory".to_string());
             }
-            let _ = set_secure_permissions(&share_dir, 0o700);
+        };
 
-            let settings_file = share_dir.join("settings.json");
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos();
-            let tmp_file = share_dir.join(format!(".settings.json.tmp.{}", nanos));
+        let config_dir = home.join(".config/ryzora");
+        if !config_dir.exists() {
+            if let Err(e) = fs::create_dir_all(&config_dir) {
+                return Err(format!("Unable to create configuration directory {}: {}", config_dir.display(), e));
+            }
+            let _ = set_secure_permissions(&config_dir, 0o700);
+        }
 
-            if let Ok(pretty) = serde_json::to_string_pretty(&s) {
-                if fs::write(&tmp_file, &pretty).is_ok() {
-                    let _ = set_secure_permissions(&tmp_file, 0o600);
-                    if fs::rename(&tmp_file, &settings_file).is_ok() {
-                        let _ = set_secure_permissions(&settings_file, 0o600);
-                        return true;
-                    } else {
-                        let _ = fs::remove_file(&tmp_file);
-                    }
-                }
+        let settings_file = config_dir.join("settings.json");
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos();
+        let tmp_file = config_dir.join(format!(".settings.json.tmp.{}.{}", std::process::id(), nanos));
+
+        let pretty = match serde_json::to_string_pretty(&s) {
+            Ok(p) => p,
+            Err(e) => return Err(format!("Failed to serialize settings: {}", e)),
+        };
+
+        // Preserve backup of existing valid settings before atomic replacement
+        if settings_file.is_file() {
+            let bak_file = config_dir.join("settings.json.bak");
+            let _ = fs::copy(&settings_file, &bak_file);
+        }
+
+        // Atomic write with sync
+        {
+            use std::io::Write;
+            let mut file = match fs::File::create(&tmp_file) {
+                Ok(f) => f,
+                Err(e) => return Err(format!("Failed to create temporary settings file {}: {}", tmp_file.display(), e)),
+            };
+            if let Err(e) = file.write_all(pretty.as_bytes()) {
+                let _ = fs::remove_file(&tmp_file);
+                return Err(format!("Failed to write settings to temporary file: {}", e));
+            }
+            if let Err(e) = file.sync_all() {
+                let _ = fs::remove_file(&tmp_file);
+                return Err(format!("Failed to flush settings file to disk: {}", e));
             }
         }
-        false
+        let _ = set_secure_permissions(&tmp_file, 0o600);
+
+        if let Err(e) = fs::rename(&tmp_file, &settings_file) {
+            let _ = fs::remove_file(&tmp_file);
+            return Err(format!("Failed to atomically replace settings file: {}", e));
+        }
+        let _ = set_secure_permissions(&settings_file, 0o600);
+
+        // Verification: read back
+        let readback = match fs::read_to_string(&settings_file) {
+            Ok(content) => content,
+            Err(e) => return Err(format!("Failed to read back written settings: {}", e)),
+        };
+        let verified: RyzoraSettings = match serde_json::from_str(&readback) {
+            Ok(v) => v,
+            Err(e) => return Err(format!("Written settings failed verification check: {}", e)),
+        };
+
+        // Retire any legacy ~/.local/share/ryzora/settings.json so we do not maintain dual active files
+        let share_file = home.join(".local/share/ryzora/settings.json");
+        if share_file.is_file() {
+            let share_bak = home.join(".local/share/ryzora/settings.json.migrated.bak");
+            let _ = fs::copy(&share_file, &share_bak);
+            let _ = fs::remove_file(&share_file);
+        }
+
+        // Sync AppearancePreferences
+        let app_prefs = AppearancePreferences {
+            mode: verified.appearance_mode.clone(),
+            accent: verified.accent_name.clone(),
+            reduce_transparency: verified.reduce_transparency,
+            reduce_motion: verified.reduce_motion,
+            increase_contrast: verified.increase_contrast,
+        };
+        if let Ok(app_json) = serde_json::to_string_pretty(&app_prefs) {
+            let _ = self.save_appearance(&app_json);
+        }
+
+        Ok(verified)
+    }
+
+    pub fn save_settings(&self, settings_json: &str) -> bool {
+        self.save_settings_detailed(settings_json).is_ok()
     }
 
     pub fn reset_settings(&self) -> Result<RyzoraSettings, String> {
         let defaults = RyzoraSettings::default();
         let json = serde_json::to_string(&defaults).map_err(|e| e.to_string())?;
-        if self.save_settings(&json) {
-            Ok(defaults)
-        } else {
-            Err("Failed to persist default settings".to_string())
-        }
+        self.save_settings_detailed(&json)
     }
 
     pub fn is_first_run(&self) -> bool {
@@ -4305,9 +4502,15 @@ impl BackendState {
         }
 
         if let Some(home) = self.resolve_home_dir() {
-            let settings_file = home.join(".local/share/ryzora/settings.json");
-            if settings_file.is_file() {
-                if let Ok(raw) = fs::read_to_string(&settings_file) {
+            let config_settings = home.join(".config/ryzora/settings.json");
+            let share_settings = home.join(".local/share/ryzora/settings.json");
+            let target = if config_settings.is_file() {
+                config_settings
+            } else {
+                share_settings
+            };
+            if target.is_file() {
+                if let Ok(raw) = fs::read_to_string(&target) {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
                         if let Some(obj) = val.as_object() {
                             if let Some(completed) = obj.get("setup_completed").and_then(|v| v.as_bool()) {
@@ -4587,9 +4790,15 @@ impl BackendState {
 
     pub fn load_appearance(&self) -> AppearancePreferences {
         if let Some(home) = self.resolve_home_dir() {
-            let appearance_file = home.join(".local/share/ryzora/appearance.json");
-            if appearance_file.is_file() {
-                if let Ok(raw) = fs::read_to_string(&appearance_file) {
+            let config_file = home.join(".config/ryzora/appearance.json");
+            let share_file = home.join(".local/share/ryzora/appearance.json");
+            let target = if config_file.is_file() {
+                config_file
+            } else {
+                share_file
+            };
+            if target.is_file() {
+                if let Ok(raw) = fs::read_to_string(&target) {
                     if let Ok(app) = serde_json::from_str::<AppearancePreferences>(&raw) {
                         return app;
                     }
@@ -4606,24 +4815,35 @@ impl BackendState {
         };
 
         if let Some(home) = self.resolve_home_dir() {
-            let share_dir = home.join(".local/share/ryzora");
-            if fs::create_dir_all(&share_dir).is_err() {
-                return false;
-            }
-            let _ = set_secure_permissions(&share_dir, 0o700);
+            let config_dir = home.join(".config/ryzora");
+            let _ = fs::create_dir_all(&config_dir);
+            let _ = set_secure_permissions(&config_dir, 0o700);
 
-            let appearance_file = share_dir.join("appearance.json");
+            let appearance_file = config_dir.join("appearance.json");
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .subsec_nanos();
-            let tmp_file = share_dir.join(format!(".appearance.json.tmp.{}", nanos));
+            let tmp_file = config_dir.join(format!(".appearance.json.tmp.{}", nanos));
 
             if let Ok(pretty) = serde_json::to_string_pretty(&app) {
                 if fs::write(&tmp_file, &pretty).is_ok() {
                     let _ = set_secure_permissions(&tmp_file, 0o600);
                     if fs::rename(&tmp_file, &appearance_file).is_ok() {
                         let _ = set_secure_permissions(&appearance_file, 0o600);
+
+                        // Also sync to legacy share location for background daemons
+                        let share_dir = home.join(".local/share/ryzora");
+                        if fs::create_dir_all(&share_dir).is_ok() {
+                            let _ = set_secure_permissions(&share_dir, 0o700);
+                            let share_file = share_dir.join("appearance.json");
+                            let share_tmp = share_dir.join(format!(".appearance.json.tmp.{}", nanos));
+                            if fs::write(&share_tmp, &pretty).is_ok() {
+                                let _ = set_secure_permissions(&share_tmp, 0o600);
+                                let _ = fs::rename(&share_tmp, &share_file);
+                                let _ = set_secure_permissions(&share_file, 0o600);
+                            }
+                        }
                         return true;
                     } else {
                         let _ = fs::remove_file(&tmp_file);
@@ -7942,32 +8162,65 @@ pub extern "C" fn ryzora_load_snapshots() -> *mut c_char {
 
 #[no_mangle]
 pub extern "C" fn ryzora_load_settings() -> *mut c_char {
-    let s = get_backend().load_settings();
-    let json = serde_json::to_string(&s).unwrap_or_else(|_| "{}".to_string());
-    safe_to_c_string(json)
+    let res = std::panic::catch_unwind(|| {
+        let s = get_backend().load_settings();
+        serde_json::to_string(&s).unwrap_or_else(|_| "{}".to_string())
+    });
+    match res {
+        Ok(json) => safe_to_c_string(json),
+        Err(_) => safe_to_c_string("{}"),
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn ryzora_save_settings(settings_json: *const c_char) -> bool {
-    if settings_json.is_null() {
-        return false;
-    }
-    let s_str = unsafe {
-        match CStr::from_ptr(settings_json).to_str() {
-            Ok(s) => s,
-            Err(_) => return false,
+pub extern "C" fn ryzora_save_settings(settings_json: *const c_char) -> *mut c_char {
+    let result = std::panic::catch_unwind(|| {
+        if settings_json.is_null() {
+            let res = serde_json::json!({ "success": false, "error": "Settings payload is null." });
+            return safe_to_c_string(res.to_string());
         }
-    };
-    get_backend().save_settings(s_str)
+        let s_str = unsafe {
+            match CStr::from_ptr(settings_json).to_str() {
+                Ok(s) => s,
+                Err(e) => {
+                    let res = serde_json::json!({ "success": false, "error": format!("Invalid UTF-8 in settings payload: {}", e) });
+                    return safe_to_c_string(res.to_string());
+                }
+            }
+        };
+        let res = match get_backend().save_settings_detailed(s_str) {
+            Ok(saved) => serde_json::json!({ "success": true, "settings": saved }),
+            Err(e) => serde_json::json!({ "success": false, "error": e }),
+        };
+        safe_to_c_string(res.to_string())
+    });
+
+    match result {
+        Ok(ptr) => ptr,
+        Err(_) => {
+            let res = serde_json::json!({ "success": false, "error": "Internal backend panic caught during settings save" });
+            safe_to_c_string(res.to_string())
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn ryzora_reset_settings() -> *mut c_char {
-    let res = match get_backend().reset_settings() {
-        Ok(s) => serde_json::json!({ "success": true, "settings": s }),
-        Err(e) => serde_json::json!({ "success": false, "error": e }),
-    };
-    safe_to_c_string(res.to_string())
+    let result = std::panic::catch_unwind(|| {
+        let res = match get_backend().reset_settings() {
+            Ok(s) => serde_json::json!({ "success": true, "settings": s }),
+            Err(e) => serde_json::json!({ "success": false, "error": e }),
+        };
+        safe_to_c_string(res.to_string())
+    });
+
+    match result {
+        Ok(ptr) => ptr,
+        Err(_) => {
+            let res = serde_json::json!({ "success": false, "error": "Internal backend panic caught during settings reset" });
+            safe_to_c_string(res.to_string())
+        }
+    }
 }
 
 #[no_mangle]
@@ -8967,8 +9220,10 @@ mod tests {
         assert_eq!(reloaded.compact_ui, true);
 
         // 4. Verify file permissions are hardened (0600) on isolated file
-        let path = temp.path().join(".local/share/ryzora/settings.json");
-        assert!(path.is_file());
+        let path = temp.path().join(".config/ryzora/settings.json");
+        assert!(path.is_file(), "Authoritative ~/.config/ryzora/settings.json must exist");
+        let legacy_path = temp.path().join(".local/share/ryzora/settings.json");
+        assert!(!legacy_path.is_file(), "Legacy ~/.local/share/ryzora/settings.json must not be dual-written");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -8976,6 +9231,19 @@ mod tests {
             let mode = meta.permissions().mode();
             assert_eq!(mode & 0o077, 0, "settings.json must be 0600");
         }
+
+        // 5. Test alias normalization in save_settings_detailed
+        let mut alias_settings = modified.clone();
+        alias_settings.snapshot_policy = "auto".to_string();
+        alias_settings.notification_level = "warning".to_string();
+        alias_settings.accent_name = "emerald".to_string();
+        let alias_json = serde_json::to_string(&alias_settings).unwrap();
+        let save_res = backend.save_settings_detailed(&alias_json);
+        assert!(save_res.is_ok());
+        let verified = save_res.unwrap();
+        assert_eq!(verified.snapshot_policy, "always");
+        assert_eq!(verified.notification_level, "security_only");
+        assert_eq!(verified.accent_name, "green");
 
         // 5. Test appearance load and save in isolated temp
         let initial_app = backend.load_appearance();
@@ -9027,6 +9295,107 @@ mod tests {
         assert_eq!(app.mode, "dark");
         assert_eq!(app.accent, "blue");
         assert!(!app.reduce_motion);
+    }
+
+    #[test]
+    fn test_settings_migration_and_atomic_failure_handling() {
+        let temp = tempfile::tempdir().unwrap();
+        let backend = BackendState::with_home_dir(temp.path().to_path_buf());
+
+        // 1. Scenario: Only legacy file exists in ~/.local/share/ryzora/settings.json
+        let share_dir = temp.path().join(".local/share/ryzora");
+        fs::create_dir_all(&share_dir).unwrap();
+        let mut legacy = RyzoraSettings::default();
+        legacy.default_release_channel = "nightly".to_string();
+        legacy.auto_refresh_interval_minutes = 30;
+        let legacy_json = serde_json::to_string(&legacy).unwrap();
+        fs::write(share_dir.join("settings.json"), &legacy_json).unwrap();
+
+        // 2. Load settings: must detect and migrate to ~/.config/ryzora/settings.json
+        let migrated = backend.load_settings();
+        assert_eq!(migrated.default_release_channel, "nightly");
+        assert_eq!(migrated.auto_refresh_interval_minutes, 30);
+        let config_file = temp.path().join(".config/ryzora/settings.json");
+        assert!(config_file.is_file(), "Migration must write ~/.config/ryzora/settings.json");
+        assert!(share_dir.join("settings.json.migrated.bak").is_file(), "Legacy backup must be preserved");
+        assert!(!share_dir.join("settings.json").is_file(), "Active legacy file must be retired");
+
+        // 3. Scenario: Both exist with different contents. Authoritative config_file must win!
+        let mut authoritative = RyzoraSettings::default();
+        authoritative.default_release_channel = "beta".to_string();
+        authoritative.auto_refresh_interval_minutes = 45;
+        let auth_json = serde_json::to_string(&authoritative).unwrap();
+        fs::write(&config_file, &auth_json).unwrap();
+        // Recreate different legacy file
+        fs::write(share_dir.join("settings.json"), &legacy_json).unwrap();
+
+        let loaded = backend.load_settings();
+        assert_eq!(loaded.default_release_channel, "beta", "Authoritative config_file must win over legacy file");
+        assert_eq!(loaded.auto_refresh_interval_minutes, 45);
+
+        // 4. Scenario: Corrupted config_file recovers from backup (.bak)
+        let bak_file = temp.path().join(".config/ryzora/settings.json.bak");
+        fs::write(&bak_file, &auth_json).unwrap();
+        fs::write(&config_file, "INVALID_CORRUPTED_JSON").unwrap();
+
+        let recovered = backend.load_settings();
+        assert_eq!(recovered.default_release_channel, "beta", "Must recover valid settings from .bak");
+
+        // 5. Scenario: Unrecognized / unknown fields preservation (forward/backward compatibility)
+        let forward_compat_json = r#"{
+            "default_release_channel": "stable",
+            "auto_refresh_enabled": true,
+            "auto_refresh_interval_minutes": 60,
+            "notification_level": "all",
+            "update_notification_policy": "notify",
+            "integrity_scan_on_startup": false,
+            "show_unverified_packages": true,
+            "show_nightly_packages": false,
+            "compact_ui": false,
+            "snapshot_policy": "ask",
+            "snapshot_retention_count": 5,
+            "snapshot_auto_cleanup": true,
+            "future_experimental_feature": true,
+            "custom_metadata_tag": "arch_linux_pro"
+        }"#;
+        let save_ext_res = backend.save_settings_detailed(forward_compat_json);
+        assert!(save_ext_res.is_ok(), "Unknown fields must not reject settings save");
+        let ext_settings = save_ext_res.unwrap();
+        assert_eq!(ext_settings.extra_fields.get("future_experimental_feature").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(ext_settings.extra_fields.get("custom_metadata_tag").and_then(|v| v.as_str()), Some("arch_linux_pro"));
+
+        // Roundtrip check: load again and ensure unknown fields persisted in file
+        let reloaded_ext = backend.load_settings();
+        assert_eq!(reloaded_ext.extra_fields.get("future_experimental_feature").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(reloaded_ext.extra_fields.get("custom_metadata_tag").and_then(|v| v.as_str()), Some("arch_linux_pro"));
+
+        // 6. Invalid JSON save attempt must fail safely and leave config_file intact
+        let invalid_json = "{ \"default_release_channel\": 12345 }";
+        let res = backend.save_settings_detailed(invalid_json);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("Failed to parse settings JSON"));
+
+        // 7. Invalid validation setting must fail safely and report validation error
+        let mut invalid_s = reloaded_ext.clone();
+        invalid_s.default_release_channel = "bogus_channel".to_string();
+        let invalid_s_json = serde_json::to_string(&invalid_s).unwrap();
+        let val_res = backend.save_settings_detailed(&invalid_s_json);
+        assert!(val_res.is_err());
+        assert!(val_res.unwrap_err().contains("Settings validation error"));
+
+        // 8. Scenario: Read-only directory error handling
+        let ro_temp = tempfile::tempdir().unwrap();
+        let ro_backend = BackendState::with_home_dir(ro_temp.path().to_path_buf());
+        let ro_config_dir = ro_temp.path().join(".config/ryzora");
+        fs::create_dir_all(&ro_config_dir).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&ro_config_dir, fs::Permissions::from_mode(0o500));
+            let ro_save_res = ro_backend.save_settings_detailed(&auth_json);
+            assert!(ro_save_res.is_err(), "Saving to read-only config directory must fail safely");
+            let _ = fs::set_permissions(&ro_config_dir, fs::Permissions::from_mode(0o700));
+        }
     }
 
     #[test]

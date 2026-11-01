@@ -49,7 +49,7 @@ extern "C" {
 
     char* ryzora_load_snapshots();
     char* ryzora_load_settings();
-    bool ryzora_save_settings(const char* settings_json);
+    char* ryzora_save_settings(const char* settings_json);
     char* ryzora_reset_settings();
     char* ryzora_load_appearance();
     bool ryzora_save_appearance(const char* appearance_json);
@@ -2291,13 +2291,36 @@ void RyzoraBackend::saveSettings(const QVariantMap &settings) {
 
     QPointer<RyzoraBackend> self = this;
     m_threadPool.start([self, jsonBytes]() {
-        bool ok = ryzora_save_settings(jsonBytes.constData());
-        QMetaObject::invokeMethod(qApp, [self, ok]() {
+        char* rawRes = ryzora_save_settings(jsonBytes.constData());
+        bool success = false;
+        QString errorMsg = QStringLiteral("Unknown persistence error");
+        QVariantMap savedMap;
+
+        if (rawRes) {
+            QByteArray resBytes(rawRes);
+            ryzora_free_string(rawRes);
+            QJsonDocument resDoc = QJsonDocument::fromJson(resBytes);
+            if (resDoc.isObject()) {
+                QJsonObject obj = resDoc.object();
+                success = obj.value(QStringLiteral("success")).toBool();
+                if (!success) {
+                    errorMsg = obj.value(QStringLiteral("error")).toString();
+                } else if (obj.contains(QStringLiteral("settings"))) {
+                    savedMap = obj.value(QStringLiteral("settings")).toObject().toVariantMap();
+                }
+            }
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, success, errorMsg, savedMap]() {
             if (self) {
-                if (ok) {
-                    self->postNotification("success", "Settings Saved", "Your application preferences have been persisted.");
+                if (success) {
+                    if (!savedMap.isEmpty()) {
+                        self->m_settingsData = savedMap;
+                        emit self->settingsChanged();
+                    }
+                    self->postNotification("success", "Settings Saved", "Your application preferences have been persisted to disk.");
                 } else {
-                    self->postNotification("error", "Error", "Failed to persist settings to disk.");
+                    self->postNotification("error", "Failed to Save Settings", errorMsg);
                 }
             }
         });

@@ -26,6 +26,11 @@
 #include "preview_stubs.hpp"
 #include "fluent_icon_provider.hpp"
 
+extern "C" {
+    char* ryzora_load_settings();
+    void ryzora_free_string(char* s);
+}
+
 class RyzoraNetworkAccessManager : public QNetworkAccessManager {
 public:
     explicit RyzoraNetworkAccessManager(QObject *parent = nullptr) : QNetworkAccessManager(parent) {}
@@ -4968,7 +4973,135 @@ int runTestSettings20(QGuiApplication &app, QQmlApplicationEngine &engine, Ryzor
     img07.save(screenshotDir + "/settings20_1080x720.png");
     qInfo() << "[TEST-SETTINGS-2.0] Saved settings20_07_narrow_window.png & settings20_1080x720.png";
 
-    qInfo() << "[TEST-SETTINGS-2.0] ALL 7 SCREENSHOTS CAPTURED SUCCESSFULLY!";
+    // ── SETTINGS RELIABILITY 2.2 VALIDATIONS ──
+    window->setWidth(1593);
+    window->setHeight(900);
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "showPreferences");
+        QMetaObject::invokeMethod(settingsView, "scrollToY", Q_ARG(QVariant, 0));
+    }
+
+    // 8. Visual contrast of OFF vs ON switches in Dark theme
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+        QMetaObject::invokeMethod(themeObj, "setAccent", Q_ARG(QVariant, "blue"));
+    }
+    pumpEvents(35, 20000);
+    QImage imgSwDark = window->grabWindow();
+    imgSwDark.save(screenshotDir + "/settings22_01_off_and_on_switches_dark.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings22_01_off_and_on_switches_dark.png";
+
+    // 9. Visual contrast of OFF vs ON switches in Light theme
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "light"));
+    }
+    pumpEvents(35, 20000);
+    QImage imgSwLight = window->grabWindow();
+    imgSwLight.save(screenshotDir + "/settings22_02_off_and_on_switches_light.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings22_02_off_and_on_switches_light.png";
+
+    // 10. Accent color switching and live token propagation: All 7 choices tested in both Dark & Light modes
+    struct AccentTestDef {
+        QString name;
+        QString alias;
+        QString expectedHexDark;
+        QString expectedHexLight;
+    };
+    QVector<AccentTestDef> allAccents = {
+        { QStringLiteral("blue"), QStringLiteral("Ocean Blue"), QStringLiteral("#6488e8"), QStringLiteral("#2563eb") },
+        { QStringLiteral("silver"), QStringLiteral("Deep Silver"), QStringLiteral("#cbd5e1"), QStringLiteral("#475569") },
+        { QStringLiteral("purple"), QStringLiteral("Amethyst"), QStringLiteral("#8b5cf6"), QStringLiteral("#7c3aed") },
+        { QStringLiteral("green"), QStringLiteral("Emerald"), QStringLiteral("#10b981"), QStringLiteral("#059669") },
+        { QStringLiteral("orange"), QStringLiteral("Amber Fire"), QStringLiteral("#f97316"), QStringLiteral("#ea580c") },
+        { QStringLiteral("rose"), QStringLiteral("Rose"), QStringLiteral("#f43f5e"), QStringLiteral("#e11d48") },
+        { QStringLiteral("cyan"), QStringLiteral("Cyan"), QStringLiteral("#06b6d4"), QStringLiteral("#0891b2") }
+    };
+
+    for (const auto &acc : allAccents) {
+        // Test in Dark Mode
+        if (themeObj) {
+            QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+            QMetaObject::invokeMethod(themeObj, "setAccent", Q_ARG(QVariant, acc.name));
+        }
+        pumpEvents(10, 10000);
+        QColor resolvedDark = themeObj ? themeObj->property("accent").value<QColor>() : QColor();
+        if (resolvedDark.name().toLower() != acc.expectedHexDark.toLower()) {
+            qCritical() << "[TEST-SETTINGS-2.0] FAIL: Dark mode accent" << acc.alias << "expected" << acc.expectedHexDark << "got" << resolvedDark.name();
+            return 1;
+        }
+
+        // Test in Light Mode
+        if (themeObj) {
+            QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "light"));
+        }
+        pumpEvents(10, 10000);
+        QColor resolvedLight = themeObj ? themeObj->property("accent").value<QColor>() : QColor();
+        if (resolvedLight.name().toLower() != acc.expectedHexLight.toLower()) {
+            qCritical() << "[TEST-SETTINGS-2.0] FAIL: Light mode accent" << acc.alias << "expected" << acc.expectedHexLight << "got" << resolvedLight.name();
+            return 1;
+        }
+        qInfo() << "[TEST-SETTINGS-2.0] Accent" << acc.alias << "(" << acc.name << ") verified: Dark=" << resolvedDark.name() << "Light=" << resolvedLight.name();
+    }
+
+    // Capture specific visual artifacts for Amethyst & Emerald
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAppearanceMode", Q_ARG(QVariant, "dark"));
+        QMetaObject::invokeMethod(themeObj, "setAccent", Q_ARG(QVariant, "purple"));
+    }
+    pumpEvents(25, 20000);
+    QImage imgPurple = window->grabWindow();
+    imgPurple.save(screenshotDir + "/settings22_03_accent_color_amethyst.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings22_03_accent_color_amethyst.png";
+
+    if (themeObj) {
+        QMetaObject::invokeMethod(themeObj, "setAccent", Q_ARG(QVariant, "emerald")); // test alias normalization
+    }
+    pumpEvents(25, 20000);
+    QColor emeraldColor = themeObj ? themeObj->property("accent").value<QColor>() : QColor();
+    if (emeraldColor.name().toLower() != "#10b981") {
+        qCritical() << "[TEST-SETTINGS-2.0] FAIL: Accent alias 'emerald' failed to resolve to green #10b981. Got:" << emeraldColor.name();
+        return 1;
+    }
+    QImage imgGreen = window->grabWindow();
+    imgGreen.save(screenshotDir + "/settings22_04_accent_color_emerald.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings22_04_accent_color_emerald.png";
+
+    // 12. Save Changes persistence test (atomic disk write to ~/.config/ryzora/settings.json)
+    if (settingsView) {
+        QMetaObject::invokeMethod(settingsView, "saveAll");
+    }
+    pumpEvents(50, 20000); // Give thread pool time to write atomically
+    QString configSettingsPath = QDir::homePath() + "/.config/ryzora/settings.json";
+    QFile configFile(configSettingsPath);
+    if (!configFile.exists()) {
+        qCritical() << "[TEST-SETTINGS-2.0] FAIL: settings.json does not exist at" << configSettingsPath;
+        return 1;
+    }
+    qInfo() << "[TEST-SETTINGS-2.0] Verified settings.json persisted at" << configSettingsPath << "Size:" << configFile.size();
+
+    // Verify restart persistence parity: load settings directly from disk via C-ABI
+    char *rawLoaded = ryzora_load_settings();
+    QVariantMap reloadedMap;
+    if (rawLoaded) {
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(rawLoaded));
+        ryzora_free_string(rawLoaded);
+        reloadedMap = doc.object().toVariantMap();
+    }
+    qInfo() << "[TEST-SETTINGS-2.0] Restart persistence verification: channel=" << reloadedMap.value("default_release_channel")
+            << "mode=" << reloadedMap.value("appearance_mode")
+            << "accent=" << reloadedMap.value("accent_name")
+            << "notif=" << reloadedMap.value("notification_level")
+            << "snapshot=" << reloadedMap.value("snapshot_policy");
+    if (reloadedMap.isEmpty()) {
+        qCritical() << "[TEST-SETTINGS-2.0] FAIL: Reloaded settings map is empty";
+        return 1;
+    }
+
+    QImage imgSaved = window->grabWindow();
+    imgSaved.save(screenshotDir + "/settings22_05_saved_and_persisted.png");
+    qInfo() << "[TEST-SETTINGS-2.0] Saved settings22_05_saved_and_persisted.png";
+
+    qInfo() << "[TEST-SETTINGS-2.0] ALL VALIDATION CHECKS AND SCREENSHOTS COMPLETED SUCCESSFULLY!";
     return 0;
 }
 

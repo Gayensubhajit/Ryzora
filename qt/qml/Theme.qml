@@ -20,13 +20,17 @@ QtObject {
     property bool reduceMotion: false
     property bool increaseContrast: false
 
-    // Color Swatches matching React ACCENT_SWATCHES
+    // Color Swatches matching React ACCENT_SWATCHES & Extended Palettes
     readonly property var swatches: {
         "blue": "#6488E8",
-        "silver": "#D9DCE2",
+        "silver": "#94A3B8",
         "purple": "#8b5cf6",
         "green": "#10b981",
-        "orange": "#f97316"
+        "orange": "#f97316",
+        "rose": "#f43f5e",
+        "cyan": "#06b6d4",
+        "emerald": "#10b981",
+        "amber": "#f97316"
     }
 
     // Swatch Names matching React
@@ -35,25 +39,41 @@ QtObject {
         "silver": "Deep Silver",
         "purple": "Amethyst",
         "green": "Emerald",
-        "orange": "Amber Fire"
+        "orange": "Amber Fire",
+        "rose": "Rose",
+        "cyan": "Cyan",
+        "emerald": "Emerald",
+        "amber": "Amber Fire"
     }
 
     // Dynamic accent resolution matching tokens.css semantic tokens
     readonly property color accent: {
         if (accentName === "silver") {
-            return resolvedTheme === "light" ? "#4b5563" : "#D9DCE2"
+            return resolvedTheme === "light" ? "#475569" : "#CBD5E1"
         } else if (accentName === "purple") {
             return resolvedTheme === "light" ? "#7c3aed" : "#8b5cf6"
-        } else if (accentName === "green") {
+        } else if (accentName === "green" || accentName === "emerald") {
             return resolvedTheme === "light" ? "#059669" : "#10b981"
-        } else if (accentName === "orange") {
+        } else if (accentName === "orange" || accentName === "amber") {
             return resolvedTheme === "light" ? "#ea580c" : "#f97316"
+        } else if (accentName === "rose") {
+            return resolvedTheme === "light" ? "#e11d48" : "#f43f5e"
+        } else if (accentName === "cyan") {
+            return resolvedTheme === "light" ? "#0891b2" : "#06b6d4"
         }
-        return resolvedTheme === "light" ? "#3b6fe8" : "#6488E8"
+        return resolvedTheme === "light" ? "#2563eb" : "#6488E8"
     }
     readonly property color accentHover: Qt.lighter(accent, 1.15)
     readonly property color accentGlow: Qt.rgba(accent.r, accent.g, accent.b, 0.12)
     readonly property color accentFaint: Qt.rgba(accent.r, accent.g, accent.b, 0.12)
+
+    // Dedicated Switch Component Tokens with High-Contrast OFF/ON States
+    readonly property color switchTrackOff: resolvedTheme === "light" ? (increaseContrast ? "#CBD5E1" : "#E2E8F0") : (increaseContrast ? "#333A48" : "#282C35")
+    readonly property color switchTrackOffHover: resolvedTheme === "light" ? "#CBD5E1" : "#353B47"
+    readonly property color switchTrackOffBorder: resolvedTheme === "light" ? (increaseContrast ? "#64748B" : "#94A3B8") : (increaseContrast ? "#64748B" : "#4A5262")
+    readonly property color switchThumbOff: resolvedTheme === "light" ? "#FFFFFF" : "#CBD5E1"
+    readonly property color switchThumbOffBorder: resolvedTheme === "light" ? "#94A3B8" : "#475569"
+    readonly property color switchThumbOn: "#FFFFFF"
 
     // Surfaces & Canvas (Monochrome Deep Black Hierarchy matching --rz-* tokens)
     readonly property color bg: resolvedTheme === "light" ? "#F5F6F9" : "#14161A"
@@ -180,8 +200,11 @@ QtObject {
     }
 
     function setAccent(name) {
-        if (swatches[name]) {
-            accentName = name
+        var key = String(name || "").toLowerCase()
+        if (key === "emerald") key = "green"
+        if (key === "amber") key = "orange"
+        if (swatches[key] !== undefined) {
+            accentName = key
             persistAppearance()
         }
     }
