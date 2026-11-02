@@ -4418,11 +4418,20 @@ int runTestVisual21(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraB
     qInfo() << "[TEST-VISUAL-2.1] Saved visual21_03_sidebar_bottom_footer.png";
 
     // 3B. Studio Lockscreen Cards with Enlarged Video & Compact Metadata
+    if (themeObj) themeObj->setProperty("appearanceMode", "dark");
     QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "studio"));
     pumpEvents(35, 20000);
     QImage imgStudio = window->grabWindow();
     imgStudio.save(screenshotDir + "/studio_lockscreen_enlarged_cards_1920x1080.png");
     qInfo() << "[TEST-VISUAL-2.1] Saved studio_lockscreen_enlarged_cards_1920x1080.png";
+
+    // 3C. Studio Lockscreen Cards in Light Mode
+    if (themeObj) themeObj->setProperty("appearanceMode", "light");
+    pumpEvents(30, 20000);
+    QImage imgStudioLight = window->grabWindow();
+    imgStudioLight.save(screenshotDir + "/studio_lockscreen_cards_light_mode.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved studio_lockscreen_cards_light_mode.png";
+    if (themeObj) themeObj->setProperty("appearanceMode", "dark");
 
     // 4. Updated icons
     QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));
@@ -4465,14 +4474,68 @@ int runTestVisual21(QGuiApplication &app, QQmlApplicationEngine &engine, RyzoraB
     // 8. Updates with available updates
     QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "updates"));
     pumpEvents(35, 20000);
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(25, 20000);
     QImage img08 = window->grabWindow();
     img08.save(screenshotDir + "/visual21_08_updates_with_available.png");
-    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_08_updates_with_available.png";
+    img08.save(screenshotDir + "/updates_1920x1080.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_08_updates_with_available.png & updates_1920x1080.png";
 
-    // 9. Updates empty state
+    // Responsive 1366x768 for Updates
+    window->setWidth(1366);
+    window->setHeight(768);
+    pumpEvents(25, 20000);
+    QImage imgUpdates1366 = window->grabWindow();
+    imgUpdates1366.save(screenshotDir + "/updates_1366x768.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved updates_1366x768.png";
+
+    // Responsive 1080x720 for Updates
+    window->setWidth(1080);
+    window->setHeight(720);
+    pumpEvents(25, 20000);
+    QImage imgUpdates1080 = window->grabWindow();
+    imgUpdates1080.save(screenshotDir + "/updates_1080x720.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved updates_1080x720.png";
+
+    // Restore 1920x1080
+    window->setWidth(1920);
+    window->setHeight(1080);
+    pumpEvents(20, 20000);
+
+    // 8B. Updates with System Updates Group Expanded
+    QObject *updatesView = rootObj->findChild<QObject*>("updatesView");
+    if (updatesView) {
+        updatesView->setProperty("systemPackagesExpanded", true);
+    }
+    pumpEvents(25, 20000);
+    QImage img08b = window->grabWindow();
+    img08b.save(screenshotDir + "/visual21_08b_system_updates_expanded.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_08b_system_updates_expanded.png";
+
+    // 8C. System Update Diagnostics Failure Details
+    if (updatesView) {
+        updatesView->setProperty("lastDiagnosticError", "System upgrade exited with code 1: ryzora-package-helper: ERROR: Unknown operation: 'upgrade-all'. Allowed: install, uninstall, reinstall, uninstall-deps, clean-cache");
+    }
+    pumpEvents(25, 20000);
+    QImage img08c = window->grabWindow();
+    img08c.save(screenshotDir + "/visual21_08c_system_update_diagnostics.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_08c_system_update_diagnostics.png";
+    if (updatesView) {
+        updatesView->setProperty("lastDiagnosticError", "");
+        updatesView->setProperty("systemPackagesExpanded", false);
+    }
+
+    // 9. Updates empty state ("Up to date" status chip on the far right)
+    QVariantList originalUpdates = backend->updatesList();
+    backend->setSimulatedUpdatesList(QVariantList());
+    pumpEvents(25, 20000);
     QImage img09 = window->grabWindow();
     img09.save(screenshotDir + "/visual21_09_updates_empty_state.png");
-    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_09_updates_empty_state.png";
+    img09.save(screenshotDir + "/updates_up_to_date_1920x1080.png");
+    qInfo() << "[TEST-VISUAL-2.1] Saved visual21_09_updates_empty_state.png & updates_up_to_date_1920x1080.png";
+    backend->setSimulatedUpdatesList(originalUpdates);
+    pumpEvents(20, 20000);
 
     // 10. Active application installation
     QMetaObject::invokeMethod(rootObj, "navigateTo", Q_ARG(QVariant, "apps"));

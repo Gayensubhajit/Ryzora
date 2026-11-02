@@ -60,6 +60,81 @@ Item {
         return lines.join("\n")
     }
 
+    readonly property bool isNarrowHeader: root.width > 0 && root.width < 900
+
+    // ── Reusable Diagnostics Action Group ──
+    Component {
+        id: diagActionsComponent
+
+        RowLayout {
+            spacing: 8
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+            RyzoraButton {
+                id: copyReportBtn
+                objectName: "copyReportButton"
+                text: "Copy report"
+                iconName: "clipboard"
+                variant: "secondary"
+                size: "md"
+                tooltip: "Copy full diagnostics report to clipboard"
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    var report = root.generateDiagnosticsReport()
+                    if (backend) {
+                        backend.copyToClipboard(report)
+                        backend.postNotification("success", "Diagnostics Copied", "Diagnostics report copied to clipboard.")
+                    }
+                }
+            }
+
+            RyzoraButton {
+                id: exportDiagBtn
+                objectName: "exportDiagnosticsButton"
+                text: "Export report"
+                iconName: "arrow-download"
+                variant: "secondary"
+                size: "md"
+                tooltip: "Save diagnostics report file to disk"
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    var report = root.generateDiagnosticsReport()
+                    if (backend) {
+                        var savedPath = backend.exportDiagnosticsReport(report)
+                        if (savedPath && savedPath.length > 0) {
+                            backend.postNotification("success", "Diagnostics Exported", "Report saved to " + savedPath)
+                        } else {
+                            backend.postNotification("error", "Export Failed", "Could not save diagnostics report.")
+                        }
+                    }
+                }
+            }
+
+            RyzoraButton {
+                id: refreshDiagBtn
+                objectName: "refreshDiagnosticsButton"
+                text: "Refresh"
+                iconName: "arrow-clockwise"
+                variant: "primary"
+                size: "md"
+                loading: root.isProbing
+                loadingText: "Probing…"
+                tooltip: "Probe host hardware, compositors, Polkit, and SDDM status"
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    root.isProbing = true
+                    probeTimer.start()
+                    root.lastChecked = Qt.formatDateTime(new Date(), "hh:mm:ss")
+                    if (backend) {
+                        backend.loadSystemInfo()
+                        backend.loadCompatibilityProfiles()
+                        backend.postNotification("info", "Diagnostics Refreshed", "System probes and compatibility profiles reloaded.")
+                    }
+                }
+            }
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
@@ -68,201 +143,197 @@ Item {
         // ══════════════════════════════════════════════════════════════
         // 1. HEADER: Title, Subtitle, Last Checked & Primary Actions
         // ══════════════════════════════════════════════════════════════
-        GridLayout {
+        ColumnLayout {
             Layout.fillWidth: true
-            columns: root.width >= 1150 ? 2 : 1
-            rowSpacing: 10
-            columnSpacing: 16
+            spacing: 12
 
-            ColumnLayout {
-                spacing: 3
+            RowLayout {
                 Layout.fillWidth: true
+                spacing: 16
 
-                RowLayout {
-                    spacing: 10
-                    Text {
-                        text: root.currentSubTab === 0 ? "Host System & Diagnostics" :
-                              (root.currentSubTab === 1 ? "Universal Linux Compatibility Lab" :
-                              (root.currentSubTab === 2 ? "Package Integrity & Security" :
-                              (root.currentSubTab === 3 ? "Session Activity Log" : "Developer Package Creator")))
-                        font.pixelSize: 26
-                        font.bold: true
-                        font.family: theme.fontFamily
-                        color: theme.text
-                    }
+                // Left side: Page Identity
+                ColumnLayout {
+                    id: leftHeaderIdentity
+                    spacing: 4
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
 
-                    Rectangle {
-                        height: 20
-                        radius: 10
-                        width: lastCheckedTxt.implicitWidth + 14
-                        color: theme.surfaceElevated
-                        border.color: theme.borderSubtle
-                        border.width: 1
+                    RowLayout {
+                        spacing: 10
+                        Text {
+                            text: root.currentSubTab === 0 ? "Host System & Diagnostics" :
+                                  (root.currentSubTab === 1 ? "Universal Linux Compatibility Lab" :
+                                  (root.currentSubTab === 2 ? "Package Integrity & Security" :
+                                  (root.currentSubTab === 3 ? "Session Activity Log" : "Developer Package Creator")))
+                            font.pixelSize: 24
+                            font.bold: true
+                            font.family: theme.fontFamily
+                            color: theme.text
+                        }
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 5
-                            Rectangle {
-                                width: 6
-                                height: 6
-                                radius: 3
-                                color: theme.success
-                            }
-                            Text {
-                                id: lastCheckedTxt
-                                text: "Checked " + root.lastChecked
-                                font.pixelSize: 10
-                                color: theme.textMuted
+                        Rectangle {
+                            height: 22
+                            radius: 11
+                            implicitWidth: lastCheckedRow.implicitWidth + 14
+                            color: theme.surfaceElevated
+                            border.color: theme.borderSubtle
+                            border.width: 1
+
+                            RowLayout {
+                                id: lastCheckedRow
+                                anchors.centerIn: parent
+                                spacing: 5
+                                Rectangle {
+                                    width: 6
+                                    height: 6
+                                    radius: 3
+                                    color: theme.success
+                                }
+                                Text {
+                                    id: lastCheckedTxt
+                                    text: "Checked " + root.lastChecked
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 10
+                                    color: theme.textMuted
+                                }
                             }
                         }
                     }
+
+                    Text {
+                        text: root.currentSubTab === 0 
+                            ? "System health, runtime environment, and security boundaries" :
+                              (root.currentSubTab === 1 
+                            ? "Capability matrix debugger for host environments against runtime display adapters" :
+                              (root.currentSubTab === 2 
+                            ? "Configuration drift verification, cryptographic integrity, and host restore points" :
+                              (root.currentSubTab === 3 
+                            ? "Real-time in-memory event stream of installation, deactivation, and backend operations"
+                            : "Authoring studio to generate, validate, and export Ryzora package specifications")))
+                        font.pixelSize: theme.fontCardDesc
+                        font.family: theme.fontFamily
+                        color: theme.textMuted
+                    }
                 }
 
-                Text {
-                    text: root.currentSubTab === 0 
-                        ? "System health, runtime environment, and security boundaries" :
-                          (root.currentSubTab === 1 
-                        ? "Capability matrix debugger for host environments against runtime display adapters" :
-                          (root.currentSubTab === 2 
-                        ? "Configuration drift verification, cryptographic integrity, and host restore points" :
-                          (root.currentSubTab === 3 
-                        ? "Real-time in-memory event stream of installation, deactivation, and backend operations"
-                        : "Authoring studio to generate, validate, and export Ryzora package specifications")))
-                    font.pixelSize: 13
-                    font.family: theme.fontFamily
-                    color: theme.textSecondary
+                // Flexible spacer pushing actions to the far right on wide viewports
+                Item {
+                    visible: !root.isNarrowHeader
+                    Layout.fillWidth: true
+                }
+
+                // Right side action group on wide viewports
+                Loader {
+                    visible: !root.isNarrowHeader
+                    active: !root.isNarrowHeader
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    sourceComponent: diagActionsComponent
                 }
             }
 
-            // Right-aligned Action Buttons (Responsive placement)
+            // Second row for right action group when header is narrow
             RowLayout {
-                Layout.alignment: root.width >= 1150 ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
-                spacing: 8
+                visible: root.isNarrowHeader
+                Layout.fillWidth: true
 
-                RyzoraButton {
-                    id: copyReportBtn
-                    objectName: "copyReportButton"
-                    text: "Copy report"
-                    variant: "secondary"
-                    size: "md"
-                    tooltip: "Copy full diagnostics report to clipboard"
-                    onClicked: {
-                        var report = root.generateDiagnosticsReport()
-                        if (backend) {
-                            backend.copyToClipboard(report)
-                            backend.postNotification("success", "Diagnostics Copied", "Diagnostics report copied to clipboard.")
-                        }
-                    }
+                Item {
+                    Layout.fillWidth: true
                 }
 
-                RyzoraButton {
-                    id: exportDiagBtn
-                    objectName: "exportDiagnosticsButton"
-                    text: "Export report"
-                    iconName: "arrow-download"
-                    variant: "secondary"
-                    size: "md"
-                    tooltip: "Save diagnostics report file to disk"
-                    onClicked: {
-                        var report = root.generateDiagnosticsReport()
-                        if (backend) {
-                            var savedPath = backend.exportDiagnosticsReport(report)
-                            if (savedPath && savedPath.length > 0) {
-                                backend.postNotification("success", "Diagnostics Exported", "Report saved to " + savedPath)
-                            } else {
-                                backend.postNotification("error", "Export Failed", "Could not save diagnostics report.")
-                            }
-                        }
-                    }
-                }
-
-                RyzoraButton {
-                    id: refreshDiagBtn
-                    objectName: "refreshDiagnosticsButton"
-                    text: "Refresh"
-                    iconName: "arrow-clockwise"
-                    variant: "primary"
-                    size: "md"
-                    loading: root.isProbing
-                    tooltip: "Probe host hardware, compositors, Polkit, and SDDM status"
-                    onClicked: {
-                        root.isProbing = true
-                        probeTimer.start()
-                        root.lastChecked = Qt.formatDateTime(new Date(), "hh:mm:ss")
-                        if (backend) {
-                            backend.loadSystemInfo()
-                            backend.loadCompatibilityProfiles()
-                            backend.postNotification("info", "Diagnostics Refreshed", "System probes and compatibility profiles reloaded.")
-                        }
-                    }
+                Loader {
+                    visible: root.isNarrowHeader
+                    active: root.isNarrowHeader
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    sourceComponent: diagActionsComponent
                 }
             }
         }
 
         // ══════════════════════════════════════════════════════════════
-        // 2. NAVIGATION ROW: Full-width Segmented Bar (No Emojis)
+        // 2. NAVIGATION ROW: Compact Segmented Tab Bar (macOS / Fluent style)
         // ══════════════════════════════════════════════════════════════
-        Rectangle {
+        RowLayout {
             Layout.fillWidth: true
-            height: 40
-            radius: theme.radiusMd
-            color: theme.surface
-            border.color: theme.borderSubtle
-            border.width: 1
+            spacing: 12
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 4
-                spacing: 4
+            Rectangle {
+                height: 38
+                implicitWidth: tabRowLayout.implicitWidth + 8
+                radius: 8
+                color: theme.surface
+                border.color: theme.borderSubtle
+                border.width: 1
 
-                Repeater {
-                    model: [
-                        { id: 0, label: "Host", icon: "desktop" },
-                        { id: 1, label: "Compatibility", icon: "wrench" },
-                        { id: 2, label: "Integrity", icon: "shield" },
-                        { id: 3, label: "Activity", icon: "pulse" },
-                        { id: 4, label: "Packages", icon: "code" }
-                    ]
+                RowLayout {
+                    id: tabRowLayout
+                    anchors.centerIn: parent
+                    spacing: 2
 
-                    delegate: Rectangle {
-                        property bool isSelected: root.currentSubTab === modelData.id
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        radius: theme.radiusSm
-                        color: isSelected ? theme.surfaceElevated : (tabArea.containsMouse ? theme.surfaceHover : "transparent")
-                        border.color: isSelected ? theme.accent : "transparent"
-                        border.width: isSelected ? 1 : 0
+                    Repeater {
+                        model: [
+                            { id: 0, label: "Host", icon: "desktop" },
+                            { id: 1, label: "Compatibility", icon: "wrench" },
+                            { id: 2, label: "Integrity", icon: "shield" },
+                            { id: 3, label: "Activity", icon: "pulse" },
+                            { id: 4, label: "Packages", icon: "code" }
+                        ]
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: root.width < 1100 ? 5 : 8
+                        delegate: Rectangle {
+                            id: tabItem
+                            readonly property bool isSelected: root.currentSubTab === modelData.id
+                            height: 32
+                            implicitWidth: tabContentRow.implicitWidth + 24
+                            radius: 6
+                            color: isSelected
+                                ? (theme.resolvedTheme === "light" ? theme.surfaceElevated : Qt.rgba(255, 255, 255, 0.12))
+                                : (tabArea.containsMouse ? (theme.resolvedTheme === "light" ? "#F1F5F9" : Qt.rgba(255, 255, 255, 0.06)) : "transparent")
+                            border.color: isSelected ? theme.borderSubtle : "transparent"
+                            border.width: isSelected ? 1 : 0
 
-                            RyzoraIcon {
-                                name: modelData.icon
-                                size: root.width < 1100 ? 13 : 14
-                                filled: isSelected
-                                color: isSelected ? theme.accent : theme.textMuted
+                            // Subtle bottom active accent indicator
+                            Rectangle {
+                                visible: tabItem.isSelected
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 2
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                height: 2
+                                width: Math.max(16, tabContentRow.implicitWidth - 8)
+                                radius: 1
+                                color: theme.accent
                             }
 
-                            Text {
-                                text: modelData.label
-                                font.pixelSize: root.width < 1100 ? 11 : 12
-                                font.bold: isSelected
-                                color: isSelected ? theme.text : theme.textSecondary
-                                elide: Text.ElideRight
-                            }
-                        }
+                            RowLayout {
+                                id: tabContentRow
+                                anchors.centerIn: parent
+                                spacing: 7
 
-                        MouseArea {
-                            id: tabArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentSubTab = modelData.id
+                                RyzoraIcon {
+                                    name: modelData.icon
+                                    size: 14
+                                    color: tabItem.isSelected ? theme.accent : (tabArea.containsMouse ? theme.text : theme.textSecondary)
+                                }
+
+                                Text {
+                                    text: modelData.label
+                                    font.family: theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: tabItem.isSelected ? theme.weightSemibold : theme.weightMedium
+                                    color: tabItem.isSelected ? theme.text : (tabArea.containsMouse ? theme.text : theme.textSecondary)
+                                }
+                            }
+
+                            MouseArea {
+                                id: tabArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.currentSubTab = modelData.id
+                            }
                         }
                     }
                 }
             }
+
+            Item { Layout.fillWidth: true }
         }
 
         // ══════════════════════════════════════════════════════════════

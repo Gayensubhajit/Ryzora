@@ -88,6 +88,8 @@ extern "C" {
     char* ryzora_apply_update_with_progress(const char* package_id, void (*callback)(const char*, void*), void* user_data);
     char* ryzora_apply_all_updates();
     char* ryzora_apply_all_updates_with_progress(void (*callback)(const char*, void*), void* user_data);
+    char* ryzora_apply_system_upgrade();
+    char* ryzora_apply_system_upgrade_with_progress(void (*callback)(const char*, void*), void* user_data);
     void ryzora_invalidate_updates_cache();
     char* ryzora_load_active_configuration();
     bool ryzora_is_silentsddm_engine_installed();
@@ -969,6 +971,11 @@ void RyzoraBackend::updateTransactionProgress(const QString &appId, const QStrin
     }
     emit activeAppOperationsChanged();
     emit appInstallProgress(appId, stage, pct, isDet, msg, dl, tot, spd, curStep, totSteps, curItem, eta, diag);
+}
+
+void RyzoraBackend::setSimulatedUpdatesList(const QVariantList &list) {
+    m_updatesList = list;
+    emit updatesChanged();
 }
 
 void RyzoraBackend::cancelAppOperation(const QString &appId) {
@@ -3292,6 +3299,144 @@ void RyzoraBackend::applyAllUpdates() {
                 emit self->activeAppOperationsChanged();
                 self->postNotification(success ? "success" : "error",
                                        success ? "Batch Updates Completed" : "Updates Failed",
+                                       message);
+                self->loadUpdates();
+                self->loadLibrary(true);
+            }
+        });
+    });
+}
+
+QVariantList RyzoraBackend::systemUpdates() const {
+    QVariantList res;
+    for (const auto &item : m_updatesList) {
+        QVariantMap map = item.toMap();
+        QString prov = map.value("provider").toString().toLower();
+        if (prov == "pacman") {
+            res.append(map);
+        }
+    }
+    return res;
+}
+
+QVariantList RyzoraBackend::applicationUpdates() const {
+    QVariantList res;
+    for (const auto &item : m_updatesList) {
+        QVariantMap map = item.toMap();
+        QString prov = map.value("provider").toString().toLower();
+        QString pType = map.value("package_type").toString().toLower();
+        if (prov == "flatpak" || prov == "aur" || (prov != "pacman" && pType == "app")) {
+            res.append(map);
+        }
+    }
+    return res;
+}
+
+QVariantList RyzoraBackend::communityUpdates() const {
+    QVariantList res;
+    for (const auto &item : m_updatesList) {
+        QVariantMap map = item.toMap();
+        QString prov = map.value("provider").toString().toLower();
+        QString pType = map.value("package_type").toString().toLower();
+        if (prov != "pacman" && prov != "flatpak" && prov != "aur" && pType != "app") {
+            res.append(map);
+        }
+    }
+    return res;
+}
+
+int RyzoraBackend::systemUpdatesCount() const {
+    return systemUpdates().size();
+}
+
+int RyzoraBackend::applicationUpdatesCount() const {
+    return applicationUpdates().size();
+}
+
+int RyzoraBackend::communityUpdatesCount() const {
+    return communityUpdates().size();
+}
+
+void RyzoraBackend::applySystemUpgrade() {
+    if (m_isShutdown.load()) return;
+
+    QString cleanId = "system";
+    QString opId = QString("op_sysup_%1").arg(QDateTime::currentMSecsSinceEpoch());
+
+    {
+        QMutexLocker locker(&m_appOpMutex);
+        if (isAppOperatingLocked(cleanId)) {
+            postNotification("info", "Operation in Progress",
+                             "System upgrade is already in progress.");
+            return;
+        }
+        m_activeAppOperations.insert(cleanId, "update");
+
+        AppTransactionRecord rec;
+        rec.opId = opId;
+        rec.appId = cleanId;
+        rec.targetPackage = "Arch Linux Repository";
+        rec.appName = "System Upgrade";
+        rec.iconUrl = "";
+        rec.provider = "pacman";
+        rec.operation = "update";
+        rec.stage = "preparing";
+        rec.percentage = -1;
+        rec.isDeterminate = false;
+        rec.message = "Preparing coordinated system package upgrade...";
+        rec.startTimeMs = QDateTime::currentMSecsSinceEpoch();
+        rec.isFinished = false;
+        m_appTransactions.insert(cleanId, rec);
+    }
+    emit activeAppOperationsChanged();
+    QPointer<RyzoraBackend> self = this;
+    m_threadPool.start([self, cleanId, opId]() {
+        AppProgressBridgeContext ctx{self, cleanId};
+
+        char *rawRes = ryzora_apply_system_upgrade_with_progress(appProgressTrampoline, &ctx);
+
+        bool success = false;
+        QString message = "No response from backend";
+        if (rawRes) {
+            QString resStr = QString::fromUtf8(rawRes);
+            ryzora_free_string(rawRes);
+            QJsonDocument doc = QJsonDocument::fromJson(resStr.toUtf8());
+            success = doc.object().value("success").toBool();
+            message = doc.object().value("message").toString();
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, cleanId, success, message]() {
+            if (self) {
+                {
+                    QMutexLocker locker(&self->m_appOpMutex);
+                    self->m_activeAppOperations.remove(cleanId);
+
+                    AppTransactionRecord termRec;
+                    if (self->m_appTransactions.contains(cleanId)) {
+                        termRec = self->m_appTransactions.take(cleanId);
+                    }
+                    termRec.isFinished = true;
+                    termRec.success = success;
+                    termRec.finishTimeMs = QDateTime::currentMSecsSinceEpoch();
+                    if (success) {
+                        termRec.stage = "succeeded";
+                        termRec.percentage = 100;
+                        termRec.message = "System upgrade completed successfully";
+                    } else {
+                        termRec.stage = "failed";
+                        termRec.error = message;
+                        termRec.message = message;
+                    }
+                    if (!termRec.opId.isEmpty()) {
+                        self->m_recentTransactions.prepend(termRec);
+                        if (self->m_recentTransactions.size() > 10) {
+                            self->m_recentTransactions.removeLast();
+                        }
+                    }
+                }
+                emit self->activeAppOperationsChanged();
+                self->postNotification(success ? "success" : "error",
+                                       success ? "System Upgrade Completed" : "System Upgrade Failed",
                                        message);
                 self->loadUpdates();
                 self->loadLibrary(true);

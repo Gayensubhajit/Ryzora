@@ -7102,6 +7102,11 @@ impl BackendState {
             return Err("Package identifier cannot be empty".to_string());
         }
 
+        // Dedicated system upgrade route
+        if trimmed == "system" || trimmed == "pacman:system" || trimmed == "system-upgrade" {
+            return self.apply_system_upgrade_with_progress(progress_cb);
+        }
+
         let updates = self.load_updates();
         let clean_trimmed = trimmed.strip_prefix("flatpak:")
             .or_else(|| trimmed.strip_prefix("aur:"))
@@ -7287,37 +7292,13 @@ impl BackendState {
         if !pacman_updates.is_empty() {
             let step = succeeded + errors.len() + 1;
             let pct = (5 + (90 * (step - 1) / total)) as u8;
-            progress_cb("downloading", Some(pct), "Synchronizing official Arch repositories and packages...", true, None, None, None, Some(step), Some(total), Some("Pacman Repository Upgrade"), None, Some("Coordinated system package upgrade"));
+            progress_cb("downloading", Some(pct), "Coordinating official Arch Linux system upgrade...", true, None, None, None, Some(step), Some(total), Some("System Upgrade"), None, Some("Coordinated system package upgrade"));
 
-            if self.home_dir_override.lock().unwrap().is_some() || std::env::var("RYZORA_SYSTEM_ROOT").is_ok() {
-                // Test mode
-                succeeded += pacman_updates.len();
-            } else {
-                let helper_path = Path::new(ryzora_core::package_helper::PACKAGE_HELPER_SYSTEM_PATH);
-                let status = if helper_path.exists() {
-                    Command::new("pkexec")
-                        .arg(ryzora_core::package_helper::PACKAGE_HELPER_SYSTEM_PATH)
-                        .arg("upgrade-all")
-                        .arg("system")
-                        .stdin(std::process::Stdio::null())
-                        .status()
-                } else {
-                    Command::new("pkexec")
-                        .args(["/usr/bin/pacman", "-Syu", "--noconfirm"])
-                        .stdin(std::process::Stdio::null())
-                        .status()
-                };
-                match status {
-                    Ok(s) if s.success() => {
-                        succeeded += pacman_updates.len();
-                    }
-                    Ok(s) => {
-                        errors.push(format!("System repository upgrade exited with code {:?}", s.code()));
-                    }
-                    Err(e) => {
-                        errors.push(format!("Failed to invoke pkexec for system upgrade: {}", e));
-                    }
-                }
+            match self.apply_system_upgrade_with_progress(|s, p, m, d, dl, tot, spd, _, _, it, eta, diag| {
+                progress_cb(s, p, m, d, dl, tot, spd, Some(step), Some(total), it.or(Some("System Upgrade")), eta, diag);
+            }) {
+                Ok(_) => succeeded += pacman_updates.len(),
+                Err(e) => errors.push(e),
             }
         }
 
@@ -7341,6 +7322,108 @@ impl BackendState {
 
     pub fn apply_all_updates(&self) -> Result<String, String> {
         self.apply_all_updates_with_progress(|_st, _pct, _msg, _is_det, _dl, _tot, _spd, _cur, _tot_steps, _item, _eta, _diag| {})
+    }
+
+    pub fn apply_system_upgrade_with_progress<F>(&self, mut progress_cb: F) -> Result<String, String>
+    where
+        F: FnMut(&str, Option<u8>, &str, bool, Option<&str>, Option<&str>, Option<&str>, Option<usize>, Option<usize>, Option<&str>, Option<&str>, Option<&str>),
+    {
+        // 1. Fail-closed check: verify Pacman database lock does not exist
+        let lock_path = Path::new("/var/lib/pacman/db.lck");
+        if lock_path.exists() {
+            let msg = "Pacman database lock exists (/var/lib/pacman/db.lck). Another package manager or update process is currently active. Please wait for it to complete.";
+            progress_cb("failed", Some(0), msg, false, None, None, None, Some(1), Some(1), Some("Arch Linux Repository"), None, Some("Database lock /var/lib/pacman/db.lck present"));
+            return Err(msg.to_string());
+        }
+
+        let updates = self.load_updates();
+        let pacman_updates: Vec<&UpdateItem> = updates.iter().filter(|u| u.provider == "pacman").collect();
+        let total_pkgs = pacman_updates.len();
+
+        progress_cb("preparing", Some(10), "Preparing coordinated Arch Linux system upgrade...", false, None, None, None, Some(1), Some(2), Some("Arch Linux Repository"), None, Some("Verifying package manager authorization and database lock"));
+
+        // 2. Test/Sandbox mock mode
+        if self.home_dir_override.lock().unwrap().is_some() || std::env::var("RYZORA_SYSTEM_ROOT").is_ok() || std::env::var("RYZORA_TEST_MOCK_UPDATES").is_ok() {
+            progress_cb("downloading", Some(40), "Synchronizing official Arch repositories and downloading packages (test mock)...", true, None, None, None, Some(1), Some(2), Some("Arch Linux Repository"), None, None);
+            progress_cb("installing", Some(80), "Applying coordinated system upgrade (test mock)...", true, None, None, None, Some(2), Some(2), Some("Arch Linux Repository"), None, None);
+            *self.library_cache.lock().unwrap() = None;
+            ryzora_core::app_adapters::updates::invalidate_updates_cache();
+            progress_cb("completed", Some(100), "Coordinated system package upgrade completed successfully (test mock).", true, None, None, None, Some(2), Some(2), Some("Arch Linux Repository"), None, None);
+            return Ok(format!("Successfully upgraded {} system packages.", total_pkgs));
+        }
+
+        progress_cb("downloading", Some(25), "Synchronizing official Arch repository databases and packages...", true, None, None, None, Some(1), Some(2), Some("Arch Linux Repository"), None, Some("Invoking pkexec for authorized repository synchronization"));
+
+        // 3. Inspect privileged helper capabilities
+        let helper_path = Path::new(ryzora_core::package_helper::PACKAGE_HELPER_SYSTEM_PATH);
+        let helper_supports_upgrade = if helper_path.exists() {
+            fs::read_to_string(helper_path).map(|c| c.contains("upgrade-all")).unwrap_or(false)
+        } else {
+            false
+        };
+
+        let mut cmd = if helper_supports_upgrade {
+            let mut c = Command::new("pkexec");
+            c.arg(ryzora_core::package_helper::PACKAGE_HELPER_SYSTEM_PATH)
+             .arg("upgrade-all")
+             .arg("system");
+            c
+        } else {
+            let mut c = Command::new("pkexec");
+            c.args(["/usr/bin/pacman", "-Syu", "--noconfirm"]);
+            c
+        };
+
+        cmd.stdin(std::process::Stdio::null());
+        let output = match cmd.output() {
+            Ok(out) => out,
+            Err(e) => {
+                let err = format!("Failed to invoke pkexec for system upgrade: {}", e);
+                progress_cb("failed", Some(0), &err, false, None, None, None, Some(1), Some(2), Some("Arch Linux Repository"), None, Some(&err));
+                return Err(err);
+            }
+        };
+
+        if output.status.success() {
+            *self.library_cache.lock().unwrap() = None;
+            ryzora_core::app_adapters::updates::invalidate_updates_cache();
+            progress_cb("completed", Some(100), "Coordinated system package upgrade completed successfully.", true, None, None, None, Some(2), Some(2), Some("Arch Linux Repository"), None, Some("System upgrade transaction finished"));
+            Ok(format!("Successfully upgraded {} system packages.", total_pkgs))
+        } else {
+            let code = output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "killed".to_string());
+            let stderr_raw = String::from_utf8_lossy(&output.stderr);
+            let stdout_raw = String::from_utf8_lossy(&output.stdout);
+
+            let raw_combined = if !stderr_raw.trim().is_empty() {
+                stderr_raw.trim().to_string()
+            } else if !stdout_raw.trim().is_empty() {
+                stdout_raw.trim().to_string()
+            } else {
+                "Process terminated with no output".to_string()
+            };
+
+            let diagnostic = if raw_combined.contains("Not authorized") || raw_combined.contains("dismissed") || raw_combined.contains("cancelled") {
+                "Authorization was cancelled or denied by user."
+            } else if raw_combined.contains("db.lck") {
+                "Pacman database lock exists (/var/lib/pacman/db.lck). Another package manager is running."
+            } else if raw_combined.contains("failed retrieving file") || raw_combined.contains("Could not resolve host") {
+                "Arch Linux repository mirrors unreachable. Check internet connection or update mirrors."
+            } else if raw_combined.contains("corrupted") || raw_combined.contains("invalid or corrupted package") {
+                "Package signature or keyring verification failed. Update archlinux-keyring."
+            } else if raw_combined.contains("conflicting dependencies") || raw_combined.contains("unresolvable package conflict") {
+                "Package dependency conflict detected. Manual resolution via pacman required."
+            } else {
+                &raw_combined
+            };
+
+            let full_err = format!("System upgrade exited with code {}: {}", code, diagnostic);
+            progress_cb("failed", Some(0), &full_err, false, None, None, None, Some(1), Some(2), Some("Arch Linux Repository"), None, Some(&raw_combined));
+            Err(full_err)
+        }
+    }
+
+    pub fn apply_system_upgrade(&self) -> Result<String, String> {
+        self.apply_system_upgrade_with_progress(|_st, _pct, _msg, _is_det, _dl, _tot, _spd, _cur, _tot_steps, _item, _eta, _diag| {})
     }
 }
 
@@ -8875,6 +8958,64 @@ pub extern "C" fn ryzora_apply_all_updates_with_progress(
     safe_to_c_string(res.to_string())
 }
 
+#[no_mangle]
+pub extern "C" fn ryzora_apply_system_upgrade() -> *mut c_char {
+    let state = get_backend();
+    let res = match state.apply_system_upgrade() {
+        Ok(msg) => serde_json::json!({
+            "success": true,
+            "message": msg
+        }),
+        Err(err) => serde_json::json!({
+            "success": false,
+            "message": err,
+            "error": err
+        }),
+    };
+    safe_to_c_string(res.to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn ryzora_apply_system_upgrade_with_progress(
+    callback: Option<AppProgressCallback>,
+    user_data: *mut c_void,
+) -> *mut c_char {
+    let state = get_backend();
+    let emit = |stage: &str, pct: Option<u8>, msg: &str, is_det: bool, dl_str: Option<&str>, tot_str: Option<&str>, speed: Option<&str>, cur_step: Option<usize>, tot_steps: Option<usize>, cur_item: Option<&str>, eta: Option<&str>, diag: Option<&str>| {
+        if let Some(cb) = callback {
+            let json = serde_json::json!({
+                "app_id": "system",
+                "stage": stage,
+                "percentage": pct,
+                "is_determinate": is_det,
+                "message": msg,
+                "bytes_downloaded_str": dl_str,
+                "bytes_total_str": tot_str,
+                "download_speed": speed,
+                "current_step": cur_step,
+                "total_steps": tot_steps,
+                "current_item": cur_item,
+                "eta_str": eta,
+                "diagnostic_details": diag,
+            });
+            let c_str = to_safe_c_string(json.to_string());
+            cb(c_str.as_ptr(), user_data);
+        }
+    };
+    let res = match state.apply_system_upgrade_with_progress(emit) {
+        Ok(msg) => serde_json::json!({
+            "success": true,
+            "message": msg
+        }),
+        Err(err) => serde_json::json!({
+            "success": false,
+            "message": err,
+            "error": err
+        }),
+    };
+    safe_to_c_string(res.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -9675,6 +9816,14 @@ mod tests {
         // 2. Batch update must succeed for test environment
         let batch_res = backend.apply_all_updates();
         assert!(batch_res.is_ok(), "Batch update must succeed: {:?}", batch_res);
+
+        // 3. Coordinated system upgrade must succeed in test environment
+        let sys_upgrade_res = backend.apply_system_upgrade();
+        assert!(sys_upgrade_res.is_ok(), "apply_system_upgrade must succeed in test mock mode: {:?}", sys_upgrade_res);
+
+        // 4. apply_update('system') route must delegate to coordinated system upgrade
+        let sys_route_res = backend.apply_update("system");
+        assert!(sys_route_res.is_ok(), "apply_update('system') must delegate to system upgrade: {:?}", sys_route_res);
 
         ryzora_core::app_adapters::updates::set_test_mock_updates(None);
     }

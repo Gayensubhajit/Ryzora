@@ -8,7 +8,7 @@ Popup {
     width: 360
     implicitHeight: Math.min(480, contentCol.implicitHeight + 24)
     padding: 0
-    modal: true
+    modal: false
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -241,53 +241,76 @@ Popup {
                 Repeater {
                     model: backend ? backend.recentTransactions.slice(0, 5) : []
                     delegate: Rectangle {
+                        id: recentRow
+                        property bool isExpanded: false
                         Layout.fillWidth: true
-                        height: 38
+                        implicitHeight: isExpanded && modelData.message ? colLayout.implicitHeight + 12 : 38
                         radius: 6
                         color: theme.surfaceElevated
-                        border.color: theme.borderSubtle
+                        border.color: modelData.stage === "failed" ? Qt.rgba(239/255, 68/255, 68/255, 0.3) : theme.borderSubtle
                         border.width: 1
 
-                        RowLayout {
+                        ColumnLayout {
+                            id: colLayout
                             anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 8
+                            anchors.margins: 8
+                            spacing: 6
 
-                            RyzoraIcon {
-                                name: modelData.stage === "succeeded" ? "check" : (modelData.stage === "cancelled" ? "close" : "alert")
-                                size: 14
-                                color: modelData.stage === "succeeded" ? "#10B981" : (modelData.stage === "cancelled" ? theme.textMuted : "#EF4444")
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                RyzoraIcon {
+                                    name: modelData.stage === "succeeded" ? "check" : (modelData.stage === "cancelled" ? "close" : "alert")
+                                    size: 14
+                                    color: modelData.stage === "succeeded" ? "#10B981" : (modelData.stage === "cancelled" ? theme.textMuted : "#EF4444")
+                                }
+
+                                Text {
+                                    text: modelData.app_name || modelData.app_id || "Application"
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    color: theme.text
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+
+                                Rectangle {
+                                    radius: 4
+                                    height: 18
+                                    implicitWidth: statusLabel.implicitWidth + 8
+                                    color: modelData.stage === "succeeded"
+                                        ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B")
+                                        : (modelData.stage === "cancelled" ? theme.surfaceHover : (theme.resolvedTheme === "light" ? "#FEE2E2" : "#451A1A"))
+
+                                    Text {
+                                        id: statusLabel
+                                        anchors.centerIn: parent
+                                        text: modelData.stage === "succeeded" ? "Completed" : (modelData.stage === "cancelled" ? "Cancelled" : "Failed")
+                                        font.pixelSize: 10
+                                        font.weight: Font.Bold
+                                        color: modelData.stage === "succeeded"
+                                            ? "#059669"
+                                            : (modelData.stage === "cancelled" ? theme.textMuted : "#EF4444")
+                                    }
+                                }
                             }
 
                             Text {
-                                text: modelData.app_name || modelData.app_id || "Application"
-                                font.pixelSize: 12
-                                font.weight: Font.Medium
-                                color: theme.text
-                                elide: Text.ElideRight
+                                visible: recentRow.isExpanded && Boolean(modelData.message)
+                                text: modelData.message || ""
+                                font.family: "monospace"
+                                font.pixelSize: 10
+                                color: modelData.stage === "failed" ? "#EF4444" : theme.textMuted
+                                wrapMode: Text.WrapAnywhere
                                 Layout.fillWidth: true
                             }
+                        }
 
-                            Rectangle {
-                                radius: 4
-                                height: 18
-                                implicitWidth: statusLabel.implicitWidth + 8
-                                color: modelData.stage === "succeeded"
-                                    ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B")
-                                    : (modelData.stage === "cancelled" ? theme.surfaceHover : (theme.resolvedTheme === "light" ? "#FEE2E2" : "#451A1A"))
-
-                                Text {
-                                    id: statusLabel
-                                    anchors.centerIn: parent
-                                    text: modelData.stage === "succeeded" ? "Completed" : (modelData.stage === "cancelled" ? "Cancelled" : "Failed")
-                                    font.pixelSize: 10
-                                    font.weight: Font.Bold
-                                    color: modelData.stage === "succeeded"
-                                        ? "#059669"
-                                        : (modelData.stage === "cancelled" ? theme.textMuted : "#EF4444")
-                                }
-                            }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: recentRow.isExpanded = !recentRow.isExpanded
                         }
                     }
                 }

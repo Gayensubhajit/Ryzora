@@ -86,8 +86,11 @@ pub fn detect_privileged_package_helper_status_in(sys_root: Option<&Path>) -> Pr
         if !helper_executable {
             error = Some("Package helper file exists but is not executable".to_string());
         } else if let Ok(content) = fs::read_to_string(&helper_path) {
-            if content.contains("ryzora-package-helper") && content.contains("pacman") {
+            if content.contains("ryzora-package-helper") && content.contains("pacman") && content.contains("upgrade-all") {
                 helper_valid = true;
+            } else if content.contains("ryzora-package-helper") && content.contains("pacman") {
+                helper_valid = false;
+                error = Some("Package helper file is outdated (missing upgrade-all capability)".to_string());
             } else {
                 error = Some("Package helper file content does not match Ryzora signature".to_string());
             }

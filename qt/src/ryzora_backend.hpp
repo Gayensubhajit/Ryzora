@@ -114,6 +114,13 @@ class RyzoraBackend : public QObject {
     // Updates
     Q_PROPERTY(QVariantList updatesList READ updatesList NOTIFY updatesChanged)
     Q_PROPERTY(int updatesCount READ updatesCount NOTIFY updatesChanged)
+    Q_PROPERTY(QVariantList systemUpdates READ systemUpdates NOTIFY updatesChanged)
+    Q_PROPERTY(QVariantList applicationUpdates READ applicationUpdates NOTIFY updatesChanged)
+    Q_PROPERTY(QVariantList communityUpdates READ communityUpdates NOTIFY updatesChanged)
+    Q_PROPERTY(int systemUpdatesCount READ systemUpdatesCount NOTIFY updatesChanged)
+    Q_PROPERTY(int applicationUpdatesCount READ applicationUpdatesCount NOTIFY updatesChanged)
+    Q_PROPERTY(int communityUpdatesCount READ communityUpdatesCount NOTIFY updatesChanged)
+    Q_PROPERTY(bool hasSystemUpdates READ hasSystemUpdates NOTIFY updatesChanged)
     Q_PROPERTY(bool isUpdatesLoading READ isUpdatesLoading NOTIFY updatesLoadingChanged)
     Q_PROPERTY(QString lastUpdatesCheckedTime READ lastUpdatesCheckedTime NOTIFY updatesCheckedTimeChanged)
     Q_PROPERTY(QString updatesError READ updatesError NOTIFY updatesChanged)
@@ -163,6 +170,13 @@ public:
 
     QVariantList updatesList() const { return m_updatesList; }
     int updatesCount() const { return m_updatesList.size(); }
+    QVariantList systemUpdates() const;
+    QVariantList applicationUpdates() const;
+    QVariantList communityUpdates() const;
+    int systemUpdatesCount() const;
+    int applicationUpdatesCount() const;
+    int communityUpdatesCount() const;
+    bool hasSystemUpdates() const { return systemUpdatesCount() > 0; }
     bool isUpdatesLoading() const { return m_isUpdatesLoading; }
     QString lastUpdatesCheckedTime() const { return m_lastUpdatesCheckedTime; }
     QString updatesError() const { return m_updatesError; }
@@ -186,6 +200,7 @@ public:
     Q_INVOKABLE QVariantList getRecentTransactions() const;
     Q_INVOKABLE QVariantMap getTransactionForApp(const QString &appId) const;
     void updateTransactionProgress(const QString &appId, const QString &stage, int pct, bool isDet, const QString &msg, const QString &dl, const QString &tot, const QString &spd, int curStep, int totSteps, const QString &curItem, const QString &eta, const QString &diag);
+    Q_INVOKABLE void setSimulatedUpdatesList(const QVariantList &list);
     Q_INVOKABLE void uninstallApp(const QString &appId);
     Q_INVOKABLE void inspectAppCleanup(const QString &appId, const QString &provider);
     Q_INVOKABLE void executeAppCleanup(const QString &requestJson);
@@ -242,6 +257,7 @@ public:
     Q_INVOKABLE void restoreSnapshot(const QString &id);
     Q_INVOKABLE void deleteSnapshot(const QString &id);
     Q_INVOKABLE void applyUpdate(const QString &packageId);
+    Q_INVOKABLE void applySystemUpgrade();
     Q_INVOKABLE void applyAllUpdates();
     Q_INVOKABLE void postNotification(const QString &type, const QString &title, const QString &message);
     Q_INVOKABLE void setTestHomeOverride(const QString &path);

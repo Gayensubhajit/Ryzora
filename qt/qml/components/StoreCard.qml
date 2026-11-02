@@ -4,22 +4,17 @@ import QtQuick.Layouts
 import QtMultimedia
 import QtQuick.Effects
 
-Rectangle {
+Item {
     id: card
-    radius: 14
-    clip: true
     implicitWidth: 320
     implicitHeight: 330
-    color: mouseArea.containsMouse ? theme.surfaceHover : theme.surface
-    border.color: card.activeFocus ? theme.accent : (mouseArea.containsMouse ? theme.cardBorderHover : theme.cardBorder)
-    border.width: card.activeFocus ? 2 : 1
     activeFocusOnTab: true
+    property int radius: 12
+    property alias color: cardBody.color
+    property alias border: cardBody.border
 
     Keys.onReturnPressed: card.cardClicked(card.itemData)
     Keys.onSpacePressed: card.cardClicked(card.itemData)
-
-    Behavior on color { ColorAnimation { duration: 120 } }
-    Behavior on border.color { ColorAnimation { duration: 120 } }
 
     property var itemData: null
 
@@ -243,36 +238,96 @@ Rectangle {
     signal cardClicked(var itemData)
     signal actionClicked(string action, var itemData)
 
-    MouseArea {
-        id: mouseArea
-        objectName: "storeCardMouseArea"
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        z: 1
-        onClicked: {
-            if (card.itemData) {
-                console.log("[QML StoreCard] Card clicked: " + card.itemData.id);
-                card.cardClicked(card.itemData);
-            }
-        }
+    // 1. Soft Ambient Elevation Shadow
+    Rectangle {
+        id: cardShadow
+        anchors.fill: cardBody
+        anchors.topMargin: mouseArea.containsMouse ? 10 : 3
+        anchors.bottomMargin: mouseArea.containsMouse ? -6 : -1
+        anchors.leftMargin: mouseArea.containsMouse ? 3 : 5
+        anchors.rightMargin: mouseArea.containsMouse ? 3 : 5
+        radius: card.radius + 3
+        color: Qt.rgba(0, 0, 0, mouseArea.containsMouse ? (theme.resolvedTheme === "light" ? 0.16 : 0.45) : (theme.resolvedTheme === "light" ? 0.07 : 0.20))
+        opacity: mouseArea.containsMouse ? 1.0 : 0.65
+        z: 0
+
+        Behavior on anchors.topMargin { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 180 } }
+        Behavior on opacity { NumberAnimation { duration: 180 } }
     }
 
-    ColumnLayout {
+    // 2. Main Elevated Card Body
+    Rectangle {
+        id: cardBody
         anchors.fill: parent
-        spacing: 0
+        anchors.topMargin: mouseArea.containsMouse ? -4 : 0
+        anchors.bottomMargin: mouseArea.containsMouse ? 4 : 0
+        radius: card.radius
+        color: "transparent"
+        clip: false
+        z: 1
+        scale: mouseArea.pressed ? 0.985 : 1.0
 
-        // ── 1. Image Preview Section (Dominant Landscape Area) ──
+        Behavior on anchors.topMargin { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+
+        // Specular Top Rim Highlight (1px frosted rim light)
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: 1
+            height: 1
+            radius: card.radius
+            color: mouseArea.containsMouse
+                ? (theme.resolvedTheme === "light" ? Qt.rgba(255, 255, 255, 0.70) : Qt.rgba(255, 255, 255, 0.25))
+                : (theme.resolvedTheme === "light" ? Qt.rgba(255, 255, 255, 0.40) : Qt.rgba(255, 255, 255, 0.08))
+            z: 11
+            Behavior on color { ColorAnimation { duration: 180 } }
+        }
+
+        // Crisp Outer Border Overlay
+        Rectangle {
+            id: borderOverlay
+            anchors.fill: parent
+            radius: card.radius
+            color: "transparent"
+            border.color: card.activeFocus ? theme.accent : (mouseArea.containsMouse ? Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.65) : theme.cardBorder)
+            border.width: card.activeFocus ? 2 : 1
+            z: 10
+            Behavior on border.color { ColorAnimation { duration: 180 } }
+        }
+
+        // Masked Inner Content Container (Seamless edge-to-edge content clipped to card radius)
         Item {
-            id: previewSection
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            id: cardContent
+            anchors.fill: parent
             clip: true
             layer.enabled: true
             layer.effect: MultiEffect {
                 maskEnabled: true
-                maskSource: cardTopMask
+                maskSource: cardMask
             }
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
+
+                // ── 1. Image Preview Section (Dominant Landscape Area) ──
+                Item {
+                    id: previewSection
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    // Solid deep-slate background ensures zero white bleed in curved corners
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#0B0D12"
+                        z: 0
+                    }
 
             // Clean Fallback Graphic when artwork is loading or unavailable
             Rectangle {
@@ -353,8 +408,8 @@ Rectangle {
                 sourceSize.width: 480
                 sourceSize.height: 300
                 smooth: true
-                scale: mouseArea.containsMouse ? 1.03 : 1.0
-                Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+                scale: mouseArea.containsMouse ? 1.04 : 1.0
+                Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 visible: status === Image.Ready && (!videoLoader.item || !videoLoader.item.hasFirstFrame)
             }
 
@@ -379,6 +434,8 @@ Rectangle {
                         anchors.fill: parent
                         fillMode: VideoOutput.PreserveAspectCrop
                         visible: videoRoot.hasFirstFrame
+                        scale: mouseArea.containsMouse ? 1.04 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                     }
 
                     MediaPlayer {
@@ -451,51 +508,92 @@ Rectangle {
 
         // ── 2. Metadata & Contextual Action Section ──
         Rectangle {
+            id: metadataSection
             Layout.fillWidth: true
             Layout.preferredHeight: card.compactLayout ? 46 : 115
             Layout.minimumHeight: card.compactLayout ? 44 : 110
-            color: "transparent"
+            color: mouseArea.containsMouse ? theme.surfaceHover : theme.surface
+            Behavior on color { ColorAnimation { duration: 150 } }
+
+            // Subtle divider line separating preview from metadata
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1
+                color: theme.borderSubtle
+                z: 2
+            }
 
             // A. Compact Mode (Studio Lockscreen): Title + Status Pill side-by-side, no extra words, maximum preview area
             RowLayout {
                 visible: card.compactLayout
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
-                spacing: 10
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 8
 
                 Text {
                     text: card.itemData ? String(card.itemData.name) : ""
                     font.family: theme.fontFamily
-                    font.pixelSize: 14
+                    font.pixelSize: 13
                     font.weight: theme.weightSemibold
                     color: mouseArea.containsMouse ? theme.accent : theme.text
                     elide: Text.ElideRight
                     Layout.fillWidth: true
+                    Behavior on color { ColorAnimation { duration: 150 } }
                 }
 
-                // Active / Status Badge
+                // Refined Status Pill (Active emerald badge or subtle clean Installed chip)
                 Rectangle {
+                    id: statusPill
                     property bool isSddm: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.sddm_login)
                     property bool isLock: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.session_lock)
                     property bool isAct: Boolean(card.itemData && (card.itemData.is_active || isSddm || isLock))
                     property bool isInst: Boolean(card.itemData && card.itemData.is_installed)
                     visible: isAct || isInst
-                    height: 22
-                    width: compactStatusText.implicitWidth + 14
-                    radius: 11
-                    color: isAct ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B") : (theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E3A8A")
-                    border.color: isAct ? "#10B981" : "#3B82F6"
+                    height: 24
+                    implicitWidth: statusPillLayout.implicitWidth + 16
+                    radius: 12
+                    color: isAct
+                        ? (theme.resolvedTheme === "light" ? "#DCFCE7" : Qt.rgba(16/255, 185/255, 129/255, 0.18))
+                        : (theme.resolvedTheme === "light" ? "#F1F5F9" : Qt.rgba(255, 255, 255, 0.08))
+                    border.color: isAct
+                        ? (theme.resolvedTheme === "light" ? "#86EFAC" : Qt.rgba(16/255, 185/255, 129/255, 0.45))
+                        : (theme.resolvedTheme === "light" ? "#E2E8F0" : Qt.rgba(255, 255, 255, 0.12))
                     border.width: 1
 
-                    Text {
-                        id: compactStatusText
+                    RowLayout {
+                        id: statusPillLayout
                         anchors.centerIn: parent
-                        text: parent.isSddm ? "ACTIVE SDDM" : (parent.isLock ? "ACTIVE LOCK" : (parent.isAct ? "ACTIVE" : "INSTALLED"))
-                        font.family: theme.fontFamily
-                        font.pixelSize: 10
-                        font.weight: theme.weightBold
-                        color: parent.isAct ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399") : (theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD")
+                        spacing: 5
+
+                        // Active Glowing Indicator Dot
+                        Rectangle {
+                            visible: statusPill.isAct
+                            width: 6
+                            height: 6
+                            radius: 3
+                            color: "#10B981"
+                        }
+
+                        // Installed Checkmark Icon
+                        RyzoraIcon {
+                            visible: !statusPill.isAct
+                            name: "check"
+                            size: 11
+                            color: theme.resolvedTheme === "light" ? "#0F766E" : "#5EEAD4"
+                        }
+
+                        Text {
+                            text: statusPill.isSddm ? "Active SDDM" : (statusPill.isLock ? "Active Lock" : (statusPill.isAct ? "Active" : "Installed"))
+                            font.family: theme.fontFamily
+                            font.pixelSize: 11
+                            font.weight: statusPill.isAct ? theme.weightSemibold : theme.weightMedium
+                            color: statusPill.isAct
+                                ? (theme.resolvedTheme === "light" ? "#15803D" : "#34D399")
+                                : (theme.resolvedTheme === "light" ? "#334155" : "#CBD5E1")
+                        }
                     }
                 }
             }
@@ -568,25 +666,52 @@ Rectangle {
 
                     // Active / Status Badge
                     Rectangle {
+                        id: fullStatusBadge
                         property bool isSddm: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.sddm_login)
                         property bool isLock: Boolean(card.itemData && card.itemData.active_targets && card.itemData.active_targets.session_lock)
                         property bool isAct: Boolean(card.itemData && (card.itemData.is_active || isSddm || isLock))
                         property bool isInst: Boolean(card.itemData && card.itemData.is_installed)
                         visible: isAct || isInst
-                        height: 20
-                        width: statusBadgeText.implicitWidth + 12
-                        radius: 10
-                        color: isAct ? (theme.resolvedTheme === "light" ? "#DCFCE7" : "#064E3B") : (theme.resolvedTheme === "light" ? "#EFF6FF" : "#1E3A8A")
-                        border.color: isAct ? "#10B981" : "#3B82F6"
+                        height: 22
+                        implicitWidth: fullStatusLayout.implicitWidth + 14
+                        radius: 11
+                        color: isAct
+                            ? (theme.resolvedTheme === "light" ? "#DCFCE7" : Qt.rgba(16/255, 185/255, 129/255, 0.18))
+                            : (theme.resolvedTheme === "light" ? "#F1F5F9" : Qt.rgba(255, 255, 255, 0.08))
+                        border.color: isAct
+                            ? (theme.resolvedTheme === "light" ? "#86EFAC" : Qt.rgba(16/255, 185/255, 129/255, 0.45))
+                            : (theme.resolvedTheme === "light" ? "#E2E8F0" : Qt.rgba(255, 255, 255, 0.12))
                         border.width: 1
 
-                        Text {
-                            id: statusBadgeText
+                        RowLayout {
+                            id: fullStatusLayout
                             anchors.centerIn: parent
-                            text: parent.isSddm ? "ACTIVE SDDM" : (parent.isLock ? "ACTIVE LOCK" : (parent.isAct ? "ACTIVE" : "INSTALLED"))
-                            font.pixelSize: 9
-                            font.bold: true
-                            color: parent.isAct ? (theme.resolvedTheme === "light" ? "#047857" : "#34D399") : (theme.resolvedTheme === "light" ? "#1D4ED8" : "#93C5FD")
+                            spacing: 4
+
+                            Rectangle {
+                                visible: fullStatusBadge.isAct
+                                width: 5
+                                height: 5
+                                radius: 2.5
+                                color: "#10B981"
+                            }
+
+                            RyzoraIcon {
+                                visible: !fullStatusBadge.isAct
+                                name: "check"
+                                size: 10
+                                color: theme.resolvedTheme === "light" ? "#0F766E" : "#5EEAD4"
+                            }
+
+                            Text {
+                                text: fullStatusBadge.isSddm ? "Active SDDM" : (fullStatusBadge.isLock ? "Active Lock" : (fullStatusBadge.isAct ? "Active" : "Installed"))
+                                font.family: theme.fontFamily
+                                font.pixelSize: 10
+                                font.weight: fullStatusBadge.isAct ? theme.weightSemibold : theme.weightMedium
+                                color: fullStatusBadge.isAct
+                                    ? (theme.resolvedTheme === "light" ? "#15803D" : "#34D399")
+                                    : (theme.resolvedTheme === "light" ? "#334155" : "#CBD5E1")
+                            }
                         }
                     }
 
@@ -622,25 +747,33 @@ Rectangle {
             }
         }
     }
+}
 
-    // Top-rounded mask for the media preview
-    Rectangle {
-        id: cardTopMask
-        width: Math.max(1, card.width)
-        height: Math.max(1, previewSection.height + card.radius)
-        radius: card.radius
-        color: "#FFFFFF"
-        visible: false
-        layer.enabled: true
-    }
+        // Mask matching the exact inner dimensions of cardBody
+        Rectangle {
+            id: cardMask
+            width: cardContent.width
+            height: cardContent.height
+            radius: card.radius
+            color: "#FFFFFF"
+            visible: false
+            layer.enabled: true
+        }
 
-    // Crisp rounded border overlay (ensures border is always visible above media corners)
-    Rectangle {
-        anchors.fill: parent
-        radius: card.radius
-        color: "transparent"
-        border.color: card.border.color
-        border.width: card.border.width
-        z: 3
+        // Top-level MouseArea for card click & hover tracking
+        MouseArea {
+            id: mouseArea
+            objectName: "storeCardMouseArea"
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            z: 1
+            onClicked: {
+                if (card.itemData) {
+                    console.log("[QML StoreCard] Card clicked: " + card.itemData.id);
+                    card.cardClicked(card.itemData);
+                }
+            }
+        }
     }
 }

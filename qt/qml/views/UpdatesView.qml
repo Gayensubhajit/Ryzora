@@ -5,6 +5,7 @@ import "../components"
 
 Item {
     id: root
+    objectName: "updatesView"
 
     signal appSelected(var appData)
 
@@ -12,11 +13,16 @@ Item {
     property string searchQuery: ""
     property var expandedDetails: ({})
     property int updateRev: 0
+    property bool systemPackagesExpanded: false
+    property string lastDiagnosticError: ""
 
     Connections {
         target: typeof backend !== "undefined" ? backend : null
         function onAppInstallProgress(appId, stage, pct, isDet, msg, dl, tot, spd, curStep, totSteps, curItem, eta, diag) {
             root.updateRev++
+            if (stage === "failed" && diag) {
+                root.lastDiagnosticError = String(diag)
+            }
         }
         function onActiveAppOperationsChanged() {
             root.updateRev++
@@ -36,35 +42,158 @@ Item {
         expandedDetails = copy
     }
 
-    function filterMatches(item) {
-        if (!item) return false
-        var pType = (item.package_type || "").toLowerCase()
-        var prov = (item.provider || "").toLowerCase()
-
-        if (selectedFilter === "apps" && pType !== "app") return false
-        if (selectedFilter === "flatpak" && prov !== "flatpak") return false
-        if (selectedFilter === "system" && pType !== "system" && pType !== "runtime") return false
-        if (selectedFilter === "themes" && pType !== "theme") return false
-
-        if (searchQuery.trim().length > 0) {
-            var q = searchQuery.trim().toLowerCase()
-            var name = (item.name || "").toLowerCase()
-            var pkgId = (item.package_id || "").toLowerCase()
-            return name.indexOf(q) !== -1 || pkgId.indexOf(q) !== -1
-        }
-        return true
-    }
-
-    function filteredUpdates() {
+    function systemUpdatesList() {
         if (!backend || !backend.updatesList) return []
         var res = []
         for (var i = 0; i < backend.updatesList.length; ++i) {
             var it = backend.updatesList[i]
-            if (filterMatches(it)) {
+            var prov = (it.provider || "").toLowerCase()
+            if (prov === "pacman") {
+                if (searchQuery.trim().length > 0) {
+                    var q = searchQuery.trim().toLowerCase()
+                    if ((it.name || "").toLowerCase().indexOf(q) === -1 && (it.package_id || "").toLowerCase().indexOf(q) === -1) {
+                        continue
+                    }
+                }
                 res.push(it)
             }
         }
         return res
+    }
+
+    function appUpdatesList() {
+        if (!backend || !backend.updatesList) return []
+        var res = []
+        for (var i = 0; i < backend.updatesList.length; ++i) {
+            var it = backend.updatesList[i]
+            var prov = (it.provider || "").toLowerCase()
+            var pType = (it.package_type || "").toLowerCase()
+            if (prov === "flatpak" || prov === "aur" || (prov !== "pacman" && pType === "app")) {
+                if (selectedFilter === "flatpak" && prov !== "flatpak") continue
+                if (selectedFilter === "aur" && prov !== "aur") continue
+                if (searchQuery.trim().length > 0) {
+                    var q = searchQuery.trim().toLowerCase()
+                    if ((it.name || "").toLowerCase().indexOf(q) === -1 && (it.package_id || "").toLowerCase().indexOf(q) === -1) {
+                        continue
+                    }
+                }
+                res.push(it)
+            }
+        }
+        return res
+    }
+
+    function communityUpdatesList() {
+        if (!backend || !backend.updatesList) return []
+        var res = []
+        for (var i = 0; i < backend.updatesList.length; ++i) {
+            var it = backend.updatesList[i]
+            var prov = (it.provider || "").toLowerCase()
+            var pType = (it.package_type || "").toLowerCase()
+            if (prov !== "pacman" && prov !== "flatpak" && prov !== "aur" && pType !== "app") {
+                if (searchQuery.trim().length > 0) {
+                    var q = searchQuery.trim().toLowerCase()
+                    if ((it.name || "").toLowerCase().indexOf(q) === -1 && (it.package_id || "").toLowerCase().indexOf(q) === -1) {
+                        continue
+                    }
+                }
+                res.push(it)
+            }
+        }
+        return res
+    }
+
+    readonly property bool hasAvailableUpdates: Boolean(backend && (backend.updatesCount > 0 || backend.isAppOperating("all")))
+    readonly property bool isNarrowHeader: root.width > 0 && root.width < 800
+
+    readonly property bool isSystemOperating: Boolean(backend && (backend.isAppOperating("system") || backend.isAppOperating("all")))
+    readonly property var systemTxn: {
+        var dummy = root.updateRev
+        if (!backend) return null
+        return backend.getTransactionForApp("system") || backend.getTransactionForApp("all")
+    }
+
+    // ── Reusable Right Actions Group ──
+    Component {
+        id: rightActionsComponent
+
+        RowLayout {
+            spacing: 12
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+            Text {
+                text: backend && backend.lastUpdatesCheckedTime
+                    ? "Last checked: " + backend.lastUpdatesCheckedTime
+                    : "Last checked: Today"
+                font.family: theme.fontFamily
+                font.pixelSize: 12
+                color: theme.textMuted
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            RyzoraButton {
+                size: "md"
+                variant: "secondary"
+                iconName: "arrow-sync"
+                text: "Check for updates"
+                loading: Boolean(backend && backend.isUpdatesLoading)
+                loadingText: "Checking…"
+                enabled: Boolean(!backend || !backend.isUpdatesLoading)
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    if (backend) backend.checkForUpdates()
+                }
+            }
+
+            // Primary Update All button when updates are pending
+            RyzoraButton {
+                visible: root.hasAvailableUpdates
+                size: "md"
+                variant: "primary"
+                iconName: "arrow-download"
+                iconFilled: true
+                text: "Update all (" + (backend ? backend.updatesCount : 0) + ")"
+                enabled: Boolean(backend && backend.updatesCount > 0 && backend.activeAppOperationsCount === 0)
+                loading: Boolean(backend && backend.isAppOperating("all"))
+                loadingText: "Updating all…"
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    if (backend) backend.applyAllUpdates()
+                }
+            }
+
+            // Subtle Up to date status chip when system and apps are up to date
+            Rectangle {
+                visible: !root.hasAvailableUpdates
+                height: 36
+                implicitWidth: upToDateLayout.implicitWidth + 24
+                radius: 8
+                color: theme.resolvedTheme === "light" ? "#F0FDF4" : Qt.rgba(16/255, 185/255, 129/255, 0.15)
+                border.color: theme.resolvedTheme === "light" ? "#BBF7D0" : Qt.rgba(16/255, 185/255, 129/255, 0.35)
+                border.width: 1
+                Layout.alignment: Qt.AlignVCenter
+
+                RowLayout {
+                    id: upToDateLayout
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    RyzoraIcon {
+                        name: "check"
+                        size: 14
+                        color: theme.resolvedTheme === "light" ? "#16A34A" : "#34D399"
+                    }
+
+                    Text {
+                        text: "Up to date"
+                        font.family: theme.fontFamily
+                        font.pixelSize: 13
+                        font.weight: theme.weightMedium
+                        color: theme.resolvedTheme === "light" ? "#15803D" : "#34D399"
+                    }
+                }
+            }
+        }
     }
 
     ColumnLayout {
@@ -72,84 +201,86 @@ Item {
         anchors.margins: 24
         spacing: 16
 
-        // ── 1. Header Row ──
-        RowLayout {
+        // ── 1. Top Header Row ──
+        ColumnLayout {
             Layout.fillWidth: true
-            spacing: 16
+            spacing: 12
 
-            ColumnLayout {
-                spacing: 4
+            RowLayout {
                 Layout.fillWidth: true
+                spacing: 16
 
-                RowLayout {
-                    spacing: 10
-                    Text {
-                        text: "Updates"
-                        font.pixelSize: 24
-                        font.bold: true
-                        color: theme.text
+                // Left side: Page Identity
+                ColumnLayout {
+                    id: leftHeaderIdentity
+                    spacing: 4
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+
+                    RowLayout {
+                        spacing: 10
+                        Text {
+                            text: "Updates"
+                            font.family: theme.fontFamily
+                            font.pixelSize: 24
+                            font.weight: theme.weightBold
+                            color: theme.text
+                        }
+
+                        Rectangle {
+                            visible: Boolean(backend && backend.updatesCount > 0)
+                            height: 22
+                            implicitWidth: badgeTxt.implicitWidth + 14
+                            radius: 11
+                            color: theme.accent
+                            Text {
+                                id: badgeTxt
+                                anchors.centerIn: parent
+                                text: (backend ? backend.updatesCount : 0).toString() + " pending"
+                                font.family: theme.fontFamily
+                                font.pixelSize: 11
+                                font.weight: theme.weightSemibold
+                                color: "#FFFFFF"
+                            }
+                        }
                     }
 
-                    Rectangle {
-                        visible: backend ? backend.updatesCount > 0 : false
-                        height: 22
-                        width: badgeTxt.implicitWidth + 14
-                        radius: 11
-                        color: theme.accent
-                        Text {
-                            id: badgeTxt
-                            anchors.centerIn: parent
-                            text: (backend ? backend.updatesCount : 0).toString()
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: "#FFFFFF"
-                        }
+                    Text {
+                        text: "Manage application and system updates"
+                        font.family: theme.fontFamily
+                        font.pixelSize: theme.fontCardDesc
+                        color: theme.textMuted
                     }
                 }
 
-                Text {
-                    text: "Synchronized with Flatpak, official repositories, AUR, and personalization presets"
-                    font.pixelSize: theme.fontCardDesc
-                    color: theme.textMuted
+                // Flexible spacer pushing actions to the far right on wide viewports
+                Item {
+                    visible: !root.isNarrowHeader
+                    Layout.fillWidth: true
+                }
+
+                // Right side action group on wide viewports
+                Loader {
+                    visible: !root.isNarrowHeader
+                    active: !root.isNarrowHeader
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    sourceComponent: rightActionsComponent
                 }
             }
 
-            // Header Actions
+            // Second row for right action group when viewport is narrow
             RowLayout {
-                spacing: 10
+                visible: root.isNarrowHeader
+                Layout.fillWidth: true
 
-                // Last Checked Label
-                Text {
-                    text: backend && backend.lastUpdatesCheckedTime
-                        ? "Last checked: " + backend.lastUpdatesCheckedTime
-                        : "Last checked: Today"
-                    font.pixelSize: 12
-                    color: theme.textMuted
-                    Layout.alignment: Qt.AlignVCenter
+                Item {
+                    Layout.fillWidth: true
                 }
 
-                // Check for updates
-                RyzoraButton {
-                    variant: "secondary"
-                    iconName: "arrow-sync"
-                    text: "Check for updates"
-                    loading: Boolean(backend && backend.isUpdatesLoading)
-                    loadingText: "Checking…"
-                    onClicked: {
-                        if (backend) backend.checkForUpdates()
-                    }
-                }
-
-                // Update All Button
-                RyzoraButton {
-                    variant: "primary"
-                    iconName: "arrow-download"
-                    iconFilled: true
-                    text: (!backend || backend.updatesCount === 0) ? "Up to date" : "Update all (" + backend.updatesCount + ")"
-                    enabled: Boolean(backend && backend.updatesCount > 0 && backend.activeAppOperationsCount === 0)
-                    onClicked: {
-                        if (backend) backend.applyAllUpdates()
-                    }
+                Loader {
+                    visible: root.isNarrowHeader
+                    active: root.isNarrowHeader
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    sourceComponent: rightActionsComponent
                 }
             }
         }
@@ -159,17 +290,17 @@ Item {
             Layout.fillWidth: true
             spacing: 12
 
-            // Filter Chips
             RowLayout {
                 spacing: 6
 
                 Repeater {
                     model: [
-                        { id: "all", label: "All" },
-                        { id: "apps", label: "Apps" },
+                        { id: "all", label: "All (" + (backend ? backend.updatesCount : 0) + ")" },
+                        { id: "system", label: "System (" + (backend ? backend.systemUpdatesCount : 0) + ")" },
+                        { id: "apps", label: "Applications (" + (backend ? backend.applicationUpdatesCount : 0) + ")" },
                         { id: "flatpak", label: "Flatpak" },
-                        { id: "system", label: "System" },
-                        { id: "themes", label: "Presets" }
+                        { id: "aur", label: "AUR" },
+                        { id: "themes", label: "Presets (" + (backend ? backend.communityUpdatesCount : 0) + ")" }
                     ]
 
                     Rectangle {
@@ -204,7 +335,6 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // Search Filter Input
             Rectangle {
                 width: 220
                 height: 32
@@ -258,7 +388,81 @@ Item {
             }
         }
 
-        // ── 3. Content Area ──
+        // ── 3. Diagnostic Error Banner (When update encounters failure) ──
+        Rectangle {
+            visible: Boolean((backend && backend.updatesError && backend.updatesError.length > 0) || root.lastDiagnosticError.length > 0)
+            Layout.fillWidth: true
+            implicitHeight: errorLayout.implicitHeight + 20
+            radius: theme.radiusSm
+            color: theme.resolvedTheme === "light" ? "#FEF2F2" : "#451A1A"
+            border.color: "#EF4444"
+            border.width: 1
+
+            ColumnLayout {
+                id: errorLayout
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    RyzoraIcon {
+                        name: "alert"
+                        size: 16
+                        color: "#EF4444"
+                    }
+
+                    Text {
+                        text: "Update Operation Encountered an Issue"
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: theme.resolvedTheme === "light" ? "#991B1B" : "#FCA5A5"
+                        Layout.fillWidth: true
+                    }
+
+                    RyzoraButton {
+                        size: "sm"
+                        variant: "secondary"
+                        text: "Copy Diagnostics"
+                        iconName: "copy"
+                        onClicked: {
+                            var diag = root.lastDiagnosticError || (backend ? backend.updatesError : "")
+                            if (backend) {
+                                backend.copyToClipboard(diag)
+                                backend.postNotification("info", "Copied", "Diagnostic failure log copied to clipboard.")
+                            }
+                        }
+                    }
+
+                    RyzoraIcon {
+                        name: "x"
+                        size: 12
+                        color: theme.textMuted
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.lastDiagnosticError = ""
+                                if (backend) backend.updatesError = ""
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: root.lastDiagnosticError || (backend ? backend.updatesError : "")
+                    font.family: "monospace"
+                    font.pixelSize: 11
+                    color: theme.resolvedTheme === "light" ? "#7F1D1D" : "#FECACA"
+                    wrapMode: Text.WrapAnywhere
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
+        // ── 4. Main Scrollable Content Area ──
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -266,6 +470,7 @@ Item {
             color: theme.surface
             border.color: theme.border
             border.width: 1
+            clip: true
 
             // State A: Checking / Loading
             ColumnLayout {
@@ -365,388 +570,530 @@ Item {
                 }
             }
 
-            // State C: Available Updates List
-            ListView {
-                id: updateListView
+            // State C: Grouped Updates Sections
+            Flickable {
+                id: updatesFlickable
                 anchors.fill: parent
-                anchors.margins: 12
-                spacing: 8
-                clip: true
+                anchors.margins: 16
+                contentWidth: width
+                contentHeight: mainSectionsCol.implicitHeight + 24
                 visible: Boolean(backend && backend.updatesCount > 0)
-                model: root.filteredUpdates()
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
 
-                delegate: Rectangle {
-                    id: updateRowDelegate
-                    width: updateListView.width
-                    implicitHeight: rowCol.implicitHeight + 20
-                    radius: theme.cardRadius
-                    color: itemMouseArea.containsMouse ? theme.surfaceHover : theme.surfaceElevated
-                    border.color: itemMouseArea.containsMouse ? theme.cardBorderHover : theme.cardBorder
-                    border.width: 1
+                ColumnLayout {
+                    id: mainSectionsCol
+                    width: updatesFlickable.width - 12
+                    spacing: 20
 
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                    // ══════════════════════════════════════════════════════════
+                    // GROUP 1: Official Pacman Coordinated System Upgrade
+                    // ══════════════════════════════════════════════════════════
+                    Rectangle {
+                        id: systemUpdatesCard
+                        visible: root.systemUpdatesList().length > 0 && (root.selectedFilter === "all" || root.selectedFilter === "system")
+                        Layout.fillWidth: true
+                        implicitHeight: sysCardCol.implicitHeight + 24
+                        radius: theme.cardRadius
+                        color: theme.surfaceElevated
+                        border.color: root.isSystemOperating ? theme.accent : theme.cardBorder
+                        border.width: root.isSystemOperating ? 2 : 1
 
-                    readonly property var activeTxn: {
-                        var dummy = root.updateRev
-                        if (!backend) return null
-                        var t = backend.getTransactionForApp(modelData.package_id)
-                        if ((!t || !t.op_id) && modelData.package_id.indexOf(':') !== -1) {
-                            t = backend.getTransactionForApp(modelData.package_id.split(':')[1])
-                        }
-                        return t
-                    }
-                    readonly property bool isOperating: Boolean(backend && (backend.isAppOperating(modelData.package_id) || (modelData.package_id.indexOf(':') !== -1 && backend.isAppOperating(modelData.package_id.split(':')[1]))))
-
-                    ColumnLayout {
-                        id: rowCol
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 12
-                        spacing: 8
-
-                        // Main Row
-                        RowLayout {
-                            Layout.fillWidth: true
+                        ColumnLayout {
+                            id: sysCardCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 16
                             spacing: 12
 
-                            // App Icon
-                            Rectangle {
-                                width: 40
-                                height: 40
-                                radius: 8
-                                color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.10)
-                                border.color: theme.borderSubtle
-                                border.width: 1
+                            // Header Row
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 14
 
-                                Image {
-                                    id: updIconImg
-                                    anchors.centerIn: parent
-                                    width: 28
-                                    height: 28
-                                    source: {
-                                        var u = (modelData.icon_url || "").trim()
-                                        if (!u) return ""
-                                        if (u.indexOf(":/") !== -1 || u.indexOf("qrc:/") === 0 || u.indexOf("data:") === 0) return u
-                                        if (u.indexOf("/") === 0) return "file://" + u
-                                        return u
+                                Rectangle {
+                                    width: 44
+                                    height: 44
+                                    radius: 10
+                                    color: Qt.rgba(16/255, 185/255, 129/255, 0.15)
+                                    border.color: Qt.rgba(16/255, 185/255, 129/255, 0.35)
+                                    border.width: 1
+
+                                    RyzoraIcon {
+                                        anchors.centerIn: parent
+                                        name: "shield-check"
+                                        size: 22
+                                        color: "#10B981"
                                     }
-                                    fillMode: Image.PreserveAspectFit
-                                    visible: status === Image.Ready
                                 }
 
-                                RyzoraIcon {
-                                    anchors.centerIn: parent
-                                    name: {
-                                        if (modelData.package_type === "runtime") return "cpu"
-                                        if (modelData.package_type === "system") return "terminal"
-                                        if (modelData.package_type === "theme") return "sliders-horizontal"
-                                        return "package"
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 3
+
+                                    RowLayout {
+                                        spacing: 8
+                                        Text {
+                                            text: "System Updates"
+                                            font.pixelSize: 15
+                                            font.bold: true
+                                            color: theme.text
+                                        }
+
+                                        Rectangle {
+                                            height: 20
+                                            implicitWidth: sysBadgeTxt.implicitWidth + 10
+                                            radius: 4
+                                            color: Qt.rgba(16/255, 185/255, 129/255, 0.15)
+                                            border.color: Qt.rgba(16/255, 185/255, 129/255, 0.35)
+                                            border.width: 1
+
+                                            Text {
+                                                id: sysBadgeTxt
+                                                anchors.centerIn: parent
+                                                text: root.systemUpdatesList().length + " packages · Pacman · Coordinated system upgrade"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                color: "#10B981"
+                                            }
+                                        }
                                     }
-                                    size: 20
-                                    color: theme.accent
-                                    visible: updIconImg.status !== Image.Ready
+
+                                    Text {
+                                        text: "Official repository updates. Applied together in one coordinated transaction to prevent partial upgrade library mismatches."
+                                        font.pixelSize: 12
+                                        color: theme.textMuted
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                }
+
+                                // Single Coordinated System Upgrade Action Button
+                                RyzoraButton {
+                                    size: "md"
+                                    variant: "primary"
+                                    text: "Update system"
+                                    iconName: "arrow-download"
+                                    iconFilled: true
+                                    loading: root.isSystemOperating
+                                    loadingText: "Upgrading system…"
+                                    enabled: !root.isSystemOperating
+                                    onClicked: {
+                                        if (backend) backend.applySystemUpgrade()
+                                    }
                                 }
                             }
 
-                            // Identity & Versions
+                            // Live Progress Bar (During System Upgrade)
                             ColumnLayout {
+                                visible: root.isSystemOperating
                                 Layout.fillWidth: true
-                                spacing: 3
+                                spacing: 4
 
                                 RowLayout {
-                                    spacing: 8
-
+                                    Layout.fillWidth: true
                                     Text {
-                                        text: modelData.name || modelData.package_id
-                                        font.pixelSize: 14
+                                        text: root.systemTxn && root.systemTxn.message ? root.systemTxn.message : "Synchronizing system repositories…"
+                                        font.pixelSize: 11
+                                        color: theme.accent
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        visible: Boolean(root.systemTxn && root.systemTxn.percentage >= 0)
+                                        text: (root.systemTxn ? root.systemTxn.percentage : 0) + "%"
+                                        font.pixelSize: 11
                                         font.bold: true
-                                        color: nameMouse.containsMouse ? theme.accent : theme.text
-                                        MouseArea {
-                                            id: nameMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (backend) {
-                                                    var app = backend.getAppById(modelData.package_id || modelData.name)
-                                                    if (app && app.id) {
-                                                        root.appSelected(app)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Provider Pill
-                                    Rectangle {
-                                        height: 18
-                                        implicitWidth: provTxt.implicitWidth + 10
-                                        radius: 4
-                                        color: {
-                                            var p = (modelData.provider || "").toLowerCase()
-                                            if (p === "flatpak") return Qt.rgba(59/255, 130/255, 246/255, 0.15)
-                                            if (p === "aur") return Qt.rgba(245/255, 158/255, 11/255, 0.15)
-                                            if (p === "pacman") return Qt.rgba(16/255, 185/255, 129/255, 0.15)
-                                            return Qt.rgba(139/255, 92/255, 246/255, 0.15)
-                                        }
-                                        border.color: {
-                                            var p = (modelData.provider || "").toLowerCase()
-                                            if (p === "flatpak") return Qt.rgba(59/255, 130/255, 246/255, 0.3)
-                                            if (p === "aur") return Qt.rgba(245/255, 158/255, 11/255, 0.3)
-                                            if (p === "pacman") return Qt.rgba(16/255, 185/255, 129/255, 0.3)
-                                            return Qt.rgba(139/255, 92/255, 246/255, 0.3)
-                                        }
-                                        Text {
-                                            id: provTxt
-                                            anchors.centerIn: parent
-                                            text: (modelData.provider || "Package").toUpperCase()
-                                            font.pixelSize: 9
-                                            font.bold: true
-                                            color: {
-                                                var p = (modelData.provider || "").toLowerCase()
-                                                if (p === "flatpak") return "#3B82F6"
-                                                if (p === "aur") return "#F59E0B"
-                                                if (p === "pacman") return "#10B981"
-                                                return "#8B5CF6"
-                                            }
-                                        }
-                                    }
-
-                                    // Package Type Pill
-                                    Rectangle {
-                                        height: 18
-                                        implicitWidth: typeTxt.implicitWidth + 10
-                                        radius: 4
-                                        color: Qt.rgba(100/255, 116/255, 139/255, 0.15)
-                                        Text {
-                                            id: typeTxt
-                                            anchors.centerIn: parent
-                                            text: (modelData.package_type || "Package").toUpperCase()
-                                            font.pixelSize: 9
-                                            font.bold: true
-                                            color: theme.textSecondary
-                                        }
+                                        color: theme.accent
                                     }
                                 }
 
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 4
+                                    radius: 2
+                                    color: theme.surfaceHover
+                                    clip: true
+
+                                    Rectangle {
+                                        visible: Boolean(root.systemTxn && root.systemTxn.is_determinate && root.systemTxn.percentage >= 0)
+                                        height: parent.height
+                                        radius: 2
+                                        color: theme.accent
+                                        width: root.systemTxn ? parent.width * Math.max(0, Math.min(100, root.systemTxn.percentage)) / 100 : 0
+                                    }
+
+                                    Rectangle {
+                                        id: sysIndetBar
+                                        visible: !Boolean(root.systemTxn && root.systemTxn.is_determinate && root.systemTxn.percentage >= 0)
+                                        height: parent.height
+                                        width: Math.max(40, parent.width * 0.3)
+                                        radius: 2
+                                        color: theme.accent
+                                        SequentialAnimation on x {
+                                            loops: Animation.Infinite
+                                            running: sysIndetBar.visible && root.isSystemOperating
+                                            PropertyAnimation {
+                                                from: -sysIndetBar.width
+                                                to: sysIndetBar.parent ? sysIndetBar.parent.width : 400
+                                                duration: 1000
+                                                easing.type: Easing.InOutQuad
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Expandable Package List Toggle
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 32
+                                radius: 6
+                                color: sysToggleMouse.containsMouse ? theme.surfaceHover : "transparent"
+
                                 RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
                                     spacing: 8
 
-                                    Text {
-                                        text: "Version: " + modelData.installed_version + " → " + modelData.available_version
-                                        font.pixelSize: 12
-                                        font.weight: Font.Medium
+                                    RyzoraIcon {
+                                        name: root.systemPackagesExpanded ? "chevron-up" : "chevron-down"
+                                        size: 13
                                         color: theme.accent
                                     }
 
                                     Text {
-                                        visible: Boolean(modelData.download_size)
-                                        text: "• " + (modelData.download_size || "")
-                                        font.pixelSize: 11
-                                        color: theme.textMuted
-                                    }
-
-                                    Text {
-                                        visible: Boolean(modelData.scope)
-                                        text: "• " + (modelData.scope === "user" ? "User installation" : "System installation")
-                                        font.pixelSize: 11
-                                        color: theme.textMuted
+                                        text: (root.systemPackagesExpanded ? "Hide" : "View") + " " + root.systemUpdatesList().length + " affected system packages"
+                                        font.pixelSize: 12
+                                        font.weight: Font.DemiBold
+                                        color: theme.accent
+                                        Layout.fillWidth: true
                                     }
                                 }
-                            }
 
-                            // Expand Info Toggle
-                            Rectangle {
-                                width: 28
-                                height: 28
-                                radius: 14
-                                color: expandMouse.containsMouse ? theme.surfaceHover : "transparent"
-                                RyzoraIcon {
-                                    anchors.centerIn: parent
-                                    name: root.isExpanded(modelData.package_id) ? "chevron-up" : "chevron-down"
-                                    size: 13
-                                    color: theme.textMuted
-                                }
                                 MouseArea {
-                                    id: expandMouse
+                                    id: sysToggleMouse
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.toggleExpanded(modelData.package_id)
+                                    hoverEnabled: true
+                                    onClicked: root.systemPackagesExpanded = !root.systemPackagesExpanded
                                 }
                             }
 
-                            // Update Action Button
-                            RyzoraButton {
-                                size: "sm"
-                                variant: modelData.can_update_individually ? "primary" : "secondary"
-                                loading: updateRowDelegate.isOperating
-                                loadingText: "Updating…"
-                                text: !modelData.can_update_individually ? "System Sync" : "Update"
-                                iconName: "arrow-download"
-                                iconFilled: true
-                                onClicked: {
-                                    if (modelData.can_update_individually) {
-                                        if (backend) backend.applyUpdate(modelData.package_id)
-                                    } else {
-                                        if (backend) {
-                                            backend.postNotification(
-                                                "info",
-                                                "System Upgrade Recommended",
-                                                "Arch Linux packages share system libraries and should be updated together. Use 'Update All' for a coordinated system upgrade."
-                                            )
+                            // Expandable Affected Packages Content (No individual buttons!)
+                            ColumnLayout {
+                                visible: root.systemPackagesExpanded
+                                Layout.fillWidth: true
+                                spacing: 4
+
+                                Repeater {
+                                    model: root.systemUpdatesList()
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 38
+                                        radius: 4
+                                        color: sysRowMouse.containsMouse ? theme.surfaceHover : theme.surface
+                                        border.color: theme.borderSubtle
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            spacing: 12
+
+                                            RyzoraIcon {
+                                                name: "package"
+                                                size: 14
+                                                color: theme.textMuted
+                                            }
+
+                                            Text {
+                                                text: modelData.name || modelData.package_id
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: theme.text
+                                                Layout.minimumWidth: 140
+                                            }
+
+                                            Text {
+                                                text: (modelData.current_version || "—") + " → " + (modelData.available_version || "latest")
+                                                font.pixelSize: 12
+                                                color: theme.accent
+                                                font.family: "monospace"
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            Text {
+                                                text: modelData.download_size_str || modelData.installed_size_str || "Official repo"
+                                                font.pixelSize: 11
+                                                color: theme.textMuted
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: sysRowMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
                                         }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        // Live Progress Detail Text (Visible while actively updating)
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: updateRowDelegate.isOperating
-                            spacing: 8
+                    // ══════════════════════════════════════════════════════════
+                    // GROUP 2: Application Updates (Flatpak & AUR Apps)
+                    // ══════════════════════════════════════════════════════════
+                    ColumnLayout {
+                        visible: root.appUpdatesList().length > 0 && (root.selectedFilter === "all" || root.selectedFilter === "apps" || root.selectedFilter === "flatpak" || root.selectedFilter === "aur")
+                        Layout.fillWidth: true
+                        spacing: 8
 
-                            Text {
-                                text: updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.message ? updateRowDelegate.activeTxn.message : "Updating package..."
-                                font.family: theme.fontFamily
-                                font.pixelSize: 11
-                                color: theme.accent
-                                elide: Text.ElideRight
+                        Text {
+                            text: "Application Updates (" + root.appUpdatesList().length + ")"
+                            font.pixelSize: 15
+                            font.bold: true
+                            color: theme.text
+                        }
+
+                        Repeater {
+                            model: root.appUpdatesList()
+                            delegate: Rectangle {
+                                id: appRowDelegate
                                 Layout.fillWidth: true
-                            }
+                                implicitHeight: appRowCol.implicitHeight + 16
+                                radius: theme.cardRadius
+                                color: appRowMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                border.color: appRowMouse.containsMouse ? theme.cardBorderHover : theme.cardBorder
+                                border.width: 1
 
-                            Text {
-                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.bytes_downloaded && updateRowDelegate.activeTxn.bytes_total)
-                                text: updateRowDelegate.activeTxn ? (updateRowDelegate.activeTxn.bytes_downloaded + " / " + updateRowDelegate.activeTxn.bytes_total) : ""
-                                font.family: theme.fontMono
-                                font.pixelSize: 10
-                                color: theme.textMuted
-                            }
-
-                            Text {
-                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.download_speed)
-                                text: (updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.download_speed) ? String(updateRowDelegate.activeTxn.download_speed) : ""
-                                font.family: theme.fontMono
-                                font.pixelSize: 10
-                                color: theme.textMuted
-                            }
-
-                            Text {
-                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.percentage >= 0)
-                                text: updateRowDelegate.activeTxn ? (updateRowDelegate.activeTxn.percentage + "%") : ""
-                                font.family: theme.fontFamily
-                                font.pixelSize: 11
-                                font.weight: theme.weightSemibold
-                                color: theme.accent
-                            }
-                        }
-
-                        // Progress Bar (Visible while this item is actively operating)
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 6
-                            radius: 3
-                            color: theme.borderSubtle
-                            clip: true
-                            visible: updateRowDelegate.isOperating
-
-                            // Determinate Progress
-                            Rectangle {
-                                visible: Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.is_determinate && updateRowDelegate.activeTxn.percentage >= 0)
-                                height: parent.height
-                                radius: 3
-                                color: theme.accent
-                                width: {
-                                    if (!parent.visible || !updateRowDelegate.activeTxn) return 0
-                                    return parent.width * Math.max(0, Math.min(100, updateRowDelegate.activeTxn.percentage)) / 100
+                                readonly property var activeTxn: {
+                                    var dummy = root.updateRev
+                                    if (!backend) return null
+                                    return backend.getTransactionForApp(modelData.package_id)
                                 }
-                                Behavior on width { NumberAnimation { duration: 150 } }
-                            }
+                                readonly property bool isOperating: Boolean(backend && backend.isAppOperating(modelData.package_id))
 
-                            // Indeterminate Slide
-                            Rectangle {
-                                id: indetBar
-                                visible: !Boolean(updateRowDelegate.activeTxn && updateRowDelegate.activeTxn.is_determinate && updateRowDelegate.activeTxn.percentage >= 0)
-                                height: parent.height
-                                width: Math.max(40, parent.width * 0.28)
-                                radius: 3
-                                color: theme.accent
+                                ColumnLayout {
+                                    id: appRowCol
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 12
+                                    spacing: 6
 
-                                SequentialAnimation on x {
-                                    loops: Animation.Infinite
-                                    running: indetBar.visible && updateRowDelegate.isOperating
-                                    PropertyAnimation {
-                                        from: -indetBar.width
-                                        to: parent.width
-                                        duration: 1000
-                                        easing.type: Easing.InOutQuad
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        Rectangle {
+                                            width: 36
+                                            height: 36
+                                            radius: 8
+                                            color: Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.10)
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
+
+                                            Image {
+                                                anchors.fill: parent
+                                                anchors.margins: 4
+                                                source: modelData.icon_url || ""
+                                                fillMode: Image.PreserveAspectFit
+                                                visible: status === Image.Ready
+                                            }
+
+                                            RyzoraIcon {
+                                                anchors.centerIn: parent
+                                                visible: parent.children[0].status !== Image.Ready
+                                                name: (modelData.provider === "flatpak") ? "layers" : "box"
+                                                size: 18
+                                                color: theme.accent
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            RowLayout {
+                                                spacing: 8
+                                                Text {
+                                                    text: modelData.name || modelData.package_id
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                    color: theme.text
+                                                }
+
+                                                Rectangle {
+                                                    height: 18
+                                                    implicitWidth: appProvTxt.implicitWidth + 8
+                                                    radius: 4
+                                                    color: (modelData.provider === "flatpak") ? Qt.rgba(59/255, 130/255, 246/255, 0.15) : Qt.rgba(245/255, 158/255, 11/255, 0.15)
+                                                    border.color: (modelData.provider === "flatpak") ? "#3B82F6" : "#F59E0B"
+                                                    border.width: 1
+
+                                                    Text {
+                                                        id: appProvTxt
+                                                        anchors.centerIn: parent
+                                                        text: (modelData.provider || "App").toUpperCase()
+                                                        font.pixelSize: 9
+                                                        font.bold: true
+                                                        color: (modelData.provider === "flatpak") ? "#3B82F6" : "#F59E0B"
+                                                    }
+                                                }
+                                            }
+
+                                            Text {
+                                                text: (modelData.current_version || "—") + " → " + (modelData.available_version || "latest")
+                                                font.pixelSize: 12
+                                                color: theme.textMuted
+                                                font.family: "monospace"
+                                            }
+                                        }
+
+                                        // Individual App Update Action Button
+                                        RyzoraButton {
+                                            size: "sm"
+                                            variant: "primary"
+                                            loading: appRowDelegate.isOperating
+                                            loadingText: "Updating…"
+                                            text: "Update"
+                                            iconName: "arrow-download"
+                                            iconFilled: true
+                                            onClicked: {
+                                                if (backend) backend.applyUpdate(modelData.package_id)
+                                            }
+                                        }
+                                    }
+
+                                    // Live progress for app update
+                                    RowLayout {
+                                        visible: appRowDelegate.isOperating
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Text {
+                                            text: appRowDelegate.activeTxn && appRowDelegate.activeTxn.message ? appRowDelegate.activeTxn.message : "Updating application…"
+                                            font.pixelSize: 11
+                                            color: theme.accent
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                 }
-                            }
-                        }
 
-                        // Expandable Details (Accordion)
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: detailsCol.implicitHeight + 12
-                            radius: 6
-                            color: theme.surface
-                            border.color: theme.borderSubtle
-                            border.width: 1
-                            visible: root.isExpanded(modelData.package_id)
-
-                            ColumnLayout {
-                                id: detailsCol
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 4
-
-                                Text {
-                                    text: modelData.description || "Package update available from repository."
-                                    font.pixelSize: 12
-                                    color: theme.textSecondary
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
-                                }
-
-                                RowLayout {
-                                    spacing: 12
-                                    Text {
-                                        text: "Source: " + (modelData.source || "upstream")
-                                        font.pixelSize: 11
-                                        color: theme.textMuted
-                                    }
-                                    Text {
-                                        text: "Scope: " + (modelData.scope || "system")
-                                        font.pixelSize: 11
-                                        color: theme.textMuted
-                                    }
-                                    Text {
-                                        text: "Package ID: " + modelData.package_id
-                                        font.pixelSize: 11
-                                        color: theme.textMuted
-                                    }
-                                }
-
-                                Text {
-                                    visible: Boolean(modelData.safety_warning)
-                                    text: "⚠️ " + (modelData.safety_warning || "")
-                                    font.pixelSize: 11
-                                    color: "#F59E0B"
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
+                                MouseArea {
+                                    id: appRowMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    z: -1
                                 }
                             }
                         }
                     }
 
-                    MouseArea {
-                        id: itemMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        z: -1
+                    // ══════════════════════════════════════════════════════════
+                    // GROUP 3: Community Customizations & Presets
+                    // ══════════════════════════════════════════════════════════
+                    ColumnLayout {
+                        visible: root.communityUpdatesList().length > 0 && (root.selectedFilter === "all" || root.selectedFilter === "themes")
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Text {
+                            text: "Community Customizations (" + root.communityUpdatesList().length + ")"
+                            font.pixelSize: 15
+                            font.bold: true
+                            color: theme.text
+                        }
+
+                        Repeater {
+                            model: root.communityUpdatesList()
+                            delegate: Rectangle {
+                                id: commRowDelegate
+                                Layout.fillWidth: true
+                                implicitHeight: commRowCol.implicitHeight + 16
+                                radius: theme.cardRadius
+                                color: commRowMouse.containsMouse ? theme.surfaceHover : theme.surfaceElevated
+                                border.color: commRowMouse.containsMouse ? theme.cardBorderHover : theme.cardBorder
+                                border.width: 1
+
+                                readonly property bool isOperating: Boolean(backend && backend.isAppOperating(modelData.package_id))
+
+                                ColumnLayout {
+                                    id: commRowCol
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 12
+                                    spacing: 6
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        Rectangle {
+                                            width: 36
+                                            height: 36
+                                            radius: 8
+                                            color: Qt.rgba(139/255, 92/255, 246/255, 0.15)
+                                            border.color: theme.borderSubtle
+                                            border.width: 1
+
+                                            RyzoraIcon {
+                                                anchors.centerIn: parent
+                                                name: "palette"
+                                                size: 18
+                                                color: "#8B5CF6"
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Text {
+                                                text: modelData.name || modelData.package_id
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                color: theme.text
+                                            }
+
+                                            Text {
+                                                text: (modelData.current_version || "—") + " → " + (modelData.available_version || "latest")
+                                                font.pixelSize: 12
+                                                color: theme.textMuted
+                                                font.family: "monospace"
+                                            }
+                                        }
+
+                                        RyzoraButton {
+                                            size: "sm"
+                                            variant: "primary"
+                                            loading: commRowDelegate.isOperating
+                                            loadingText: "Updating…"
+                                            text: "Update"
+                                            iconName: "arrow-download"
+                                            iconFilled: true
+                                            onClicked: {
+                                                if (backend) backend.applyUpdate(modelData.package_id)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: commRowMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    z: -1
+                                }
+                            }
+                        }
                     }
                 }
 

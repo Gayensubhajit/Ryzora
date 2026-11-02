@@ -920,9 +920,9 @@ Item {
                             columnSpacing: 18
                             columns: {
                                 var avail = (galleryGrid.width > 0 ? galleryGrid.width : (root.width > 0 ? root.width : 1200)) - 48
-                                if (avail >= 1350) return 4
-                                if (avail >= 960) return 3
-                                if (avail >= 580) return 2
+                                if (avail >= 1250) return 4
+                                if (avail >= 850) return 3
+                                if (avail >= 520) return 2
                                 return 1
                             }
                             visible: root.installedThemes.length > 0
@@ -931,8 +931,9 @@ Item {
                                 model: root.installedThemes
                                 StoreCard {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 250
-                                    Layout.minimumHeight: 230
+                                    Layout.preferredHeight: 236
+                                    Layout.minimumHeight: 216
+                                    Layout.maximumHeight: 250
                                     compactLayout: true
                                     hideActionButton: true
                                     hideCategoryBadge: true
